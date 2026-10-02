@@ -145,8 +145,8 @@ void main() {
       home: Scaffold(body: OmiCanvas(child: Center(child: HomeAskOmiButton(onTap: () {})))),
     ));
     final label = tester.widget<Text>(find.text('Ask anything'));
-    expect(label.style!.fontSize, OmiType.title3.fontSize);
-    expect(label.style!.fontWeight, FontWeight.w400, reason: 'regular, like the reference');
+    expect(label.style!.fontSize, OmiType.callout.fontSize);
+    expect(label.style!.fontWeight, FontWeight.w500, reason: 'medium, as in Omi v8');
     expect(label.maxLines, 1);
     expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(Icon)), findsNothing);
     expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(OmiGlass)), findsOneWidget);

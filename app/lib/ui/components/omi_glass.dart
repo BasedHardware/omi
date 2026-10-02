@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../omi_tokens.dart';
 
-/// A little liquid glass for a control floating on the page: a fill and a rim lit along its top
-/// edge, and on a light page a small shadow under it, so it stands off the page. Over content that
-/// scrolls beneath it ([blur]), what passes under is blurred.
+/// A little liquid glass for a control on the page: a fill and a rim. A control floating over
+/// content that scrolls beneath it ([blur]) blurs what passes under and takes the float glass, which
+/// on a light page adds a faint outline and a soft shadow.
 ///
 /// [shape] is the outline: a [CircleBorder], [StadiumBorder] or [RoundedRectangleBorder]. [tint]
 /// replaces the glass fill for a control that is on or busy. The child is not clipped; one that
@@ -27,15 +27,17 @@ class OmiGlass extends StatelessWidget {
 
   static const double blurSigma = 16;
 
-  /// The glass fill in [shape], or [tint] for a control that is on or busy, with its [shadows].
+  /// The glass fill in [shape], or [tint] for a control that is on or busy.
   static ShapeDecoration fill(ShapeBorder shape, {Color? tint}) =>
-      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass, shadows: shadows);
+      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass);
 
-  /// A small shadow close under the glass; none in dark, where the lit rim alone lifts it.
-  static List<BoxShadow> get shadows {
-    final color = OmiColors.glassShadow;
-    if (color.a == 0) return const [];
-    return [BoxShadow(color: color, blurRadius: 10, offset: const Offset(0, 3))];
+  /// Around a floating control: a hairline outline and a soft shadow; none in dark.
+  static List<BoxShadow> get floatShadows {
+    if (OmiColors.floatOutline.a == 0 && OmiColors.floatShadow.a == 0) return const [];
+    return [
+      BoxShadow(color: OmiColors.floatOutline, spreadRadius: 0.5),
+      BoxShadow(color: OmiColors.floatShadow, blurRadius: 30, offset: const Offset(0, 10)),
+    ];
   }
 
   /// The lit rim around [shape]. A foreground decoration, so it draws over a child that paints to
@@ -45,16 +47,24 @@ class OmiGlass extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rimmed = DecoratedBox(decoration: rim(shape), position: DecorationPosition.foreground, child: child);
-    if (!blur) return DecoratedBox(decoration: fill(shape, tint: tint), child: rimmed);
-    // The shadow sits outside the blur's clip, so it is painted around it.
+    if (!blur) {
+      return DecoratedBox(
+        decoration: fill(shape, tint: tint),
+        child: DecoratedBox(decoration: rim(shape), position: DecorationPosition.foreground, child: child),
+      );
+    }
+    final floatRim = OmiGlassRim(shape: shape, edge: OmiColors.floatEdge, rim: OmiColors.floatRim);
+    // The outline and shadow sit outside the blur's clip, so they are painted around it.
     return DecoratedBox(
-      decoration: ShapeDecoration(shape: shape, shadows: shadows),
+      decoration: ShapeDecoration(shape: shape, shadows: floatShadows),
       child: ClipPath(
         clipper: ShapeBorderClipper(shape: shape),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: DecoratedBox(decoration: ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass), child: rimmed),
+          child: DecoratedBox(
+            decoration: ShapeDecoration(shape: shape, color: tint ?? OmiColors.floatGlass),
+            child: DecoratedBox(decoration: floatRim, position: DecorationPosition.foreground, child: child),
+          ),
         ),
       ),
     );

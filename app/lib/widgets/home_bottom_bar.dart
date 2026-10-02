@@ -106,7 +106,7 @@ class HomeAskOmiButton extends StatelessWidget {
             child: ExcludeSemantics(
               child: Text(
                 label,
-                style: OmiType.title3.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w400),
+                style: OmiType.callout.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

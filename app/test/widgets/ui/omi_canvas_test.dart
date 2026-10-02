@@ -69,21 +69,23 @@ void main() {
       expect(find.byType(ClipPath), findsOneWidget, reason: 'the blur stays inside the shape');
       final shadow = tester
           .widget<DecoratedBox>(find.ancestor(of: find.byType(ClipPath), matching: find.byType(DecoratedBox)).first);
-      expect((shadow.decoration as ShapeDecoration).shadows, OmiGlass.shadows,
+      expect((shadow.decoration as ShapeDecoration).shadows, OmiGlass.floatShadows,
           reason: 'painted outside the clip, so the blur does not cut it off');
     });
 
-    test('light glass: dark\'s fill inverted, lit along the top like dark, with a small shadow', () {
-      expect(OmiColors.glass, const Color(0x80C5C5C3), reason: 'the locked colour');
-      expect(OmiColors.glassEdge, const Color(0xE6FFFFFF), reason: 'light catches the top edge, as in dark');
-      expect(OmiGlass.shadows, hasLength(1));
-      expect(OmiGlass.shadows.single.blurRadius, lessThanOrEqualTo(12), reason: 'close under it, no haze');
-      expect(OmiGlass.fill(const CircleBorder()).shadows, OmiGlass.shadows);
+    test('light glass follows Omi v8: hairline circles, a frosted floating bar; dark is as it was', () {
+      expect(OmiColors.glass, const Color(0x8CFFFFFF));
+      expect(OmiColors.glassEdge, const Color(0x17000000));
+      expect(OmiColors.glassRim, const Color(0x17000000), reason: 'one even hairline round a circle');
+      expect(OmiGlass.fill(const CircleBorder()).shadows, isNull, reason: 'circles have no shadow');
+      expect(OmiColors.floatGlass, const Color(0x9EFFFFFF));
+      expect(OmiGlass.floatShadows, hasLength(2), reason: 'a faint outline and a soft shadow');
 
       OmiColors.active = OmiPalette.dark;
       expect(OmiColors.glass, const Color(0x803A3A3C));
       expect(OmiColors.glassEdge, const Color(0x29FFFFFF));
-      expect(OmiGlass.shadows, isEmpty, reason: 'dark is unchanged');
+      expect(OmiColors.floatGlass, OmiColors.glass, reason: 'the floating bar is the same glass in dark');
+      expect(OmiGlass.floatShadows, isEmpty, reason: 'dark is unchanged');
     });
 
     test('a tint replaces the glass fill; the rim follows the palette', () {
