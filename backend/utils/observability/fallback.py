@@ -169,6 +169,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
         'modulate_serve_error',
         'provider_rate_limited',
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_rotation',
         'provider_5xx',
         'capacity_full',

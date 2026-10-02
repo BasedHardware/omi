@@ -14,6 +14,7 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'provider_5xx',
         'timeout',
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'capacity_full',
