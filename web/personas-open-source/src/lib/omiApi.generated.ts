@@ -5053,6 +5053,7 @@ export interface UserDataExportResponse {
   conversation_keyframe_jobs?: Array<Record<string, unknown>>;
   conversation_photo_manifest?: Array<Record<string, unknown>>;
   conversations?: Array<Record<string, unknown>>;
+  export_complete?: boolean | null;
   frame_requests?: Array<Record<string, unknown>>;
   frame_vision_receipts?: Array<Record<string, unknown>>;
   jit_data?: Record<string, Array<Record<string, unknown>>>;
@@ -17662,10 +17663,13 @@ export async function get_user_webhooks_status_v1_users_developer_webhooks_statu
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function export_all_user_data_v1_users_export_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserDataExportResponse> {
+export async function export_all_user_data_v1_users_export_get(query: { stream?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserDataExportResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/export`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {

@@ -165,6 +165,7 @@ struct SettingsContentView: View {
   // ChatProvider for browser extension setup
   var chatProvider: ChatProvider? = nil
   @StateObject var viewModel = SettingsViewModel()
+  @StateObject var dataExportModel = AccountDataExportModel()
 
   // Updater view model
   @ObservedObject var updaterViewModel = UpdaterViewModel.shared
