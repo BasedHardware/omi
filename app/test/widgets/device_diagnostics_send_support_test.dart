@@ -367,6 +367,11 @@ void main() {
     expect(bundle['fail_to_connect_count_window'], 1);
     expect(bundle['reconnection_count'], 3);
     expect(bundle['counters_since'], {'reconnection_count': since, 'fail_to_connect_count': since});
+    final retainedHistory = (bundle['disconnect_history'] as List).cast<Map<String, dynamic>>();
+    expect(retainedHistory, hasLength(4));
+    expect(retainedHistory.map((event) => event['ts']), [now - 8 * dayMs, now - 8 * dayMs, now - dayMs, now - dayMs]);
+    expect(retainedHistory.map((event) => event['event_type']),
+        ['disconnect', 'fail_to_connect', 'disconnect', 'fail_to_connect']);
     expect(_CannedUpload.requests, 0);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
