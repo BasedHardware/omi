@@ -198,10 +198,8 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
   );
   if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted = await setConversationVisibility(
-      conversation.id,
-      visibility: ConversationVisibility.private_.value,
-    );
+    final reverted =
+        await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
     if (reverted) conversation.visibility = ConversationVisibility.private_;
   }
 }
@@ -244,12 +242,8 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   final l10n = context.l10n;
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: conversationDisplayTitle(
-      conversation,
-      l10n,
-      surface: ConversationUntitledRenderedSurface.actions,
-      dates: OmiDateFormat.of(context),
-    ),
+    title: conversationDisplayTitle(conversation, l10n,
+        surface: ConversationUntitledRenderedSurface.actions, dates: OmiDateFormat.of(context)),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.

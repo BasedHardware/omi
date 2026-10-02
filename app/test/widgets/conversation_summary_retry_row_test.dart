@@ -144,18 +144,12 @@ void main() {
   });
 
   testWidgets('a row without title or transcript shows a recording date and reports', (tester) async {
-    await _pumpRow(
-      tester,
-      conversation: _conversation(title: '', summaryRetryable: false, segments: const []),
-    );
+    await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
 
     expect(find.text(_l10n(tester).untitledConversation), findsNothing);
     expect(
-      find.text(
-        OmiDateFormat.of(
-          tester.element(find.byType(ConversationListItem)),
-        ).dateTime(DateTime.utc(2020, 1, 1, 12).toLocal()),
-      ),
+      find.text(OmiDateFormat.of(tester.element(find.byType(ConversationListItem)))
+          .dateTime(DateTime.utc(2020, 1, 1, 12).toLocal())),
       findsOneWidget,
     );
     expect(emitted, hasLength(1));
