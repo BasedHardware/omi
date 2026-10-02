@@ -13,6 +13,8 @@ from routers.listen import speakers
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import speaker_resolution
 from utils.owner_voice_evidence import authorized_owner_segments, pool_owner_vectors
+from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.speaker_learning_policy import authorized_teaching_segments
 from utils.speaker_tag_prompts import service
 from utils.sync import speaker_identity
 from utils import speaker_permissions, executors
@@ -306,3 +308,89 @@ def test_live_entitlement_read_failure_stays_closed_and_is_retried():
 
     asyncio.run(run())
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize('segment_scope, teaches', [('scope-a', True), ('scope-b', False)])
+def test_carried_label_teaches_only_inside_its_capture_scope(monkeypatch, segment_scope, teaches):
+    # A merged conversation reuses speaker id 1 in two capture scopes. The label carried
+    # into scope-a must not authorize scope-b audio that merely bears the same person.
+    segment = {
+        'id': 's',
+        'speaker_id': 1,
+        'speaker_id_scope': segment_scope,
+        'person_id': 'p',
+        'is_user': False,
+        'start': 0,
+        'end': 10,
+        'text': 'synthetic speech',
+    }
+    receipt = {
+        'generation': 1,
+        'segments': {},
+        'speakers': {
+            '1': {
+                'generation': 1,
+                'person_id': 'p',
+                'is_user': False,
+                'source': 'carried',
+                'speaker_id_scope': 'scope-a',
+            }
+        },
+    }
+    conversation = {'id': 'c', 'transcript_segments': [segment], 'manual_speaker_assignments': receipt}
+    assert authorized_teaching_segments(conversation, 'p') == ([segment] if teaches else [])
+    # Label application already drew the same line; teaching now agrees with it.
+    applied = apply_manual_assignments([dict(segment, person_id=None)], receipt)
+    assert (applied[0].get('person_id') == 'p') is teaches
+    store = StrictFirestore({USER: {}, CONV: conversation, PERSON: {'id': 'p'}})
+    monkeypatch.setattr(users, 'db', store)
+    users.replace_person_speech_profile(
+        'u', 'p', None, 'sample', 'synthetic', [1.0, 0.0], 'c', ['s'], expected_receipt_generation=1
+    )
+    assert (store.rows[PERSON].get('speaker_embedding') == [1.0, 0.0]) is teaches
+
+
+def _owner_source_after(decisions):
+    conversation = source()
+    conversation['transcript_segments'].append(
+        {'id': 'other', 'speaker_id': 2, 'start': 9, 'end': 15, 'text': 'synthetic guest speech', 'is_user': False}
+    )
+    receipt = conversation['manual_speaker_assignments']
+    receipt['generation'] = 2
+    receipt['segments'].update(decisions)
+    return conversation
+
+
+def _pool_owner(store):
+    return voice_profiles.add_owner_voice_confirmation(
+        'u',
+        [0.0, 1.0],
+        pool_owner_vectors,
+        conversation_id='c',
+        expected_receipt_generation=1,
+        segment_ids=['s'],
+        firestore_client=store,
+    )
+
+
+def test_owner_teaching_survives_a_later_tag_on_another_voice():
+    conversation = _owner_source_after({'other': {'generation': 2, 'person_id': 'p', 'is_user': False}})
+    store = StrictFirestore({USER: {}, CONV: conversation})
+    assert _pool_owner(store) == 1
+    assert store.rows[USER]['speaker_embedding'] == pytest.approx([0.0, 1.0])
+
+
+@pytest.mark.parametrize(
+    'decision, still_owner',
+    [
+        ({'generation': 2, 'person_id': 'p', 'is_user': False}, False),
+        ({'generation': 2, 'is_user': True, 'use_for_speech_training': False}, True),
+        ({'generation': 2, 'is_user': False, 'rejection': {'kind': 'not_me'}}, False),
+    ],
+)
+def test_owner_teaching_stops_when_its_own_segment_is_revoked(decision, still_owner):
+    conversation = _owner_source_after({'s': decision})
+    conversation['transcript_segments'][0]['is_user'] = still_owner
+    store = StrictFirestore({USER: {}, CONV: conversation})
+    assert _pool_owner(store) == 0
+    assert 'speaker_embedding' not in store.rows[USER]

@@ -94,10 +94,6 @@ _inflight_lock = threading.RLock()
 ScheduleTask = Callable[..., None]
 
 
-class TagPromptForbidden(Exception):
-    """The answer needs a feature the user's plan does not include."""
-
-
 class TagPromptInvalid(Exception):
     """The answer does not fit the prompt."""
 
@@ -492,9 +488,8 @@ def apply_answer(
     answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
-    needs_named = answer in _NAMED_ANSWERS
-    if needs_named and not named_speaker_prompts_allowed(uid):
-        raise TagPromptForbidden('Naming other people needs a paid plan')
+    # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
+    # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
     person_id: Optional[str] = None
     person_enrolled = False
@@ -806,6 +801,7 @@ async def store_owner_voice_sample(
             _pool,
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+            card_generation=card_generation,
             # Record only the selected run's segments: the confirmation retracts
             # by intersection, and overlapping owner segments from another capture
             # scope must not be retracted by a later edit in this scope.

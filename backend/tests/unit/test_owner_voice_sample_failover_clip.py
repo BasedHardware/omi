@@ -223,7 +223,9 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
             captured['pooled_pcm'] = handle.readframes(handle.getnframes())
         return np.ones((1, 4), dtype=np.float32)
 
-    def fake_pool_confirmation(uid, embedding, pool, *, conversation_id, expected_receipt_generation, segment_ids):
+    def fake_pool_confirmation(
+        uid, embedding, pool, *, conversation_id, expected_receipt_generation, segment_ids, card_generation
+    ):
         captured['pooled_embedding'] = embedding
         captured['pooled_conversation'] = conversation_id
         captured['pooled_segments'] = segment_ids

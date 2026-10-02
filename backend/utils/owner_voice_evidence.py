@@ -17,7 +17,6 @@ def authorized_owner_segments(
 ) -> list[str]:
     """A card grants teaching only to its exact decision, never a later opt-out."""
     receipt = conversation.get('manual_speaker_assignments') or {}
-    speakers = receipt.get('speakers') or {}
     wanted = set(segment_ids)
     allowed = []
     for segment in conversation.get('transcript_segments') or []:
@@ -25,14 +24,6 @@ def authorized_owner_segments(
             continue
         decision = winning_receipt_decision(receipt, segment)
         if not decision or not decision.get('is_user') or decision.get('person_id') or decision.get('rejection'):
-            continue
-        # A merged conversation can reuse numeric speaker ids across capture
-        # scopes; a speaker-level entry only covers segments in its own scope.
-        if (
-            decision is speakers.get(str(segment.get('speaker_id')))
-            and decision.get('speaker_id_scope') is not None
-            and decision.get('speaker_id_scope') != segment.get('speaker_id_scope')
-        ):
             continue
         card_authorized = card_generation is not None and decision.get('generation') == card_generation
         if decision.get('use_for_speech_training', True) is not False or card_authorized:
