@@ -55,12 +55,13 @@ export function CurrentPlanCard(props: {
       {periodText ? <div className="text-sm text-text-tertiary">{periodText}</div> : null}
       {subscription.features?.includes('byok') ? (
         <div className="space-y-1 text-sm text-text-tertiary">
-          <div>Chat and AI: BYOK keys active</div>
+          <div>Chat and AI: BYOK supported — configure keys in Developer settings</div>
           <div>
             {sub.transcription_allowance?.reason === 'byok'
               ? 'Transcription: Deepgram BYOK'
               : sub.transcription_allowance &&
-                  sub.transcription_allowance.reason !== 'allowance_unavailable'
+                  sub.transcription_allowance.reason !== 'allowance_unavailable' &&
+                  sub.transcription_allowance.reason !== 'usage_invalid'
                 ? 'Transcription: Omi plan allowance'
                 : 'Transcription allowance unavailable — refresh to check'}
           </div>

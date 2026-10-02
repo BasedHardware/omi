@@ -12,6 +12,7 @@ describe('CurrentPlanCard provider-scoped BYOK', () => {
     ['plan_allowance_exhausted', 'Transcription: Omi plan allowance'],
     ['byok', 'Transcription: Deepgram BYOK'],
     ['allowance_unavailable', 'Transcription allowance unavailable — refresh to check'],
+    ['usage_invalid', 'Transcription allowance unavailable — refresh to check'],
     [undefined, 'Transcription allowance unavailable — refresh to check']
   ])('shows the server transcription allowance for %s', (reason, expected) => {
     const sub: UserSubscriptionResponse = {
@@ -42,7 +43,10 @@ describe('CurrentPlanCard provider-scoped BYOK', () => {
       />
     )
 
-    expect(screen.getByText('Chat and AI: BYOK keys active')).not.toBeNull()
+    expect(
+      screen.getByText('Chat and AI: BYOK supported — configure keys in Developer settings')
+    ).not.toBeNull()
+    expect(screen.queryByText('Chat and AI: BYOK keys active')).toBeNull()
     expect(screen.getByText(expected)).not.toBeNull()
   })
 })
