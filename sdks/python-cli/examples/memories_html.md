@@ -51,12 +51,12 @@ import os
 from pathlib import Path
 import re
 import sys
-import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 
 CATEGORY_META: Dict[str, Dict[str, str]] = {
     "work": {"label": "Work", "emoji": "💼"},
+    "skills": {"label": "Skills", "emoji": "🎯"},
     "personal": {"label": "Personal", "emoji": "👤"},
     "learnings": {"label": "Learnings", "emoji": "🧠"},
     "interests": {"label": "Interests", "emoji": "💡"},
@@ -156,7 +156,11 @@ p.summary { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
 .badge-category { background: var(--badge-cat-bg); color: var(--badge-cat-text); }
 .badge-tag { background: var(--badge-tag-bg); color: var(--badge-tag-text); font-family: ui-monospace, monospace; }
 .badge-private { background: var(--badge-priv-bg); color: var(--badge-priv-text); }
-.memory-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.75rem; color: var(--muted); }
+.memory-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
 @media print {
   body { margin: 0; padding: 0; max-width: 100%; color: #000; background: #fff; }
   .memory-card { page-break-inside: avoid; border: 1px solid #ccc; margin-bottom: 0.5rem; }
@@ -252,6 +256,7 @@ def report(
     now: Optional[datetime] = None,
 ) -> str:
     """Generate self-contained HTML document for the loaded memories."""
+    # Filter memories if category_filter is supplied
     filtered_items: List[Dict[str, Any]] = []
     for item_id, item in items_by_id.items():
         cat = str(item.get("category") or "other").strip().lower()
@@ -259,6 +264,7 @@ def report(
             continue
         filtered_items.append({"_id": item_id, **item})
 
+    # Sort memories reverse-chronologically by created_at
     def sort_key(m: Dict[str, Any]) -> Tuple[datetime, str]:
         parsed = parse_time(m.get("created_at"))
         dt = parsed if parsed is not None else datetime.min.replace(tzinfo=timezone.utc)
@@ -266,6 +272,7 @@ def report(
 
     filtered_items.sort(key=sort_key, reverse=True)
 
+    # Collect statistics
     total_count = len(filtered_items)
     categories = set()
     tagged_count = 0
@@ -307,12 +314,21 @@ def report(
     )
     parts.append(f'  <p class="summary">{escape(summary_text)}</p>')
 
+    # Stats Grid
     parts += [
         '  <div class="stats-grid">',
         f'    <div class="stat-card"><div class="num">{total_count}</div><div class="lbl">Total Memories</div></div>',
-        f'    <div class="stat-card"><div class="num" style="color:var(--badge-cat-text);">{len(categories)}</div><div class="lbl">Categories</div></div>',
+        (
+            '    <div class="stat-card">'
+            f'<div class="num" style="color:var(--badge-cat-text);">{len(categories)}</div>'
+            '<div class="lbl">Categories</div></div>'
+        ),
         f'    <div class="stat-card"><div class="num">{tagged_count}</div><div class="lbl">Tagged</div></div>',
-        f'    <div class="stat-card"><div class="num" style="color:var(--badge-priv-text);">{private_count}</div><div class="lbl">Private</div></div>',
+        (
+            '    <div class="stat-card">'
+            f'<div class="num" style="color:var(--badge-priv-text);">{private_count}</div>'
+            '<div class="lbl">Private</div></div>'
+        ),
         "  </div>",
     ]
 
@@ -321,6 +337,7 @@ def report(
         parts += ["</body>", "</html>\n"]
         return "\n".join(parts)
 
+    # Grouped display
     sorted_cats = sorted(grouped.keys())
     for cat in sorted_cats:
         meta = CATEGORY_META.get(cat, {"label": cat.replace("_", " ").title(), "emoji": "📁"})
@@ -399,23 +416,39 @@ def convert(
 
     if not overwrite:
         try:
-            with output_path.open("xb") as output:
-                output.write(html_content)
+            output = output_path.open("xb")
         except FileExistsError:
-            raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite to replace)") from None
+            raise FileExistsError(
+                f"Refusing to overwrite existing {output_path} (use --overwrite to replace)"
+            ) from None
+        try:
+            with output:
+                output.write(html_content)
+        except OSError:
+            output_path.unlink(missing_ok=True)
+            raise
     else:
-        with tempfile.NamedTemporaryFile("wb", dir=parent_dir, delete=False, prefix=".tmp_memories_") as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            try:
+        # Atomic write to temporary file in same directory with default permissions, then replace destination
+        tmp_name = f".tmp_memories_{uuid.uuid4().hex}.html"
+        tmp_path = parent_dir / tmp_name
+        try:
+            with tmp_path.open("xb") as tmp_file:
                 tmp_file.write(html_content)
                 tmp_file.flush()
                 os.fsync(tmp_file.fileno())
-            except BaseException:
-                tmp_path.unlink(missing_ok=True)
-                raise
-        tmp_path.replace(output_path)
+            tmp_path.replace(output_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
-    return len(items)
+    # Return count of memories exported to the report
+    target_category = category_filter.strip().lower() if category_filter else None
+    filtered_count = sum(
+        1
+        for item in items.values()
+        if not target_category or str(item.get("category") or "other").strip().lower() == target_category
+    )
+    return filtered_count
 
 
 def main(argv: Optional[List[str]] = None) -> int:

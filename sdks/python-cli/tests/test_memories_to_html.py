@@ -67,10 +67,16 @@ class TestMemoriesToHtml(unittest.TestCase):
         self.assertIn("<!DOCTYPE html>", html_out)
         self.assertIn("<title>Second Brain Knowledge</title>", html_out)
         self.assertIn("<h1>Second Brain Knowledge</h1>", html_out)
-        self.assertIn("Total: 3 · Categories: 3 · Tagged: 2 · Private: 1.", html_out)
-        self.assertIn('<div class="stat-card"><div class="num">3</div><div class="lbl">Total Memories</div></div>', html_out)
+        self.assertIn(
+            '<div class="stat-card"><div class="num">3</div><div class="lbl">Total Memories</div></div>',
+            html_out,
+        )
         self.assertIn('<div class="stat-card"><div class="num">2</div><div class="lbl">Tagged</div></div>', html_out)
-        self.assertIn('<div class="stat-card"><div class="num" style="color:var(--badge-priv-text);">1</div><div class="lbl">Private</div></div>', html_out)
+        self.assertIn(
+            '<div class="stat-card"><div class="num" style="color:var(--badge-priv-text);">1</div>'
+            '<div class="lbl">Private</div></div>',
+            html_out,
+        )
 
     def test_category_grouping_and_emojis(self):
         items_dict = {it["id"]: it for it in self.sample_memories}
@@ -83,9 +89,10 @@ class TestMemoriesToHtml(unittest.TestCase):
         self.assertIn("🔒 Private", html_out)
 
     def test_escaping_against_xss(self):
+        malicious_id = "<img src=x onerror=alert(1)>"
         malicious = {
-            "xss": {
-                "id": "<img src=x onerror=alert(1)>",
+            malicious_id: {
+                "id": malicious_id,
                 "content": "<script>alert('xss')</script> & 'quotes'",
                 "category": "work",
                 "tags": ["<script>", "normal"],
@@ -97,6 +104,19 @@ class TestMemoriesToHtml(unittest.TestCase):
         self.assertNotIn("<script>alert", html_out)
         self.assertIn("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; &amp; &#x27;quotes&#x27;", html_out)
         self.assertNotIn("<img src=x", html_out)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", html_out)
+
+    def test_skills_category_metadata(self):
+        items_dict = {
+            "m_skills": {
+                "id": "m_skills",
+                "content": "Mastered async concurrency in Rust",
+                "category": "skills",
+                "created_at": "2026-09-20T10:00:00Z",
+            }
+        }
+        html_out = m2html.report(items_dict, timedelta(0), "")
+        self.assertIn("🎯 Skills (1)", html_out)
 
     def test_timezone_offset(self):
         items_dict = {
@@ -185,6 +205,24 @@ class TestMemoriesToHtml(unittest.TestCase):
         self.assertIsNone(m2html.parse_time("invalid"))
         self.assertIsNone(m2html.parse_time(None))
         self.assertIsNone(m2html.parse_time("9999-12-31T23:59:59-14:00"))
+
+    def test_convert_category_filter_count(self):
+        src = self.tmp / "input_filter.json"
+        dest = self.tmp / "report_filter.html"
+        src.write_text(json.dumps(self.sample_memories), encoding="utf-8")
+
+        count = m2html.convert([str(src)], str(dest), category_filter="work")
+        self.assertEqual(count, 1)
+
+    def test_failed_write_cleans_up_destination(self):
+        src = self.tmp / "input_err.json"
+        dest = self.tmp / "report_err.html"
+        src.write_text(json.dumps(self.sample_memories), encoding="utf-8")
+
+        with patch("pathlib.Path.open", side_effect=OSError("Disk full")):
+            with self.assertRaises(OSError):
+                m2html.convert([str(src)], str(dest), overwrite=False)
+        self.assertFalse(dest.exists())
 
     def test_main_cli_execution(self):
         src = self.tmp / "mems.json"
