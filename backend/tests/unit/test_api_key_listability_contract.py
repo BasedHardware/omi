@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 import pytest
 
@@ -14,6 +15,18 @@ os.environ.setdefault(
 
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
+import database.api_key_cache as api_key_cache
+from tests.unit.test_api_key_revocation_race_fakes import AtomicKeyBatch, RedisStore
+
+
+@pytest.fixture(autouse=True)
+def _local_revocation_store(monkeypatch):
+    store = RedisStore()
+    monkeypatch.setattr(redis_db, "r", store)
+    monkeypatch.setattr(api_key_cache, "_redis", lambda: redis_db.r)
+    return store
+
+
 import database.redis_db as redis_db
 from database.api_key_metadata import (
     ApiKeyAuthRepair,
@@ -71,7 +84,9 @@ class _DocumentReference:
         self._collection._records[self.id] = {"data": dict(data), "create_time": None}
 
     def update(self, data: dict[str, Any]) -> None:
-        record = self._collection._records.setdefault(self.id, {"data": {}, "create_time": None})
+        record = self._collection._records.get(self.id)
+        if record is None:
+            raise NotFound("update requires an existing document")
         target = record["data"]
         for path, value in data.items():
             parts = path.split(".")
@@ -124,6 +139,9 @@ class _Collection:
 
 
 class _Firestore:
+    def batch(self):
+        return AtomicKeyBatch()
+
     def __init__(self):
         self._collections: dict[str, _Collection] = {}
 
@@ -209,13 +227,14 @@ class _Redis:
         return True
 
 
-class _RedisKeyValueStore:
+class _RedisKeyValueStore(RedisStore):
     def __init__(self):
         self.values: dict[str, object] = {}
 
-    def set(self, key: str, value: object, ex: Optional[int] = None) -> None:
+    def set(self, key: str, value: object, ex: Optional[int] = None) -> bool:
         del ex
         self.values[key] = value
+        return True
 
     def get(self, key: str) -> object:
         value = self.values.get(key)
@@ -234,7 +253,8 @@ class _FailingRedisKeyValueStore(_RedisKeyValueStore):
 
 class _ReadFailingRedisKeyValueStore(_RedisKeyValueStore):
     def get(self, key: str) -> object:
-        del key
+        if key.startswith("api_key:revoked:"):
+            return super().get(key)
         raise RuntimeError("redis read unavailable")
 
 
@@ -692,7 +712,7 @@ def test_developer_auth_reports_cache_read_error_after_firestore_recovery(monkey
     assert auth_result.repairs == {ApiKeyAuthRepair.CACHE_READ}
 
 
-def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monkeypatch):
+def test_cache_delete_failure_preserves_mcp_document_grant_but_fences_auth(monkeypatch):
     raw_token = "omi_mcp_dddddddddddddddddddddddddddddddd"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
@@ -731,10 +751,10 @@ def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monk
     ]
     assert db.collection("mcp_api_keys").document("mcp-revoke-failure").get().exists is True
     assert set(_mcp_grant_keys(db, "user-1")) == {"mcp-revoke-failure"}
-    assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "mcp-revoke-failure"
+    assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
 
 
-def test_cache_delete_failure_preserves_developer_document_and_current_auth(monkeypatch):
+def test_cache_delete_failure_preserves_developer_document_but_fences_auth(monkeypatch):
     raw_token = "omi_dev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
     db = _Firestore()
@@ -768,7 +788,7 @@ def test_cache_delete_failure_preserves_developer_document_and_current_auth(monk
     assert store.delete_calls == [(f"dev_api_key:{hashed_key}",)]
     assert db.collection("dev_api_keys").document("dev-revoke-failure").get().exists is True
     remove_grant.assert_not_called()
-    assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "dev-revoke-failure"
+    assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
 
 
 @pytest.mark.parametrize("corrupt_hash", [None, "", " ", 7, "not-a-hash"])
