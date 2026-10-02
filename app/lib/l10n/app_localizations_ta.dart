@@ -12191,17 +12191,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பேச்சாளர்கள்',
-      one: '1 பேச்சாளர்',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “$askPhrase” அல்லது “$questionPhrase” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.';
   }
@@ -12225,6 +12214,21 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.';
 
   @override
+  String get exportingAllData =>
+      'உங்கள் தரவு ஏற்றுமதி செய்யப்படுகிறது… Omi-ஐ திறந்தே வைக்கவும்; பெரிய கணக்குகளுக்கு பல நிமிடங்கள் ஆகலாம்.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பேச்சாளர்கள்',
+      one: '1 பேச்சாளர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று';
 
   @override
@@ -12239,4 +12243,66 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'உள்ளூர் நகல்கள்';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'லேபிளிடப்பட்ட வரிகள்: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'குரல் கற்றுக்கொள்ளப்பட்டது',
+        'pending': 'குரலைக் கற்றுக்கொள்கிறது…',
+        'disabled': 'குரல் சேமிப்பு முடக்கப்பட்டுள்ளது',
+        'other': 'குரல் இன்னும் கற்றுக்கொள்ளப்படவில்லை',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'அடுத்த முறை Omi $name அவர்களை அடையாளம் காணும்.',
+        'pending': 'இதற்கு சில விநாடிகள் ஆகும்.',
+        'disabled': 'Omi $name அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.',
+        'other': 'Omi-க்கு $name அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'இந்தக் குரலுடன் முந்தைய உரையாடல்கள்: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'சாத்தியம்',
+        'soundsLike': '$name போல ஒலிக்கிறது',
+        'notPerson': '$name இல்லை',
+        'carried': 'இன்னும் $name. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.',
+        'change': 'மாற்று',
+        'alsoTitle': 'இதுவும் $name தானா?',
+        'alsoBody': 'முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.',
+        'confirmed': 'இந்த லேபிளை உறுதிப்படுத்தினீர்கள்',
+        'other': 'மதிப்பாய்வு',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'இந்தக் குரலின் $duration';
+  }
 }

@@ -12127,17 +12127,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count participantes',
-      one: '1 participante',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Ative o Omi em Atalhos → Siri. Diga “$askPhrase” ou “$questionPhrase” e faça sua pergunta.';
   }
@@ -12161,6 +12150,21 @@ class AppLocalizationsPt extends AppLocalizations {
       'Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando.';
 
   @override
+  String get exportingAllData =>
+      'Exportando seus dados… Mantenha o Omi aberto; contas grandes podem levar vários minutos.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count participantes',
+      one: '1 participante',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'Remover cópias sincronizadas automaticamente';
 
   @override
@@ -12175,4 +12179,66 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Cópias locais';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Linhas identificadas: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voz aprendida',
+        'pending': 'Aprendendo a voz…',
+        'disabled': 'O salvamento de voz está desativado',
+        'other': 'Voz ainda não aprendida',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'O Omi vai reconhecer $name na próxima vez.',
+        'pending': 'Isso leva alguns segundos.',
+        'disabled': 'Ative o salvamento de vozes em Configurações para o Omi poder reconhecer $name.',
+        'other': 'O Omi precisa de mais fala clara de $name e vai continuar tentando.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversas anteriores com esta voz: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Provável',
+        'soundsLike': 'Soa como $name',
+        'notPerson': 'Não é $name',
+        'carried': 'Continua sendo $name. Mantido da sua última conversa.',
+        'change': 'Alterar',
+        'alsoTitle': 'Esta voz também é $name?',
+        'alsoBody': 'O Omi encontrou a mesma voz em conversas anteriores.',
+        'confirmed': 'Você confirmou este rótulo',
+        'other': 'Revisar',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration desta voz';
+  }
 }

@@ -80,7 +80,11 @@ from utils.conversations.smart_merge_policy import (
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.executors import postprocess_executor, run_blocking
 from utils.llm.jev_client import ask_jev
-from utils.metrics import record_conversation_smart_merge, record_conversation_smart_merge_refresh
+from utils.metrics import (
+    record_conversation_smart_merge,
+    record_conversation_smart_merge_audit,
+    record_conversation_smart_merge_refresh,
+)
 from utils.observability.fallback import record_fallback
 from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
 
@@ -374,7 +378,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         result = smart_merge_db.absorb_conversation(
             uid, plan.survivor_id, conversation_id, expected_revision=plan.expected_revision, plan=payloads
         )
-        outcome, reason = result.outcome, result.reason
+        outcome, reason, audit = result.outcome, result.reason, result.audit
     except Exception as error:
         # A transaction error normally commits nothing; an ambiguous commit is
         # settled by reading the donor marker back.
@@ -386,6 +390,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         )
         row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
         outcome, reason = ('absorbed', 'absorbed') if row and is_donor(row) else ('rejected', 'error')
+        audit = 'unknown'
 
     if outcome == 'rejected':
         kept = dict(plan.record, decision=KEPT, reason=reason)
@@ -407,6 +412,17 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
     record_conversation_smart_merge(
         mode=mode.value, decision='merge', reason='absorbed', gap_seconds=plan.gap, p_same=plan.record.get('p_same')
     )
+    if outcome == 'absorbed' and audit != 'none':
+        record_conversation_smart_merge_audit(audit)
+        logger.info('event=smart_merge_audit outcome=%s uid=%s', audit, uid)
+        if audit == 'skipped_error':
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='audit',
+                to_mode='none',
+                reason='local_heal',
+                outcome='degraded',
+            )
     logger.info(
         'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s',
         mode.value,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -142,6 +143,7 @@ Future<void> showNameSpeakerSheet(
   ) onSpeakerAssigned,
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
+  Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
 }) {
   return showOmiSheet<void>(
     context: context,
@@ -153,6 +155,7 @@ Future<void> showNameSpeakerSheet(
       suggestion: suggestion,
       defaultApplyToSpeaker: defaultApplyToSpeaker,
       onSpeakerAssigned: onSpeakerAssigned,
+      onSpeakerRejected: onSpeakerRejected,
     ),
   );
 }
@@ -171,6 +174,10 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final SpeakerLabelSuggestionEvent? suggestion;
   final bool defaultApplyToSpeaker;
 
+  /// Says the current label is wrong without naming who it is: "Not Me", "Not <name>",
+  /// "Not a Person". Null hides those answers (the live transcript).
+  final Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected;
+
   const NameSpeakerBottomSheet({
     super.key,
     required this.speakerId,
@@ -179,6 +186,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.segments,
     this.suggestion,
     this.defaultApplyToSpeaker = false,
+    this.onSpeakerRejected,
   });
 
   @override
@@ -386,6 +394,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _buildNewPersonInput(people, userName)
                       else
                         _buildPersonSelector(people, userName),
+                      if (widget.onSpeakerRejected != null && !_isCreatingNewPerson) _buildRejections(people),
                       const SizedBox(height: 16),
                       _buildUntaggedSegments(),
                       const SizedBox(height: 8),
@@ -607,6 +616,66 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         const SizedBox(height: 8),
         Wrap(spacing: 8.0, runSpacing: 8.0, children: chips),
       ],
+    );
+  }
+
+  Future<void> _reject(SpeakerRejection kind) async {
+    final reject = widget.onSpeakerRejected;
+    if (reject == null || loading) return;
+    final l10n = context.l10n;
+    setLoading(true);
+    var saved = false;
+    try {
+      saved = await reject(kind);
+    } catch (_) {
+      saved = false;
+    }
+    setLoading(false);
+    if (!mounted) return;
+    if (!saved) {
+      setState(() => _saveFailed = true);
+      return;
+    }
+    OmiFeedback.confirm(
+      context,
+      kind == SpeakerRejection.notAPerson ? l10n.speakerTagPromptNotAPersonToast : l10n.speakerTagPromptRejectedToast,
+    );
+    Navigator.pop(context);
+  }
+
+  /// The answers that only say the label is wrong. "Not Me" / "Not <name>" appear when this line
+  /// carries that label; "Not a Person" is always there (a TV, a voice assistant).
+  Widget _buildRejections(List<Person> people) {
+    final l10n = context.l10n;
+    final current = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    final person = people.firstWhereOrNull((p) => p.id == current?.personId);
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
+      child: Wrap(
+        spacing: OmiSpacing.xs,
+        children: [
+          if (current?.isUser == true)
+            OmiButton.secondary(
+              key: const Key('name_speaker_not_me'),
+              label: l10n.speakerTagPromptNotMeAction,
+              size: OmiButtonSize.compact,
+              onPressed: () => _reject(SpeakerRejection.notMe),
+            ),
+          if (person != null)
+            OmiButton.secondary(
+              key: const Key('name_speaker_not_person'),
+              label: l10n.speakerLabelText('notPerson', person.name),
+              size: OmiButtonSize.compact,
+              onPressed: () => _reject(SpeakerRejection.notPerson),
+            ),
+          OmiButton.secondary(
+            key: const Key('name_speaker_not_a_person'),
+            label: l10n.speakerTagPromptNotAPerson,
+            size: OmiButtonSize.compact,
+            onPressed: () => _reject(SpeakerRejection.notAPerson),
+          ),
+        ],
+      ),
     );
   }
 

@@ -190,7 +190,11 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
         for pattern in check.triggers:
             if not pattern or pattern.count("[") != pattern.count("]"):
                 errors.append(f"{check.id}: invalid trigger glob: {pattern!r}")
-            elif pattern != "all" and not glob.has_magic(pattern) and not (root / pattern).exists():
+            elif (
+                pattern not in {"all", "@firestore-index-guard"}
+                and not glob.has_magic(pattern)
+                and not (root / pattern).exists()
+            ):
                 errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
             errors.append(f"{check.id}: lanes must not be empty")
@@ -244,12 +248,23 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     )
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
+        files.update(
+            run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines()
+        )
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
 
 def trigger_matches(pattern: str, path: str) -> bool:
+    if pattern == "@firestore-index-guard":
+        # The backend selector owns both the inventory scope and guard inputs.
+        # It and its inventory imports are stdlib-only; selection needs no venv.
+        backend_scripts = Path(__file__).resolve().parents[2] / "backend/scripts"
+        if str(backend_scripts) not in sys.path:
+            sys.path.insert(0, str(backend_scripts))
+        from select_backend_unit_tests import is_firestore_index_guard_path
+
+        return is_firestore_index_guard_path(path)
     if pattern == "all":
         return True
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):

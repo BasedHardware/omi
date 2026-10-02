@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
 from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
-from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
+from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
-from utils.stt.live_health import health, mode as routing_mode
+from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
     propose,
@@ -307,12 +307,26 @@ async def connect_configured_chain(
                     routing_models=routing_models,
                 )
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            health.record_connect_failure(
+                (
+                    target.id
+                    if target is not None
+                    else (
+                        (routing_models or {}).get('parakeet') or 'parakeet'
+                        if service.value == 'parakeet'
+                        else DEFAULT_IDS.get(service.value, service.value)
+                    )
+                ),
+                bounded_language(routing_language),
+                routing_uid,
+                reason,
+            )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
-            # omi_fallback_total keeps its bounded vocabulary: the typed account
-            # deaths fold onto quota/auth exactly like the socket path does.
-            fallback_reason = fallback_reason_for_typed_death(reason) if account_rejection else reason
+            # Preserve legacy omi_fallback_total quota/auth labels while the
+            # health observation and connect counter retain precise tokens.
+            fallback_reason = fallback_metric_reason(reason)
             capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             if active and target is not None and not (reason == 'auth' or account_rejection):
                 failed_targets.add(target.id)

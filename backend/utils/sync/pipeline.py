@@ -124,6 +124,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
+from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
 from utils.stt.outcomes import (
@@ -2624,17 +2625,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 # This callback runs in sync_executor. Waiting here keeps the fence
                 # durable before audio finalization, while the coordinator loop stays
                 # available to dispatch the writes through db_executor.
-                asyncio.run_coroutine_threadsafe(
-                    _checkpoint_fenced_conversations_for_run(
-                        uid,
-                        response,
-                        content_id,
-                        job_id,
-                        active_run_lock_token,
-                        active_run_lock_epoch,
-                    ),
-                    coordinator_loop,
-                ).result()
+                checkpoint_coro = _checkpoint_fenced_conversations_for_run(
+                    uid, response, content_id, job_id, active_run_lock_token, active_run_lock_epoch
+                )
+                asyncio.run_coroutine_threadsafe(checkpoint_coro, coordinator_loop).result()
 
             await run_blocking(
                 sync_executor,
@@ -2648,6 +2642,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # conversations play exactly like realtime ones. Gated on the user's setting.
             if private_cloud_sync_enabled:
                 await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
+                schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 

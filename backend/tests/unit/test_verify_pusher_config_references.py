@@ -237,7 +237,8 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
     assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
-    assert "CONVERSATION_RELEVANCE_JEV_ENABLED" not in literals
+    assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "1"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"

@@ -12210,17 +12210,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count intervenants',
-      one: '1 intervenant',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Activez Omi dans Raccourcis → Siri. Dites « $askPhrase » ou « $questionPhrase », puis posez votre question.';
   }
@@ -12245,6 +12234,21 @@ class AppLocalizationsFr extends AppLocalizations {
       'Cette version d\'Omi n\'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser.';
 
   @override
+  String get exportingAllData =>
+      'Exportation de vos données… Gardez Omi ouvert ; les comptes volumineux peuvent prendre plusieurs minutes.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count intervenants',
+      one: '1 intervenant',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'Suppression automatique des copies synchronisées';
 
   @override
@@ -12259,4 +12263,66 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Copies locales';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Lignes étiquetées : $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voix apprise',
+        'pending': 'Apprentissage de la voix…',
+        'disabled': 'L’enregistrement de la voix est désactivé',
+        'other': 'Voix pas encore apprise',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi reconnaîtra $name la prochaine fois.',
+        'pending': 'Cela prend quelques secondes.',
+        'disabled': 'Activez l’enregistrement des voix dans les Réglages pour qu’Omi puisse reconnaître $name.',
+        'other': 'Omi a besoin d’une parole plus claire de $name et continuera d’essayer.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversations précédentes avec cette voix : $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Probable',
+        'soundsLike': 'Ressemble à $name',
+        'notPerson': 'Pas $name',
+        'carried': 'Toujours $name. Repris de votre dernière conversation.',
+        'change': 'Modifier',
+        'alsoTitle': 'Est-ce aussi $name ?',
+        'alsoBody': 'Omi a retrouvé la même voix dans des conversations précédentes.',
+        'confirmed': 'Vous avez confirmé cette étiquette',
+        'other': 'Vérifier',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration de cette voix';
+  }
 }

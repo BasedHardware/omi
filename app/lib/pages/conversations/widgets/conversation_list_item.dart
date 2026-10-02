@@ -105,6 +105,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,
+        conversation.isLocked,
       );
 
   @override

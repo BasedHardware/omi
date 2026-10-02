@@ -207,6 +207,8 @@ getTranscriptWidget(
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
   TranscriptSegmentBuilder? segmentBuilder,
+  void Function(TranscriptSegment segment)? onConfirmSpeakerLabel,
+  void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
   DateTime? startedAt,
 }) {
   if (conversationCreating) {
@@ -245,6 +247,8 @@ getTranscriptWidget(
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
       segmentBuilder: segmentBuilder,
+      onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+      onRejectSpeakerLabel: onRejectSpeakerLabel,
       startedAt: startedAt,
     );
   }

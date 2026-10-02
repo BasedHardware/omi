@@ -71,7 +71,7 @@ RelevanceArm = Literal['keep_all', 'jev', 'nano']
 
 
 def uid_bucket(uid: str, salt: str) -> float:
-    """Stable salted cohort, using the capture shadow's first eight SHA256 bytes."""
+    """Stable salted identity bucket; ``uid`` may also be a conversation ID."""
     digest = hashlib.sha256(f'{salt}\0{uid}'.encode()).digest()
     # Floating-point rounding of the largest uint64 must not produce 100.
     return min(int.from_bytes(digest[:8], 'big') / 2**64 * 100, math.nextafter(100.0, 0.0))
@@ -112,18 +112,23 @@ def keep_all_selected(conversation_id: str) -> bool:
 
 
 def relevance_arm(uid: str, conversation_id: str) -> RelevanceArm:
-    """Keep selected conversations; otherwise preserve the live Jev UID ramp."""
+    """Ramp by conversation so every account shares one policy (INV-MEM-5).
+
+    UID overrides are dev dogfooding only. Unknown/unset stages fail closed
+    to the conversation policy and never read the allowlist.
+    """
     if keep_all_selected(conversation_id):
         return 'keep_all'
 
-    bucket = uid_bucket(uid, 'relevance-arm-v1')
+    bucket = uid_bucket(conversation_id, 'relevance-arm-v2')
     keep_all = _percentage_or_none('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', default=0.0)
     jev = _percentage_or_none('CONVERSATION_RELEVANCE_JEV_PERCENT', default=100.0)
     if keep_all is None or jev is None:
         return 'nano'
     if conversation_relevance_jev_enabled():
-        if keep_all <= bucket < min(100.0, keep_all + jev) or _allowlisted(
-            uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+        if keep_all <= bucket < min(100.0, keep_all + jev) or (
+            os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
+            and _allowlisted(uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST')
         ):
             return 'jev'
     return 'nano'

@@ -12102,17 +12102,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Hovoriaci: $count',
-      one: '1 hovoriaci',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Zapnite Omi v Skratkách → Siri. Povedzte „$askPhrase“ alebo „$questionPhrase“ a potom položte svoju otázku.';
   }
@@ -12136,6 +12125,21 @@ class AppLocalizationsSk extends AppLocalizations {
       'Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať.';
 
   @override
+  String get exportingAllData =>
+      'Exportujú sa vaše údaje… Nechajte Omi otvorené; pri veľkých účtoch to môže trvať niekoľko minút.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hovoriaci: $count',
+      one: '1 hovoriaci',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'Automatické odstraňovanie synchronizovaných kópií';
 
   @override
@@ -12150,4 +12154,66 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Lokálne kópie';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označené riadky: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Hlas naučený',
+        'pending': 'Učenie hlasu…',
+        'disabled': 'Ukladanie hlasu je vypnuté',
+        'other': 'Hlas zatiaľ nie je naučený',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi nabudúce rozpozná osobu $name.',
+        'pending': 'Trvá to niekoľko sekúnd.',
+        'disabled': 'Zapnite ukladanie hlasov v Nastaveniach, aby Omi mohol rozpoznať osobu $name.',
+        'other': 'Omi potrebuje viac zreteľnej reči osoby $name a bude to skúšať ďalej.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Predchádzajúce rozhovory s týmto hlasom: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Pravdepodobne',
+        'soundsLike': 'Znie ako $name',
+        'notPerson': 'Nie je to $name',
+        'carried': 'Stále $name. Prevzaté z vášho posledného rozhovoru.',
+        'change': 'Zmeniť',
+        'alsoTitle': 'Je to aj $name?',
+        'alsoBody': 'Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.',
+        'confirmed': 'Tento štítok ste potvrdili',
+        'other': 'Skontrolovať',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tohto hlasu';
+  }
 }

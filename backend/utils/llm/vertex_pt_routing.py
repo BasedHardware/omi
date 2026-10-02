@@ -31,8 +31,8 @@ PT_MODEL_CURRENT = 'gemini-2.5-flash'
 
 # Migration target. A PT order for this model provisions in ~10 business days.
 # Nothing needs to be redeployed when it lands: the proxy attempts `dedicated`
-# on this model, and a non-429 response is the proof that capacity exists.
-PT_MODEL_TARGET = 'gemini-3.1-flash-lite'
+# on this model; only a successful dedicated response proves capacity exists.
+PT_MODEL_TARGET = 'gemini-3.8-flash'
 
 # Overflow ladder, most-capable first. Overflow is always on-demand, so this is
 # also a cost ladder: 3.1-flash-lite ($1.50 out) beats 2.5-flash spillover
@@ -53,12 +53,14 @@ PRICE_PER_MTOK_IN: dict[str, float] = {
     'gemini-3.1-flash-lite': 0.25,
     'gemini-2.5-flash': 0.30,
     'gemini-2.5-pro': 1.25,
+    PT_MODEL_TARGET: 1.50,
 }
 PRICE_PER_MTOK_OUT: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.40,
     'gemini-3.1-flash-lite': 1.50,
     'gemini-2.5-flash': 2.50,
     'gemini-2.5-pro': 10.00,
+    PT_MODEL_TARGET: 7.50,
 }
 
 # Feature name (see model_config.FEATURE_PT_OVERFLOW_ORIGIN) or desktop
@@ -94,6 +96,7 @@ OVERFLOW_ORIGIN_OPTION = 'pt_overflow_origin'
 # floor of the text ladder and is also the model clients pin directly, so
 # giving it a chain would promote those lanes onto costlier models.
 MODEL_FALLBACKS: dict[str, tuple[str, ...]] = {
+    PT_MODEL_TARGET: ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-2.5-pro': ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-2.5-flash': ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-3.1-flash-lite': ('gemini-2.5-flash-lite',),
@@ -183,24 +186,10 @@ def vertex_endpoint(
 
 
 def thinking_config_for(*, budget: int) -> dict[str, object]:
-    """Return the thinkingConfig body to send, for every model.
+    """Legacy 2.5/3.1 budget helper; 3.8 attempts use model_payload's low level.
 
-    There is deliberately no per-family branch here. Measured 2026-08-18 on the
-    global endpoint, `gemini-3.1-flash-lite` HONORS `thinkingBudget`:
-
-        thinkingBudget: 0        -> thoughts=0    output=64
-        thinkingBudget: 1024     -> thoughts=278  output=77
-        thinkingLevel: 'minimal' -> thoughts=0    output=75
-        thinkingLevel: 'high'    -> thoughts=603  output=76
-        (no thinking config)     -> thoughts=0    output=64
-
-    while 2.5-family models reject `thinkingLevel` outright with HTTP 400
-    ('thinking_level is not supported by this model'). `thinkingBudget` is
-    therefore the one option both families accept, and `thinkingLevel` is the
-    one that works on neither universally. An earlier revision split on family
-    from documentation rather than measurement and had it backwards; the split
-    is gone rather than inverted, so a fallback chain that crosses families
-    needs no body rewriting at all.
+    3.1 Flash-Lite accepted budgets in the 2026-08-18 probe, while 2.5
+    rejects thinkingLevel. Adapt the body for each actual serving model.
     """
     return {'thinkingBudget': int(budget)}
 
@@ -218,7 +207,8 @@ def thinking_config_for(*, budget: int) -> dict[str, object]:
 COMPANY_PAID_VERTEX_TEXT_MODELS = frozenset(
     {
         PT_MODEL_CURRENT,  # gemini-2.5-flash — the us-central1 reservation
-        PT_MODEL_TARGET,  # gemini-3.1-flash-lite — the migration target
+        PT_MODEL_TARGET,  # gemini-3.8-flash — dedicated only when capacity observed
+        'gemini-3.1-flash-lite',  # existing Pro remap and overflow
         'gemini-2.5-flash-lite',  # cheap shared floor
     }
 )
@@ -404,7 +394,9 @@ def resolve_fallback_chain(
     else:
         chain = MODEL_FALLBACKS.get(head, ())
     return _under_origin_ceiling(
-        tuple(rung for rung in chain if rung != protected and rung != head and rung not in dead),
+        _under_origin_ceiling(
+            tuple(rung for rung in chain if rung != protected and rung != head and rung not in dead), head
+        ),
         origin_model,
     )
 
@@ -477,7 +469,8 @@ def is_provisioned_capacity_absent(status: int, message: str) -> bool:
 DESKTOP_TEXT_LANES: dict[str, str] = {
     PT_MODEL_CURRENT: 'omi:auto:desktop-vertex-flash',
     'gemini-2.5-pro': 'omi:auto:desktop-vertex-pro',
-    PT_MODEL_TARGET: 'omi:auto:desktop-vertex-target',
+    'gemini-3.1-flash-lite': 'omi:auto:desktop-vertex-target',
+    PT_MODEL_TARGET: 'omi:auto:desktop-vertex-flash-38',
     'gemini-2.5-flash-lite': 'omi:auto:desktop-vertex-flash-lite',
 }
 DESKTOP_EMBEDDING_MODEL = 'gemini-embedding-001'
@@ -491,15 +484,52 @@ def desktop_text_lane_id(model: str) -> str | None:
 def desktop_serving_model(model: str, *, target_dedicated_ready: bool, override: str = '') -> str:
     """The model that actually serves a company-paid desktop request for `model`.
 
-    The pin policy the desktop proxy ran in-process before the gateway move:
-      * `gemini-2.5-pro`    -> the migration target (never the $10/M on-demand pro)
-      * `PT_MODEL_CURRENT`  -> whichever model currently owns prepaid capacity
-      * client-pinned models serve as themselves (flash-lite stays the cheap floor;
-        3.1-flash-lite becomes `dedicated` automatically once it holds the order)
+    Pro retains its inexpensive 3.1 Flash-Lite remap. Old Flash clients retain
+    2.5 Flash, changing only from dedicated to shared after the order moves.
+    Client-pinned Lite and new 3.8 requests serve their requested model.
     """
     normalized = _normalize(model)
+    if override:
+        company_paid_vertex_text_model(override, knob='pt model override')
     if normalized == 'gemini-2.5-pro':
-        return PT_MODEL_TARGET
+        return 'gemini-3.1-flash-lite'
+    # Old clients retain their original model/list price after migration. The
+    # capacity header changes to shared; 3.8 PayGo is not a safe price remap.
     if normalized == PT_MODEL_CURRENT:
-        return resolve_pt_model(target_dedicated_ready=target_dedicated_ready, override=override)
+        return PT_MODEL_CURRENT
     return normalized
+
+
+# Location for the MOVED order, not the on-demand residency default. A global
+# order requires explicit operator sign-off; no automatic global discovery.
+PT_TARGET_LOCATION_ENV = 'OMI_VERTEX_PT_TARGET_LOCATION'
+
+
+def target_capacity_endpoint(*, location: str) -> tuple[str, str]:
+    """Accept a declared regional/us/global order location without guessing its shape."""
+    normalized = _normalize(location) or MULTI_REGION_LOCATION
+    if normalized in {'us', 'global', 'eu'}:
+        return MULTI_REGION_HOST, normalized
+    if not normalized or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in normalized):
+        raise ValueError('invalid PT target location')
+    return f'{normalized}-aiplatform.googleapis.com', normalized
+
+
+def model_payload(payload: Mapping[str, object], model: str) -> dict[str, object]:
+    """Adapt thinking for each real attempt, including cross-family fallback."""
+    adapted = dict(payload)
+    key = 'generation_config' if 'generation_config' in adapted else 'generationConfig'
+    value = adapted.get(key, {})
+    config = dict(value) if isinstance(value, Mapping) else {}
+    thinking_key = 'thinking_config' if 'thinking_config' in config else 'thinkingConfig'
+    thinking = config.get(thinking_key)
+    if model == PT_MODEL_TARGET:
+        config.pop('thinking_config', None)
+        config['thinkingConfig'] = {'thinkingLevel': 'low'}
+    elif not uses_multi_region_endpoint(model) and isinstance(thinking, Mapping):
+        level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
+        if level is not None:
+            config.pop('thinking_config', None)
+            config['thinkingConfig'] = {'thinkingBudget': 0 if level == 'minimal' else 1024}
+    adapted[key] = config
+    return adapted

@@ -122,6 +122,7 @@ PHOTO_PROFILES = (
     _profile('goal-context', photo=True, statuses=[['completed']]),
     _profile('fair-use-classification', photo=True, start_date=[FROZEN_NOW]),
     _profile('speaker-prompts', photo=True, start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
+    _profile('speaker-voice-matches', photo=True, start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
 )
 
 PROFILES = {

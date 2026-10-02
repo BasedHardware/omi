@@ -90,6 +90,19 @@ and the known best-effort background-task limit.
 
 ## 1. Connection + Streaming + Transcription
 
+### Segment-upload processing shape
+
+Both `POST /v1/conversations/from-segments` and
+`POST /v1/dev/user/conversations/from-segments` accept conversation source
+provenance, including `workflow` and `external_integration`. Omitted or null
+source defaults to `phone`. A session-id upload builds a stored `Conversation`;
+an upload without a session id builds `CreateConversation`. Both summarize their
+transcript segments regardless of the source label. Only an
+`ExternalIntegrationCreateConversation` with integration provenance uses its
+`text`, `text_source`, and `text_source_spec` fields for text-based processing.
+Segment validation continues to return 422, and processing failures keep the
+existing privacy-safe 5xx / BYOK 429 contract.
+
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
 supports the requested mode wins: Parakeet's live RNNT model is English-only,
@@ -106,22 +119,34 @@ When `STT_ROUTING_MODE=shadow`, listen computes the cost-ordered, capability-
 filtered primary against static selection and counts agreement without changing
 connections. `on` applies that policy only to the stable UID cohort selected by
 `STT_ROUTING_ON_PERCENT` (default zero). Fleet health is a binary gate on
-speech-session disruptions, including no text and death after text, with shared
+classified provider errors and completed text, with shared
 5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
 admission stay intact. Redis refresh/write work stays off connect with a 75 ms
 default deadline; faults use local evidence and known benches, and router errors
 restore configured order. No worst-provider probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than
-additional health samples. Failed recovery trials require the same failure-user
+additional health samples. Plain no-text and deadline-only outcomes are
+censored: they neither bench nor promote. Serving/connect errors use a closed
+provider-attributable reason set; later failures after a no-text diagnostic
+remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
+The v5 reason vocabulary is shared by health and source-leg fallback telemetry;
+socket-owned causes precede send symptoms, and free-text transport deaths become
+bounded provider errors. Observations expose target/outcome/reason for rollout
+reconciliation. Window deadline/empty/capacity and session/account causes stay
+censored, even when a following send fails. Never-refreshed snapshots are NaN.
 Each user has one majority-outcome vote and at most three sequential-evidence
-outcomes per trial window. Terminal
+outcomes per trial window. Health stages cannot empty an eligible chain;
+all-degraded selection uses stage, observed provider error rate, then cost. The
+terminal target keeps its full eligible share when no cheaper stage-100 target
+can absorb the session. Explicit ramp/account/capability exclusions remain. Terminal
 legs honor capacity signals and a five-second process-local cooldown after
 `capacity_full`, without treating capacity as provider disruption. If every
 candidate is capacity-blocked, one least-recently-refused candidate may dial
 through its normal circuit/admission gate so a sole recovered target can serve.
-Global stage and transition metrics plus static/proposed shadow pairs are
+Global-stage pod cache views (including freshness/unknown state), scoped CAS
+transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
@@ -522,6 +547,27 @@ completed processing bundle. Deferred retraction keeps cleanup retryable. Late
 repair WALs that target a donor append to its survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.
+
+The same absorb transaction writes a content-free audit sibling,
+`users/{uid}/smart_merge_audit/{donor_id}` (ids, decision numbers, model and
+question version, ledger position; `expire_at` 60 days out with no TTL policy
+active), outside every conversation cascade so the record of a merge survives
+the survivor's deletion. Identifiers are bounded slash-free tokens; source, model,
+question version and mode match server-known values. It costs two extra reads
+(durable account-deletion marker and destructive-operation gate, only on the
+absorbing path) and one extra write. Blocking/malformed authority or an invalid
+projection commits the merge without the sibling. An authority RPC or audit
+staging error rolls back and restarts the absorb without audit I/O; it never
+continues on a transaction with a failed read. Merge policy stays unchanged.
+`CONVERSATION_SMART_MERGE_AUDIT_ENABLED` (unset or blank = on; only
+true/on/1/yes enable it, everything else = off) removes the extra I/O.
+Apply the kill switch to GKE pusher and Cloud Run backend-sync, which host the
+finalizer. Outcomes are logged as `event=smart_merge_audit outcome=...` and counted in
+`omi_conversation_smart_merge_audit_total`; purged survivors are counted by age
+since their last merge in `omi_conversation_smart_merge_survivor_deleted_total`.
+This counts purges, including manual-merge source deletion, not user-confirmed
+false merges. Account wipes/raw database deletes bypass this counter. The
+`last_merged_at` stamp and deletion counter remain active when audit I/O is off.
 
 ## Conversation start location
 
@@ -1274,24 +1320,24 @@ sequenceDiagram
 
 All three REST assignment forms use `database.conversations.assign_conversation_speaker`.
 It persists manual overrides/defaults, invalidates contributing profiles, and clears
-client projections atomically. Live/sync writers overlay those decisions; live
-writers preserve unseen appends and explicitly identify merged-away segments.
-Manually curated conversations cannot be automatic sync bridge donors.
-When a sync bridge retires an ID already open on a client, its tombstone is
-followed on detail reads. Assignment follows the same owner-scoped redirect
-inside its transaction. A donor speaker number is translated through its
+client projections atomically; live/sync writers overlay decisions, keep unseen
+appends, and identify merged-away segments. When a sync bridge retires an ID already
+open on a client, its tombstone is followed on detail reads. Manually curated
+conversations are never sync bridge donors, and a same-stream rollover carries the
+active scope's winning manual decisions as `source:'carried'` generation-1 entries.
+Assignment follows the same owner-scoped redirect inside its transaction. A donor speaker number is translated through its
 stable segment IDs before updating the survivor, because bridge allocation
 can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Enrollment remains **best-effort**. Pusher publishes `audio_files` during capture
-as well as at finalization. REST tries immediately; the acknowledged socket path
-queues a delayed attempt. A crash after the saved edit, missing/tail audio at the
-attempt, or a failed extraction can still lose that attempt: there is no durable
-job, lease, retry, or reconciliation worker. Reassigning the label can retry.
-Stored MANUAL decisions include concrete segment IDs and a generation; automatic
-matches and text suggestions do not create teaching receipts.
+Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
+pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
+one pooled WAV under the unchanged gates, and records one outcome on
+`voice_learning_*`. `audio_files` publish during capture and at finalization;
+REST tries immediately, sockets queue a delayed attempt, and fanout completion
+schedules a bounded retry for receipt-named people lacking a usable voiceprint
+(≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of
@@ -1394,15 +1440,15 @@ sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
 for 2 h so repeated app opens do not rescan 30 conversations.
 
 Answers apply through the same `assign_conversation_speaker` transaction as the
-transcript tag sheet (scope: that diarized speaker in that conversation), so a
-prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
-an explicit unknown decision. `someone_else` with a `person_id` or `name` is the correction
-path and labels that person. `not_a_person` (TV, podcast) clears an automatic
-label and stores an ignored-voice marker (`ignored_voices` in the prompt state,
-newest 200) so that conversation speaker is never asked about again;
-`GET /v1/speaker-tag-prompts/ignored-voices` lists markers and `DELETE
-.../ignored-voices/{conversation_id}/{speaker_id}` undoes one (and forgets its
-answered prompt ids).
+transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
+writes that same ledger (optionally per `segment_ids` of that speaker).
+`someone_else` with a `person_id`/`name` labels that person. Every negative
+answer writes `rejection: {kind, person_id}` on the receipt decision —
+`not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
+stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
+filtered from live matching, resolution, and prompt selection until a newer
+positive decision wins. A segment's `speaker_label_source` projects provenance:
+`manual`/`carried` under a winning decision, `auto` for match-only evidence.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,
@@ -1426,12 +1472,12 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
   that function now returns early when the user turned off
   `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
   sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
-- **Owner** ("That's me"): the confirmed clip must be the owner's only voice for
-  5-10 s and pass `verify_and_transcribe_sample`; its embedding is pooled into
+- **Owner** ("That's me" prompt or `is_user` tag-sheet assignment): the
+  confirmed clip is the longest clean same-voice run, 5-10 s of distinct owner
+  speech, passing `verify_and_transcribe_sample`; its embedding pools into
   `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
-  voiceprint (`speaker_embedding_base`, refreshed whenever another writer
-  replaced `speaker_embedding` after the last pooling) plus the last 5
-  confirmations (`owner_voice_confirmations`).
+  voiceprint (`speaker_embedding_base`, refreshed when another writer replaced
+  `speaker_embedding` after the last pooling) plus the last 5 confirmations.
 
 `GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
@@ -1896,10 +1942,10 @@ counter (label = reason only) plus one log line:
 drop (it logs and decides on the next clip). `speaker_id_evidence` /
 `speaker_id_decision` / the exit line carry `session=<recording session id>`
 — never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise
-attributable: `store_owner_voice_sample` logs one
-`owner sample outcome=… conversation=<id>` line per outcome next to the
-existing counter.
+without replaying the saved conversation. "That's me" outcomes are likewise attributable:
+`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
+Owner confirmation publication reads the current conversation receipt in the pooling transaction:
+a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a

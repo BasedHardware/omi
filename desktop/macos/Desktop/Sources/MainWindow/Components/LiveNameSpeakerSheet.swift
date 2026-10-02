@@ -7,7 +7,7 @@ struct LiveNameSpeakerSheet: View {
   let sampleText: String
   let people: [Person]
   let currentPersonId: String?
-  let onSave: (_ personId: String) -> Void
+  let onSave: (_ personId: String) async -> Bool
   let onCreatePerson: (_ name: String) async -> Person?
   let onDismiss: () -> Void
 
@@ -16,6 +16,8 @@ struct LiveNameSpeakerSheet: View {
   @State private var newPersonName: String = ""
   @State private var duplicateWarning: String? = nil
   @State private var isCreating: Bool = false
+  @State private var isSaving: Bool = false
+  @State private var saveError: String? = nil
 
   /// Preview text from the segment
   private var previewText: String {
@@ -34,6 +36,7 @@ struct LiveNameSpeakerSheet: View {
           .foregroundColor(Ink.primary)
         Spacer()
         DismissButton(action: onDismiss)
+          .disabled(isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.top, OmiSpacing.xl)
@@ -66,19 +69,24 @@ struct LiveNameSpeakerSheet: View {
         .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
+        .disabled(isSaving)
 
         Button(action: save) {
-          Text("Save")
+          if isSaving {
+            ProgressView().controlSize(.small)
+          } else {
+            Text("Save")
+          }
         }
         .buttonStyle(.plain)
-        .foregroundColor(canSave ? Ink.surface : Ink.secondary)
+        .foregroundColor(canSave && !isSaving ? Ink.surface : Ink.secondary)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(canSave ? Ink.primary : Ink.rowFillHover)
+            .fill(canSave && !isSaving ? Ink.primary : Ink.rowFillHover)
         )
-        .disabled(!canSave)
+        .disabled(!canSave || isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.md)
@@ -149,6 +157,13 @@ struct LiveNameSpeakerSheet: View {
           duplicateWarning = nil
         }
       }
+      .disabled(isSaving)
+
+      if let saveError {
+        Text(saveError)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.errorRed)
+      }
 
       // Inline text field for new person name
       if isAddingNewPerson {
@@ -181,9 +196,7 @@ struct LiveNameSpeakerSheet: View {
               Task { await createAndSelect() }
             }) {
               if isCreating {
-                ProgressView()
-                  .scaleEffect(0.5)
-                  .frame(width: 14, height: 14)
+                ProgressView().controlSize(.small)
               } else {
                 Text("Add")
                   .scaledFont(size: OmiType.caption, weight: .medium)
@@ -206,6 +219,7 @@ struct LiveNameSpeakerSheet: View {
               .foregroundColor(Ink.errorRed)
           }
         }
+        .disabled(isSaving)
       }
 
       Text(
@@ -251,8 +265,18 @@ struct LiveNameSpeakerSheet: View {
   }
 
   private func save() {
-    guard let personId = selectedPersonId else { return }
-    onSave(personId)
+    guard let personId = selectedPersonId, !isSaving else { return }
+    isSaving = true
+    saveError = nil
+    Task {
+      let saved = await onSave(personId)
+      isSaving = false
+      if saved {
+        onDismiss()
+      } else {
+        saveError = "Could not save this speaker. Please try again."
+      }
+    }
   }
 
   private func personChip(label: String, isSelected: Bool, isAction: Bool = false, action: @escaping () -> Void)

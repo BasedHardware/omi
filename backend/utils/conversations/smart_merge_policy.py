@@ -338,6 +338,7 @@ def absorb_payloads(
             'revision': next_revision,
             'refreshed_revision': refreshed_revision(survivor),
             'fragments': [fragment.as_ledger_entry() for fragment in fragments],
+            'last_merged_at': merged_at,
         }
     )
     state.pop('refresh_lease', None)

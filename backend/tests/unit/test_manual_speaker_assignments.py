@@ -451,6 +451,7 @@ def test_apply_copies_only_segments_whose_identity_changes():
         'person_id': 'new',
         'is_user': False,
         'speaker_identity_status': 'not_user',
+        'speaker_label_source': 'manual',
     }
     unlabeled = {'id': 's1', 'speaker_id': 0, 'person_id': None, 'is_user': False}
     receipt = {'speakers': {'0': {'generation': 1, 'person_id': 'new', 'is_user': False}}}
