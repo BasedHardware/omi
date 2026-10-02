@@ -116,6 +116,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "speaker_tag_prompts:list": (20, 3600),
     "speaker_tag_prompts:clip": (60, 3600),
     "speaker_tag_prompts:answer": (60, 3600),
+    # Hosted MCP speaker labels: same per-hour budget as a tag-prompt answer, which
+    # does the same work (one assignment transaction, optional voice-sample
+    # extraction). People creation is a single Firestore write, but an agent can
+    # loop, so it is capped as well.
+    "speakers:assign": (60, 3600),
+    "people:create": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
