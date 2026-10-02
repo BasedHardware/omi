@@ -795,16 +795,12 @@ async def store_owner_voice_sample(
         language = conversation.get('language') or await run_blocking(
             db_executor, users_db.get_user_language_preference, uid
         )
-        # Cut at the legacy position first. If that yields no verified speech and the receiver
-        # recorded hearing this window somewhere else (reconnects and failover pull the text
-        # and audio clocks apart), try once more there. Both cuts face the same verification.
-        shift = capture_shift(conversation, start, end)
-        retry_at_capture = shift is not None and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS
-        use_capture = False
-        wav = b''
-        is_valid, reason = False, ''
-        while True:
-            failure = ''
+
+        # Cut at the legacy position first, with its bounded text search. Only if that yields no
+        # verified speech and the receiver recorded hearing this window somewhere else (reconnects
+        # and failover pull the text and audio clocks apart) is it cut once more there. Every cut
+        # faces the same verification, and a failed retry reports what the legacy cut found.
+        async def cut(prefer_capture: bool) -> Tuple[str, bytes, str]:
             pcm = await run_blocking(
                 sync_executor,
                 conversation_clip_pcm,
@@ -813,30 +809,24 @@ async def store_owner_voice_sample(
                 start,
                 end,
                 caller='owner_confirmation',
-                prefer_capture=use_capture,
+                prefer_capture=prefer_capture,
             )
             if not pcm:
-                failure = 'no_audio'
-            else:
-                pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
-                if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
-                    failure = 'clip_not_clean'
-                else:
-                    wav = pcm_to_wav(pcm)
-                    _, is_valid, reason = await verify_and_transcribe_sample(
-                        wav, CLIP_SAMPLE_RATE, text, language=language
-                    )
-                    if not is_valid and not reason.startswith('transcription_failed'):
-                        failure = 'unverified'
-            if failure and retry_at_capture and not use_capture:
-                use_capture = True
-                OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='attempted').inc()
-                continue
-            break
-        if failure in ('no_audio', 'clip_not_clean'):
-            outcome = failure
-            return outcome
-        if not is_valid and reason.startswith('text_mismatch'):
+                return 'no_audio', b'', ''
+            pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
+            if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
+                return 'clip_not_clean', b'', ''
+            clip_wav = pcm_to_wav(pcm)
+            _, clip_valid, clip_reason = await verify_and_transcribe_sample(
+                clip_wav, CLIP_SAMPLE_RATE, text, language=language
+            )
+            if clip_valid:
+                return '', clip_wav, clip_reason
+            failed = 'transient_failure' if clip_reason.startswith('transcription_failed') else 'rejected_quality'
+            return failed, b'', clip_reason
+
+        failure, wav, reason = await cut(False)
+        if failure == 'rejected_quality' and reason.startswith('text_mismatch'):
             run_contributors = [
                 s
                 for s in conversation['transcript_segments']
@@ -858,11 +848,21 @@ async def store_owner_voice_sample(
                     anchor_offset=start - min(float(s.get('start') or 0) for s in run_contributors),
                 )
                 if recovered is not None:
-                    pcm, _recovered_transcript = recovered
-                    wav = pcm_to_wav(pcm)
-                    is_valid = True
-        if not is_valid:
-            outcome = 'transient_failure' if reason.startswith('transcription_failed') else 'rejected_quality'
+                    failure, wav = '', pcm_to_wav(recovered[0])
+        use_capture = False
+        shift = capture_shift(conversation, start, end)
+        if (
+            failure
+            and failure != 'transient_failure'
+            and shift is not None
+            and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS
+        ):
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='attempted').inc()
+            capture_failure, capture_wav, _ = await cut(True)
+            if not capture_failure:
+                failure, wav, use_capture = '', capture_wav, True
+        if failure:
+            outcome = failure
             return outcome
         embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav, 'owner_confirmation.wav')
         if not np.isfinite(embedding).all() or not np.any(embedding):

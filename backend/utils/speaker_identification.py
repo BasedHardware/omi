@@ -912,11 +912,13 @@ async def extract_speaker_samples(
         timeline_v2 = is_audio_timeline_v2(conversation)
         read_session = AudioChunkReadSession(uid, conversation_id, sample_rate)
         use_capture = False
+        legacy_outcome: Optional[str] = None
 
-        def capture_retry() -> bool:
+        def capture_retry(failed: str) -> bool:
             # The legacy position failed to yield verified speech. Live text and stored audio run on
             # different clocks, so try once more where the receiver recorded hearing these segments.
-            nonlocal use_capture
+            # If that fails too, the attempt reports what the legacy position found.
+            nonlocal use_capture, legacy_outcome
             if use_capture or timeline_v2:
                 return False
             shifts = [
@@ -926,6 +928,7 @@ async def extract_speaker_samples(
             if not any(shift is not None and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS for shift in shifts):
                 return False
             use_capture = True
+            legacy_outcome = failed
             OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='person', outcome='attempted').inc()
             return True
 
@@ -1016,17 +1019,19 @@ async def extract_speaker_samples(
                         fully_decoded.append((clip_start, end, contributors))
 
             if not clips:
-                if capture_retry():
+                failed = 'uncovered_audio' if unavailable_window else 'no_chunks'
+                if capture_retry(failed):
                     continue
                 clean_seconds = 0.0
-                outcome = 'uncovered_audio' if unavailable_window else 'no_chunks'
+                outcome = legacy_outcome or failed
                 return outcome
             sample_audio = b''.join(clips)
             clean_seconds = min(plan.total_seconds, decoded_seconds)
             if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
-                if capture_retry():
+                failed = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
+                if capture_retry(failed):
                     continue
-                outcome = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
+                outcome = legacy_outcome or failed
                 return outcome
 
             # Missing intervals must not abort later usable speech or contribute
@@ -1044,9 +1049,12 @@ async def extract_speaker_samples(
                 wav_bytes, sample_rate, expected_text, language=sample_language
             )
             if not is_valid or transcript is None:
-                if not reason.startswith('transcription_failed') and capture_retry():
-                    continue
-                if reason.startswith('text_mismatch') and len(plan.intervals) == len(clips) == len(fully_decoded) == 1:
+                # Bounded text search belongs to the legacy cut and runs before the capture retry.
+                if (
+                    not use_capture
+                    and reason.startswith('text_mismatch')
+                    and len(plan.intervals) == len(clips) == len(fully_decoded) == 1
+                ):
                     rec_start, rec_end, rec_contributors = fully_decoded[0]
                     ordered_rec = sorted(
                         (seg for seg in rec_contributors if seg.get('id')),
@@ -1074,7 +1082,10 @@ async def extract_speaker_samples(
                             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
                             is_valid = True
                 if not is_valid or transcript is None:
-                    outcome = _verify_outcome(reason)
+                    failed = _verify_outcome(reason)
+                    if not reason.startswith('transcription_failed') and capture_retry(failed):
+                        continue
+                    outcome = legacy_outcome or failed
                     return outcome
             break
 
