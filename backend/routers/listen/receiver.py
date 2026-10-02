@@ -1206,8 +1206,7 @@ class ListenReceiver(ReplayFilterMixin):
         if replay and epoch is not None:
             epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
-        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
-        hop.reason = live_stt_terminal_reason(previous, 'connection_lost')
+        hop = PendingLiveFailover.from_socket(previous, dead_provider or 'unknown', service.value)
         hop.capture_window_failure_details(previous)
         try:
             raw = await self._create_stt_socket(

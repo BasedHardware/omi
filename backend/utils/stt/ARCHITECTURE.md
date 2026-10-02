@@ -510,7 +510,7 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `failover` counts actual active backup attempts, and capacity admission refusals
 count actual overflow. Unused backup legs do not inflate failover counters.
 `omi_stt_cost_routing_all_degraded_total{target}` marks the emergency health
-selection, and `omi_stt_cost_routing_observations_total{target,outcome}` separates
+selection, and `omi_stt_cost_routing_observations_total{target,outcome,reason}` separates
 `success|provider_failure|censored`. No UID/content labels are added.
 Transition counters count successful CAS writers, separately for
 `scope=global|language`; Redis-down local transitions remain logs only.

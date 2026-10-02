@@ -129,7 +129,7 @@ class PendingLiveFailover:
         from_mode: str,
         to_mode: str,
         component: str = 'stt_live_session',
-        reason: str = 'connection_lost',
+        reason: str,
         capacity_subtype: str | None = None,
     ) -> None:
         self.component, self.reason = component, normalize_live_stt_reason(reason)
@@ -139,6 +139,11 @@ class PendingLiveFailover:
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
+
+    @classmethod
+    def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
+        """Capture the source cause before a successor can change the hop."""
+        return cls(from_mode=from_mode, to_mode=to_mode, reason=live_stt_terminal_reason(source, 'connection_lost'))
 
     @property
     def settled(self) -> bool:

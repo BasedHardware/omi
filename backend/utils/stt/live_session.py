@@ -557,11 +557,16 @@ class LiveLegSocket(STTSocket):
 
     @property
     def death_reason(self) -> str | None:
-        return self._replay_failure_reason or self._local_death_reason or self.raw.death_reason
+        return self._terminal_reason or self._replay_failure_reason or self._local_death_reason or self.raw.death_reason
 
     @property
     def typed_death_reason(self) -> str | None:
-        return self._replay_failure_reason or getattr(self.raw, 'typed_death_reason', None) or self._local_death_reason
+        return (
+            self._terminal_reason
+            or self._replay_failure_reason
+            or getattr(self.raw, 'typed_death_reason', None)
+            or self._local_death_reason
+        )
 
     @property
     def normalized_death_reason(self) -> str:

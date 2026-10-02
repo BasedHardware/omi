@@ -590,7 +590,7 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     assert connect_metrics.connect_error_class(failures[0]['reason']) == error_class
     assert st._soniox_circuit.state == 'open'  # account bench armed, unchanged
     assert fallbacks, 'the bounded fallback vocabulary is still recorded'
-    assert all(event['reason'] in (typed_reason, 'other') for event in fallbacks)
+    assert all(event['reason'] == typed_reason for event in fallbacks)
 
 
 def test_mid_session_metrics_retain_their_bounded_vocabulary():

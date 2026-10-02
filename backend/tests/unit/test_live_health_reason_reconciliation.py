@@ -103,15 +103,18 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(family, typed,
         assert not leg.send(PCM)
     assert observed(leg.routing_target, outcome, reason) == before + 1
     assert leg.normalized_death_reason == reason
+    assert leg.death_reason == leg.typed_death_reason == reason
     # All observer vantage points see the same cause after the first observation.
     assert live_failure.live_stt_terminal_reason(leg, 'send_failed') == reason
     assert live_failure.live_stt_terminal_reason(leg, 'connection_lost') == reason
     for recovered in (True, False):
-        hop = live_failure.PendingLiveFailover(from_mode=family, to_mode='soniox', reason=reason)
+        hop = live_failure.PendingLiveFailover.from_socket(leg, family, 'soniox')
+        assert hop.reason == reason
+        hop.to_mode = 'modulate'  # PTT's connect fallback changes the successor, not the source.
         fallback = OMI_FALLBACK_TOTAL.labels(
             component='stt_live_session',
             from_mode=family,
-            to_mode='soniox',
+            to_mode='modulate',
             reason=reason,
             outcome='recovered' if recovered else 'exhausted',
         )

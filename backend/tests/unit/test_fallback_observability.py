@@ -31,16 +31,17 @@ class FakeCounter:
         ('modulate_serve_error', 'modulate_serve_error'),
         ('connection_lost', 'connection_lost'),
         ('send_failed', 'send_failed'),
-        (None, 'untyped'),
-        ('unbounded vendor message', 'untyped'),
+        (None, 'connection_lost'),
+        ('unbounded vendor message', 'connection_lost'),
     ],
 )
+@pytest.mark.parametrize('source', ['first_text_deadline', 'other'])
 def test_failed_live_hop_retains_source_reason_when_successor_has_a_different_failure(
-    monkeypatch, caplog, typed, subtype
+    monkeypatch, caplog, typed, subtype, source
 ):
     counter = FakeCounter()
     monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
-    pending = PendingLiveFailover(from_mode='parakeet', to_mode='modulate', reason='first_text_deadline')
+    pending = PendingLiveFailover(from_mode='parakeet', to_mode='modulate', reason=source)
     with caplog.at_level(logging.WARNING, logger=fallback_mod.logger.name):
         pending.note_failure(typed)
         pending.note_failure(typed)
@@ -50,7 +51,7 @@ def test_failed_live_hop_retains_source_reason_when_successor_has_a_different_fa
                 'component': 'stt_live_session',
                 'from_mode': 'parakeet',
                 'to_mode': 'modulate',
-                'reason': 'first_text_deadline',
+                'reason': source,
                 'outcome': 'exhausted',
             },
             1.0,
@@ -59,7 +60,7 @@ def test_failed_live_hop_retains_source_reason_when_successor_has_a_different_fa
     assert len(caplog.records) == 1
     assert caplog.records[0].message == (
         'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
-        'reason=first_text_deadline outcome=exhausted'
+        f'reason={source} outcome=exhausted' + (f' subtype={subtype}' if source == 'other' else '')
     )
 
 

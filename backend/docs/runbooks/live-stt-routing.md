@@ -172,7 +172,7 @@ sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-li
 count(omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} != omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"}) or vector(0)
 ```
 
-**On requires Modulate's `provider_failure` counts to track its attributable
+**Before enabling `on`, require Modulate's `provider_failure` counts to track its attributable
 mid-session failovers by reason.** `modulate-velma-2` maps to fallback
 `from_mode="modulate"`; `parakeet-window` maps to `parakeet`. Fallbacks use family
 labels: sibling endpoints cannot be distinguished there, so compare their
