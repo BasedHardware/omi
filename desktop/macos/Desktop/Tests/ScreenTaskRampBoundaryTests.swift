@@ -211,22 +211,22 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertFalse(authority.isCurrent(old))
   }
 
-  private func httpFailure(_ status: Int, retryable: String? = nil, retryAfter: String? = nil) -> ScreenTaskHTTPFailure
+  private func httpFailure(_ status: Int, retryable: String? = nil, retryAfter: String? = nil) throws
+    -> ScreenTaskHTTPFailure
   {
     var headers: [String: String] = [:]
     headers["X-Omi-Retryable"] = retryable
     headers["Retry-After"] = retryAfter
-    return ScreenTaskHTTPFailure(
-      response: HTTPURLResponse(
-        url: URL(string: "http://local")!, statusCode: status,
-        httpVersion: nil, headerFields: headers)!, data: Data())
+    let url = try XCTUnwrap(URL(string: "http://local"))
+    let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers))
+    return ScreenTaskHTTPFailure(response: response, data: Data())
   }
 
   func testTerminalGateAndExtractionFailuresNeverEnterLegacyAndOutageEntersOnce() async throws {
     for gate in [true, false] {
       for error in [
-        httpFailure(401), httpFailure(402), httpFailure(429, retryable: "true", retryAfter: "60"),
-        httpFailure(503, retryable: "false"), ScreenTaskFailure.planGated, ScreenTaskFailure.invalidResponse,
+        try httpFailure(401), try httpFailure(402), try httpFailure(429, retryable: "true", retryAfter: "60"),
+        try httpFailure(503, retryable: "false"), ScreenTaskFailure.planGated, ScreenTaskFailure.invalidResponse,
       ] as [Error] {
         let state = RampState()
         if gate { state.gateError = error } else { state.extractionError = error }
@@ -238,7 +238,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
         XCTAssertFalse(state.sent.contains("legacy"))
       }
     }
-    for error in [httpFailure(503, retryable: "true"), URLError(.timedOut), URLError(.notConnectedToInternet)]
+    for error in [try httpFailure(503, retryable: "true"), URLError(.timedOut), URLError(.notConnectedToInternet)]
       as [Error]
     {
       let state = RampState()
@@ -250,14 +250,14 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
       XCTAssertEqual(metrics.legacyAttempts, 1)
       XCTAssertNotEqual(metrics.fallbackReason, "none")
     }
-    XCTAssertEqual(httpFailure(429, retryAfter: "60").retryAfter, 60)
+    XCTAssertEqual(try httpFailure(429, retryAfter: "60").retryAfter, 60)
   }
 
-  func testGateAuthDenialRemainsTerminalWhenFeatureStopsDuringResponse() async {
+  func testGateAuthDenialRemainsTerminalWhenFeatureStopsDuringResponse() async throws {
     let state = RampState()
     state.suspendAt = "gate"
     state.change = "feature"
-    state.gateError = httpFailure(401)
+    state.gateError = try httpFailure(401)
     do {
       _ = try await ScreenTaskPipeline().run(
         frame: frame(), key: "owner:1:window", services: services(state), metrics: ScreenTaskFrameMetrics())
@@ -273,11 +273,11 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     let cooldown = ScreenTaskBackpressure(now: { state.now })
     let authority = RuntimeOwnerAuthorizationAuthority()
     let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
-    cooldown.record(httpFailure(429, retryAfter: "60"), owner: original)
+    cooldown.record(try httpFailure(429, retryAfter: "60"), owner: original)
     XCTAssertTrue(cooldown.isBlocked(original))
     state.time += 60
     XCTAssertFalse(cooldown.isBlocked(original))
-    cooldown.record(httpFailure(429, retryAfter: "60"), owner: original)
+    cooldown.record(try httpFailure(429, retryAfter: "60"), owner: original)
     authority.beginTransition()
     authority.endTransition(ownerID: "synthetic-a")
     let fresh = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))

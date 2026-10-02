@@ -231,11 +231,13 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertEqual(config["maxOutputTokens"] as? Int, 2048)
   }
 
-  func testLegacyRetirementAndBackpressureRemainNonRetryableEvenWithReplayHeader() {
+  func testLegacyRetirementAndBackpressureRemainNonRetryableEvenWithReplayHeader() throws {
     for status in [401, 402, 429, 410] {
-      let response = HTTPURLResponse(
-        url: URL(string: "http://local")!, statusCode: status, httpVersion: nil,
-        headerFields: ["X-Omi-Retryable": status == 410 ? "false" : "true", "Retry-After": "60"])!
+      let url = try XCTUnwrap(URL(string: "http://local"))
+      let response = try XCTUnwrap(
+        HTTPURLResponse(
+          url: url, statusCode: status, httpVersion: nil,
+          headerFields: ["X-Omi-Retryable": status == 410 ? "false" : "true", "Retry-After": "60"]))
       let error = GeminiClient.httpError(response: response, data: Data(#"{"detail":"model_retired"}"#.utf8))
       XCTAssertEqual(error?.shouldAutoRetry, false)
     }

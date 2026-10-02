@@ -131,7 +131,7 @@ actor ScreenTaskPipeline {
       let outage = ScreenTaskErrorPolicy.outageReason(error)
       guard stopped || outage != nil else { throw error }
       if !stopped { try services.validateFeature() }
-      let reason = stopped ? "dispatch_disabled" : outage!
+      let reason = stopped ? "dispatch_disabled" : (outage ?? "provider_5xx")
       metrics.fallbackReason = reason
       services.fallback("screen_task_extraction", reason)
       metrics.legacyAttempts += 1
