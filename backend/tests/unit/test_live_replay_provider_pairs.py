@@ -15,6 +15,11 @@ from utils.stt.resilient_stream import ResilientAudio, replay_chunks, socket_is_
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket
 from utils.stt.streaming import SafeModulateSocket
+from utils.stt import live_chain, replay_delivery
+from utils.stt.live_failure import settle_terminal_socket
+from utils.stt.live_gate import GateState
+from utils.stt.live_metrics import REPLAY_AUDIO, REPLAY_CLOSED, REPLAY_SKIPPED
+from utils.stt.replay_delivery import replay_packets
 
 
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
@@ -142,8 +147,6 @@ def fallback_count():
 
 async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=False):
     if router_on:
-        from utils.stt.live_gate import GateState
-
         monkeypatch.setenv('STT_ROUTING_MODE', 'on')
         monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
         live_session.health._cost_local[('modulate-velma-2', 'all')] = GateState(
@@ -265,8 +268,6 @@ async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(mo
     ],
 )
 async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, order):
-    from utils.stt.live_metrics import REPLAY_CLOSED
-
     first_family = 'soniox' if order[1] == 'soniox' else 'modulate'
     closed_before = REPLAY_CLOSED.labels(source='parakeet', successor=first_family)._value.get()
     actual, base, raws, legs, observations = await setup_receiver(monkeypatch, order, fail_first=True)
@@ -418,8 +419,6 @@ async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypa
         entered.set()
         await asyncio.Event().wait()
 
-    from utils.stt import live_chain
-
     monkeypatch.setattr(st, '_primary_is_serving', handshake)
     monkeypatch.setattr(st, 'fallback_socket_is_serving', handshake)
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', handshake)
@@ -444,8 +443,6 @@ async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypa
 
 
 def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
-    from utils.stt.replay_delivery import replay_packets
-
     monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PACKET_BYTES', 4)
     assert list(replay_packets(((0, b'AA'), (1, b'BBBB'), (8, b'CCCCCC')))) == [
         (0, b'AABB'),
@@ -497,9 +494,6 @@ async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkey
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monkeypatch, virtual_clock, successor):
-    from utils.stt import replay_delivery
-    from utils.stt.live_metrics import REPLAY_SKIPPED, REPLAY_AUDIO, REPLAY_CLOSED
-
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
@@ -571,8 +565,6 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypatch, successor):
-    from utils.stt.live_failure import settle_terminal_socket
-
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
     try:
@@ -607,8 +599,6 @@ async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypa
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkeypatch, virtual_clock, successor):
-    from utils.stt import replay_delivery
-
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
