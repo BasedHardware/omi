@@ -63,11 +63,16 @@ def escape_latex(text: Any) -> str:
     return "".join(out)
 
 
-def format_timestamp(seconds: Union[float, int, None]) -> str:
-    """Format seconds into MM:SS or HH:MM:SS."""
+def format_timestamp(seconds: Union[float, int, str, None]) -> str:
+    """Format seconds into MM:SS or HH:MM:SS. Tolerates string timestamps."""
     if seconds is None:
         return "00:00"
-    total = int(seconds)
+    try:
+        if isinstance(seconds, str):
+            seconds = float(seconds.strip())
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return "00:00"
     hours, rem = divmod(max(total, 0), 3600)
     minutes, secs = divmod(rem, 60)
     if hours > 0:
@@ -132,7 +137,6 @@ def conversation_body_lines(conv: Dict[str, Any]) -> List[str]:
     date_str = utc_date_str(started_at) or "N/A"
 
     lines: List[str] = [
-        escape_latex(conversation_title(conv)),
         r"\label{sec:" + sanitize_component(str(conv_id)) + "}",
         "",
         escape_latex(date_str) + r" \quad| source: " + escape_latex(str(source)),
@@ -195,8 +199,9 @@ def conversation_body_lines(conv: Dict[str, Any]) -> List[str]:
 def document_preamble() -> List[str]:
     return [
         r"\documentclass[11pt]{article}",
-        r"\usepackage[utf8]{inputenc}",
-        r"\usepackage[T1]{fontenc}",
+        # UTF-8 is the LaTeX kernel default since 2018, so no inputenc needed.
+        # Compile with xelatex/lualatex for full Unicode (emoji, CJK); pdflatex
+        # works for Latin-script text.
         r"\usepackage[a4paper,margin=2.5cm]{geometry}",
         r"\usepackage{amsmath,amssymb}",
         r"\usepackage{hyperref}",
@@ -238,7 +243,7 @@ def render_master_document(items: List[Dict[str, Any]]) -> str:
 
 def render_single_document(conv: Dict[str, Any], conv_id: Any) -> str:
     lines = list(PREAMBLE_LINES)
-    lines.pop(-1)  # drop \maketitle for single documents
+    lines.remove(r"\maketitle")  # drop \maketitle for single documents
     lines.append(r"\section{" + escape_latex(conversation_title(conv)) + "}")
     lines.extend(conversation_body_lines(conv))
     lines.append(r"\end{document}")
@@ -250,17 +255,17 @@ def safe_output_path(output_dir: Path, name: str, suffix: str) -> Path:
     """Resolve an output path inside output_dir, refusing traversal."""
     resolved_root = output_dir.resolve()
     candidate = (output_dir / name).resolve()
-    if not str(candidate).startswith(str(resolved_root)):
+    if resolved_root != candidate and resolved_root not in candidate.parents:
         raise SystemExit(f"Error: refusing to write outside {resolved_root}: {name}")
     return candidate
 
 
 def unique_path(path: Path, overwrite: bool, used: set) -> Path:
-    if overwrite:
-        return path
+    """Pick a non-colliding path. `used` (in-batch collisions) is always
+    honored; `overwrite` only allows replacing pre-existing on-disk files."""
     candidate = path
     counter = 1
-    while candidate in used or candidate.exists():
+    while candidate in used or (not overwrite and candidate.exists()):
         counter += 1
         candidate = path.with_name(f"{path.stem}-{counter}{path.suffix}")
     return candidate
@@ -332,7 +337,7 @@ def main() -> None:
         "--overwrite",
         action="store_true",
         default=False,
-        help="Overwrite existing files on collision (default: exclusive-creation).",
+        help="Replace pre-existing files on collision (in-batch collisions are always suffixed).",
     )
     args = parser.parse_args()
 

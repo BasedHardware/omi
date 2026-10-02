@@ -14,7 +14,9 @@ python conversations_to_latex.py input.json --output report.tex
 omi --json conversation list --include-transcript | python conversations_to_latex.py - report.tex
 ```
 
-Compiles out of the box with `pdflatex`, `xelatex`, or `lualatex`.
+Compiles out of the box with `pdflatex`, `xelatex`, or `lualatex` — but use
+`xelatex`/`lualatex` if conversations contain full Unicode (emoji, CJK);
+`pdflatex` only covers Latin-script text.
 
 ## One standalone document per conversation
 
@@ -32,7 +34,7 @@ resolved deterministically with `-2`, `-3`, ... suffixes.
 | `input` | JSON file path, or `-` for stdin |
 | `output` / `--output` / `-o` | master `.tex` output path (default `conversations_report.tex`) |
 | `--output-dir` | one standalone `.tex` per conversation |
-| `--overwrite` | overwrite on filename collision (default: exclusive-creation) |
+| `--overwrite` | replace pre-existing files on collision (default: exclusive-creation). In-batch collisions between conversations in the same export are always suffixed `-2`, `-3`, ... even with `--overwrite` |
 
 Envelope unwrapping supports bare arrays, `conversations`/`items`/`data`/`results`
 keys, and single conversation objects. UTF-8 BOM tolerated. Output paths are

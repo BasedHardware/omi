@@ -210,8 +210,10 @@ class TestDocumentStructure(unittest.TestCase):
 
     def test_utf8_preamble(self):
         tex = ctl.render_master_document(sample_fixture())
-        self.assertIn(r"\usepackage[utf8]{inputenc}", tex)
-        self.assertIn(r"\usepackage[T1]{fontenc}", tex)
+        # UTF-8 is the LaTeX kernel default (no inputenc/fontenc needed);
+        # xelatex/lualatex recommended for full Unicode.
+        self.assertNotIn("inputenc", tex)
+        self.assertNotIn(r"\maketitle", ctl.render_single_document(sample_fixture()[0], "x"))
         self.assertIn("geometry", tex)
         self.assertIn("amsmath", tex)
         self.assertIn("hyperref", tex)
@@ -675,18 +677,18 @@ class TestGuards(unittest.TestCase):
 
     def test_default_output_name(self):
         old_argv, old_stdout, old_stderr, old_cwd = sys.argv, sys.stdout, sys.stderr, os.getcwd()
-        tmp = tempfile.mkdtemp()
-        os.chdir(tmp)
-        src = Path(tmp) / "in.json"
-        src.write_text(json.dumps([conv()]), encoding="utf-8")
-        sys.argv = ["x", str(src)]
-        sys.stdout = sys.stderr = io.StringIO()
-        try:
-            ctl.main()
-        finally:
-            os.chdir(old_cwd)
-            sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
-        self.assertTrue((Path(tmp) / "conversations_report.tex").exists())
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            src = Path(tmp) / "in.json"
+            src.write_text(json.dumps([conv()]), encoding="utf-8")
+            sys.argv = ["x", str(src)]
+            sys.stdout = sys.stderr = io.StringIO()
+            try:
+                ctl.main()
+            finally:
+                os.chdir(old_cwd)
+                sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
+            self.assertTrue((Path(tmp) / "conversations_report.tex").exists())
 
     def test_unique_path_used_set(self):
         p = Path("/tmp/a.tex")
