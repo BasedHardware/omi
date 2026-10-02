@@ -720,11 +720,21 @@ class LiveLegSocket(STTSocket):
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
-            if audio and self.raw.send(audio) is not True:
-                self._record_cost_outcome(True, reason=self.typed_death_reason or 'send_failed')
-                self.finish()
-                self._dead = True
-                return False
+            if audio:
+                try:
+                    sent = self.raw.send(audio)
+                except Exception:
+                    # A transport exception is provider evidence even though
+                    # the generic dead-session path below reports vad_failed.
+                    self._record_cost_outcome(True, reason=self.typed_death_reason or 'send_failed')
+                    self._dead = True
+                    self.finish()
+                    return False
+                if sent is not True:
+                    self._record_cost_outcome(True, reason=self.typed_death_reason or 'send_failed')
+                    self.finish()
+                    self._dead = True
+                    return False
             if output is not None and output.should_finalize:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)

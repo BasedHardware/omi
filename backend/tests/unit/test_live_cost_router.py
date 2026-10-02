@@ -13,6 +13,7 @@ import pytest
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
 from utils.stt import live_chain, live_health, live_session, live_router, streaming as st
 from utils.stt.live_gate import GateState, begin_trial, transition
+from utils.stt.live_signal import PROVIDER_FAILURE_REASONS, provider_observation
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.live_router import select, connecting_target
 from utils.stt.live_rollout import window_allocation
@@ -539,6 +540,46 @@ def test_health_session_is_once_and_late_failure_after_text_counts(monkeypatch):
     silent.send(b'\x00\x00' * 16000)
     silent.finish()
     assert len(seen) == 3
+
+
+def test_send_exception_is_provider_failure_but_vad_exception_stays_censored(monkeypatch):
+    from tests.unit.test_live_routing_health import SpeechGate, _leg
+
+    seen = []
+    monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *args: seen.append(args))
+
+    send_failed = _leg()
+
+    def raise_connection_error(_audio):
+        raise ConnectionError('provider transport unavailable')
+
+    send_failed.raw.send = raise_connection_error
+    assert send_failed.send(b'\x01\x00' * 16000) is False
+    assert len(seen) == 1
+    assert seen[0][2] == 'failover'
+    assert seen[0][5] in PROVIDER_FAILURE_REASONS
+    assert provider_observation(seen[0][2], seen[0][5]) is True
+
+    class FailingGate(SpeechGate):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        def process_audio(self, audio, wall, score_pcm=None, *, start_sample=None):
+            self.calls += 1
+            if self.calls > 1:
+                raise RuntimeError('VAD failed')
+            return super().process_audio(audio, wall, score_pcm, start_sample=start_sample)
+
+    vad_failed = _leg(FailingGate())
+    vad_failed.window = True
+    assert vad_failed.send(b'\x01\x00' * 16000)
+    assert vad_failed.send(b'\x01\x00' * 16000) is False
+    assert len(seen) == 2
+    assert seen[1][2] == 'failover'
+    assert seen[1][5] == 'vad_failed'
+    assert provider_observation(seen[1][2], seen[1][5]) is None
 
 
 @pytest.mark.asyncio
