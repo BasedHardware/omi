@@ -36,12 +36,14 @@ Load a goal export into a local SQLite database:
 python goals_to_sqlite.py ~/Documents/omi_goals.sqlite goals.json
 ```
 
-### 2. Multi-Page Export Merge
+### 2. Multi-Export Merge
 
-Merge multiple paginated exports or historical snapshots into a single unified database:
+Merge multiple snapshots, team exports, or backups into a single unified database. Note that `omi goal list`
+caps exports at `--limit 100` and currently provides no pagination offset, so each export covers the newest 100
+milestones; ingesting more than 100 goals requires other data sources or separate scoped exports:
 
 ```sh
-python goals_to_sqlite.py omi_goals.sqlite export_2026_q3.json export_2026_q4.json
+python goals_to_sqlite.py omi_goals.sqlite export_team_a.json export_team_b.json
 ```
 
 Duplicate goal IDs across files update existing entries rather than creating duplicate rows.

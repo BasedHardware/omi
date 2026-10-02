@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -39,11 +40,15 @@ CREATE INDEX IF NOT EXISTS goals_created_at ON goals (created_at);
 
 
 def validate_db_path(db_path: str) -> None:
-    """Raise ValueError if db_path is unsafe or points at a non-SQLite file."""
+    """Raise ValueError if db_path is unsafe, a symlink, or points at a non-SQLite file."""
     p = Path(db_path)
     if ".." in p.parts:
         raise ValueError(
             f"Output path {db_path!r} contains '..'; refusing to write outside the intended directory."
+        )
+    if p.is_symlink():
+        raise ValueError(
+            f"Output path {db_path!r} is a symlink; refusing to write through symlinks."
         )
     if p.exists():
         try:
@@ -87,7 +92,7 @@ def utc_stamp(value: Any) -> Optional[str]:
 
 
 def parse_float(value: Any) -> Optional[float]:
-    """Parse a float value safely, rejecting non-finite numbers."""
+    """Parse a float value safely, rejecting non-finite numbers and handling overflow."""
     if value is None:
         return None
     try:
@@ -95,18 +100,65 @@ def parse_float(value: Any) -> Optional[float]:
         if not math.isfinite(val):
             return None
         return val
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return None
+
+
+def normalize_bool_flag(value: Any) -> Optional[bool]:
+    """Normalize boolean flags, integer flags, and string aliases safely."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    s = str(value).strip().lower()
+    if s in ("true", "1", "yes"):
+        return True
+    if s in ("false", "0", "no"):
+        return False
+    return None
 
 
 def derive_status(goal: Dict[str, Any]) -> Tuple[int, int]:
     """Derive (is_active_int, is_completed_int) with strict inactive precedence."""
-    is_active = goal.get("is_active")
-    if is_active is False or is_active == 0 or str(is_active).strip().lower() in ("false", "0", "no"):
+    active_flag = normalize_bool_flag(goal.get("is_active"))
+    if active_flag is False:
         return 0, 0
-    is_achieved = goal.get("is_achieved") or goal.get("is_completed")
-    if is_achieved is True or is_achieved == 1 or str(is_achieved).strip().lower() in ("true", "1", "yes"):
+
+    achieved_flag = normalize_bool_flag(goal.get("is_achieved"))
+    completed_flag = normalize_bool_flag(goal.get("is_completed"))
+    if achieved_flag is True or completed_flag is True:
         return 1, 1
+    if achieved_flag is False or completed_flag is False:
+        return 1, 0
+
+    # For goals with no explicit achievement flag, derive completion from target or boolean state
+    goal_type = str(goal.get("goal_type") or "").strip().lower()
+    if goal_type == "boolean":
+        c = parse_float(goal.get("current_value"))
+        if c is not None and c >= 1.0:
+            return 1, 1
+        return 1, 0
+
+    curr = parse_float(goal.get("current_value"))
+    target = parse_float(goal.get("target_value"))
+    min_v = parse_float(goal.get("min_value"))
+    max_v = parse_float(goal.get("max_value"))
+    base = min_v if min_v is not None else 0.0
+    denom = None
+    if target is not None and target != base:
+        denom = target - base
+    elif max_v is not None and max_v != base:
+        denom = max_v - base
+
+    if curr is not None and denom is not None and denom > 0:
+        if (curr - base) >= denom:
+            return 1, 1
+
+    if target == 0.0 and curr == 0.0:
+        return 1, 1
+
     return 1, 0
 
 
@@ -180,7 +232,10 @@ def rows_from(source: str) -> List[Tuple[Any, ...]]:
         raw_id = item.get("id")
         clean_id = text(raw_id)
         if clean_id is None:
-            clean_id = f"auto_{uuid.uuid4().hex}"
+            stable_sig = hashlib.sha256(
+                json.dumps(item, sort_keys=True, ensure_ascii=True).encode("utf-8")
+            ).hexdigest()[:16]
+            clean_id = f"gen_{stable_sig}"
 
         raw_title = item.get("title")
         clean_title = text(raw_title)
@@ -196,12 +251,10 @@ def rows_from(source: str) -> List[Tuple[Any, ...]]:
 
         is_act, is_comp = derive_status(item)
         progress = calc_progress_pct(item, is_comp)
-        if progress is not None and progress >= 100.0:
-            is_comp = 1
 
         created = utc_stamp(item.get("created_at"))
         updated = utc_stamp(item.get("updated_at"))
-        raw_json_str = json.dumps(item, ensure_ascii=False)
+        raw_json_str = json.dumps(item, ensure_ascii=True)
 
         rows.append((
             clean_id,

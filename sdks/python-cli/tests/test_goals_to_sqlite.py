@@ -96,10 +96,41 @@ class TestGoalsToSQLite(unittest.TestCase):
         # Inactive takes strict precedence
         self.assertEqual(g2sql.derive_status({"is_active": False, "is_achieved": True}), (0, 0))
         self.assertEqual(g2sql.derive_status({"is_active": "0", "is_completed": True}), (0, 0))
+        # Inactive takes precedence even if progress reached 100%
+        self.assertEqual(
+            g2sql.derive_status({
+                "is_active": "false",
+                "current_value": 100,
+                "target_value": 100,
+            }),
+            (0, 0),
+        )
+        # Normalized string boolean flags
+        self.assertEqual(
+            g2sql.derive_status({
+                "is_active": True,
+                "is_achieved": "false",
+                "is_completed": "true",
+            }),
+            (1, 1),
+        )
+        # Boolean goal reaching 1.0 without explicit flag derives (1, 1)
+        self.assertEqual(
+            g2sql.derive_status({
+                "is_active": True,
+                "goal_type": "boolean",
+                "current_value": 1.0,
+            }),
+            (1, 1),
+        )
         # Completed
         self.assertEqual(g2sql.derive_status({"is_active": True, "is_achieved": True}), (1, 1))
         # Active
         self.assertEqual(g2sql.derive_status({"is_active": True, "is_achieved": False}), (1, 0))
+
+    def test_parse_float_overflow(self):
+        self.assertIsNone(g2sql.parse_float("9" * 400))
+        self.assertIsNone(g2sql.parse_float(10**400))
 
     def test_calc_progress_pct(self):
         # Completed goal
@@ -159,7 +190,27 @@ class TestGoalsToSQLite(unittest.TestCase):
 
         loaded, added, total = g2sql.load(str(db), [str(f1), str(f2)])
         self.assertEqual(loaded, 4)
+        self.assertEqual(added, 3)
         self.assertEqual(total, 3)
+
+        # Idempotent second load: re-running with same files must add 0 rows
+        loaded2, added2, total2 = g2sql.load(str(db), [str(f1), str(f2)])
+        self.assertEqual(loaded2, 4)
+        self.assertEqual(added2, 0)
+        self.assertEqual(total2, 3)
+
+        # Ingestion of record without ID derives deterministic ID and is also idempotent
+        f_no_id = self.tmp / "no_id.json"
+        f_no_id.write_text(json.dumps([{"title": "No ID Goal", "current_value": 5}]), encoding="utf-8")
+        loaded_n1, added_n1, total_n1 = g2sql.load(str(db), [str(f_no_id)])
+        self.assertEqual(loaded_n1, 1)
+        self.assertEqual(added_n1, 1)
+        self.assertEqual(total_n1, 4)
+
+        loaded_n2, added_n2, total_n2 = g2sql.load(str(db), [str(f_no_id)])
+        self.assertEqual(loaded_n2, 1)
+        self.assertEqual(added_n2, 0)
+        self.assertEqual(total_n2, 4)
 
         conn = sqlite3.connect(str(db))
         cursor = conn.cursor()
@@ -179,6 +230,15 @@ class TestGoalsToSQLite(unittest.TestCase):
         self.assertEqual(row[1], 90.0)
 
         conn.close()
+
+    def test_validate_db_path_symlink_rejection(self):
+        target = self.tmp / "target.sqlite"
+        target.write_bytes(g2sql._SQLITE_MAGIC + b"\x00" * 84)
+        link = self.tmp / "symlink.sqlite"
+        link.symlink_to(target)
+        with self.assertRaises(ValueError) as ctx:
+            g2sql.validate_db_path(str(link))
+        self.assertIn("is a symlink", str(ctx.exception))
 
     def test_main_cli_execution(self):
         src = self.tmp / "cli_input.json"
