@@ -73,10 +73,12 @@ def _clean_id(raw_id: Any, field_name: str = 'id') -> str:
 def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[str], bool]:
     """Plain-text sentences from ``transcript_segments``; ``([], True)`` on empty.
 
-    Returns ``(texts, decoded)``. On an invalid UID, corrupted ciphertext,
-    wrong key, or malformed segments array, returns ``([], False)`` so the
-    caller can tell a decode failure from an empty recording and skip marking
-    ``summary_retryable``.
+    Strict security rationale: an encrypted blob must actually decrypt.
+    ``encryption.decrypt`` returns its input when authentication fails, and a
+    tolerant decode would then parse attacker- or corruption-controlled plaintext
+    into a title and a Retry offer. Any failure yields ``([], False)``: the caller
+    degrades to the deterministic time title with no Retry, and never aborts the
+    terminal write.
     """
     if not isinstance(uid, str) or not uid.strip():
         return [], False
