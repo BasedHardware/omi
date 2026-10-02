@@ -45,6 +45,9 @@
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
+* [`conversations_latex.md`](conversations_latex.md) — render a conversation export
+  into a self-compiling LaTeX report (.tex): per-conversation sections,
+  summary, checklist, and escaped transcript.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
