@@ -14,7 +14,7 @@ from tests.unit.test_parakeet_window_live import runtime, _flush_capture
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
 from utils.observability import fallback
 from utils.stt import live_chain, live_router, parakeet_window as window, streaming as st
-from utils.stt.live_metrics import CHAIN_EXHAUSTED
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
 
 
 @pytest.fixture(autouse=True)
@@ -130,6 +130,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
             actual._stt_failed_providers.add('soniox')
             actual._stt_failed_reasons['soniox'] = 'connection_lost'
     before = CHAIN_EXHAUSTED._value.get()
+    overflow_before = WINDOW_ADMISSION.labels(outcome='overflow')._value.get()
     try:
         tasks = [asyncio.create_task(actual._failover_stt_socket()) for actual in actuals]
         await started.wait()
@@ -138,6 +139,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
         assert await asyncio.gather(*tasks) == [True] * 35
         assert len(replacements) == 35
         window_connect.assert_not_called()
+        assert WINDOW_ADMISSION.labels(outcome='overflow')._value.get() - overflow_before == 35
         assert CHAIN_EXHAUSTED._value.get() == before
         for actual in actuals:
             assert actual.host.stt_service == st.STTService.soniox
