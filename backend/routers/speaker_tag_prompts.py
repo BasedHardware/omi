@@ -69,8 +69,6 @@ def answer_speaker_tag_prompt(
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
     except service.TagPromptInvalid as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    except service.TagPromptForbidden as error:
-        raise HTTPException(status_code=402, detail=str(error)) from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:

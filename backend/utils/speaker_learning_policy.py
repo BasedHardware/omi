@@ -80,12 +80,22 @@ def union_seconds(intervals: List[Tuple[float, float]]) -> float:
 
 
 def winning_receipt_decision(receipt: Mapping[str, Any], segment: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
+    """The receipt decision that governs teaching from ``segment``, or None.
+
+    A merged conversation reuses numeric speaker ids across capture scopes, so a
+    speaker-level entry stamped with a scope covers only segments in that scope.
+    Without this a label carried into one scope would authorize another scope's audio.
+    """
+    by_speaker = (receipt.get('speakers') or {}).get(str(segment.get('speaker_id')))
+    if (
+        isinstance(by_speaker, Mapping)
+        and by_speaker.get('speaker_id_scope') is not None
+        and by_speaker.get('speaker_id_scope') != segment.get('speaker_id_scope')
+    ):
+        by_speaker = None
     decisions = [
         decision
-        for decision in (
-            (receipt.get('segments') or {}).get(segment.get('id')),
-            (receipt.get('speakers') or {}).get(str(segment.get('speaker_id'))),
-        )
+        for decision in ((receipt.get('segments') or {}).get(segment.get('id')), by_speaker)
         if isinstance(decision, Mapping)
     ]
     if not decisions:
