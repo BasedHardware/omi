@@ -999,3 +999,11 @@ async def test_two_open_responses_at_disconnect_are_two_distinct_rows(monkeypatc
         ('1', 'resp_a', 'cancelled'),
         ('2', 'resp_b', 'cancelled'),
     ]
+
+
+@pytest.fixture(autouse=True)
+def held_discovery_leases_for_request_matrix(monkeypatch):
+    """Keep synthetic discovery separate from customer-attempt/accounting fixtures."""
+    from utils.llm import vertex_reservation_state
+
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())

@@ -297,6 +297,12 @@ class ProxyTelemetry:
         """
         if route.provider not in _DIRECT_LEDGER_ROUTES:
             return
+        if route.provider == 'vertex_ai':
+            reservation_state.note_request(
+                self.model,
+                route.headers.get(ptr.REQUEST_TYPE_HEADER, ''),
+                _reservation_states().get(self.model, State.UNKNOWN),
+            )
         self.attempts += 1
         self._pending_attempt = route.provider
         self.provider_metadata = None

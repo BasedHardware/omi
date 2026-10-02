@@ -109,6 +109,38 @@ identity, production endpoint, datastore or control-plane API was used.
 Both calls reported no token counts and no trafficType; counts are **unreported**,
 not inferred zero. Conservative reserved spend $0.02 each, $0.04 total, below
 the $0.50 ceiling. There is no successful live routing evidence from this run.
-Stopped before 3.8/shared, Lite, Pro-remap and streaming probes. Re-run the bounded
-synthetic provider smoke with that same authorized credential source once its
-inference permission is restored. Mock coverage cannot replace this release gate.
+Stopped before 3.8/shared, Lite, Pro-remap and streaming probes. This initial
+recipe selected the inherited read-only credential; the corrected interactive
+ADC requires reauthentication. It does not establish that the human identity
+lacks inference permission.
+
+The coordinator reports a separate 2026-10-02 production dedicated 2.5 Flash
+response with `usageMetadata.trafficType=PROVISIONED_THROUGHPUT`. This is available
+positive metadata evidence, not this agent's provider-path or 3.8 discovery result.
+
+The authorized dev-operator smoke at `6744d638f3` made 28 synthetic dispatches in
+`based-hardware-dev`: 12 dedicated 429 capacity errors and 16 completed shared
+200 `ON_DEMAND` responses, across gateway/direct and JSON/SSE. Normal 2.5 requests
+fell back to shared 3.1 Flash-Lite; target dedicated failures recovered to shared
+3.8. Both states stayed unknown. Four real synthetic probes used the 30-second
+deadline and published one failure each; 600-second leases deduplicated new state
+instances. State storage was isolated FakeRedis, not deployed Redis. Counts:
+48 input, 29 candidate output, 77 total; errors omitted usage. Known gross list
+cost $0.0001721; cumulative conservative allowance $0.2801721/$0.50. The PR body
+contains every dispatch's counts and exact error message. These are negative-order
+and recovery results, not evidence of a live 3.8 order or automatic inactive
+confirmation. Refusal classification was subsequently narrowed to audited build
+identities; the response contract is unchanged.
+
+Successful dedicated 3.8 discovery cannot be qualified until its order exists.
+Real-order activation and successor-based inactivity remain pending on prod;
+the six-hour unknown/shared alert makes missed discovery visible in the meantime.
+
+Follow-up 3 additionally exercised strict **process-local** state with no Redis or
+FakeRedis: 12 dev dispatches (8 dedicated 429s, 4 shared 200 ON_DEMAND), gateway/
+direct JSON and SSE, both synthetic model probes with actual 30-second deadlines,
+and per-process 600-second lease deduplication. Tokens: 12 input, 6 output, 18
+total; additional known list cost $0.0000315. Conservative cumulative allowance
+across all smokes: $0.4402036/$0.50. All evidence remained unknown, as expected.
+A harness assertion initially overlooked the one-second read cache delaying the
+second probe; the corrected follow-up verified both leases, with no serving fix.

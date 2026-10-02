@@ -1,7 +1,8 @@
-"""Shared reservation evidence with bounded Redis I/O and injected inference.
+"""Bounded reservation evidence in shared Redis or an explicitly local store.
 
-No customer data, ADC, or network at import time. Keys are project + declared
-order/location scoped. Redis failure means UNKNOWN; it never authorizes refusal.
+No customer data, ADC, or network at import time. Missing configuration uses
+process-local evidence; a configured Redis outage fails open, never replaying
+cached negative state. Both storage modes use the same strict reducer.
 """
 
 import asyncio
@@ -15,7 +16,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 import httpx
-
+from prometheus_client import Counter
 from redis.asyncio import Redis
 from redis.exceptions import WatchError
 
@@ -36,6 +37,13 @@ from utils.llm.vertex_pt_routing import COMPANY_PAID_VERTEX_TEXT_MODELS
 
 logger = logging.getLogger(__name__)
 Probe = Callable[[str, str], Awaitable[str]]
+UNKNOWN_SHARED_ALERT_SECONDS = 6 * 3600
+UNKNOWN_SHARED_ALERT_REPEAT_SECONDS = 3600
+UNKNOWN_SHARED_REQUESTS = Counter(
+    'omi_vertex_reservation_unknown_shared_total',
+    'Shared requests while a declared reservation with shared unknown policy is unresolved',
+    ['model'],
+)
 
 
 class ReservationState:
@@ -44,14 +52,23 @@ class ReservationState:
         self._owns_client = client is None
         self._snapshot: dict[str, State] = {}
         self._snapshot_at = 0.0
-        self._snapshot_key = ""
+        self._snapshot_key = ''
         self._positive: dict[str, float] = {}
+        self._pending_success: dict[str, float] = {}
+        self._local_doc: dict[str, Any] = {}
+        self._unknown_shared_since: dict[str, float] = {}
+        self._unknown_warned_at: dict[str, float] = {}
+        self._local_logged = False
+        self._scope_key = self.key()
         self._probe_tasks: set[asyncio.Task[Any]] = set()
 
     def client(self) -> Any:
         if self._client is None:
             host = os.getenv('REDIS_DB_HOST', '').strip()
             if not host:
+                if not self._local_logged:
+                    logger.warning('vertex_reservation_storage mode=process_local reason=not_configured')
+                    self._local_logged = True
                 return None
             self._client = Redis(
                 host=host,
@@ -65,7 +82,6 @@ class ReservationState:
 
     @staticmethod
     def key() -> str:
-        # An endpoint reconfiguration must not inherit evidence from another order address.
         addresses = [
             (m, s.order, os.getenv(s.location_env, s.location) if s.location_env else s.location)
             for m, s in sorted(RESERVATIONS.items())
@@ -73,14 +89,161 @@ class ReservationState:
         revision = hashlib.sha256(json.dumps(addresses).encode()).hexdigest()[:16]
         return 'vertex-reservations:v1:' + os.getenv('GOOGLE_CLOUD_PROJECT', '') + ':' + revision
 
+    def _check_scope(self) -> None:
+        key = self.key()
+        if key != self._scope_key:
+            self._scope_key = key
+            self._snapshot = {}
+            self._positive.clear()
+            self._pending_success.clear()
+            self._local_doc = {}
+            self._unknown_shared_since.clear()
+            self._unknown_warned_at.clear()
+
+    def note_request(self, model: str, capacity: str, state: State) -> None:
+        """Bounded warning on actual shared dispatch after six hours unknown.
+
+        The first-request timestamp is carried into the next evidence transaction;
+        reads merge its earliest value across replicas. No request content/identity.
+        """
+        self._check_scope()
+        spec = RESERVATIONS.get(model)
+        if spec is None or spec.unknown_capacity != 'shared':
+            return
+        if state != State.UNKNOWN:
+            self._unknown_shared_since.pop(model, None)
+            self._unknown_warned_at.pop(model, None)
+            return
+        if capacity != 'shared':
+            return
+        UNKNOWN_SHARED_REQUESTS.labels(model).inc()
+        now = time.time()
+        since = self._unknown_shared_since.setdefault(model, now)
+        if (
+            now - since >= UNKNOWN_SHARED_ALERT_SECONDS
+            and now - self._unknown_warned_at.get(model, 0) >= UNKNOWN_SHARED_ALERT_REPEAT_SECONDS
+        ):
+            self._unknown_warned_at[model] = now
+            logger.warning(
+                'vertex_reservation_discovery_overdue model=%s state=unknown capacity=shared '
+                'first_requested_at=%d elapsed_seconds=%d threshold_seconds=%d',
+                model,
+                since,
+                now - since,
+                UNKNOWN_SHARED_ALERT_SECONDS,
+            )
+
+    def _advance(
+        self,
+        doc: dict[str, Any],
+        now: float,
+        model: str,
+        outcome: str,
+        claim: bool,
+        pending: dict[str, float],
+    ) -> tuple[dict[str, Any], dict[str, tuple[State, str]], str | None]:
+        evidence = {m: Evidence(**doc.get('evidence', {}).get(m, {})) for m in RESERVATIONS}
+        for m, at in pending.items():
+            # A failed publication is retried, but cannot erase a newer remote
+            # success or a failure window that began after this local success.
+            own = evidence[m]
+            if 0 <= now - at <= ACTIVE_FRESH_SECONDS and at > max(own.success_at, own.failure_start):
+                evidence[m] = observe(own, now=at, outcome='dedicated_success')
+        if model in RESERVATIONS and outcome:
+            evidence[model] = observe(evidence[model], now=now, outcome=outcome)
+        states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
+        leases = {m: at for m, at in doc.get('leases', {}).items() if m in RESERVATIONS}
+        selected = None
+        if claim:
+            for m in RESERVATIONS:
+                if m in discovery_models(os.environ) and now >= leases.get(m, 0):
+                    selected = m
+                    leases[m] = now + PROBE_SECONDS
+                    break
+        unknown_since = {}
+        for m, spec in RESERVATIONS.items():
+            if states[m][0] == State.UNKNOWN and spec.unknown_capacity == 'shared':
+                starts = [
+                    v
+                    for v in (doc.get('unknown_shared_since', {}).get(m), self._unknown_shared_since.get(m))
+                    if type(v) in (int, float) and 0 <= v <= now
+                ]
+                if starts:
+                    unknown_since[m] = min(starts)
+        new = {
+            'evidence': {m: asdict(e) for m, e in evidence.items()},
+            'states': {m: state.value for m, (state, _) in states.items()},
+            'leases': leases,
+            'unknown_shared_since': unknown_since,
+        }
+        return new, states, selected
+
+    def _committed(
+        self,
+        before: dict[str, Any],
+        after: dict[str, Any],
+        states: dict[str, tuple[State, str]],
+        now: float,
+        pending: dict[str, float],
+        storage: str,
+    ) -> None:
+        for m, at in pending.items():
+            if self._pending_success.get(m) == at:
+                self._pending_success.pop(m, None)
+        # Requests can arrive during an awaited Redis transaction. Preserve their
+        # first-request timestamp unless evidence has resolved the uncertainty.
+        for m, (state, _) in states.items():
+            if state != State.UNKNOWN:
+                self._unknown_shared_since.pop(m, None)
+                self._unknown_warned_at.pop(m, None)
+            elif m in after['unknown_shared_since']:
+                at = after['unknown_shared_since'][m]
+                self._unknown_shared_since[m] = min(at, self._unknown_shared_since.get(m, at))
+        for m, (state, reason) in states.items():
+            if before.get('states', {}).get(m, 'unknown') != state.value:
+                own = after['evidence'][m]
+                successor_success = max(
+                    (
+                        after['evidence'][other]['success_at']
+                        for other, spec in RESERVATIONS.items()
+                        if other != m and spec.order == RESERVATIONS[m].order
+                    ),
+                    default=0,
+                )
+                logger.log(
+                    logging.WARNING if state == State.INACTIVE else logging.INFO,
+                    'vertex_reservation_transition model=%s state=%s reason=%s storage=%s at=%d '
+                    'failure_count=%d failure_start=%d failure_at=%d success_at=%d successor_success_at=%d',
+                    m,
+                    state.value,
+                    reason,
+                    storage,
+                    now,
+                    own['failure_count'],
+                    own['failure_start'],
+                    own['failure_at'],
+                    own['success_at'],
+                    successor_success,
+                )
+
     async def transact(
         self, model: str = '', outcome: str = '', *, claim: bool = False
     ) -> tuple[dict[str, State], str | None]:
+        self._check_scope()
+        if model in RESERVATIONS and outcome == 'dedicated_success':
+            self._positive[model] = time.monotonic()
+            self._pending_success[model] = time.time()
+        pending = dict(self._pending_success)
         failure_reason = 'timeout'
         try:
             client = self.client()
             if client is None:
-                return {}, None
+                now = time.time()
+                before = self._local_doc
+                new, states, selected = self._advance(before, now, model, outcome, claim, pending)
+                self._local_doc = new
+                self._committed(before, new, states, now, pending, 'process_local')
+                return {m: s for m, (s, _) in states.items()}, selected
             async with asyncio.timeout(0.3):
                 for _ in range(3):
                     async with client.pipeline(transaction=True) as pipe:
@@ -90,38 +253,14 @@ class ReservationState:
                             doc = json.loads(raw) if raw else {}
                             seconds, micros = await pipe.time()
                             now = seconds + micros / 1_000_000
-                            evidence = {m: Evidence(**doc.get('evidence', {}).get(m, {})) for m in RESERVATIONS}
-                            if model in RESERVATIONS and outcome:
-                                evidence[model] = observe(evidence[model], now=now, outcome=outcome)
-                            states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
-                            leases = dict(doc.get('leases', {}))
-                            selected = None
-                            if claim:
-                                for m in RESERVATIONS:
-                                    if m in discovery_models(os.environ) and now >= leases.get(m, 0):
-                                        selected = m
-                                        leases[m] = now + PROBE_SECONDS
-                                        break
-                            new = {
-                                'evidence': {m: asdict(e) for m, e in evidence.items()},
-                                'states': {m: state.value for m, (state, _) in states.items()},
-                                'leases': leases,
-                            }
-                            if not outcome and selected is None and new == doc:
+                            new, states, selected = self._advance(doc, now, model, outcome, claim, pending)
+                            if new == doc:
                                 await pipe.unwatch()
-                                return {m: s for m, (s, _) in states.items()}, None
-                            pipe.multi()
-                            pipe.set(self.key(), json.dumps(new), ex=172800)
-                            await pipe.execute()
-                            for m, (state, reason) in states.items():
-                                if doc.get('states', {}).get(m, 'unknown') != state.value:
-                                    logger.info(
-                                        'vertex_reservation_transition model=%s state=%s reason=%s at=%d',
-                                        m,
-                                        state.value,
-                                        reason,
-                                        now,
-                                    )
+                            else:
+                                pipe.multi()
+                                pipe.set(self.key(), json.dumps(new), ex=172800)
+                                await pipe.execute()
+                            self._committed(doc, new, states, now, pending, 'redis')
                             return {m: s for m, (s, _) in states.items()}, selected
                         except WatchError:
                             continue
@@ -144,6 +283,7 @@ class ReservationState:
     async def refresh(
         self, probe: Probe | None = None, *, timeout_seconds: float = 1.6, apply_overrides: bool = True
     ) -> dict[str, State]:
+        self._check_scope()
         key = self.key()
         if self._snapshot and self._snapshot_key == key and 0 <= time.monotonic() - self._snapshot_at < 1:
             states = self._snapshot
@@ -159,7 +299,6 @@ class ReservationState:
                         self._probe_tasks.add(task)
                         task.add_done_callback(self._probe_tasks.discard)
             except TimeoutError:
-                states = {}
                 record_fallback(
                     component='vertex_reservations',
                     from_mode='redis',
@@ -168,15 +307,18 @@ class ReservationState:
                     outcome='degraded',
                 )
                 logger.warning('vertex_reservation_refresh_budget_exhausted state=unknown')
-            # Never cache a refusal-capable snapshot: outage/recovery must be
-            # checked on every request. Positive/unknown snapshots may lag 1s.
             self._snapshot = states if states and State.INACTIVE not in states.values() else {}
             self._snapshot_at = time.monotonic()
             self._snapshot_key = key
         local = {
             m: State.ACTIVE for m, at in self._positive.items() if 0 <= time.monotonic() - at <= ACTIVE_FRESH_SECONDS
         }
-        raw = {m: (states or local).get(m, State.UNKNOWN) for m in RESERVATIONS}
+        raw = {}
+        for m in RESERVATIONS:
+            state = states.get(m, State.UNKNOWN)
+            # Merge per model; a stale nonempty Redis map must not hide a local
+            # success whose write failed. Newer confirmed inactivity still wins.
+            raw[m] = local.get(m, state) if state == State.UNKNOWN else state
         return effective_states(raw, os.environ) if apply_overrides else raw
 
     async def _run_probe(self, model: str, probe: Probe, key: str) -> None:
@@ -189,7 +331,6 @@ class ReservationState:
                 outcome = await probe(model, location)
         except Exception:
             outcome = 'inconclusive'
-        # An endpoint change or emergency pin during the call invalidates its evidence.
         if model in discovery_models(os.environ) and key == self.key():
             await self.transact(model, outcome)
             self._snapshot = {}
@@ -204,10 +345,15 @@ class ReservationState:
         self._client = None
         self._snapshot = {}
         self._positive.clear()
+        self._pending_success.clear()
+        self._local_doc = {}
+        self._unknown_shared_since.clear()
+        self._unknown_warned_at.clear()
 
     async def record(
         self, model: str, capacity: str, status: int, traffic_type: str | None, *, timeout_seconds: float = 0.3
     ) -> None:
+        self._check_scope()
         if (
             model in RESERVATIONS
             and capacity == 'dedicated'
@@ -216,6 +362,7 @@ class ReservationState:
         ):
             self._snapshot = {}
             self._positive[model] = time.monotonic()
+            self._pending_success[model] = time.time()
             if timeout_seconds <= 0:
                 return
             try:
@@ -232,7 +379,6 @@ class ReservationState:
                 logger.warning('vertex_reservation_publish_budget_exhausted state=local_positive')
 
     async def record_response(self, model: str, capacity: str, response: httpx.Response) -> bool:
-        """Only positive metadata on a dedicated response updates shared evidence."""
         if model not in RESERVATIONS or capacity != 'dedicated':
             return False
         try:

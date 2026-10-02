@@ -274,3 +274,11 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
     assert json.loads(outgoing.content) == {
         'instances': [{'content': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}]
     }
+
+
+@pytest.fixture(autouse=True)
+def held_discovery_leases_for_request_matrix(monkeypatch):
+    """Keep synthetic discovery separate from customer-attempt/accounting fixtures."""
+    from utils.llm import vertex_reservation_state
+
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())

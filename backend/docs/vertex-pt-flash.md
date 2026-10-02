@@ -1,5 +1,11 @@
 # Vertex Provisioned Throughput reservation state
 
+**One exclusive order, edited in place. Before purchasing a second order or
+splitting an order, declare a distinct order identity in `RESERVATIONS`. Never
+label concurrent/split capacity as the same order.** Automatic inactivity relies
+on this operator contract. `OMI_VERTEX_PT_MODEL=gemini-3.8-flash` explicitly
+declares that the old 2.5 order is gone; do not set it in anticipation of a move.
+
 We bought **5 GSU Provisioned Throughput** for `gemini-2.5-flash` in
 `us-central1` so company-paid Flash text is reserved and cheaper than Gemini
 API list price.
@@ -259,51 +265,72 @@ purchased or split order must have a different identity before serving it.
 Response metadata cannot verify that inventory or rule out fulfilment overlap;
 the exclusive-order declaration is an operator contract, not unconditional proof.
 
-`ReservationState` shares bounded evidence through Redis across Cloud Run
-instances and gateway pods. Production desktop-backend uses `DESKTOP_REDIS_*`,
-so gateway chart bindings use its existing password secret. Apply the updated
-`backend-secrets` chart first: its ExternalSecret must populate
-`<env>-omi-backend-secrets[VERTEX_RESERVATION_REDIS_PASSWORD]` from
-`DESKTOP_REDIS_DB_PASSWORD` in prod or `REDIS_DB_PASSWORD` in dev. Verify that
-key exists through the authorized deployment process before rolling gateway
-pods; the reference is mandatory, just like the ConfigMap. Before rollout,
-provision `<env>-omi-reservation-runtime-config` in the gateway namespace with
-`REDIS_DB_HOST` and `REDIS_DB_PORT` matching desktop-backend exactly (dev uses
-its desktop `REDIS_DB_*` configuration). These are non-secret ConfigMap values,
-not new Secret Manager entries. The chart references are mandatory: a missing
-ConfigMap prevents a new pod starting. Host/port values and connectivity could
-not be inspected under this task's no-production-access rule. Do not substitute
-the backend's separate Redis pool. Keys include the compute project and all declared order locations,
-expire after 48 hours idle, and contain only per-model timestamps, counters,
-states and probe leases. No user/request identity or content is stored.
-Transactions use WATCH/CAS with three attempts and a 300ms whole-operation bound;
-Redis time owns ordering. Unchanged reads do not rewrite the evidence document.
-Positive/unknown snapshots may be cached for one second; a snapshot containing
-any inactive state is never cached, so a store outage immediately fails admission
-open on the next request. Environment overrides are still resolved per request.
-Gateway refresh and positive publication each consume at most one quarter of
-the remaining inference budget (and retain their absolute limits). Both serving
-services close their owned Redis pools at shutdown. Missing, malformed or unavailable storage cannot
-confirm inactivity. Local positive dedicated evidence can still serve prepaid
-capacity during an outage, but no local negative evidence can refuse a client.
+`ReservationState` uses shared Redis when configured and the same strict reducer
+with process-local evidence when no Redis host is configured. Missing Redis is
+**not a startup dependency**. The first local use emits one bounded WARNING:
+`vertex_reservation_storage mode=process_local reason=not_configured`.
+
+Two supported topologies:
+
+- **Both services share Redis:** BFF and gateway use fleet-wide 600-second leases,
+  publish dedicated evidence to the same project/location-scoped key and read the
+  same transitions. This requires matching the desktop Redis pool, not the separate
+  backend pool. Gateway-to-desktop-Redis network reachability is unverified.
+- **Desktop-backend Redis, gateway process-local (preferred without new cluster
+  wiring):** the BFF independently schedules both synthetic dedicated probes through
+  Vertex using its own credentials, records old-model capacity failures and strict
+  successor successes in its existing Redis, and can confirm inactivity/refuse
+  audited old clients without any gateway observations. The gateway independently
+  probes and routes using its local strict evidence. Its state/leases reset on pod
+  restart and are not fleet-wide; routing may lag BFF cutoff. No wire/state exchange
+  or gateway Redis connection is required. An integration test advances the BFF
+  through four probe intervals while a separate gateway remains unknown and proves
+  BFF admission still refuses the eligible legacy request.
+
+The gateway chart's Redis host/port ConfigMap and password Secret references are
+all `optional: true`. A missing reference cannot prevent a pod starting. Optional
+future wiring for David: provision `<env>-omi-reservation-runtime-config` with
+`REDIS_DB_HOST`/`REDIS_DB_PORT` from the existing desktop GitHub environment, and
+apply the `backend-secrets` password alias `VERTEX_RESERVATION_REDIS_PASSWORD`
+(prod source: `DESKTOP_REDIS_DB_PASSWORD`; dev: `REDIS_DB_PASSWORD`). No workflow
+change is made here, no new cluster resource is needed to deploy, and no GKE to
+Redis reachability is assumed. Partial or unreachable configuration degrades to
+unknown plus fresh local positives; a configured-store outage does not authorize
+refusal from cached negative state.
+
+Redis keys include compute project and declared order locations, expire after
+48 hours idle, and contain only timestamps, counters, states, leases and the first
+unknown shared-request time. WATCH/CAS uses three attempts and a 300ms total bound;
+Redis time orders committed observations. Unchanged reads do not write. Positive/
+unknown snapshots cache for one second; negative snapshots never cache. Local
+successes are merged per model and failed positive publications are retried after
+recovery, without erasing a newer confirmed failure window. Local state and
+pending evidence are cleared on project/order-location scope changes.
+
+The gateway performs its bounded state read **before** starting the full inference
+deadline. Publication after a response retains its separate bounded allowance.
+Both services close owned Redis pools and cancel their probes at shutdown.
 
 State is `active`, `inactive`, or `unknown`, with its reason and observation
 timestamps. No order-list/control-plane API is called. An authenticated paid
 request can lease **one** synthetic `Reply OK.` dedicated probe for one declared
-model; each model has a fleet-wide 600-second lease. The tracked background task
+model; each model has a 600-second lease (fleet-wide in Redis, per process without it). The tracked background task
 has its own **30-second whole-attempt deadline**, 16 output tokens, and declared
 model-specific thinking (zero budget on 2.5, low level on 3.8). It never retries
 shared. It closes/cancels with its owning service. Customer requests are never
 used as discovery probes: unknown 3.8 traffic goes directly shared. This removes
 the one-second screenshot-completion requirement and duplicated customer work.
 A 1.6-second synthetic response is covered by a cross-instance discovery test;
-actual successful dedicated latency remains a live release gate.
+successful dedicated 3.8 discovery remains unverified until that order exists.
 
 Discovery is demand-triggered, with no idle polling. Gateway pods can finish
 leased work independently of the triggering request. Request-based Cloud Run CPU
-may pause background work while idle; use the always-running gateway plus shared
-Redis for fleet discovery, and verify lease completion during rollout. No claim
-is made about discovery during a total traffic/service outage. Demand in any
+may pause background work while idle. In the preferred topology the next BFF
+request resumes it; sustained traffic/probe completion within the freshness window
+is required for cutoff. Sparse traffic delays confirmation safely. Shared Redis
+with an always-running gateway is optional, not a correctness dependency under
+steady BFF traffic. Verify BFF lease completion during rollout; no discovery or
+confirmation guarantee is made during a total traffic/service outage. Demand in any
 managed lane can check all declarations, including an inactive/refused old lane.
 
 Any nonempty `OMI_VERTEX_PT_MODEL` pin suppresses all synthetic discovery. A
@@ -360,10 +387,32 @@ refusal headers; it never invokes a provider or charges metering. It neither
 prompts an update nor stops future normal capture requests. Observe mode increments
 `omi_vertex_reservation_policy_total{action="would_refuse"}` and serves normally;
 enforce mode records `action="refuse"`. Decisions use closed model/state/lane/action
-labels. `vertex_reservation_transition` records state/reason/time on shared state
-changes; `vertex_reservation_policy` and `vertex_reservation_probe` record routing
+labels. `vertex_reservation_transition` records each committed state change. An inactive
+transition emits one **WARNING** with model, storage, reason, transition time,
+failure count, failure-window start/latest time, own success time and latest
+same-order successor success time; `vertex_reservation_policy` and `vertex_reservation_probe` record routing
 and synthetic usage without content or raw User-Agent. Gateway decisions also log
 which capacity the state selected. Storage fail-open uses standard fallback telemetry.
+
+### Missed-discovery alert
+
+`vertex_reservation_discovery_overdue` is a WARNING when a declared target is
+still sent shared/unknown at least **six hours (21,600 seconds)** after its first
+unknown shared request. Repeat warnings are limited to once per model per hour.
+Only declared model names, state/capacity and timestamps/elapsed seconds appear;
+no user, request, prompt or User-Agent fields. Known active/inactive state resets
+the local unknown timer. Redis transactions share the earliest timer across
+replicas; a newly noted first request is persisted on the next transaction.
+Without Redis, the timestamp resets on process restart.
+
+The bounded counter `omi_vertex_reservation_unknown_shared_total{model}` increments
+on each such shared/unknown dispatch. Alert on
+`sum by (model) (rate(omi_vertex_reservation_unknown_shared_total[5m])) > 0`
+with `for: 6h` to retain the alert condition across process churn under sustained
+traffic. Neither the counter nor warning asserts that an order actually exists:
+check the order/location, strict completion/traffic metadata, discovery permissions
+and probe completion before changing overrides. Alert provisioning is an operator
+follow-up; this PR emits the signal and does not change monitoring resources.
 
 [Client audit, lane costs, release tags, rollout dependency and smoke limits](vertex-reservation-lane-audit.md).
 Default enforcement requires a positive macOS identity and one of the audited
@@ -386,13 +435,14 @@ Never discover `global` automatically.
 
 ### Operator runbook
 
-Before the move: provision the shared-store ConfigMap described above, then
-deploy the password/chart bindings and both serving images;
-verify both services see the same project/location-scoped evidence. Confirm the
-order's location and approve global residency separately if required. Finish the
-eligible macOS pipeline ramp or hold observe mode. Watch bounded probe events:
-old dedicated success; target capacity errors until fulfilled. Missing store or
-target positive evidence means no automatic cutoff.
+Before the move: deploy both serving images using the preferred BFF Redis /
+gateway process-local topology. Verify the BFF's two model probes complete and
+its Redis records the evidence. Gateway Redis wiring is optional; if added,
+verify the desktop pool binding and cross-service connectivity before relying on
+fleet-wide leases. Confirm the order's location and approve global residency
+separately if required. Audit the eligible old-client identities, or hold observe
+mode. Watch old dedicated success and target capacity errors until fulfilled.
+Missing target positive evidence means no automatic cutoff.
 
 On the day: target PT successes make it active independently. Old dedicated errors
 still use the original 3.1 Flash-Lite overflow during the confirmation window
@@ -473,7 +523,7 @@ shipping code.
 | `OMI_VERTEX_LEGACY_TASK_MODE` | `enforce` default; `observe` counts would-refuse but serves normally. |
 | `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
-| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Gateway target discovery/full-capacity attempts retain same-model shared recovery to preserve extraction precision. |
+| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Target dedicated attempts also respect this switch; synthetic discovery never retries shared. |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Dedicated target order location. Default US multi-region; regional/global require an explicit declared order location. Global requires residency sign-off. Shared target traffic retains its residency default. |
 | `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 

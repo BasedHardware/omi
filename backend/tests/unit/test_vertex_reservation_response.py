@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -242,6 +242,8 @@ async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch
 
     states = {TARGET: State.ACTIVE} if active else {}
     store = ReservationState()
+    note_request = Mock(wraps=store.note_request)
+    monkeypatch.setattr(store, 'note_request', note_request)
     monkeypatch.setattr(store, 'refresh', AsyncMock(return_value=states))
     monkeypatch.setattr(store, 'transact', AsyncMock(return_value=(states, None)))
     token = AsyncMock(return_value='synthetic-token')
@@ -304,6 +306,8 @@ async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch
         if fallback:
             expected.append('shared')
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == expected
+        assert note_request.call_count == len(seen)
+        assert [call.args[1] for call in note_request.call_args_list] == expected
         assert all(f'/models/{TARGET}:' in str(r.url) for r in (seen[:-1] if fallback else seen))
         if fallback:
             assert '/models/gemini-3.1-flash-lite:' in str(seen[-1].url)

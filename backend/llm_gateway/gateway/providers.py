@@ -526,6 +526,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ):
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
+        self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
         endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
@@ -683,6 +684,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ) -> Mapping[str, Any]:
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
+        self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
         endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)

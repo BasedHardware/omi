@@ -1322,10 +1322,15 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
 
 
 @pytest.fixture(autouse=True)
-def _reset_pt_promotion_state():
+def _reset_pt_promotion_state(monkeypatch):
     """Observed capacity and learned reachability are module state; never leak
     them between tests. Reachability is a per-model table now, so clearing one
     target field is no longer enough."""
+    from utils.llm import vertex_reservation_state
+
+    # Probe behavior is exercised separately with explicit leases and wire mocks.
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
+    monkeypatch.setattr(desktop_proxy, 'reservation_state', vertex_reservation_state.ReservationState())
     desktop_proxy._reservation_snapshot.set({})
     desktop_proxy.reservation_state._positive.clear()
     desktop_proxy._model_unavailable_at.clear()
