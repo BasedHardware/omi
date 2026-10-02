@@ -86,7 +86,7 @@ def legacy_speaker_clip_pcm(
     relevant_set = {round(ts, 3) for ts in relevant}
     for chunk in session.chunks:
         if chunk.get('is_batch'):
-            key = storage._strip_extension(chunk['path'].split('/')[-1])
+            key = chunk['path'].split('/')[-1].split('.batch.', 1)[0]
             bounds = [float(value) for value in key.split('-', 1)]
             matches = any(bounds[0] <= round(ts, 3) <= bounds[-1] for ts in relevant)
         else:
