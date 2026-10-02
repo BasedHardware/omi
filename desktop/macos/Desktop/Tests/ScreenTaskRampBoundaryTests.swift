@@ -249,7 +249,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     return ScreenTaskHTTPFailure(response: response, data: Data())
   }
 
-  func testTerminalGateAndExtractionFailuresNeverEnterLegacyAndOutageEntersOnce() async throws {
+  func testTerminalDenialsAndExtractionOutagesNeverEnterLegacyAndNextTriggerRetries() async throws {
     for gate in [true, false] {
       for error in [
         try httpFailure(401), try httpFailure(402), try httpFailure(429, retryable: "true", retryAfter: "60"),
@@ -271,11 +271,23 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
       let state = RampState()
       state.extractionError = error
       let metrics = ScreenTaskFrameMetrics()
-      _ = try await ScreenTaskPipeline().run(
-        frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
-      XCTAssertEqual(state.sent, ["gate", "extraction", "legacy"])
-      XCTAssertEqual(metrics.legacyAttempts, 1)
-      XCTAssertNotEqual(metrics.fallbackReason, "none")
+      let pipeline = ScreenTaskPipeline()
+      do {
+        _ = try await pipeline.run(frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
+        XCTFail("outage completed analysis")
+      } catch {
+        metrics.finish(error: error)
+      }
+      XCTAssertEqual(state.sent, ["gate", "extraction"])
+      XCTAssertEqual(metrics.legacyAttempts, 0)
+      XCTAssertEqual(metrics.extractor, "none")
+      XCTAssertEqual(metrics.outcome, "failed")
+      XCTAssertEqual(metrics.errorClass, "provider_outage")
+      XCTAssertEqual(metrics.counts.outboxSaved, 0)
+      state.extractionError = nil
+      _ = try await pipeline.run(
+        frame: frame(), key: "owner:1:window", services: services(state), metrics: ScreenTaskFrameMetrics())
+      XCTAssertEqual(state.sent, ["gate", "extraction", "gate", "extraction"])
     }
     XCTAssertEqual(try httpFailure(429, retryAfter: "60").retryAfter, 60)
   }
@@ -313,7 +325,8 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     let normalResponse = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:]))
     XCTAssertNil(GeminiClient.httpError(response: normalResponse, data: body))
     let state = RampState()
-    state.extractionError = URLError(.timedOut)
+    state.suspendAt = "gate"
+    state.change = "feature"
     state.legacyError = refusal
     let metrics = ScreenTaskFrameMetrics()
     do {
@@ -323,8 +336,8 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     } catch {
       metrics.finish(error: error)
     }
-    XCTAssertEqual(state.sent, ["gate", "extraction", "legacy"])
-    XCTAssertEqual(metrics.pipeline, "legacy_recovery")
+    XCTAssertEqual(state.sent, ["gate", "legacy"])
+    XCTAssertEqual(metrics.pipeline, "legacy")
     XCTAssertEqual(metrics.legacyAttempts, 1)
     XCTAssertEqual(metrics.outcome, "refused")
     XCTAssertEqual(metrics.errorClass, "legacy_task_reservation_inactive")
@@ -410,6 +423,83 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertEqual(boundApps, ["Messages"])
     let captured = CapturedFrame(jpegData: Data(), appName: resolved.app, frameNumber: 1, capturedUptime: 123)
     XCTAssertEqual(captured.capturedUptime, 123)
+  }
+
+  func testLegacyInferenceRevocationPreventsReturningAnyToolForOwnerSessionAndExclusion() async throws {
+    for change in ["owner", "exclusion"] {
+      for sameUID in [false, true] {
+        let state = RampState()
+        state.suspendAt = "inference"
+        state.change = change
+        state.sameOwner = sameUID
+        let transport = GeminiToolLoopTransport(
+          admit: {}, authHeader: { _ in "Bearer synthetic-a" },
+          send: { request in
+            state.append("inference")
+            await Task.yield()
+            state.boundary("inference")
+            let response = try XCTUnwrap(
+              HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (
+              Data(
+                #"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"search_similar","args":{"query":"synthetic old screen"}}}]}}]}"#
+                  .utf8), response
+            )
+          })
+        let client = try GeminiClient(workload: .extraction, toolLoopTransport: transport)
+        do {
+          _ = try await ScreenTaskWorkAuthority.$validate.withValue({ try state.frameValid() }) {
+            try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [])
+          }
+          XCTFail("revoked inference returned an executable search tool")
+        } catch {
+          XCTAssertEqual(
+            ScreenTaskErrorPolicy.errorClass(error), change == "owner" ? "owner_revoked" : "privacy_revoked")
+        }
+        XCTAssertEqual(state.sent, ["inference"], "no retry or later tool may dispatch")
+      }
+    }
+  }
+
+  func testEmbeddingAuthSuspensionRevalidatesOriginalOwnerSessionAndExclusionBeforeDispatch() async throws {
+    for change in ["owner", "exclusion"] {
+      for sameUID in [false, true] {
+        let state = RampState()
+        state.suspendAt = "auth"
+        state.change = change
+        state.sameOwner = sameUID
+        let authority = RuntimeOwnerAuthorizationAuthority()
+        let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
+        let service = EmbeddingService(
+          acquireAuth: { snapshot in
+            XCTAssertEqual(snapshot, original)
+            state.append("auth")
+            await Task.yield()
+            state.boundary("auth")
+            if change == "owner" {
+              authority.beginTransition()
+              authority.endTransition(ownerID: sameUID ? "synthetic-a" : "synthetic-b")
+            }
+            return "Bearer synthetic-current-account"
+          },
+          dispatch: { request in
+            state.append("embedding")
+            let response = try XCTUnwrap(
+              HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"embedding":{"values":[1,0]}}"#.utf8), response)
+          }, ownerIsCurrent: { authority.isCurrent($0, ownerID: "synthetic-a") })
+        do {
+          _ = try await ScreenTaskWorkAuthority.$validate.withValue({ try state.frameValid() }) {
+            try await service.embed(text: "synthetic old screen", authorization: original)
+          }
+          XCTFail("revoked query uploaded under current credentials")
+        } catch {
+          XCTAssertEqual(
+            ScreenTaskErrorPolicy.errorClass(error), change == "owner" ? "owner_revoked" : "privacy_revoked")
+        }
+        XCTAssertEqual(state.sent, ["auth"])
+      }
+    }
   }
 
   func testOwnerSwapAtHandlerAndDeliverySuspensionsIncludingSameUIDRejectsMutation() async throws {

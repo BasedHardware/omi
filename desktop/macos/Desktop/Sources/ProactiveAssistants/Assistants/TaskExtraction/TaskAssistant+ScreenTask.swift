@@ -129,7 +129,7 @@ extension TaskAssistant {
       },
       legacy: {
         let (results, searches) = try await self.extractTaskSingleStage(
-          from: frame.jpegData, appName: frame.appName, authorization: authorization, maximumRequests: 1)
+          from: frame.jpegData, appName: frame.appName, authorization: authorization)
         return ScreenTaskExtraction(results: results, searchCount: searches, extractor: "legacy")
       },
       fallback: { area, reason in

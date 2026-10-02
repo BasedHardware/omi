@@ -599,8 +599,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
   /// terminator result when zero tasks were extracted.
   func extractTaskSingleStage(
-    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
-    maximumRequests: Int? = nil
+    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> (
     [TaskExtractionResult], Int
   ) {
@@ -764,22 +763,27 @@ actor TaskAssistant: ProactiveAssistant {
     var lastContextSummary = ""
     var lastCurrentActivity = ""
 
-    toolLoop: for iteration in 0..<(maximumRequests ?? 8) {
+    toolLoop: for iteration in 0..<8 {
+      try ScreenTaskWorkAuthority.require()
       let result = try await geminiClient.sendImageToolLoop(
         contents: contents,
         systemPrompt: prompts.system,
         tools: [tools],
         forceToolCall: iteration == 0,
         thinkingBudget: 1024,
-        authorization: authorization,
-        maximumAttempts: maximumRequests == nil ? nil : 1
+        authorization: authorization
       )
 
+      try ScreenTaskWorkAuthority.require()
+      if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+        throw ScreenTaskFailure.ownerRevoked
+      }
       guard let toolCall = result.toolCalls.first else {
         log("Task: No tool call received on iteration \(iteration), breaking")
         break
       }
 
+      try ScreenTaskWorkAuthority.require()
       switch toolCall.name {
       case "no_task_found":
         let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No task on screen"
@@ -982,7 +986,7 @@ actor TaskAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         searchCount += 1
         log("Task: search_similar query: \"\(query)\"")
-        let searchResults = await executeVectorSearch(query: query)
+        let searchResults = try await executeVectorSearch(query: query, authorization: authorization)
         log("Task: Vector search returned \(searchResults.count) results")
 
         let searchResultsJson: String
@@ -1310,11 +1314,15 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   /// Execute vector similarity search
-  private func executeVectorSearch(query: String) async -> [TaskSearchResult] {
+  private func executeVectorSearch(query: String, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws
+    -> [TaskSearchResult]
+  {
     var results: [TaskSearchResult] = []
 
     do {
-      let queryEmbedding = try await EmbeddingService.shared.embed(text: query)
+      try ScreenTaskWorkAuthority.require()
+      let queryEmbedding = try await EmbeddingService.shared.embed(text: query, authorization: authorization)
+      try ScreenTaskWorkAuthority.require()
       let vectorResults = await EmbeddingService.shared.searchSimilar(query: queryEmbedding, topK: 10)
 
       for result in vectorResults where result.similarity > 0.3 {
@@ -1367,6 +1375,10 @@ actor TaskAssistant: ProactiveAssistant {
         }
       }
     } catch {
+      try ScreenTaskWorkAuthority.require()
+      if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+        throw ScreenTaskFailure.ownerRevoked
+      }
       logError("Task: Vector search failed", error: error)
     }
 

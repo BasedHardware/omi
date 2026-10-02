@@ -63,6 +63,7 @@ enum ScreenTaskErrorPolicy {
       case .ownerRevoked: return "owner_revoked"
       case .privacyRevoked: return "privacy_revoked"
       case .invalidResponse: return "invalid_response"
+      case .providerOutage: return "provider_outage"
       }
     }
     if case APIError.unauthorized = error { return "auth" }

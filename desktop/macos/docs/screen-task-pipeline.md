@@ -34,7 +34,7 @@ No fuzzy or subset matching is used.
 Local SQLite FTS selects at most eight related rows including active, completed,
 deleted and staged suppression evidence. Retrieval itself makes no embedding
 request. The assistant's existing embedding-service initialization remains, and
-legacy recovery can use its existing network semantic search. Gate context uses
+ordinary legacy can use its existing network semantic search. Gate context uses
 four descriptions and 1024 profile characters. Gate OCR is full OCR, up to 12,000
 Swift characters, rather than the cropped dedupe line list.
 
@@ -62,7 +62,7 @@ stops new feature gate/extraction dispatches and feature-result mutations within
 55 seconds of its last admission request (within the 60-second requirement),
 even if refresh hangs. It rechecks before every dispatch and mutation. Queued
 frames after stop use legacy with their original binding; late feature results
-are discarded. Stop during gate processing permits one bounded legacy recovery.
+are discarded. Stop during gate processing selects the ordinary owner-bound legacy loop.
 These controls stop the new pipeline, and do not disable the legacy extractor or
 change reservation routing. Already committed canonical outbox rows remain
 durable and can finish delivery under the current owner; admission leases govern
@@ -82,14 +82,17 @@ schema, auth, plan, quota, 429 and explicit `X-Omi-Retryable:false` responses ar
 terminal. `Retry-After` postpones subsequent feature requests for that owner and
 session. No same-model repair or automatic schema-to-legacy fallback occurs.
 
-A genuine extraction provider 5xx/timeout/offline permits one explicit legacy
-request, with no inner retry/model ladder. Thus a feature frame has at most one
-gate, one new screenshot request and one legacy screenshot request; provider
-internal retries are outside this client budget. A typed legacy retirement
+An extraction provider 5xx/timeout/offline terminates the frame with
+`outcome=failed`, `error_class=provider_outage`, `extractor=none` and a bounded
+`fallback_reason` identifying 5xx/timeout/offline. No legacy request, observation,
+staging or content-dedupe entry is created; the next trigger retries naturally.
+A feature frame has at most one gate and one new screenshot request. A typed legacy retirement
 refusal is terminal and quiet. Feature-off retains the existing legacy loop,
 with original-owner/privacy hardening and its existing retry/header behavior.
-The bounded feature recovery call honours the feature cooldown; ordinary
-feature-off work does not acquire that separate gate/extraction cooldown.
+Ordinary feature-off work does not acquire the separate gate/extraction cooldown.
+Legacy model responses are revalidated before any tool executes, and semantic
+search passes the original authorization into embedding. Auth acquisition and
+actual embedding dispatch both revalidate the original owner/session and app privacy.
 Capture still proposes pending candidates, never accepted action items. Policy
 rejection, coalescence and an unsynced outbox are not delivered suggestions.
 
@@ -97,11 +100,10 @@ The sibling reservation policy can return HTTP 200 with `X-Omi-Error-Class=legac
 and `X-Omi-Reservation-State=inactive`. The client terminates quietly without decoding
 its synthetic `no_task_found` as inference. Terminal `outcome=refused`,
 `error_class=legacy_task_reservation_inactive`, `extractor=none`, zero delivery/failure
-counts and `pipeline=legacy_recovery` identify a refused recovery; normal legacy
-work instead keeps `pipeline=legacy`. No retry, observation or candidate is created.
+counts and `pipeline=legacy` identify the refusal. No retry, observation or candidate is created.
 
 Every processed frame emits `Screen Task Frame Terminal` with `schema_version=2`,
-`pipeline` (`screen_task_v2`, `legacy`, `legacy_recovery`), `gate_outcome`,
+`pipeline` (`screen_task_v2`, `legacy`), `gate_outcome`,
 `audit_sample`, actual `extractor` (`gemini_3_8`, `legacy`, `none`), terminal
 `outcome`, `error_class`, `fallback_reason`, `eligible_frames` (one for a valid owner/privacy-bound frame),
 `feature_enabled_at_start`, `client_bypass`,
@@ -135,7 +137,7 @@ per-task extraction event is suppressed for audits. Compare audit counts with
 separately. An audit is model disagreement evidence, not human recall ground
 truth. Existing candidate-attribution events retain canonical IDs separately.
 Flag-configured logging suppresses inherited content-bearing task logs through
-extraction, recovery and staging. Other capture/coordinator logs are outside that
+extraction, ordinary legacy and staging. Other capture/coordinator logs are outside that
 scope, and derived context/task content still persists in observations/outbox and
 candidates. Provider residency, retention and real cost are not verified here.
 
@@ -145,7 +147,7 @@ At each consented ramp stage read these signals:
 | --- | --- |
 | Gate pass rate | Within terminal events filtered to `feature_enabled_at_start=true`, count `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls |
 | Audited-reject misses | `gate_outcome=rejected`, `audit_sample=true`, `extractor=gemini_3_8`, sum `pending_delivered`; show audited frame count and human labels separately |
-| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` over processed feature frames; distinguish gate bypass from extractor recovery |
+| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` over processed feature frames; distinguish gate bypass from admission-loss legacy |
 | Delivered suggestions/user-day | Sum terminal `pending_delivered` by analytics user/day and actual extractor; compare a contemporaneous legacy baseline and active-user exposure |
 | Latency | Terminal stage `*_ms`, especially `capture_to_terminal_ms`; slice by pipeline/extractor and messaging cohort using existing cohort metadata |
 | Errors | Terminal `outcome=failed`, `error_class`, `invalid_items`, `failed`; backend gate terminal outcome counts and existing proxy status/error telemetry |

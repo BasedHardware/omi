@@ -374,12 +374,14 @@ actor GeminiClient {
   /// Optional model to retry with if the primary model keeps failing transiently
   /// (e.g. Pro overloaded → fall back to Flash). Nil or equal-to-primary = no fallback.
   private let fallbackModel: String?
+  private let toolLoopTransport: GeminiToolLoopTransport?
 
   init(
     apiKey: String? = nil,
     model: String = ModelQoS.Gemini.proactive,
     fallbackModel: String? = nil,
-    workload: GeminiWorkloadClass
+    workload: GeminiWorkloadClass,
+    toolLoopTransport: GeminiToolLoopTransport? = nil
   ) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
@@ -391,6 +393,7 @@ actor GeminiClient {
     self.model = model
     self.fallbackModel = fallbackModel
     self.workload = workload
+    self.toolLoopTransport = toolLoopTransport
     // Which model a proactive assistant actually runs on is a product decision with a
     // measurable click-through cost, and until now it was invisible at runtime — the model
     // appears only inside the request URL, so a tier change could not be confirmed on a
@@ -1068,6 +1071,13 @@ struct GeminiImageToolRequest: Encodable {
   }
 }
 
+/// Transport ports keep offline boundary tests on the production response/tool path.
+struct GeminiToolLoopTransport: Sendable {
+  var admit: @Sendable () async throws -> Void
+  var authHeader: @Sendable (RuntimeOwnerAuthorizationSnapshot?) async throws -> String
+  var send: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+}
+
 // MARK: - GeminiClient Image + Tool Extensions
 
 extension GeminiClient {
@@ -1083,25 +1093,21 @@ extension GeminiClient {
     tools: [GeminiTool],
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0,
-    authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
-    maximumAttempts: Int? = nil
+    authorization: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolChatResult {
-    if let maximumAttempts, maximumAttempts <= 0 { throw GeminiClientError.invalidResponse }
     if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
-    if maximumAttempts != nil, let authorization, ScreenTaskBackpressure.shared.isBlocked(authorization) {
-      throw ScreenTaskFailure.backpressure
-    }
-    try await Self.enforceManagedProactivity()
+    try ScreenTaskWorkAuthority.require()
+    if let toolLoopTransport { try await toolLoopTransport.admit() } else { try await Self.enforceManagedProactivity() }
     // Try the primary model first; if it keeps failing transiently, fall back to the
     // secondary model (e.g. Pro overloaded → Flash) before giving up.
     let models: [String] = {
       if let fb = fallbackModel, fb != model { return [model, fb] }
       return [model]
     }()
-    let maxRetries = maximumAttempts.map { max(0, $0 - 1) } ?? 2
+    let maxRetries = 2
     var lastError: Error?
 
-    for (modelIndex, activeModel) in models.prefix(maximumAttempts == nil ? models.count : 1).enumerated() {
+    for (modelIndex, activeModel) in models.enumerated() {
       for attempt in 0...maxRetries {
         do {
           // Wrap JSON serialization in autoreleasepool (contents may include
@@ -1133,7 +1139,13 @@ extension GeminiClient {
           var urlRequest = URLRequest(url: url)
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-          urlRequest.setValue(try await authHeader(authorization: authorization), forHTTPHeaderField: "Authorization")
+          let header: String
+          if let toolLoopTransport {
+            header = try await toolLoopTransport.authHeader(authorization)
+          } else {
+            header = try await authHeader(authorization: authorization)
+          }
+          urlRequest.setValue(header, forHTTPHeaderField: "Authorization")
           urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
@@ -1142,13 +1154,17 @@ extension GeminiClient {
             throw CancellationError()
           }
           try ScreenTaskWorkAuthority.require()
-          let (data, urlResponse) = try await Self.send(urlRequest)
-          if maximumAttempts != nil, let authorization, let response = urlResponse as? HTTPURLResponse,
-            !(200...299).contains(response.statusCode)
-          {
-            ScreenTaskBackpressure.shared.record(
-              ScreenTaskHTTPFailure(response: response, data: data), owner: authorization)
+          let (data, urlResponse): (Data, URLResponse)
+          if let toolLoopTransport {
+            (data, urlResponse) = try await toolLoopTransport.send(urlRequest)
+          } else {
+            (data, urlResponse) = try await Self.send(urlRequest)
           }
+          // A response cannot grant fresh authority to work captured under an old session/app.
+          if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+            throw ScreenTaskFailure.ownerRevoked
+          }
+          try ScreenTaskWorkAuthority.require()
           try checkHTTPStatus(urlResponse, data: data)
 
           let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
@@ -1191,7 +1207,7 @@ extension GeminiClient {
           guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
             // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
             // if the failure is transient and a fallback model remains.
-            if maximumAttempts == nil && modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
+            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
               DesktopDiagnosticsManager.shared.recordFallback(
                 area: "gemini_model",
                 from: Self.bucketGeminiModel(activeModel),

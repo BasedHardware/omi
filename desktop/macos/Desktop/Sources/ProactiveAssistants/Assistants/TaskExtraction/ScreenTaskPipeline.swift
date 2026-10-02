@@ -27,7 +27,6 @@ actor ScreenTaskPipeline {
       try services.validateFeature()
       try Task.checkCancellation()
     }
-    var admission: ScreenTaskAdmission?
     do {
       try requireFeature()
       metrics.eligibleFrames = 1
@@ -89,7 +88,6 @@ actor ScreenTaskPipeline {
           shouldExtract: true, gateOutcome: "fail_open", auditSample: false, clientBypass: true)
       }
       metrics.gateMS = (services.now() - gateStart) * 1000
-      admission = gate
       metrics.gateOutcome = gate.gateOutcome
       metrics.auditSample = gate.auditSample
       try requireFeature()
@@ -128,14 +126,19 @@ actor ScreenTaskPipeline {
           if case .stopped = $0 { return true }
           return false
         } == true
-      let outage = ScreenTaskErrorPolicy.outageReason(error)
-      guard stopped || outage != nil else { throw error }
-      if !stopped { try services.validateFeature() }
-      let reason = stopped ? "dispatch_disabled" : (outage ?? "provider_5xx")
+      // Extraction outages terminate this frame. No legacy request, observation or dedupe entry.
+      guard stopped else {
+        if let reason = ScreenTaskErrorPolicy.outageReason(error) {
+          metrics.fallbackReason = reason
+          throw ScreenTaskFailure.providerOutage
+        }
+        throw error
+      }
+      let reason = "dispatch_disabled"
       metrics.fallbackReason = reason
       services.fallback("screen_task_extraction", reason)
       metrics.legacyAttempts += 1
-      metrics.pipeline = "legacy_recovery"
+      metrics.pipeline = "legacy"
       let start = services.now()
       var fallback = try await ScreenTaskWorkAuthority.$validate.withValue(services.validateFrame) {
         try await services.legacy()
@@ -143,7 +146,6 @@ actor ScreenTaskPipeline {
       try services.validateFrame()
       metrics.extractionMS += (services.now() - start) * 1000
       metrics.extractor = "legacy"
-      fallback.admission = admission
       fallback.extractor = "legacy"
       return fallback
     }

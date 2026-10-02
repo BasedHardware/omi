@@ -159,7 +159,7 @@ enum ScreenTaskFreshFlagResponse {
 }
 
 /// Shared transport checks this at the actual dispatch, including auth retries.
-/// Legacy recovery retains frame privacy/owner authority but does not need a feature lease.
+/// Ordinary legacy work retains frame privacy/owner authority but does not need a feature lease.
 enum ScreenTaskWorkAuthority {
   @TaskLocal static var validate: (@Sendable () throws -> Void)?
   static func require() throws {

@@ -257,17 +257,6 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertEqual(try decoded.results(app: "Messages", context: [], today: "2026-10-02").first?.task?.tags.count, 3)
   }
 
-  func testZeroLegacyAttemptBudgetRejectsBeforeAnyManagedAdmissionOrDispatch() async throws {
-    let client = try GeminiClient(model: "gemini-2.5-flash", workload: .extraction)
-    do {
-      _ = try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [], maximumAttempts: 0)
-      XCTFail("zero request budget dispatched")
-    } catch GeminiClient.GeminiClientError.invalidResponse {
-    } catch {
-      XCTFail("zero budget reached a later admission: \(error)")
-    }
-  }
-
   func testLegacyRetryHeadersRemainUnchangedAndRetirementStaysTerminal() throws {
     for status in [401, 402, 429, 410] {
       let url = try XCTUnwrap(URL(string: "http://local"))
