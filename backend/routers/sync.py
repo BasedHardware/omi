@@ -1133,11 +1133,10 @@ async def sync_local_files_v2(
                 backfill_slot_acquired = False
             failure_key = claim.get('failure_key')
             logger.warning(
-                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s quarantined=%s',
+                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s',
                 lane_decision.lane.value,
                 failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
                 client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
-                str(claim.get('quarantined') is True).lower(),
             )
             return JSONResponse(
                 status_code=202,

@@ -318,6 +318,25 @@ def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatc
     finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)
 
 
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(pipeline, monkeypatch, flag):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+    module, store = pipeline
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    # The last call repeats a segment whose assignment already committed.
+    for timestamp in (1000, 1060, 1060):
+        outcome = {}
+        module.process_segment(
+            f'{timestamp}.wav', 'u', response, threading.Lock(), errors, is_locked=True, deferred_outcome=outcome
+        )
+        assert outcome['outcome'].value == 'success'
+    assert errors == []
+    rows = conversations(store)
+    assert len(rows) == 1
+    assert rows[0]['is_locked'] is True and len(rows[0]['transcript_segments']) == 2
+
+
 @pytest.mark.parametrize('condition', ['anchor_deleted', 'lineage_deleted', 'user_managed', 'provenance', 'cycle'])
 def test_assignment_outcomes_through_process_segment(pipeline, condition, monkeypatch):
     monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')

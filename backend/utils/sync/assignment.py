@@ -32,11 +32,15 @@ logger = logging.getLogger(__name__)
 
 
 def capture_mismatch(left: dict, right: dict) -> str:
-    """One of eight fixed tokens; never expose source or device values."""
+    """Which partition fields differ, as one of eight fixed tokens.
+
+    ``none`` exactly when ``compatible_capture`` holds: every field is compared
+    for equality, so two locked captures match. Never exposes field values.
+    """
     fields = [
         name for key, name in (('source', 'source'), ('client_device_id', 'device')) if left.get(key) != right.get(key)
     ]
-    if bool(left.get('is_locked')) != bool(right.get('is_locked')) or left.get('is_locked'):
+    if bool(left.get('is_locked')) != bool(right.get('is_locked')):
         fields.append('lock')
     return '_'.join(fields) or 'none'
 
@@ -86,8 +90,7 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        row.get('is_locked')
-        or (row.get('smart_merge') or {}).get('role') == 'survivor'
+        (row.get('smart_merge') or {}).get('role') == 'survivor'
         or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
@@ -180,13 +183,13 @@ def assign_in_transaction(
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
         target_id, target = None, None
-    if own_anchor and capture_mismatch(own_anchor, incoming) != 'none':
-        logger.warning(
-            'event=sync_assignment_target outcome=anchor_rejected mismatch=%s',
-            capture_mismatch(own_anchor, incoming),
-        )
-        # A retry key can itself have become locked or changed provenance. Do
-        # not overwrite it with a new row or silently acknowledge new speech.
+    anchor_mismatch = capture_mismatch(own_anchor, incoming) if own_anchor else 'none'
+    if anchor_mismatch != 'none':
+        logger.warning('event=sync_assignment_target outcome=anchor_rejected mismatch=%s', anchor_mismatch)
+        # The stored retry anchor changed source, device or lock state since it
+        # was written. It can no longer match temporally, so continuing would
+        # replace it with a new row. An unchanged anchor (locked or not) is a
+        # plain retry and deduplicates below.
         raise SyncAssignmentConflict('sync anchor provenance mismatch', subtype='provenance_mismatch')
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
         raise SyncAssignmentSuperseded('sync anchor is user managed')

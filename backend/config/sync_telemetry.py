@@ -113,14 +113,16 @@ SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
     }
 )
 
-# These are structural, not retryable transport failures. Keep the generic
-# mixed-batch token bounded too; per-segment diagnostics retain the cause.
-SYNC_STRUCTURAL_PERSISTENCE_FINGERPRINTS = frozenset(
+# The closed set of persistence fingerprints that may count as a strike in the
+# three-strike / 24-hour repeat-failure pause. ``persistence:mixed`` is the one
+# generic token for a batch whose failing segments carry different fingerprints;
+# per-segment diagnostics retain the cause.
+SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS = frozenset(
     {
         'persistence:provenance_mismatch',
         'persistence:redirect_cycle',
         'persistence:document_size_limit',
-        'persistence:deterministic',
+        'persistence:mixed',
     }
 ) | frozenset(f'persistence:{name}' for name in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS)
 

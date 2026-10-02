@@ -83,29 +83,119 @@ def test_retry_strikes_are_owner_fenced_and_transient_releases_do_not_increment(
     assert ref.data['repeat_failure_count'] == 1
 
 
-@pytest.mark.parametrize(
-    'fingerprint',
-    [
-        'persistence:ValueError',
-        'persistence:provenance_mismatch',
-        'persistence:redirect_cycle',
-        'persistence:document_size_limit',
-        'persistence:deterministic',
-    ],
-)
-def test_deterministic_failure_quarantines_only_its_content_without_ttl(fingerprint):
+_CLASSIFIED_FINGERPRINTS = [
+    'persistence:ValueError',
+    'persistence:TypeError',
+    'persistence:provenance_mismatch',
+    'persistence:redirect_cycle',
+    'persistence:document_size_limit',
+    'persistence:mixed',
+]
+
+
+@pytest.mark.parametrize('fingerprint', _CLASSIFIED_FINGERPRINTS)
+def test_classified_persistence_failure_pauses_on_the_third_strike_and_is_readmitted(fingerprint):
     failing, healthy = _Ref(), _Ref()
     start = datetime(2026, 9, 27, tzinfo=timezone.utc)
-    assert _claim(failing, 'bad', start)['outcome'] == 'owned'
-    failing.data['partial_result'] = {'new_memories': ['retained']}
-    assert _fail(failing, 'bad', start, 'persistent_persistence', fingerprint)
+    for index in range(3):
+        now = start + timedelta(minutes=index)
+        # The first and second strike never pause: each retry is still admitted.
+        assert _claim(failing, f'bad-{index}', now)['outcome'] == 'owned'
+        failing.data['partial_result'] = {'new_memories': ['retained']}
+        failing.data['processed_segment_ids'] = ['healthy-sibling']
+        assert _fail(failing, f'bad-{index}', now, 'persistent_persistence', fingerprint)
+        assert failing.data['repeat_failure_count'] == index + 1
+        assert ('repeat_failure_pause_until' in failing.data) is (index == 2)
+    third = start + timedelta(minutes=2)
     assert failing.data['status'] == 'retryable'
-    assert 'expires_at' not in failing.data
+    # Bounded, never permanent: the ledger TTL stays and no forever flag exists.
+    assert failing.data['expires_at'] == third + timedelta(days=sync_ledger.LEDGER_RETENTION_DAYS)
+    assert failing.data['repeat_failure_pause_until'] == third + sync_ledger.REPEAT_FAILURE_PAUSE
+    assert 'persistence_quarantined' not in failing.data
+    capped = _claim(failing, 'bad-3', start + timedelta(minutes=3))
+    assert capped['outcome'] == 'capped' and capped['failure_key'] == 'persistent_persistence'
+    assert 1 <= capped['retry_after'] <= 86400 and 'quarantined' not in capped
+    assert _claim(failing, 'bad-4', third + timedelta(hours=24, seconds=-1))['outcome'] == 'capped'
+    assert _claim(healthy, 'good-0', start + timedelta(minutes=3))['outcome'] == 'owned'
+    # The pause expires by itself; sibling checkpoints survive it.
+    readmitted = third + timedelta(hours=24)
+    assert _claim(failing, 'bad-5', readmitted)['outcome'] == 'owned'
     assert failing.data['partial_result'] == {'new_memories': ['retained']}
-    for days in (0, 1, 46, 365):
-        capped = _claim(failing, 'retry', start + timedelta(days=days))
-        assert capped['outcome'] == 'capped' and capped['quarantined']
-    assert _claim(healthy, 'good', start)['outcome'] == 'owned'
+    assert failing.data['processed_segment_ids'] == ['healthy-sibling']
+    # A still-failing item starts a new three-strike window, not an instant pause.
+    assert _fail(failing, 'bad-5', readmitted, 'persistent_persistence', fingerprint)
+    assert failing.data['repeat_failure_count'] == 1
+    assert 'repeat_failure_pause_until' not in failing.data
+    assert _claim(failing, 'bad-6', readmitted + timedelta(minutes=1))['outcome'] == 'owned'
+
+
+def test_bad_deploy_for_an_hour_does_not_pause_before_the_third_strike_and_recovers():
+    """A TypeError from a bad deploy is a strike, never a first-occurrence stop."""
+    assert _persistence_failure_fingerprint(TypeError('bad deploy'), 'persistence') == 'persistence:TypeError'
+    start = datetime(2026, 9, 27, tzinfo=timezone.utc)
+
+    # Fixed after two failures: the item was never paused and its streak clears.
+    fixed_early = _Ref()
+    for index in range(2):
+        now = start + timedelta(minutes=20 * index)
+        assert _claim(fixed_early, f'job-{index}', now)['outcome'] == 'owned'
+        assert _fail(fixed_early, f'job-{index}', now, 'persistent_persistence', 'persistence:TypeError')
+    after_fix = start + timedelta(hours=1)
+    assert _claim(fixed_early, 'after-fix', after_fix)['outcome'] == 'owned'
+    completed = sync_ledger._mark_completed_transaction.to_wrap(
+        _Transaction(),
+        fixed_early,
+        'after-fix',
+        {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+        after_fix,
+    )
+    assert completed and fixed_early.data['status'] == 'completed'
+
+    # Three failures inside the hour: paused for 24 hours, then admitted again
+    # with no operator repair, and the fixed code completes it.
+    paused = _Ref()
+    for index in range(3):
+        now = start + timedelta(minutes=20 * index)
+        assert _claim(paused, f'job-{index}', now)['outcome'] == 'owned'
+        assert _fail(paused, f'job-{index}', now, 'persistent_persistence', 'persistence:TypeError')
+    assert _claim(paused, 'during-pause', after_fix)['outcome'] == 'capped'
+    released = start + timedelta(minutes=40) + sync_ledger.REPEAT_FAILURE_PAUSE
+    assert _claim(paused, 'after-pause', released)['outcome'] == 'owned'
+    assert sync_ledger._mark_completed_transaction.to_wrap(
+        _Transaction(),
+        paused,
+        'after-pause',
+        {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+        released,
+    )
+    assert paused.data['status'] == 'completed'
+
+
+def test_partial_batch_earns_strikes_pauses_after_three_and_keeps_sibling_checkpoints():
+    """Two healthy siblings must not let one failing segment retry forever."""
+    ref = _Ref()
+    start = datetime(2026, 9, 27, tzinfo=timezone.utc)
+    release = sync_ledger._release_claim_after_job_retired_transaction.to_wrap
+    for index in range(3):
+        now = start + timedelta(minutes=index)
+        job_id = f'job-{index}'
+        assert _claim(ref, job_id, now)['outcome'] == 'owned'
+        ref.data['partial_result'] = {'new_memories': ['sibling-a', 'sibling-b']}
+        ref.data['processed_segment_ids'] = ['sibling-a', 'sibling-b']
+        fingerprint = _whole_job_persistence_fingerprint(1, 3, ['persistence:provenance_mismatch'])
+        job = {
+            'status': 'partial_failure',
+            'result': {'repeat_failure_key': 'persistent_persistence', 'repeat_failure_fingerprint': fingerprint},
+        }
+        # The router's terminal cleanup carries the same strike as the worker.
+        assert release(_Transaction(), ref, job_id, now, **_terminal_repeat_failure_kwargs(job))
+        assert ref.data['repeat_failure_count'] == index + 1
+    capped = _claim(ref, 'job-3', start + timedelta(minutes=3))
+    assert capped['outcome'] == 'capped' and capped['failure_key'] == 'persistent_persistence'
+    assert ref.data['partial_result'] == {'new_memories': ['sibling-a', 'sibling-b']}
+    assert ref.data['processed_segment_ids'] == ['sibling-a', 'sibling-b']
+    assert 'expires_at' in ref.data
+    assert _claim(ref, 'job-4', start + timedelta(minutes=2) + sync_ledger.REPEAT_FAILURE_PAUSE)['outcome'] == 'owned'
 
 
 def test_polling_release_records_strike_once_for_the_terminal_owner():
@@ -146,40 +236,53 @@ def test_only_known_data_shape_persistence_errors_receive_fingerprints():
     assert _persistence_failure_fingerprint(TimeoutError('timeout'), 'persistence') is None
 
 
-def test_partial_and_mixed_failures_cannot_rearm_deterministic_work():
+def test_one_classified_segment_failure_gives_a_partial_or_mixed_batch_a_strike():
     fingerprint = 'persistence:ValueError'
     assert _whole_job_persistence_fingerprint(2, 2, [fingerprint, fingerprint]) == fingerprint
-    assert (
-        _whole_job_persistence_fingerprint(2, 2, [fingerprint, 'persistence:TypeError']) == 'persistence:deterministic'
-    )
+    # Differing fingerprints collapse to one bounded token on the same cap.
+    mixed = _whole_job_persistence_fingerprint(2, 2, [fingerprint, 'persistence:TypeError'])
+    assert mixed == 'persistence:mixed'
+    assert sync_ledger._validated_failure_fingerprint('persistent_persistence', mixed) == mixed
     assert _whole_job_persistence_fingerprint(2, 3, [fingerprint, fingerprint]) == fingerprint
     assert _whole_job_persistence_fingerprint(2, 2, [fingerprint]) == fingerprint
+    # No classified failure, or no failure at all: never a strike.
     assert _whole_job_persistence_fingerprint(2, 2, []) is None
+    assert _whole_job_persistence_fingerprint(0, 2, [fingerprint]) is None
     result = {'repeat_failure_key': 'persistent_persistence', 'repeat_failure_fingerprint': fingerprint}
     assert _terminal_repeat_failure_kwargs({'status': 'partial_failure', 'result': result}) == {
         'failure_key': 'persistent_persistence',
         'failure_fingerprint': fingerprint,
     }
+    assert _terminal_repeat_failure_kwargs({'status': 'completed', 'result': result}) == {}
 
 
-def test_unknown_persistence_error_does_not_quarantine():
+def test_different_or_unclassified_persistence_failures_reset_the_streak():
     ref = _Ref()
     start = datetime(2026, 9, 27, tzinfo=timezone.utc)
-    assert _claim(ref, 'job', start)['outcome'] == 'owned'
-    assert _fail(ref, 'job', start, 'persistent_persistence', 'persistence:OtherException')
-    assert 'persistence_quarantined' not in ref.data
-    assert _claim(ref, 'retry', start)['outcome'] == 'owned'
+    fingerprints = ['persistence:ValueError', 'persistence:TypeError', 'persistence:ValueError']
+    for index, fingerprint in enumerate(fingerprints):
+        now = start + timedelta(minutes=index)
+        assert _claim(ref, f'job-{index}', now)['outcome'] == 'owned'
+        assert _fail(ref, f'job-{index}', now, 'persistent_persistence', fingerprint)
+    assert ref.data['repeat_failure_count'] == 1
+    assert ref.data['repeat_failure_fingerprint'] == 'persistence:ValueError'
+    assert _claim(ref, 'unknown', start + timedelta(minutes=3))['outcome'] == 'owned'
+    assert _fail(ref, 'unknown', start + timedelta(minutes=3), 'persistent_persistence', 'persistence:OtherException')
+    assert 'repeat_failure_count' not in ref.data
+    assert _claim(ref, 'conflict', start + timedelta(minutes=4))['outcome'] == 'owned'
+    assert _fail(ref, 'conflict', start + timedelta(minutes=4), None)
+    assert 'repeat_failure_count' not in ref.data
 
 
 @pytest.mark.parametrize('subtype', ['provenance_mismatch', 'redirect_cycle'])
-def test_structural_assignment_conflicts_are_quarantined_by_subtype(subtype):
+def test_classified_assignment_conflicts_are_strikes_by_subtype(subtype):
     assert (
         _persistence_failure_fingerprint(SyncAssignmentConflict('private detail', subtype=subtype), 'persistence')
         == f'persistence:{subtype}'
     )
 
 
-def test_only_recognized_document_size_invalid_argument_is_quarantined():
+def test_only_recognized_document_size_invalid_argument_is_a_strike():
     size = InvalidArgument('Document private-id exceeds the maximum allowed size')
     assert _persistence_failure_fingerprint(size, 'persistence') == 'persistence:document_size_limit'
     for error in (InvalidArgument('transaction has expired'), InvalidArgument('unknown private detail')):
@@ -213,6 +316,6 @@ def test_whole_job_provider_invalid_input_reaches_existing_app_terminal_reason()
         InvalidArgument('exceeds the maximum allowed size'),
     ],
 )
-def test_structural_error_wrapping_transport_does_not_quarantine(error):
+def test_classified_error_wrapping_transport_is_never_a_strike(error):
     error.__cause__ = ServiceUnavailable('transient')
     assert _persistence_failure_fingerprint(error, 'persistence') is None

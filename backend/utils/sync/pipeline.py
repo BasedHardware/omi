@@ -64,8 +64,6 @@ from database.sync_ledger import (
     checkpoint_sync_content_partial_result,
     get_processed_sync_segment_ids,
     get_sync_content_partial_result,
-    get_sync_segment_quarantine,
-    quarantine_sync_segment,
     is_valid_completed_sync_content_result,
     mark_sync_content_completed,
     release_sync_content_claim_after_job_retired,
@@ -217,10 +215,11 @@ _SYNC_FAILURE_REASON_CODES = {
 
 
 def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
-    """Identify a bounded persistence data-shape failure, never an unknown error.
+    """Identify a bounded, classified persistence failure, never an unknown error.
 
-    Inspect the full cause chain so an apparent data-shape error wrapping a
-    transient transport or Firestore failure cannot record a strike.
+    A fingerprint is one strike toward the three-strike / 24-hour pause, never
+    a permanent verdict. Inspect the full cause chain so an apparent classified
+    error wrapping a transient transport or Firestore failure cannot record one.
     """
     if phase != 'persistence':
         return None
@@ -265,10 +264,11 @@ def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | 
 def _whole_job_persistence_fingerprint(
     failed_segments: int, total_segments: int, fingerprints: list[str]
 ) -> str | None:
-    # A healthy or transiently failed sibling must not re-arm deterministic
-    # paid work. Partial-result and processed-segment checkpoints stay intact.
+    # One classified failure earns the batch a strike toward the bounded pause,
+    # so a healthy or transient sibling cannot keep a mixed batch retrying paid
+    # work forever. Sibling checkpoints stay; the batch need not fail entirely.
     if failed_segments > 0 and fingerprints:
-        return fingerprints[0] if len(set(fingerprints)) == 1 else 'persistence:deterministic'
+        return fingerprints[0] if len(set(fingerprints)) == 1 else 'persistence:mixed'
     return None
 
 
@@ -2468,67 +2468,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     assignment_turnstile.complete(path)
                     return
                 deferred_outcome: dict = {}
-                try:
-                    quarantined = get_sync_segment_quarantine(uid, segment_id) if content_id and segment_id else None
-                except Exception:
-                    assignment_turnstile.complete(path)
-                    raise
-                if isinstance(quarantined, str):
-                    # Different upload batches still share the VAD-content guard.
-                    assignment_turnstile.complete(path)
-                    deferred_outcome.update(
-                        outcome=TranscriptionOutcome.UPSTREAM_ERROR,
-                        provider='unknown',
-                        model='unknown',
-                        retryable=False,
-                        phase='persistence',
-                        exception_type='none',
-                        repeat_failure_key='persistent_persistence',
-                        repeat_failure_fingerprint=quarantined,
-                    )
-                    with segment_lock:
-                        segment_errors.append('sync_persistence_failed')
-                    logger.warning('event=sync_persistence_quarantine outcome=skipped')
-                    ok = False
-                else:
-                    ok = process_segment(
-                        path,
-                        uid,
-                        response,
-                        segment_lock,
-                        segment_errors,
-                        source,
-                        is_locked,
-                        transcription_prefs,
-                        person_embeddings_cache,
-                        segment_target,
-                        assignment_turnstile,
-                        speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
-                        private_cloud_sync_enabled=private_cloud_sync_enabled,
-                        data_protection_level=data_protection_level,
-                        client_device_id=client_device_id,
-                        client_platform=client_platform,
-                        sync_lane=sync_lane,
-                        deferred_outcome=deferred_outcome,
-                        geolocation=geolocation,
-                        job_id=job_id,
-                        segment_key=segment_id or path,
-                        attempt_ref=attempt_ref,
-                        source_position_map=segment_source_maps.get(path),
-                    )
-                    fingerprint = deferred_outcome.get('repeat_failure_fingerprint')
-                    if content_id and segment_id and fingerprint:
-                        if not quarantine_sync_segment(
-                            uid,
-                            content_id,
-                            segment_id,
-                            job_id,
-                            fingerprint,
-                            run_token=active_run_lock_token,
-                            run_epoch=active_run_lock_epoch,
-                        ):
-                            raise SyncJobRunLeaseLost('sync persistence quarantine owner lost')
-                        logger.warning('event=sync_persistence_quarantine outcome=recorded')
+                ok = process_segment(
+                    path,
+                    uid,
+                    response,
+                    segment_lock,
+                    segment_errors,
+                    source,
+                    is_locked,
+                    transcription_prefs,
+                    person_embeddings_cache,
+                    segment_target,
+                    assignment_turnstile,
+                    speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    sync_lane=sync_lane,
+                    deferred_outcome=deferred_outcome,
+                    geolocation=geolocation,
+                    job_id=job_id,
+                    segment_key=segment_id or path,
+                    attempt_ref=attempt_ref,
+                    source_position_map=segment_source_maps.get(path),
+                )
                 if ok:
                     # Persist result contributions before the processed marker.
                     # Therefore any skipped segment on a retry has its visible

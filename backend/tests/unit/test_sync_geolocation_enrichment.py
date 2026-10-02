@@ -216,18 +216,18 @@ async def test_coordinator_without_geolocation_never_attempts_a_geocode(pipeline
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cached', [False, True])
 @pytest.mark.parametrize('fenced', [False, True])
-async def test_deterministic_segment_guard_skips_stt_across_batches_and_retains_siblings(pipeline, cached, fenced):
+async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pipeline, fenced):
+    """One classified persistence failure beside a healthy sibling still earns
+    the batch a strike; the sibling's result and checkpoint are preserved, and
+    every segment is attempted (no per-segment guard short-circuits STT)."""
     _prepare(pipeline, ['/tmp/a.wav', '/tmp/b.wav'])
     pipeline.get_sync_content_partial_result = MagicMock(return_value={})
     pipeline.get_processed_sync_segment_ids = MagicMock(return_value=set())
     pipeline.compute_sync_segment_id = lambda uid, path: Path(path).stem
     fingerprint = 'persistence:document_size_limit'
-    pipeline.get_sync_segment_quarantine = MagicMock(
-        side_effect=lambda uid, segment: fingerprint if cached and segment == 'a' else None
-    )
-    pipeline.quarantine_sync_segment = MagicMock(return_value=True)
+    pipeline.checkpoint_sync_content_partial_result = MagicMock(return_value=True)
+    pipeline.add_processed_sync_segment_id = MagicMock(return_value=True)
     pipeline._finalize_sync_job_for_run = MagicMock()
     pipeline.release_sync_content_claim = MagicMock(return_value=True)
     pipeline.release_sync_content_claim_after_job_retired = MagicMock(return_value=True)
@@ -262,19 +262,23 @@ async def test_deterministic_segment_guard_skips_stt_across_batches_and_retains_
 
     pipeline.process_segment = process
     await pipeline._run_full_pipeline_background_async(
-        'job-quarantine',
+        'job-partial-strike',
         'uid',
         ['/tmp/a.opus'],
         'omi',
         False,
-        '/tmp/job-quarantine',
-        content_id='different-batch' if cached else 'first-batch',
+        '/tmp/job-partial-strike',
+        content_id='batch',
         content_run_bound=True,
         ledger_fence_active=fenced,
     )
-    assert ('/tmp/a.wav' in called) is (not cached)
-    assert '/tmp/b.wav' in called
-    assert pipeline.quarantine_sync_segment.call_count == (0 if cached else 1)
+    assert sorted(called) == ['/tmp/a.wav', '/tmp/b.wav']
+    # The healthy path adds no ledger read per segment.
+    pipeline.get_processed_sync_segment_ids.assert_called_once()
+    pipeline.get_sync_content_partial_result.assert_called_once()
+    # Only the successful sibling is checkpointed as processed.
+    assert [call.args[3] for call in pipeline.add_processed_sync_segment_id.call_args_list] == ['b']
+    pipeline.checkpoint_sync_content_partial_result.assert_called_once()
     pipeline.mark_sync_content_completed.assert_not_called()
     result = pipeline._finalize_sync_job_for_run.call_args.args[2]
     assert result['failed_segments'] == 1 and result['total_segments'] == 2
