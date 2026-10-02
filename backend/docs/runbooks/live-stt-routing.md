@@ -289,8 +289,9 @@ the v6 rollout. Do not increase the router percentage until all checks pass:
 - **Soniox and Parakeet at global 100**, without noise-driven language benches;
   **Modulate benched or in bounded 5% re-entry**, never promoted on this error
   rate. Its stage may legitimately cycle 0/5 as backoff runs.
-- Proposed Parakeet share matches its eligible 25% sticky cohort, without a
-  health-driven reduction to 5%; no proposals divert a capable, admitted
+- Proposed Parakeet share matches the configured
+  `PARAKEET_WINDOW_ALLOCATION_PERCENT` sticky cohort, without a health-driven
+  reduction to 5%; no proposals divert a capable, admitted
   healthy Parakeet session to a more expensive target. Compare target shares
   and pair disagreement with static selection, accounting for language,
   actual window/RNNT engine eligibility, cohort repetition and capacity.
