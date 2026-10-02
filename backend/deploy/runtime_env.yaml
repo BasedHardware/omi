@@ -2131,10 +2131,10 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '8'
+            value: '16'
             category: rollout
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
             value: '8'

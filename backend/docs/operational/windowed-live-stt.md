@@ -11,8 +11,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |

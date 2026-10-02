@@ -201,7 +201,8 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(prod, 'STT_SERVICE_MODELS') == CANARY_STREAMING_ROUTE
     assert listen_env['STT_SERVICE_MODELS']['value'] == CANARY_STREAMING_ROUTE
     assert overlay['overlay']['gke']['config_map']['entries']['STT_SERVICE_MODELS']['value'] == CANARY_STREAMING_ROUTE
-    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '8'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '16'
+
     assert _env_value(prod, 'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS') == '12'
     assert _env_value(prod, 'PARAKEET_WINDOW_MAX_EMPTY_STREAK') == '4'
     assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
