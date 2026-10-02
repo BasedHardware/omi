@@ -98,8 +98,9 @@ def test_known_window_survives_copy_parent_dump_and_roundtrip():
     )
     nested = conversation.model_dump()['transcript_segments'][0]
     assert (nested['audio_capture_start'], nested['audio_capture_end']) == (100.0, 102.0)
-    reparsed = Conversation(**json.loads(json.dumps(conversation.model_dump(mode='json'))))
-    assert reparsed.transcript_segments[0].audio_capture_start == 100.0
+    # JSON-mode dumps are API responses: the storage-only window is not served.
+    served = conversation.model_dump(mode='json')['transcript_segments'][0]
+    assert 'audio_capture_start' not in served and 'audio_capture_end' not in served
 
 
 def test_explicit_excludes_and_includes_are_honored():

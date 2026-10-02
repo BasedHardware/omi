@@ -35,7 +35,7 @@ from utils.conversations.audio_placement import (
     TEXT_SEARCH_MAX_SECONDS,
     TEXT_SEARCH_PAD_SECONDS,
     locate_in_verified_words,
-    candidate_window,
+    provisional_window,
 )
 from utils.executors import run_blocking, sync_executor
 from utils.observability.fallback import record_fallback
@@ -49,6 +49,11 @@ OMI_SPEAKER_PLACEMENT_SEARCH_TOTAL = Counter(
     'omi_speaker_placement_search_total',
     'Bounded teaching text placement attempts.',
     ['outcome'],
+)
+OMI_SPEAKER_CAPTURE_RETRY_TOTAL = Counter(
+    'omi_speaker_capture_retry_total',
+    'Teaching attempts retried at the receiver capture window after the legacy position failed.',
+    ['target', 'outcome'],
 )
 OMI_SPEAKER_PLACEMENT_SEARCH_AUDIO_SECONDS = Counter(
     'omi_speaker_placement_search_audio_seconds_total',
@@ -128,7 +133,7 @@ async def recover_teaching_clip(
             or offset_value < 0
         ):
             return None
-        window = candidate_window(conversation, start, end)
+        window = provisional_window(conversation, start, end)
         if window is None:
             return None
         if _has_unplaced_overlap(conversation, start, end):

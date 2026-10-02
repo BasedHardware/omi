@@ -105,7 +105,7 @@ def capture_window(
     often misses the audio. ``audio_capture_start``/``audio_capture_end`` hold the
     receiver's capture-clock window for the segment. All contributors must agree on
     one offset between transcript time and capture time, and keep their duration.
-    The result is a better candidate, not proof: the capture clock and the chunk
+    The result is a second candidate, not proof: the capture clock and the chunk
     clock can still disagree, so callers keep their transcript verification.
     """
     start_f = _numeric(start)
@@ -134,15 +134,27 @@ def capture_window(
     return (start_f + offset, end_f + offset)
 
 
-def candidate_window(
+CAPTURE_RETRY_MIN_SHIFT_SECONDS = 0.25
+
+
+def capture_shift(
     conversation: Mapping[str, Any],
     start: float,
     end: float,
     *,
     segments: Optional[Sequence[Mapping[str, Any]]] = None,
-) -> Optional[Tuple[float, float]]:
-    """Best unproven position for a verified reader: the capture window, else the legacy origin."""
-    return capture_window(conversation, start, end, segments=segments) or provisional_window(conversation, start, end)
+) -> Optional[float]:
+    """Seconds between the capture window and the legacy position, or None when either is unknown.
+
+    Verified readers cut at the legacy position first, because the capture clock and the
+    stored-chunk clock differ by ordinary arrival jitter. Only when that cut fails and the
+    capture window sits somewhere materially different is it worth one more attempt.
+    """
+    capture = capture_window(conversation, start, end, segments=segments)
+    legacy = provisional_window(conversation, start, end)
+    if capture is None or legacy is None:
+        return None
+    return capture[0] - legacy[0]
 
 
 def _placed_contributor(segment: Any) -> bool:

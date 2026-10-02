@@ -479,6 +479,9 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
+    # Origin-based offsets interleave overlapping sources; keep the transcript chronological
+    # (stable, so equal starts keep their source order).
+    merged.sort(key=lambda seg: seg.get("start") or 0)
     return merged
 
 

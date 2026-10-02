@@ -118,6 +118,10 @@ class TranscriptSegment(BaseModel):
         excluded = info.exclude if isinstance(getattr(info, 'exclude', None), (dict, set, frozenset)) else frozenset()
         included = getattr(info, 'include', None)
         included = included if isinstance(included, (dict, set, frozenset)) else None
+        # Capture windows are storage-only. Python-mode dumps feed Firestore and internal
+        # rewrites; JSON-mode dumps are API responses, which must never carry them.
+        if getattr(info, 'mode', 'python') == 'json':
+            return data
         for key in ('audio_capture_start', 'audio_capture_end'):
             value = getattr(self, key)
             if value is not None and key not in excluded and (included is None or key in included):

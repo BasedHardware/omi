@@ -59,7 +59,8 @@ from utils.executors import (
     submit_with_context,
     sync_executor,
 )
-from utils.conversations.teaching_placement import recover_teaching_clip
+from utils.conversations.audio_placement import CAPTURE_RETRY_MIN_SHIFT_SECONDS, capture_shift
+from utils.conversations.teaching_placement import OMI_SPEAKER_CAPTURE_RETRY_TOTAL, recover_teaching_clip
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
@@ -791,21 +792,50 @@ async def store_owner_voice_sample(
             outcome = 'clip_not_clean'
             return outcome
         start, end, text, (win_scope, win_speaker) = cast(Tuple[float, float, str, Tuple[Any, int]], window)
-        pcm = await run_blocking(
-            sync_executor, conversation_clip_pcm, uid, conversation, start, end, caller='owner_confirmation'
-        )
-        if not pcm:
-            outcome = 'no_audio'
-            return outcome
-        pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
-        if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
-            outcome = 'clip_not_clean'
-            return outcome
-        wav = pcm_to_wav(pcm)
         language = conversation.get('language') or await run_blocking(
             db_executor, users_db.get_user_language_preference, uid
         )
-        _, is_valid, reason = await verify_and_transcribe_sample(wav, CLIP_SAMPLE_RATE, text, language=language)
+        # Cut at the legacy position first. If that yields no verified speech and the receiver
+        # recorded hearing this window somewhere else (reconnects and failover pull the text
+        # and audio clocks apart), try once more there. Both cuts face the same verification.
+        shift = capture_shift(conversation, start, end)
+        retry_at_capture = shift is not None and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS
+        use_capture = False
+        wav = b''
+        is_valid, reason = False, ''
+        while True:
+            failure = ''
+            pcm = await run_blocking(
+                sync_executor,
+                conversation_clip_pcm,
+                uid,
+                conversation,
+                start,
+                end,
+                caller='owner_confirmation',
+                prefer_capture=use_capture,
+            )
+            if not pcm:
+                failure = 'no_audio'
+            else:
+                pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
+                if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
+                    failure = 'clip_not_clean'
+                else:
+                    wav = pcm_to_wav(pcm)
+                    _, is_valid, reason = await verify_and_transcribe_sample(
+                        wav, CLIP_SAMPLE_RATE, text, language=language
+                    )
+                    if not is_valid and not reason.startswith('transcription_failed'):
+                        failure = 'unverified'
+            if failure and retry_at_capture and not use_capture:
+                use_capture = True
+                OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='attempted').inc()
+                continue
+            break
+        if failure in ('no_audio', 'clip_not_clean'):
+            outcome = failure
+            return outcome
         if not is_valid and reason.startswith('text_mismatch'):
             run_contributors = [
                 s
@@ -872,6 +902,8 @@ async def store_owner_voice_sample(
             outcome = 'stale_assignment'
             return outcome
         outcome = 'stored'
+        if use_capture:
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='stored').inc()
         return outcome
     except Exception as error:
         logger.error('speaker tag prompt owner sample failed error_type=%s', type(error).__name__)
