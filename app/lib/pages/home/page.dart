@@ -899,8 +899,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   Widget _buildTasksActions(BuildContext context) {
     return Consumer<ActionItemsProvider>(
       builder: (context, tasks, _) {
-        final hasItems = tasks.actionItems.isNotEmpty;
-        final allSelected = hasItems && tasks.selectedCount == tasks.actionItems.length;
+        // Paywalled tasks can't be acted on, so they don't count towards "all".
+        final hasItems = tasks.selectableItems.isNotEmpty;
+        final allSelected = tasks.allSelectableSelected;
         return PullDownButton(
           itemBuilder: (context) => [
             PullDownMenuItem(
@@ -916,6 +917,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             PullDownMenuItem(
               title: context.l10n.selectActionItems,
               icon: Icons.check_box_outlined,
+              enabled: hasItems,
               onTap: () {
                 OmiHaptics.light();
                 primaryFocus?.unfocus();
@@ -925,14 +927,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             PullDownMenuItem(
               title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
               icon: allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+              enabled: hasItems,
               onTap: () {
                 OmiHaptics.light();
                 primaryFocus?.unfocus();
                 if (allSelected) {
                   tasks.clearSelection();
                 } else {
-                  if (!tasks.isSelectionMode) tasks.startSelection();
-                  tasks.selectAllItems();
+                  // Every page, not just the loaded one; paywalled tasks stay out.
+                  unawaited(tasks.selectAllTasks());
                 }
               },
             ),

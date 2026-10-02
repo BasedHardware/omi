@@ -124,6 +124,7 @@ void main() {
     await tester.tap(find.text('Export'));
     await tester.pump();
     expect(find.text('Connect a task app in Settings to export'), findsOneWidget);
-    await tester.pumpAndSettle(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pumpAndSettle();
   });
 }

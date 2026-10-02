@@ -3,7 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/action_items/task_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -89,6 +96,44 @@ void main() {
     expect(find.text('An older task behind the…'), findsOneWidget);
     // Two open rows: only the unlocked one can be completed.
     expect(find.bySemanticsLabel('Mark Complete'), findsOneWidget);
+  });
+
+  testWidgets('tapping a paywalled task goes to the plan page, with no task menu or page', (tester) async {
+    final provider = ActionItemsProvider(getActionItems: _items);
+    addTearDown(provider.dispose);
+    // The shared harness has no UsageProvider; the plan page needs an inert one.
+    // Providers above the navigator: the plan page is pushed as a route, so it must find them too.
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+        ChangeNotifierProvider<GoalsProvider>(create: (_) => GoalsProvider()),
+        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
+        ChangeNotifierProvider<UsageProvider>(
+          create: (_) => UsageProvider(
+            deviceTimeZone: () async => 'UTC',
+            usageRequest: ({required period, required timeZone}) async => null,
+          ),
+        ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: ActionItemsPage()),
+      ),
+    ));
+    await provider.ensureLoaded();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('An older task behind the…'));
+    // The plan page animates while it loads, so settle by time rather than by quiescence.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(UsagePage), findsOneWidget);
+    expect(find.byType(TaskPage), findsNothing);
+    expect(find.text('Open'), findsNothing);
+    // Tear the route down so its timers don't outlive the test.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('holding a done task offers Mark Incomplete and Delete Task', (tester) async {

@@ -7,13 +7,12 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/task_delete_undo.dart';
+import 'package:omi/pages/action_items/task_export.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart' show DateTimePickerSheet;
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart' show openChatBlockConversation;
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -29,8 +28,8 @@ Future<void> openTaskPage(BuildContext context, ActionItemWithMetadata item) {
   return routeToPage(context, TaskPage(item: item));
 }
 
-/// One task, full screen: the conversation page's chrome (X, a Save pill that wakes up when
-/// something changed), the text as a large editable title, a line back to the conversation it was
+/// One task, full screen: the conversation page's chrome (a back button, a Save pill that wakes up
+/// when something changed), the text as a large editable title, a line back to the conversation it was
 /// heard in, then Due (with the quick chips) and Mark Complete in one card and Export / Delete in another.
 ///
 /// Text and due date save on Save; completion saves the moment it is tapped, like the list's ring.
@@ -158,23 +157,6 @@ class _TaskPageState extends State<TaskPage> {
     return '$day · ${dates.time(date)}';
   }
 
-  /// One task to the connected task app, the way the list's long-press menu does it.
-  Future<void> _export() async {
-    OmiHaptics.light();
-    final integrations = context.read<TaskIntegrationProvider>();
-    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
-    if (connected.isEmpty) {
-      OmiFeedback.error(
-        context,
-        context.l10n.connectTaskAppToExport,
-        actionLabel: context.l10n.connectAction,
-        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
-      );
-      return;
-    }
-    await context.read<ActionItemsProvider>().exportItems(context, [widget.item], connected.first);
-  }
-
   void _delete() {
     final provider = context.read<ActionItemsProvider>();
     unawaited(deleteTaskWithUndo(context, provider, widget.item));
@@ -201,7 +183,7 @@ class _TaskPageState extends State<TaskPage> {
                 padding: const EdgeInsets.fromLTRB(10, 6, 16, 0),
                 child: Row(
                   children: [
-                    OmiCloseButton.circled(onPressed: _close),
+                    OmiBackButton.circled(onPressed: _close),
                     const Spacer(),
                     OmiButton(
                       key: const Key('task_save_button'),
@@ -300,7 +282,7 @@ class _TaskPageState extends State<TaskPage> {
                         _CardRow(
                           leading: const Icon(Icons.ios_share_rounded, size: 22),
                           title: l10n.exportButton,
-                          onTap: _saving ? null : _export,
+                          onTap: _saving ? null : () => exportTaskToConnectedApp(context, widget.item),
                           showChevron: false,
                         ),
                         _CardRow(
@@ -417,7 +399,9 @@ class _CardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isDestructive ? OmiColors.danger : OmiColors.textPrimary;
-    return Semantics(
+    // The row is one control for assistive tech; a trailing control (the due-date ×) stays its
+    // own, outside the merged subtree, so it is still announced and tappable.
+    final row = Semantics(
       button: true,
       checked: semanticsChecked,
       label: title,
@@ -427,26 +411,31 @@ class _CardRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 52),
           child: Padding(
-            padding: const EdgeInsetsDirectional.only(start: 16, end: 12),
+            padding: EdgeInsetsDirectional.only(start: 16, end: trailing != null ? 0 : 12),
             child: Row(
               children: [
                 SizedBox(width: 22, child: Center(child: IconTheme(data: IconThemeData(color: color), child: leading))),
                 const SizedBox(width: 16),
                 Expanded(child: Text(title, style: OmiType.body.copyWith(color: color, letterSpacing: -0.4))),
-                if (trailing != null)
-                  trailing!
-                else if (showChevron && onTap != null)
+                if (trailing == null && showChevron && onTap != null)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(start: 2),
                     child: Icon(Icons.chevron_right_rounded, size: 20, color: OmiColors.textTertiary),
                   )
-                else
+                else if (trailing == null)
                   const SizedBox(width: 4),
               ],
             ),
           ),
         ),
       ),
+    );
+    if (trailing == null) return row;
+    return Row(
+      children: [
+        Expanded(child: row),
+        Padding(padding: const EdgeInsetsDirectional.only(end: 8), child: trailing!),
+      ],
     );
   }
 }

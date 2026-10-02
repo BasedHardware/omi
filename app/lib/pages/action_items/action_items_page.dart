@@ -9,7 +9,6 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -22,6 +21,7 @@ import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
+import 'task_export.dart';
 import 'task_page.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
@@ -388,7 +388,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
         final categorizedItems = _categorizeItems(provider.actionItems, false);
-        final completedItems = _completedItems(provider);
+        final completedItems = provider.completedItemsNewestFirst;
         final hasTasks = categorizedItems.values.any((l) => l.isNotEmpty) || completedItems.isNotEmpty;
         final apiPhase = provider.apiViewState.phase;
         // Successful empty results use the existing icon and conversation guidance.
@@ -670,18 +670,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ],
       ),
     );
-  }
-
-  /// Done tasks, newest first.
-  List<ActionItemWithMetadata> _completedItems(ActionItemsProvider provider) {
-    DateTime? when(ActionItemWithMetadata i) => i.completedAt ?? i.updatedAt ?? i.createdAt;
-    final items = provider.completedItems;
-    items.sort((a, b) {
-      final x = when(a), y = when(b);
-      if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
-      return y.compareTo(x);
-    });
-    return items;
   }
 
   /// "Completed n ›" under the open sections, folded by default. Open, it lists the done tasks
@@ -1113,7 +1101,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         const PullDownMenuDivider.large(),
         if (!item.exported)
-          PullDownMenuItem(title: l10n.exportButton, icon: Icons.ios_share_rounded, onTap: () => _exportTask(item)),
+          PullDownMenuItem(
+              title: l10n.exportButton,
+              icon: Icons.ios_share_rounded,
+              onTap: () => exportTaskToConnectedApp(context, item)),
         if (!item.completed && item.indentLevel < maxIndent)
           PullDownMenuItem(
             title: l10n.indentTask,
@@ -1143,23 +1134,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ],
     );
-  }
-
-  /// One task to the connected task app, the way the selection bar exports several.
-  Future<void> _exportTask(ActionItemWithMetadata item) async {
-    OmiHaptics.light();
-    final integrations = Provider.of<TaskIntegrationProvider>(context, listen: false);
-    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
-    if (connected.isEmpty) {
-      OmiFeedback.error(
-        context,
-        context.l10n.connectTaskAppToExport,
-        actionLabel: context.l10n.connectAction,
-        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
-      );
-      return;
-    }
-    await Provider.of<ActionItemsProvider>(context, listen: false).exportItems(context, [item], connected.first);
   }
 
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) => categoryForItem(item, false);
@@ -1272,7 +1246,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
                                 const SizedBox(width: 4),
                                 Text(
-                                  context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
+                                  context.l10n.exportedToPlatform(taskExportPlatformLabel(item.exportPlatform!)),
                                   style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                                 ),
                               ],
@@ -1334,23 +1308,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             .round();
     final locale = Localizations.localeOf(context).toLanguageTag();
     return days.abs() < 7 ? DateFormat.E(locale).format(local) : DateFormat.MMMd(locale).format(local);
-  }
-
-  String _exportPlatformLabel(String platform) {
-    switch (platform) {
-      case 'todoist':
-        return 'Todoist';
-      case 'asana':
-        return 'Asana';
-      case 'google_tasks':
-        return 'Google Tasks';
-      case 'clickup':
-        return 'ClickUp';
-      case 'apple_reminders':
-        return 'Reminders';
-      default:
-        return platform;
-    }
   }
 
   void _showEditSheet(ActionItemWithMetadata item) {

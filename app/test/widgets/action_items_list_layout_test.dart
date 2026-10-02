@@ -10,9 +10,15 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../support/typed_action_items_screen.dart';
 
+/// One clock for the fixture and the expected labels, captured once when the file loads.
+final DateTime _now = DateTime.now();
+
+/// A due time on the day [offset] days from today. Today's own entry has to stay in the future
+/// for the whole test, so it is the last instant of today (or just after now in the final second).
 DateTime _day(int offset) {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day + offset, 23, 59);
+  final endOfDay = DateTime(_now.year, _now.month, _now.day + offset, 23, 59, 59, 999);
+  if (offset == 0 && !endOfDay.isAfter(_now)) return _now.add(const Duration(milliseconds: 100));
+  return endOfDay;
 }
 
 Future<ActionItemsResponse?> _items({
