@@ -175,7 +175,7 @@ from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
 from utils.sync.assignment import fragment_rule, needs_fragment_review
-from utils.sync.speaker_identity import SpeakerIdentityDependencies, USER_SELF_PERSON_ID
+from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -1293,7 +1293,7 @@ def process_segment(
             identify_speakers_for_segments(
                 transcript_segments,
                 audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
+                person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
                 uid,
                 language=language,
                 owner_reserved=owner_reserved,

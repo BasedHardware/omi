@@ -203,6 +203,7 @@ def conversations_db():
         # database.conversations imports this helper at module load, but archive
         # filtering never calls it; keep the contract isolated from its graph.
         "utils.person_evidence": AutoMockModule("utils.person_evidence"),
+        "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
