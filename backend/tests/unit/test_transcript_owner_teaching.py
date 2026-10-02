@@ -270,6 +270,10 @@ def test_decoded_pcm_below_floor_fails_before_embedding(monkeypatch):
         'language': 'en',
         'transcript_segments': [_segment('a', 0.0, 8.0, is_user=True, text='hello there friend')],
     }
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(
         service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 4.8)
@@ -291,6 +295,10 @@ def test_oversized_pcm_is_capped_to_the_window(monkeypatch):
         'language': 'en',
         'transcript_segments': [_segment('a', 0.0, 8.0, is_user=True, text='hello there friend')],
     }
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(
         service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 20)
@@ -306,7 +314,7 @@ def test_oversized_pcm_is_capped_to_the_window(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: 1,
+        lambda uid, embedding, pool, **kwargs: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample(UID, CONV, ['a'])) == 'stored'
     assert captured['wav_seconds'] == pytest.approx(8.0, abs=0.01)
@@ -320,6 +328,10 @@ def test_success_path_pools_owner_confirmation_into_voiceprint(monkeypatch):
     store = StrictFirestore({('users', UID): {'speaker_embedding': [1.0, 0.0]}})
     conversation = {'id': CONV, 'language': 'en', 'transcript_segments': segments}
     store.rows[('users', UID, 'conversations', CONV)] = conversation
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(
         service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * service.CLIP_SAMPLE_RATE * 8

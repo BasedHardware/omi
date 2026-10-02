@@ -1287,6 +1287,8 @@ class TranscriptProcessor:
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
                 continue
+            if not await speaker.named_speakers_allowed():
+                continue
             name = detection.name
             # The owner is identified by voice, never by hearing their own name: minting
             # a person for it produced a second "David" alongside "David (You)".
