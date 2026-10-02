@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
