@@ -210,7 +210,7 @@ class PeopleProvider extends BaseProvider {
     _pinOperations[personId] = operation;
     operation.whenComplete(() {
       if (identical(_pinOperations[personId], operation)) _pinOperations.remove(personId);
-    });
+    }).ignore();
     return operation;
   }
 
