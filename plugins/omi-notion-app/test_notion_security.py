@@ -1,14 +1,114 @@
 """
 Unit tests for omi-notion-app security, UID sanitization, and XSS prevention.
+
+The production module is loaded through importlib with framework-only doubles
+injected via patch.dict(sys.modules, ...), matching the loader already used by
+test_main.py in this app and by plugins/omi-github-app/test_github_tools_auth.py
+upstream. fastapi, requests and dotenv are therefore not required, so this suite
+runs in the hermetic Hygiene lane that installs no third-party packages.
 """
 
+import importlib.util
+from pathlib import Path
+import sys
+import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from fastapi import HTTPException
-from fastapi.responses import HTMLResponse
 
-import main
+def load_app():
+    class Framework:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get(self, *args, **kwargs):
+            return lambda handler: handler
+
+        post = get
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class Response:
+        default_status = 200
+
+        def __init__(self, content=None, status_code=None, url=None, **kwargs):
+            if isinstance(content, bytes):
+                self.body = content
+            else:
+                self.body = str("" if content is None else content).encode()
+            self.status_code = self.default_status if status_code is None else status_code
+            self.headers = {}
+            if url is not None:
+                self.headers["location"] = url
+
+    class RedirectResponse(Response):
+        default_status = 307
+
+    def Query(default=None, **kwargs):
+        return default
+
+    def module(name, **attributes):
+        value = types.ModuleType(name)
+        value.__dict__.update(attributes)
+        return value
+
+    stubs = {
+        "requests": module("requests", get=Mock(), post=Mock(), patch=Mock()),
+        "dotenv": module("dotenv", load_dotenv=lambda: None),
+        "fastapi": module(
+            "fastapi",
+            FastAPI=Framework,
+            Request=Framework,
+            Query=Query,
+            HTTPException=HTTPException,
+        ),
+        "fastapi.responses": module(
+            "fastapi.responses",
+            HTMLResponse=Response,
+            RedirectResponse=RedirectResponse,
+            JSONResponse=Response,
+        ),
+        "models": module("models", ChatToolResponse=Mock()),
+        "db": module(
+            "db",
+            **{
+                name: Mock()
+                for name in (
+                    "store_notion_tokens",
+                    "get_notion_tokens",
+                    "update_notion_tokens",
+                    "delete_notion_tokens",
+                    "store_oauth_state",
+                    "get_oauth_state",
+                    "delete_oauth_state",
+                    "store_user_setting",
+                    "get_user_setting",
+                )
+            }
+        ),
+        "notion_content": module(
+            "notion_content",
+            encode_payload=Mock(),
+            plan_content_requests=Mock(),
+            title_items=Mock(),
+        ),
+    }
+    spec = importlib.util.spec_from_file_location(
+        "notion_security_under_test", Path(__file__).with_name("main.py")
+    )
+    loaded = importlib.util.module_from_spec(spec)
+    with patch.dict(sys.modules, stubs):
+        spec.loader.exec_module(loaded)
+    return loaded
+
+
+main = load_app()
+HTTPException = main.HTTPException
+HTMLResponse = main.HTMLResponse
 
 
 class NotionSecuritySanitizationTests(unittest.TestCase):
