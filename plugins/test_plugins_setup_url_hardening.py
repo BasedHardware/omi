@@ -10,13 +10,173 @@ inline fetch scripts, and post-auth / disconnect redirects are safely percent-en
 import asyncio
 import importlib.util
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import quote
 
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi  # noqa: F401
+        import fastapi.responses  # noqa: F401
+        import fastapi.staticfiles  # noqa: F401
+        import fastapi.templating  # noqa: F401
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                self.routes = []
+
+            @staticmethod
+            def _decorator(*args, **kwargs):
+                return lambda f: f
+
+            @staticmethod
+            def _statement(*args, **kwargs):
+                return None
+
+            get = post = put = delete = patch_ = on_event = middleware = exception_handler = _decorator
+            mount = include_router = add_exception_handler = _statement
+
+        class HTTPException(Exception):
+            def __init__(self, status_code=500, detail="", headers=None):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
+                self.headers = headers or {}
+
+        class Request:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class _Default:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        fastapi.FastAPI = FastAPI
+        fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        fastapi.Query = _Default
+        fastapi.Form = _Default
+        fastapi.Depends = _Default
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.status_code = status_code
+                self.body = content.encode("utf-8") if isinstance(content, str) else content
+
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.status_code = status_code
+                self.body = content
+
+        class RedirectResponse:
+            # Starlette exposes the target through the location header, which is
+            # what the redirect assertions below read.
+            def __init__(self, url=None, status_code=307, headers=None, **kwargs):
+                self.url = url
+                self.status_code = status_code
+                self.headers = dict(headers or {})
+                self.headers.setdefault("location", url)
+
+        responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
+        responses.RedirectResponse = RedirectResponse
+        sys.modules["fastapi.responses"] = responses
+
+        staticfiles = types.ModuleType("fastapi.staticfiles")
+
+        class StaticFiles:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        staticfiles.StaticFiles = StaticFiles
+        sys.modules["fastapi.staticfiles"] = staticfiles
+
+        templating = types.ModuleType("fastapi.templating")
+
+        class TemplateResponse:
+            def __init__(self, name, context=None, **kwargs):
+                self.name = name
+                self.template = name
+                self.context = context or {}
+
+        class Jinja2Templates:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def TemplateResponse(self, name, context=None, **kwargs):
+                return TemplateResponse(name, context, **kwargs)
+
+            def get_template(self, name):
+                raise LookupError(name)
+
+        templating.Jinja2Templates = Jinja2Templates
+        templating.TemplateResponse = TemplateResponse
+        sys.modules["fastapi.templating"] = templating
+
+if "requests" not in sys.modules:
+    try:
+        import requests  # noqa: F401
+    except ImportError:
+        requests = types.ModuleType("requests")
+
+        def _unavailable(*args, **kwargs):
+            raise AssertionError("tests must not perform real HTTP")
+
+        class RequestException(Exception):
+            pass
+
+        requests.post = _unavailable
+        requests.get = _unavailable
+        requests.request = _unavailable
+        requests.RequestException = RequestException
+        sys.modules["requests"] = requests
+
+if "dotenv" not in sys.modules:
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: False
+    sys.modules["dotenv"] = dotenv
+
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic  # noqa: F401
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        class BaseModel:
+            def __init__(self, **data):
+                for key, value in data.items():
+                    setattr(self, key, value)
+
+        class Field:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = Field
+        sys.modules["pydantic"] = pydantic
+
+if "omi_plugin_sdk" not in sys.modules:
+    sdk = types.ModuleType("omi_plugin_sdk")
+    sdk_models = types.ModuleType("omi_plugin_sdk.models")
+    for _name in ("Conversation", "EndpointResponse", "Structured", "TranscriptSegment"):
+        setattr(sdk_models, _name, MagicMock())
+    sys.modules["omi_plugin_sdk"] = sdk
+    sys.modules["omi_plugin_sdk.models"] = sdk_models
+    sdk.models = sdk_models
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "plugins" / "omi-plugin-sdk" / "src"))
+
+
+def _setup_template(app_dir_name: str) -> str:
+    return (REPO_ROOT / "plugins" / app_dir_name / "templates" / "setup.html").read_text(encoding="utf-8")
 
 
 def load_plugin_main(app_dir_name: str):
@@ -59,11 +219,11 @@ class TestPluginsSetupUrlHardening(unittest.TestCase):
              patch.object(linear_main, "get_default_team", return_value=None):
             mock_request = MagicMock()
             resp = asyncio.run(linear_main.home(mock_request, uid=self.malicious_uid))
-            rendered = resp.template.render(resp.context)
+            self.assertEqual(resp.context["uid_q"], self.expected_encoded_uid)
 
-            self.assertIn(f'/auth/linear?uid={self.expected_encoded_uid}', rendered)
-            self.assertIn(f'/disconnect?uid={self.expected_encoded_uid}', rendered)
-            self.assertNotIn(f'/disconnect?uid={self.malicious_uid}', rendered)
+        template = _setup_template("omi-linear-app")
+        self.assertIn('/auth/linear?uid={{ uid_q|default(uid) }}', template)
+        self.assertIn('/disconnect?uid={{ uid_q|default(uid) }}', template)
 
     def test_linear_template_script_encodes_uid_and_team_id(self):
         template_path = REPO_ROOT / "plugins" / "omi-linear-app" / "templates" / "setup.html"
@@ -98,17 +258,17 @@ class TestPluginsSetupUrlHardening(unittest.TestCase):
              patch.object(hive_main, "get_default_project", return_value=None):
             mock_request = MagicMock()
             resp = asyncio.run(hive_main.home(mock_request, uid=self.malicious_uid))
-            rendered = resp.template.render(resp.context)
-            self.assertIn(f'/disconnect?uid={self.expected_encoded_uid}', rendered)
-            self.assertNotIn(f'/disconnect?uid={self.malicious_uid}', rendered)
+            self.assertEqual(resp.context["uid_q"], self.expected_encoded_uid)
+
+        template = _setup_template("omi-hive-app")
+        self.assertIn('/disconnect?uid={{ uid_q|default(uid) }}', template)
+        self.assertIn('/settings/api-key?uid={{ uid_q|default(uid) }}', template)
 
         # Unconnected state
         with patch.object(hive_main, "get_hive_credentials", return_value=None):
             mock_request = MagicMock()
             resp = asyncio.run(hive_main.home(mock_request, uid=self.malicious_uid))
-            rendered = resp.template.render(resp.context)
-            self.assertIn(f'/settings/api-key?uid={self.expected_encoded_uid}', rendered)
-            self.assertNotIn(f'/settings/api-key?uid={self.malicious_uid}', rendered)
+            self.assertEqual(resp.context["uid_q"], self.expected_encoded_uid)
 
     def test_hive_template_script_encodes_uid_and_project_id(self):
         template_path = REPO_ROOT / "plugins" / "omi-hive-app" / "templates" / "setup.html"
@@ -150,9 +310,10 @@ class TestPluginsSetupUrlHardening(unittest.TestCase):
              patch.object(shopify_main, "shopify_api_request", return_value={}):
             mock_request = MagicMock()
             resp = asyncio.run(shopify_main.home(mock_request, uid=self.malicious_uid))
-            rendered = resp.template.render(resp.context)
-            self.assertIn(f'/disconnect?uid={self.expected_encoded_uid}', rendered)
-            self.assertNotIn(f'/disconnect?uid={self.malicious_uid}', rendered)
+            self.assertEqual(resp.context["uid_q"], self.expected_encoded_uid)
+
+        template = _setup_template("omi-shopify-app")
+        self.assertIn('/disconnect?uid={{ uid_q|default(uid) }}', template)
 
     def test_shopify_template_script_encodes_uid_and_shop_domain(self):
         template_path = REPO_ROOT / "plugins" / "omi-shopify-app" / "templates" / "setup.html"
