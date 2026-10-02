@@ -1192,6 +1192,7 @@ def _load_sync_router_for_fast_path():
         'utils.sync.content_id',
         'utils.sync.capture_manifest',
         'utils.speaker_assignment',
+        'utils.speaker_permissions',
         'utils.speaker_identification',
         'utils.speaker_learning_jobs',
         'utils.stt.speaker_embedding',
@@ -1216,9 +1217,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
-    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
-    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
-    # since a MagicMock parent does not resolve submodules by itself.
+    # Register pipeline submodules explicitly: MagicMock parents cannot resolve them.
     sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute

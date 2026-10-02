@@ -1020,6 +1020,7 @@ async def extract_speaker_samples(
             conversation_id,
             contributing_ids,
             speech_seconds=clean_seconds,
+            expected_receipt_generation=receipt.get('generation', 0),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)

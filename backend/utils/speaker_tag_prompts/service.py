@@ -17,7 +17,7 @@ import time
 import uuid
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union, cast
 
 import numpy as np
 
@@ -63,6 +63,7 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
 from utils.speaker_learning_policy import union_seconds
+from utils.owner_voice_evidence import authorized_owner_segments
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MAX_GAP_SECONDS,
@@ -91,10 +92,6 @@ _inflight_verifications: Dict[str, Future[Optional[bytes]]] = {}
 _inflight_lock = threading.RLock()
 
 ScheduleTask = Callable[..., None]
-
-
-class TagPromptForbidden(Exception):
-    """The answer needs a feature the user's plan does not include."""
 
 
 class TagPromptInvalid(Exception):
@@ -491,9 +488,8 @@ def apply_answer(
     answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
-    needs_named = request.kind != SpeakerTagPromptKind.owner_check or answer in _NAMED_ANSWERS
-    if needs_named and not named_speaker_prompts_allowed(uid):
-        raise TagPromptForbidden('Naming other people needs a paid plan')
+    # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
+    # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
     person_id: Optional[str] = None
     person_enrolled = False
@@ -513,6 +509,7 @@ def apply_answer(
                     uid=uid,
                     conversation_id=request.conversation_id,
                     segment_ids=segment_ids,
+                    card_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
                 )
                 voice_sample_queued = True
     elif person_id is not None:
@@ -664,7 +661,9 @@ def _pool(vectors: List[List[float]]) -> List[float]:
     return centroid.flatten().tolist()
 
 
-def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> Optional[Tuple[float, float, str]]:
+def owner_clip_window(
+    conversation: Dict[str, Any], segment_ids: List[str], *, return_key: bool = False
+) -> Optional[Union[Tuple[float, float, str], Tuple[float, float, str, Tuple[Any, int]]]]:
     """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
 
     A whole-speaker label may resolve to several captures; choose the longest
@@ -737,13 +736,17 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
             if not text:
                 continue
             if best is None or speech > best[0]:
-                best = (speech, start, end, text)
+                best = (speech, start, end, text, (scope, speaker_id))
     if best is None:
         return None
-    return best[1], best[2], best[3]
+    if return_key:
+        return best[1], best[2], best[3], best[4]
+    return cast(Tuple[float, float, str], (best[1], best[2], best[3]))
 
 
-async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
+async def store_owner_voice_sample(
+    uid: str, conversation_id: str, segment_ids: List[str], *, card_generation: Optional[int] = None
+) -> str:
     """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label.
 
     The outcome is attributable: beyond the Prometheus counter, one log line
@@ -759,11 +762,15 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not conversation:
             outcome = 'clip_not_clean'
             return outcome
-        window = owner_clip_window(conversation, segment_ids)
+        authorized = authorized_owner_segments(conversation, segment_ids, card_generation=card_generation)
+        if set(authorized) != set(segment_ids) or not authorized:
+            outcome = 'stale_assignment'
+            return outcome
+        window = owner_clip_window(conversation, authorized, return_key=True)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
-        start, end, text = window
+        start, end, text, (win_scope, win_speaker) = cast(Tuple[float, float, str, Tuple[Any, int]], window)
         pcm = await run_blocking(
             sync_executor, conversation_clip_pcm, uid, conversation, start, end, caller='owner_confirmation'
         )
@@ -794,6 +801,19 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
             _pool,
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+            card_generation=card_generation,
+            # Record only the selected run's segments: the confirmation retracts
+            # by intersection, and overlapping owner segments from another capture
+            # scope must not be retracted by a later edit in this scope.
+            segment_ids=[
+                s['id']
+                for s in conversation['transcript_segments']
+                if s.get('id') in authorized
+                and s.get('speaker_id_scope') == win_scope
+                and speaker_id_of(s) == win_speaker
+                and s.get('start', end) < end
+                and s.get('end', start) > start
+            ],
         )
         if not stored:
             outcome = 'stale_assignment'
