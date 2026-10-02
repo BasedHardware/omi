@@ -13,56 +13,64 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 void main() {
-  testWidgets('detail title hugs one line, grows to three, and shows no emoji', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  for (final initialTitle in ['Short title', '']) {
+    testWidgets('detail title layout and recording fallback: $initialTitle', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
-    final conversation = ServerConversation(
-      id: 'title-alignment',
-      createdAt: DateTime(2026, 9, 28, 12),
-      structured: Structured('Short title', '', emoji: '🧠'),
-    );
-    final detail = ConversationDetailProvider()
-      ..selectedDate = conversationLocalDayKey(conversation.createdAt)
-      ..setCachedConversation(conversation)
-      ..titleController = TextEditingController(text: conversation.structured.title)
-      ..titleFocusNode = FocusNode();
-    final folders = FolderProvider(foldersFetcher: () async => []);
-    addTearDown(detail.dispose);
-    addTearDown(folders.dispose);
+      final conversation = ServerConversation(
+        id: 'title-alignment',
+        createdAt: DateTime(2026, 9, 28, 12),
+        structured: Structured(initialTitle, '', emoji: '🧠'),
+      );
+      final detail = ConversationDetailProvider()
+        ..selectedDate = conversationLocalDayKey(conversation.createdAt)
+        ..setCachedConversation(conversation)
+        ..titleController = TextEditingController(text: conversation.structured.title)
+        ..titleFocusNode = FocusNode();
+      final folders = FolderProvider(foldersFetcher: () async => []);
+      addTearDown(detail.dispose);
+      addTearDown(folders.dispose);
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-          ChangeNotifierProvider<FolderProvider>.value(value: folders),
-        ],
-        child: MaterialApp(
-          theme: buildOmiTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: ConversationDetailHeader(onOpenRecordings: (_) {})),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+            ChangeNotifierProvider<FolderProvider>.value(value: folders),
+          ],
+          child: MaterialApp(
+            theme: buildOmiTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: ConversationDetailHeader(onOpenRecordings: (_) {})),
+          ),
         ),
-      ),
-    );
+      );
 
-    final titleField = find.byType(ConversationTitleField);
-    const lineHeight = 28.0 * 1.15; // OmiType.title1 with the header's line height.
+      final titleField = find.byType(ConversationTitleField);
+      const lineHeight = 28.0 * 1.15; // OmiType.title1 with the header's line height.
 
-    void expectLines(int lines) {
-      expect(tester.getSize(titleField).height, closeTo(lineHeight * lines, 1));
-    }
+      void expectLines(int lines) {
+        expect(tester.getSize(titleField).height, closeTo(lineHeight * lines, 1));
+      }
 
-    expect(find.text('🧠'), findsNothing);
-    expectLines(1);
+      expect(find.text('🧠'), findsNothing);
+      expectLines(1);
+      if (initialTitle.isEmpty) {
+        expect(find.textContaining('Recording · '), findsOneWidget);
+        expect(find.text('Untitled Conversation'), findsNothing);
+        expect(detail.titleController!.text, isEmpty);
+        expect(conversation.structured.title, isEmpty);
+      }
 
-    detail.titleController!.text = 'First line\nSecond line';
-    await tester.pump();
-    expectLines(2);
+      detail.titleController!.text = 'First line\nSecond line';
+      await tester.pump();
+      expectLines(2);
 
-    detail.titleController!.text = 'One\nTwo\nThree\nFour';
-    await tester.pump();
-    expectLines(3);
-  });
+      detail.titleController!.text = 'One\nTwo\nThree\nFour';
+      await tester.pump();
+      expectLines(3);
+    });
+  }
 }

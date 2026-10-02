@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -8,6 +9,7 @@ import 'package:omi/services/home_widgets_service.dart';
 
 /// What the iOS Home Screen widgets are given (ios/BatteryWidget/SharedDefaults.swift reads it).
 void main() {
+  setUpAll(() => initializeDateFormatting());
   final en = lookupAppLocalizations(const Locale('en'));
 
   BtDevice device(String id, String name, DeviceType type) => BtDevice(id: id, name: name, type: type, rssi: -50);
@@ -130,7 +132,7 @@ void main() {
       expect(doc['title'], 'Call Chitapa reminder');
       expect(doc['at'], DateTime.utc(2026, 9, 26, 19, 14).millisecondsSinceEpoch / 1000);
       expect(doc['detail'], startsWith('1 task · '));
-      expect(HomeWidgetsPayload.latest(conversation('untitled'), en)!['title'], en.untitledConversation);
+      expect(HomeWidgetsPayload.latest(conversation('untitled'), en)!['title'], startsWith('${en.recording} · '));
       expect(HomeWidgetsPayload.latest(null, en), isNull);
     });
   });

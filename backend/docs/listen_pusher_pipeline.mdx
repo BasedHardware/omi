@@ -2253,3 +2253,33 @@ the transactional deletion fence. Late commits after a worker timeout are valid 
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+
+### Empty-title presentation and diagnosis
+
+The list/search/folder response redactor and GET conversation detail apply
+`utils/conversations/display_title.py` only at the read presentation boundary (also shared by MCP).
+An unlocked, non-deleted, kept completed response with a blank title uses the
+existing deterministic transcript algorithm; without decoded text it uses
+`Recording · YYYY-MM-DD HH:MM UTC` (or `Recording` if no usable timestamp).
+The UTC suffix is intentional: list rendering does not read a user's timezone.
+This projection never writes a document or enters recovery admission, which
+must still see the raw title. It also covers the document-size guard deliberately
+omitting the optional title in a terminal write. Locked/discarded/in-flight rows
+retain their existing presentation contract.
+
+Flutter's cached-row fallback uses the same transcript parity fixtures and,
+without text, the localized Recording label plus `OmiDateFormat` in local time.
+The existing `Conversation Untitled Rendered` event now measures use of this
+clock fallback; compare within a build. Server fallback observations use
+`omi_fallback_total{component="conversation_title",reason="malformed_doc"}`.
+Both are **render observations, not unique conversations created per day**;
+repeated reads and old recording dates prevent that interpretation.
+
+`recovery_structure_unavailable` means no rich structure survived, not a provider
+timeout. Provider exceptions leave `_get_structured` through the existing typed
+processing-failure retry path. The `selfheal_guard` refusal log now includes a
+bounded `structure_reason`: `transcript_decode_failed` or `no_enriched_structure`.
+Neither field contains transcript content. Do not retry unreadable blobs as
+provider outages. The existing `omi-journey-capture-fail` alert
+uses the durable terminal projection; inspect the current alert manifest for
+its 30-minute denominator and dwell rather than adding a raw-count page.

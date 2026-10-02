@@ -142,10 +142,11 @@ void main() {
     expect(emitted, isEmpty);
   });
 
-  testWidgets('a legacy untitled row without transcript text is the one Untitled case, and it reports', (tester) async {
+  testWidgets('a row without title or transcript shows a recording date and reports', (tester) async {
     await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
 
-    expect(find.text(_l10n(tester).untitledConversation), findsOneWidget);
+    expect(find.text(_l10n(tester).untitledConversation), findsNothing);
+    expect(find.textContaining('${_l10n(tester).recording} · '), findsOneWidget);
     expect(emitted, hasLength(1));
     expect(emitted.single.surface, ConversationUntitledRenderedSurface.list);
   });

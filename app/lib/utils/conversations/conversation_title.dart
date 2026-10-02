@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 
@@ -38,24 +40,31 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
 }
 
 /// The display title of a kept (not discarded) conversation: its title, else transcript text,
-/// else "Untitled Conversation" — and that last case reports [ConversationUntitledRendered] so
-/// the fallback can be verified to reach zero. [title] overrides the raw structured title when a
-/// surface already normalized it.
+/// else a localized recording date/time. The last case reports [ConversationUntitledRendered]
+/// so missing server titles remain observable. [title] overrides the raw structured title
+/// when a surface already normalized it.
 String conversationDisplayTitle(
   ServerConversation conversation,
   AppLocalizations l10n, {
   required ConversationUntitledRenderedSurface surface,
   String? title,
+  OmiDateFormat? dates,
 }) {
   final trimmed = (title ?? conversation.structured.title).trim();
   if (trimmed.isNotEmpty) return trimmed;
   final fallback = transcriptFallbackTitle(conversation);
   if (fallback != null) return fallback;
   UntitledConversationTelemetry.report(conversation, surface);
-  return l10n.untitledConversation;
+  return recordingFallbackTitle(conversation, l10n, dates: dates);
 }
 
-/// Reports each bare "Untitled Conversation" render at most once per conversation, surface and
+/// A presentation-only label; never save this placeholder as a user title.
+String recordingFallbackTitle(ServerConversation conversation, AppLocalizations l10n, {OmiDateFormat? dates}) {
+  final formatter = dates ?? OmiDateFormat(locale: Locale(l10n.localeName), use24HourFormat: false, l10n: l10n);
+  return '${l10n.recording} · ${formatter.dateTime((conversation.startedAt ?? conversation.createdAt).toLocal())}';
+}
+
+/// Reports each missing-title/no-transcript fallback at most once per conversation, surface and
 /// app session. Only bounded properties leave the device: surface, an age bucket and whether a
 /// retry was offered — never the id, title or transcript.
 class UntitledConversationTelemetry {
