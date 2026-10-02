@@ -1410,16 +1410,24 @@ class ActionItemsProvider extends ChangeNotifier {
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
     _exportingIds.addAll(items.map((i) => i.id));
-    final List<ExportResult> results;
+    var results = const <ExportResult>[];
     try {
-      results = await Future.wait(items.map((i) => _exportItemRequest(i, platform)));
+      results = await Future.wait(items.map((i) async {
+        try {
+          return await _exportItemRequest(i, platform);
+        } catch (e) {
+          // One exporter throwing is one failed task, not a lost outcome for the whole batch.
+          Logger.debug('Export of ${i.id} to ${platform.key} threw: $e');
+          return ExportResult.failed;
+        }
+      }));
       // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
       await fetchActionItems();
     } finally {
       _exportingIds.removeAll(items.map((i) => i.id));
+      onSettled?.call();
     }
     final successCount = results.where((r) => r == ExportResult.success).length;
-    onSettled?.call();
 
     if (!context.mounted) {
       return;

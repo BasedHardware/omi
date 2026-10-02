@@ -12,17 +12,23 @@ import 'package:omi/utils/platform/platform_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
   final Future<bool> Function(String appKey) _setDefaultTaskIntegration;
+  final Future<TaskIntegrationsResponse?> Function() _getTaskIntegrations;
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+
+  /// The last load did not reach the server; [ensureLoaded] tries again instead of trusting it.
+  bool _needsRetry = false;
   bool _appleRemindersPermission = false;
   bool _appleRemindersPermissionManuallySet = false;
   int _sessionGeneration = 0;
 
   TaskIntegrationProvider({
     Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn,
+    Future<TaskIntegrationsResponse?> Function()? getTaskIntegrationsFn,
   })  : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
+        _getTaskIntegrations = getTaskIntegrationsFn ?? getTaskIntegrations,
         _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
@@ -32,23 +38,26 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
   Future<void>? _inFlightLoad;
 
-  /// Resolves once the default app and connection details have been loaded at least once, joining
-  /// a load already in flight instead of starting another. For callers that act on the answer
-  /// right away (a single export), where reading [isAppConnected] before the first load lands
-  /// would say nothing is connected.
+  /// Resolves once the default app and connection details have been loaded from the server,
+  /// joining a load already in flight instead of starting another, and loading again if the last
+  /// attempt failed. For callers that act on the answer right away (a single export), where
+  /// reading [isAppConnected] before the first load lands would say nothing is connected.
   Future<void> ensureLoaded() {
-    if (_hasLoaded) return Future<void>.value();
-    return _inFlightLoad ?? loadFromBackend();
+    if (_hasLoaded && !_needsRetry) return Future<void>.value();
+    return loadFromBackend();
   }
 
-  /// Load default app and connection details from backend
+  /// Load default app and connection details from backend. A call while a load is in flight
+  /// joins it rather than fetching twice.
   Future<void> loadFromBackend() {
-    final load = _loadFromBackend();
-    _inFlightLoad = load;
-    load.whenComplete(() {
-      if (identical(_inFlightLoad, load)) _inFlightLoad = null;
+    final existing = _inFlightLoad;
+    if (existing != null) return existing;
+    late final Future<void> started;
+    started = _loadFromBackend().whenComplete(() {
+      if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
-    return load;
+    _inFlightLoad = started;
+    return started;
   }
 
   Future<void> _loadFromBackend() async {
@@ -57,8 +66,9 @@ class TaskIntegrationProvider extends ChangeNotifier {
     // Don't notify listeners immediately to avoid setState during build
 
     try {
-      final response = await getTaskIntegrations();
+      final response = await _getTaskIntegrations();
       if (generation != _sessionGeneration) return;
+      _needsRetry = response == null;
       if (response != null) {
         _connectionDetails = response.integrations;
 
@@ -98,6 +108,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       }
     } catch (e) {
       if (generation != _sessionGeneration) return;
+      _needsRetry = true;
       Logger.debug('Error loading task integrations from backend: $e');
     } finally {
       if (generation == _sessionGeneration) {
@@ -211,6 +222,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
     // The old session's load exits on the generation check without setting hasLoaded; a caller
     // of ensureLoaded must start a fresh one rather than join it.
     _inFlightLoad = null;
+    _needsRetry = false;
     _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
     _connectionDetails = {};
     _isLoading = false;

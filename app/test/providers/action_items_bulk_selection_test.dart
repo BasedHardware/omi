@@ -203,6 +203,38 @@ void main() {
     expect(exportedIds, ['open']);
   });
 
+  testWidgets('an exporter that throws is one failed task, and the export still settles', (tester) async {
+    final provider = ActionItemsProvider(
+        getActionItems: _onePage, exportItemRequest: (item, platform) async => throw StateError('no network'));
+    addTearDown(provider.dispose);
+    await provider.ensureLoaded();
+
+    late BuildContext pageContext;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: Builder(builder: (context) {
+          pageContext = context;
+          return const SizedBox.shrink();
+        })),
+      ),
+    ));
+
+    var settled = false;
+    await provider.exportItems(pageContext, [_open], TaskIntegrationApp.googleTasks, onSettled: () => settled = true);
+    await tester.pump();
+
+    expect(settled, isTrue);
+    expect(find.textContaining('0 of 1'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pumpAndSettle();
+  });
+
   test('an export platform is named the way Task Integrations names the app', () {
     expect(taskExportPlatformLabel('google_tasks'), 'Google Tasks');
     expect(taskExportPlatformLabel('apple_reminders'), TaskIntegrationApp.appleReminders.displayName);

@@ -114,7 +114,9 @@ class _TaskPageState extends State<TaskPage> {
 
   /// Completion is instant everywhere (the list, Home, here): no Save needed.
   Future<void> _toggleCompleted() async {
-    if (_toggling) return;
+    // One mutation at a time: a toggle during a save would race the description and date updates,
+    // and the save's pop would then swallow the toggle's outcome.
+    if (_toggling || _saving) return;
     final next = !_completed;
     OmiHaptics.light();
     // The row is disabled until the server answers, so two taps cannot race each other.
@@ -180,7 +182,7 @@ class _TaskPageState extends State<TaskPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final item = widget.item;
-    final canSave = _isDirty && !_saving && _text.text.trim().isNotEmpty;
+    final canSave = _isDirty && !_saving && !_toggling && _text.text.trim().isNotEmpty;
     return PopScope<Object?>(
       canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, _) {
@@ -283,7 +285,7 @@ class _TaskPageState extends State<TaskPage> {
                           key: const Key('task_completed_toggle'),
                           leading: TaskCompletionMark(completed: _completed),
                           title: _completed ? l10n.completed : l10n.markComplete,
-                          onTap: _toggling ? null : _toggleCompleted,
+                          onTap: _toggling || _saving ? null : _toggleCompleted,
                           showChevron: false,
                           semanticsChecked: _completed,
                         ),

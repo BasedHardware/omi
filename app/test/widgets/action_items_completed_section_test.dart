@@ -332,6 +332,23 @@ void main() {
     expect(find.text('Completed'), findsNothing);
   });
 
+  testWidgets('the completion row is disabled while a save is in flight', (tester) async {
+    final (_, completions) = await pumpApp(tester, updateDelay: const Duration(milliseconds: 300));
+    await tester.tap(find.text('Draft the update'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('task_description')), 'Draft the investor update');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task_save_button')));
+    await tester.pump();
+    // While the description update is in flight the toggle does nothing.
+    await tester.tap(find.byKey(const Key('task_completed_toggle')));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(completions, isEmpty);
+  });
+
   testWidgets('tapping a task opens its page with the conversation line, and Save wakes up on an edit', (tester) async {
     await pumpPage(tester);
 
