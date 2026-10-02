@@ -2,6 +2,9 @@ import ActivityKit
 import SwiftUI
 import UIKit
 import WidgetKit
+#if compiler(>=6.4)
+import AppIntents
+#endif
 
 // Values below come from the omi-ios-v2 design package: tokens/tokens.json,
 // generator/s_system.py (LockScreen, Island) and specs/geometry/iphone16.
@@ -549,8 +552,16 @@ private struct CaptureActions: View {
                 // Shared by the Lock Screen and expanded Island. Start/Stop keep the existing
                 // resume/pause behavior; Start is offered only after a user stops capture.
                 if state.canPause {
-                    let resume = state.status == "paused"
-                    action(resume ? "Start" : "Stop", value: resume ? "resume" : "pause", enabled: true)
+                    if state.status != "paused" {
+                        action("Stop", value: "pause", enabled: true)
+                    } else if state.source != "phone" {
+                        action("Start", value: "resume", enabled: true)
+                    } else if #available(iOS 18.0, *) {
+                        button("Start", intent: OmiCaptureRecordingIntent(
+                            recordingId: snapshot.recordingId, revision: state.conversationRevision))
+                    }
+                    // iOS 17 has no audio recording intent, so a stopped phone mic starts again
+                    // only in Omi, which tapping the card opens.
                 }
                 // End always closes this card, saving the conversation first when there is one
                 // (LiveActivityManager).
@@ -564,10 +575,17 @@ private struct CaptureActions: View {
     #if compiler(>=6.4)
     @available(iOS 17.0, *)
     private func action(_ label: LocalizedStringKey, value: String, enabled: Bool, primary: Bool = false) -> some View {
+        button(label, intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
+                                               revision: state.conversationRevision, action: value),
+               enabled: enabled, primary: primary)
+    }
+
+    @available(iOS 17.0, *)
+    private func button(_ label: LocalizedStringKey, intent: some AppIntent, enabled: Bool = true,
+                        primary: Bool = false) -> some View {
         // Busy blocks duplicate intents without recoloring the whole action row.
         let available = enabled && !state.busy
-        return Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
-                                               revision: state.conversationRevision, action: value)) {
+        return Button(intent: intent) {
             Text(label)
                 .contentTransition(.identity)
                 .font(.subheadline.weight(primary ? .bold : .semibold))

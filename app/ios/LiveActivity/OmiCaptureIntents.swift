@@ -26,4 +26,27 @@ struct OmiCaptureIntent: LiveActivityIntent {
         return .result()
     }
 }
+
+/// Start for a stopped phone microphone. Turning the mic back on from the Lock Screen starts a
+/// recording while Omi is in the background, which iOS allows only from an audio recording intent.
+@available(iOS 18.0, *)
+struct OmiCaptureRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
+    static var title: LocalizedStringResource = "Start Omi recording"
+    static var isDiscoverable: Bool = false
+
+    @Parameter(title: "Recording") var recordingId: String
+    @Parameter(title: "Conversation") var conversationRevision: Int
+
+    init() {}
+    init(recordingId: String, revision: Int) {
+        self.recordingId = recordingId
+        self.conversationRevision = revision
+    }
+
+    func perform() async throws -> some IntentResult {
+        try await OmiCaptureActionDispatcher.perform(
+            recordingId: recordingId, revision: conversationRevision, action: "resume")
+        return .result()
+    }
+}
 #endif

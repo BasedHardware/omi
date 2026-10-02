@@ -162,7 +162,7 @@ final class LiveActivityManager {
             do {
                 if #available(iOS 16.2, *) {
                     activity = try Activity.request(attributes: OmiCaptureAttributes(recordingId: id),
-                        content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(90)), pushType: nil)
+                        content: ActivityContent(state: state, staleDate: Self.staleDate(for: state)), pushType: nil)
                 } else {
                     activity = try Activity.request(attributes: OmiCaptureAttributes(recordingId: id),
                         contentState: state, pushType: nil)
@@ -173,9 +173,16 @@ final class LiveActivityManager {
         }
     }
 
+    /// A live card goes stale when Omi stops refreshing it. A stopped one does not: iOS may suspend
+    /// Omi while the mic is off, and Start must stay on the card. If Omi is killed meanwhile, its
+    /// next launch, including one from a tap on this card, closes the card.
+    private static func staleDate(for state: OmiCaptureAttributes.ContentState) -> Date? {
+        state.status == "paused" ? nil : Date().addingTimeInterval(90)
+    }
+
     private func update(_ activity: Activity<OmiCaptureAttributes>, state: OmiCaptureAttributes.ContentState) async {
         if #available(iOS 16.2, *) {
-            await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(90)))
+            await activity.update(ActivityContent(state: state, staleDate: Self.staleDate(for: state)))
         } else {
             await activity.update(using: state)
         }
