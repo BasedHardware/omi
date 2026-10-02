@@ -18,7 +18,7 @@ from typing import Any, List, Mapping, Optional
 
 from database.audio_timeline import chunk_span_bounds
 from utils.audio_timeline import coverage_outcome
-from utils.conversations.audio_placement import locate, provisional_window
+from utils.conversations.audio_placement import candidate_window, locate
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
@@ -65,7 +65,7 @@ def conversation_clip_pcm(
     """PCM16 mono for ``[start, end)``, or None when no stored audio covers it."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise ValueError('Clip window must be positive and at most 12 seconds')
-    window = provisional_window(conversation, start, end)
+    window = candidate_window(conversation, start, end)
     if window is None:
         return None
     placement = locate(conversation, start, end)

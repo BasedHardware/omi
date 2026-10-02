@@ -88,6 +88,63 @@ def provisional_window(conversation: Mapping[str, Any], start: float, end: float
     return (abs_start, abs_end)
 
 
+CAPTURE_CLOCK_TOLERANCE_SECONDS = 1.0
+
+
+def capture_window(
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    *,
+    segments: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> Optional[Tuple[float, float]]:
+    """Where the live receiver heard ``[start, end)``, when every contributor recorded it.
+
+    Legacy live text is timed from the provider stream and stored audio from chunk
+    arrival; reconnects and failover pull those clocks apart, so ``started_at + start``
+    often misses the audio. ``audio_capture_start``/``audio_capture_end`` hold the
+    receiver's capture-clock window for the segment. All contributors must agree on
+    one offset between transcript time and capture time, and keep their duration.
+    The result is a better candidate, not proof: the capture clock and the chunk
+    clock can still disagree, so callers keep their transcript verification.
+    """
+    start_f = _numeric(start)
+    end_f = _numeric(end)
+    if start_f is None or end_f is None or start_f < 0 or end_f <= start_f:
+        return None
+    contributors = list(segments) if segments is not None else _overlapping_segments(conversation, start_f, end_f)
+    if not contributors:
+        return None
+    offsets = []
+    for segment in contributors:
+        if not _placed_contributor(segment):
+            return None
+        seg_start = _numeric(segment.get('start'))
+        seg_end = _numeric(segment.get('end'))
+        cap_start = _numeric(segment.get('audio_capture_start'))
+        cap_end = _numeric(segment.get('audio_capture_end'))
+        if seg_start is None or seg_end is None or cap_start is None or cap_end is None or cap_end <= cap_start:
+            return None
+        if abs((cap_end - cap_start) - (seg_end - seg_start)) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+            return None
+        offsets.append(cap_start - seg_start)
+    if max(offsets) - min(offsets) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+        return None
+    offset = sorted(offsets)[len(offsets) // 2]
+    return (start_f + offset, end_f + offset)
+
+
+def candidate_window(
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    *,
+    segments: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> Optional[Tuple[float, float]]:
+    """Best unproven position for a verified reader: the capture window, else the legacy origin."""
+    return capture_window(conversation, start, end, segments=segments) or provisional_window(conversation, start, end)
+
+
 def _placed_contributor(segment: Any) -> bool:
     if not isinstance(segment, Mapping) or segment.get('audio_alignment') == 'unplaced':
         return False

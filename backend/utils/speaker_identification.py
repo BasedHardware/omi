@@ -17,7 +17,7 @@ from utils.audio_timeline import (
     coverage_outcome,
     is_audio_timeline_v2,
 )
-from utils.conversations.audio_placement import locate, provisional_window
+from utils.conversations.audio_placement import candidate_window, locate, provisional_window
 from utils.conversations.teaching_placement import recover_teaching_clip
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL, OMI_PERSON_VOICE_LEARNING_TOTAL
@@ -920,7 +920,7 @@ async def extract_speaker_samples(
             if placement.reason in ('unplaced', 'invalid_window', 'missing_origin'):
                 continue
             if not timeline_v2:
-                window = placement.window or provisional_window(conversation, clip_start, end)
+                window = placement.window or candidate_window(conversation, clip_start, end, segments=contributors)
                 if window is None:
                     continue
                 clip = await run_blocking(
