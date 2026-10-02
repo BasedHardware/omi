@@ -254,6 +254,14 @@ OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
 for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
+OMI_SPEAKER_CLIP_COVERAGE_TOTAL = Counter(
+    'omi_speaker_clip_coverage_total',
+    'Legacy speaker clip extraction by bounded sample coverage outcome',
+    ['outcome'],
+)
+for _outcome in ('covered', 'gap', 'missing', 'invalid_window'):
+    OMI_SPEAKER_CLIP_COVERAGE_TOTAL.labels(outcome=_outcome)
+
 OMI_PERSON_VOICE_LEARNING_TOTAL = Counter(
     'omi_person_voice_learning_total',
     'Person voice-learning attempts by bounded outcome',

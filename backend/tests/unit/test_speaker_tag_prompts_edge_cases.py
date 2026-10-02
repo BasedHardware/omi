@@ -58,8 +58,8 @@ def test_conversation_clip_pcm_falls_back_to_created_at_and_normalizes_naive_utc
     }
     monkeypatch.setattr(
         clips,
-        'download_audio_chunks_and_merge',
-        lambda uid, cid, relevant, fill_gaps=True, sample_rate=16000: b'\x01\x00' * (sample_rate * 10),
+        'legacy_speaker_clip_pcm',
+        lambda uid, cid, start, end, sample_rate: b'\x01\x00' * round((end - start) * sample_rate),
     )
     pcm = clips.conversation_clip_pcm('uid-1', conv, 1.0, 6.0)
     assert pcm is not None

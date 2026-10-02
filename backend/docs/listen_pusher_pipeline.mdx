@@ -1313,6 +1313,22 @@ REST tries immediately, sockets queue a delayed attempt, and fanout completion
 schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
+Legacy person teaching, owner confirmations and speaker-tag preview clips use
+`utils/speaker_audio.py` to cut each blob on its own timestamp. Overlapping
+decoded chunks contribute each sample position once; a window inside a batch
+blob uses that blob's start rather than an interior requested chunk timestamp.
+Every requested sample must exist: gaps and truncated windows return no clip,
+never silence padding or a shortened clip. Person teaching records
+`uncovered_audio` and remains pending without replacing its previous voiceprint.
+`omi_speaker_clip_coverage_total{outcome=covered|gap|missing|invalid_window}`
+records bounded, content-free extraction outcomes. V2 span validation remains
+unchanged. This does not repair drift in legacy transcript timestamps, and the
+existing STT text-containment and speaker-purity checks still run before learning.
+Each legacy window requires one blob listing and sequential decoding of its
+predecessor/intersecting blobs, stopping once complete (at most 12 s of returned
+PCM); person teaching retains its existing 12-window cap and one STT verification
+plus one embedding call. Blob sizes themselves are not capped by this reader.
+
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of
 `ai_user_profile.profile_text`. Only the first name is displayed; unknown-name
