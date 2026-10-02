@@ -81,8 +81,39 @@ class TestGoalsToJSONL(unittest.TestCase):
     def test_derive_status_precedence(self):
         self.assertEqual(g2jsonl.derive_status({"is_active": False, "is_achieved": True}), "inactive")
         self.assertEqual(g2jsonl.derive_status({"is_active": "0", "is_completed": True}), "inactive")
+        # Inactive precedence even if 100% progress
+        self.assertEqual(
+            g2jsonl.derive_status({
+                "is_active": "false",
+                "current_value": 100,
+                "target_value": 100,
+            }),
+            "inactive",
+        )
+        # Normalized string boolean flags
+        self.assertEqual(
+            g2jsonl.derive_status({
+                "is_active": True,
+                "is_achieved": "false",
+                "is_completed": "true",
+            }),
+            "completed",
+        )
+        # Boolean goal reaching 1.0 without explicit flag derives completed
+        self.assertEqual(
+            g2jsonl.derive_status({
+                "is_active": True,
+                "goal_type": "boolean",
+                "current_value": 1.0,
+            }),
+            "completed",
+        )
         self.assertEqual(g2jsonl.derive_status({"is_active": True, "is_achieved": True}), "completed")
         self.assertEqual(g2jsonl.derive_status({"is_active": True, "is_achieved": False}), "active")
+
+    def test_parse_float_overflow(self):
+        self.assertIsNone(g2jsonl.parse_float("9" * 400))
+        self.assertIsNone(g2jsonl.parse_float(10**400))
 
     def test_calc_progress_pct(self):
         self.assertEqual(g2jsonl.calc_progress_pct({}, True), 100.0)
@@ -146,8 +177,12 @@ class TestGoalsToJSONL(unittest.TestCase):
         loaded = g2jsonl.load([str(f_idless), str(f_empty)])
         self.assertEqual(len(loaded), 1)
         key = list(loaded.keys())[0]
-        self.assertTrue(key.startswith("auto_"))
+        self.assertTrue(key.startswith("gen_"))
         self.assertEqual(loaded[key]["id"], key)
+
+        # Idempotent: second load derives identical key
+        loaded2 = g2jsonl.load([str(f_idless)])
+        self.assertEqual(list(loaded2.keys())[0], key)
 
     def test_build_jsonl_output_format_and_schema(self):
         goals_dict = {g["id"]: g for g in self.sample_goals}
@@ -185,7 +220,6 @@ class TestGoalsToJSONL(unittest.TestCase):
         count = g2jsonl.convert([str(src)], destination=str(dest))
         self.assertEqual(count, 3)
         self.assertTrue(dest.exists())
-        orig_bytes = dest.read_bytes()
 
         # Second call without overwrite must fail
         with self.assertRaises(FileExistsError):
@@ -198,6 +232,9 @@ class TestGoalsToJSONL(unittest.TestCase):
         # No leftover temp files exist
         tmp_files = list(self.tmp.glob(".tmp_goals_jsonl_*"))
         self.assertEqual(tmp_files, [])
+
+        # Capture snapshot of destination immediately before injecting write failure
+        orig_bytes = dest.read_bytes()
 
         # Failing tmp write in overwrite mode cleans up temporary file and leaves destination intact
         real_open = Path.open
