@@ -92,23 +92,20 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
-  /// Recovered disconnects since [_countersSinceMs], bounded by the native
-  /// history's 7-day retention. Mirrors `reconnection_count_window` in
-  /// [_buildBundle]. Null when the window anchor is unavailable.
-  int? get _reconnectionCountWindow {
-    final since = _countersSinceMs;
-    final history = _diagnostics?.disconnectHistory;
-    if (since == null || history == null) return null;
-    return history.where((e) => e.timestamp >= since && e.timeToReconnectMs > 0).length;
+  int _recentWindowStart(int countersSinceMs) {
+    final cutoff = DateTime.now().millisecondsSinceEpoch - const Duration(days: 7).inMilliseconds;
+    return countersSinceMs > cutoff ? countersSinceMs : cutoff;
   }
 
-  /// Connect attempts that never established, since [_countersSinceMs]. Mirrors
-  /// `fail_to_connect_count_window` in [_buildBundle].
-  int? get _failToConnectCountWindow {
+  /// Native history is pruned on writes, so quiet devices can retain expired
+  /// events. Apply the rolling window when reading, as [_buildBundle] does.
+  /// Null preserves the lifetime-only fallback when the anchor is unavailable.
+  Iterable<BleDisconnectEvent>? get _recentDisconnectHistory {
     final since = _countersSinceMs;
     final history = _diagnostics?.disconnectHistory;
     if (since == null || history == null) return null;
-    return history.where((e) => e.timestamp >= since && e.eventType == 'fail_to_connect').length;
+    final windowStart = _recentWindowStart(since);
+    return history.where((e) => e.timestamp >= windowStart);
   }
 
   Future<void> _loadBatteryHistory() async {
@@ -147,6 +144,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    final windowStart = _recentWindowStart(sinceMs);
     return {
       'schema_version': 2,
       'device_id': widget.deviceId,
@@ -167,10 +165,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
           .length,
       'fail_to_connect_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && e['eventType'] == 'fail_to_connect')
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
       'battery_history': extended['battery_history_v2'] ??
@@ -432,8 +430,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     // Lifetime counters read catastrophic after months of pairing (10k+
     // reconnections); the 7-day window reflects the behavior users actually
     // experience, so it leads and the lifetime number stays as context.
-    final reconnectsWindow = _reconnectionCountWindow;
-    final failsWindow = _failToConnectCountWindow;
+    final recentHistory = _recentDisconnectHistory;
+    final reconnectsWindow = recentHistory?.where((e) => e.timeToReconnectMs > 0).length;
+    final failsWindow = recentHistory?.where((e) => e.eventType == 'fail_to_connect').length;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
 
     return Column(
