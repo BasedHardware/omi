@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest"
+    "speakerLabelTalkTime": "{duration} sellest häälest",
+    "deviceNameInvalidCharacters": "Nimi sisaldab toetamata märke",
+    "deviceNameTooLong": "Nimi on liiga pikk (kuni {maxBytes} märki; emojid ja täpitähed loevad rohkem)",
+    "renameDevice": "Nimeta seade ümber",
+    "deviceRenameFailed": "Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.",
+    "renameDeviceDescription": "Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.",
+    "deviceRenamed": "Seade nimetati ümber: {name}",
+    "tapToRename": "Puuduta ümbernimetamiseks",
+    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi"
 }

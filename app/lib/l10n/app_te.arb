@@ -11339,5 +11339,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
     "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}",
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
-    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}"
+    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
+    "renameDevice": "పరికరం పేరు మార్చండి",
+    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "renameDeviceDescription": "పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.",
+    "tapToRename": "పేరు మార్చడానికి నొక్కండి",
+    "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
+    "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
+    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
+    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
 }

@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
     "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
     "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
-    "speakerLabelTalkTime": "{duration} từ giọng nói này"
+    "speakerLabelTalkTime": "{duration} từ giọng nói này",
+    "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
+    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "renameDevice": "Đổi tên thiết bị",
+    "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
+    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}",
+    "tapToRename": "Chạm để đổi tên",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống"
 }

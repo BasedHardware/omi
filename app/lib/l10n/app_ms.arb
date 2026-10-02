@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengecam {name} pada masa akan datang.} pending{Ini mengambil masa beberapa saat.} disabled{Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam {name}.} other{Omi memerlukan lebih banyak pertuturan yang jelas daripada {name} dan akan terus mencuba.}}",
     "speakerLabelEarlierMatches": "Perbualan terdahulu dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
-    "speakerLabelTalkTime": "{duration} daripada suara ini"
+    "speakerLabelTalkTime": "{duration} daripada suara ini",
+    "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "renameDevice": "Namakan Semula Peranti",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
+    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}",
+    "tapToRename": "Ketik untuk menamakan semula",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong"
 }

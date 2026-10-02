@@ -3817,5 +3817,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi rozpozna osobę {name} następnym razem.} pending{To potrwa kilka sekund.} disabled{Włącz zapisywanie głosów w Ustawieniach, aby Omi mógł rozpoznać osobę {name}.} other{Omi potrzebuje wyraźniejszej mowy osoby {name} i będzie próbować dalej.}}",
     "speakerLabelEarlierMatches": "Wcześniejsze rozmowy z tym głosem: {count}",
     "speakerLabelText": "{part, select, likely{Prawdopodobnie} soundsLike{Brzmi jak {name}} notPerson{To nie {name}} carried{Nadal {name}. Przeniesiono z ostatniej rozmowy.} change{Zmień} alsoTitle{Czy to też {name}?} alsoBody{Omi znalazł ten sam głos we wcześniejszych rozmowach.} confirmed{Potwierdzono tę etykietę} other{Sprawdź}}",
-    "speakerLabelTalkTime": "{duration} tego głosu"
+    "speakerLabelTalkTime": "{duration} tego głosu",
+    "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
+    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
+    "renameDevice": "Zmień nazwę urządzenia",
+    "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
+    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
+    "tapToRename": "Dotknij, aby zmienić nazwę",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta"
 }

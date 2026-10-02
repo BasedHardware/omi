@@ -11629,6 +11629,36 @@ class AppLocalizationsFi extends AppLocalizations {
       'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
 
   @override
+  String get renameDevice => 'Nimeä laite uudelleen';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.';
+
+  @override
+  String get tapToRename => 'Napauta nimetäksesi uudelleen';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Laitteen nimi ei voi olla tyhjä';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nimi sisältää merkkejä, joita ei tueta';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nimi on liian pitkä (enintään $maxBytes merkkiä; emojit ja ääkköset vievät enemmän)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Laite nimettiin uudelleen: $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Yhteenveto epäonnistui';
 
   @override

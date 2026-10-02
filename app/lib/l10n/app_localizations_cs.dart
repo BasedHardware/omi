@@ -11625,6 +11625,36 @@ class AppLocalizationsCs extends AppLocalizations {
       'Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.';
 
   @override
+  String get renameDevice => 'Přejmenovat zařízení';
+
+  @override
+  String get deviceRenameFailed =>
+      'Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.';
+
+  @override
+  String get tapToRename => 'Klepnutím přejmenujete';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Název zařízení nemůže být prázdný';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Název obsahuje nepodporované znaky';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Název je příliš dlouhý (max. $maxBytes znaků; emoji a diakritika se počítají víc)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Zařízení přejmenováno na $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Shrnutí se nepodařilo';
 
   @override

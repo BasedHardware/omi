@@ -1,8 +1,11 @@
 #include "lib/core/settings.h"
 
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
+
+#include "lib/core/device_name.h"
 
 LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -15,6 +18,8 @@ static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
+/* Empty string means "no custom name stored": fall back to CONFIG_BT_DEVICE_NAME. */
+static char device_name[OMI_DEVICE_NAME_MAX_LEN + 1] = "";
 
 struct lsm6dsl_time_base {
     uint64_t epoch_s;
@@ -53,6 +58,26 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         return rc;
     }
 
+    if (settings_name_steq(name, "dev_name", &next) && !next) {
+        uint8_t stored[OMI_DEVICE_NAME_MAX_LEN];
+        if (len == 0 || len > sizeof(stored)) {
+            LOG_WRN("Ignoring dev_name with invalid length %u", (unsigned) len);
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, stored, len);
+        if (rc < 0) {
+            return rc;
+        }
+        if (!omi_device_name_is_valid(stored, len)) {
+            LOG_WRN("Ignoring malformed dev_name in flash");
+            return -EINVAL;
+        }
+        memcpy(device_name, stored, len);
+        device_name[len] = '\0';
+        LOG_INF("Loaded dev_name: %s", device_name);
+        return 0;
+    }
+
     if (settings_name_steq(name, "rtc_timestamp", &next) && !next) {
         if (len != sizeof(rtc_timestamp)) {
             return -EINVAL;
@@ -80,7 +105,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
             uint32_t epoch_u32 = 0;
             rc = read_cb(cb_arg, &epoch_u32, sizeof(epoch_u32));
             if (rc >= 0) {
-                rtc_epoch = (uint64_t)epoch_u32;
+                rtc_epoch = (uint64_t) epoch_u32;
                 LOG_INF("Loaded rtc_epoch(u32)=%u -> %llu", epoch_u32, rtc_epoch);
                 return 0;
             }
@@ -88,7 +113,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         }
 
         LOG_WRN("rtc_epoch size mismatch: len=%u expected=%u (or legacy %u)",
-            (unsigned)len, (unsigned)sizeof(rtc_epoch), (unsigned)sizeof(uint32_t));
+                (unsigned) len,
+                (unsigned) sizeof(rtc_epoch),
+                (unsigned) sizeof(uint32_t));
         return -EINVAL;
     }
 
@@ -96,7 +123,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         if (len == sizeof(lsm6dsl_time_base)) {
             rc = read_cb(cb_arg, &lsm6dsl_time_base, sizeof(lsm6dsl_time_base));
             if (rc >= 0) {
-                LOG_INF("Loaded lsm6dsl_time_base: epoch_s=%llu ts=0x%08x", lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
+                LOG_INF("Loaded lsm6dsl_time_base: epoch_s=%llu ts=0x%08x",
+                        lsm6dsl_time_base.epoch_s,
+                        lsm6dsl_time_base.ts);
                 return 0;
             }
             return rc;
@@ -121,7 +150,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         }
 
         LOG_WRN("lsm6dsl_time_base size mismatch: len=%u expected=%u (or legacy %u)",
-            (unsigned)len, (unsigned)sizeof(lsm6dsl_time_base), (unsigned)(sizeof(uint64_t) + sizeof(uint32_t)));
+                (unsigned) len,
+                (unsigned) sizeof(lsm6dsl_time_base),
+                (unsigned) (sizeof(uint64_t) + sizeof(uint32_t)));
         return -EINVAL;
     }
 
@@ -207,8 +238,14 @@ int app_settings_init(void)
         LOG_ERR("Failed to load app settings (err %d)", err);
     }
 
-    LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x",
-		dim_light_ratio, mic_gain, rtc_epoch, lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
+    LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x "
+            "dev_name=%s",
+            dim_light_ratio,
+            mic_gain,
+            rtc_epoch,
+            lsm6dsl_time_base.epoch_s,
+            lsm6dsl_time_base.ts,
+            app_settings_get_device_name());
     return (err == -ENOENT) ? 0 : err;
 }
 
@@ -244,4 +281,40 @@ int app_settings_save_mic_gain(uint8_t new_gain)
 uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
+}
+
+int app_settings_save_device_name(const char *name, size_t len)
+{
+    if (!omi_device_name_is_valid((const uint8_t *) name, len)) {
+        return -EINVAL;
+    }
+
+    int err = settings_save_one("omi/dev_name", name, len);
+    if (err) {
+        LOG_ERR("Failed to save dev_name (err %d)", err);
+        return err;
+    }
+
+    memcpy(device_name, name, len);
+    device_name[len] = '\0';
+    LOG_INF("Saved dev_name: %s", device_name);
+    return 0;
+}
+
+int app_settings_clear_device_name(void)
+{
+    int err = settings_delete("omi/dev_name");
+    if (err && err != -ENOENT) {
+        LOG_ERR("Failed to clear dev_name (err %d)", err);
+        return err;
+    }
+
+    device_name[0] = '\0';
+    LOG_INF("Cleared dev_name, using default %s", CONFIG_BT_DEVICE_NAME);
+    return 0;
+}
+
+const char *app_settings_get_device_name(void)
+{
+    return device_name[0] != '\0' ? device_name : CONFIG_BT_DEVICE_NAME;
 }

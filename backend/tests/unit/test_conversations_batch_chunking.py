@@ -37,16 +37,11 @@ def test_store_model_segments_result_850_chunks():
     mock_db = setup_mock_db(commit_log)
 
     segments = [
-        TranscriptSegment(
-            text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)
-        )
-        for i in range(850)
+        TranscriptSegment(text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)) for i in range(850)
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_segments_result(
-            "user_123", "conv_456", "deepgram", segments
-        )
+        conversations.store_model_segments_result("user_123", "conv_456", "deepgram", segments)
 
     assert commit_log == [400, 400, 50]
     assert len(commit_log) == 3
@@ -58,9 +53,7 @@ def test_store_model_segments_result_empty():
     mock_db = setup_mock_db(commit_log)
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_segments_result(
-            "user_123", "conv_456", "deepgram", []
-        )
+        conversations.store_model_segments_result("user_123", "conv_456", "deepgram", [])
 
     assert commit_log == []
     assert len(commit_log) == 0
@@ -72,32 +65,22 @@ def test_store_model_segments_result_exact_multiples():
     mock_db = setup_mock_db(commit_log)
 
     segments_400 = [
-        TranscriptSegment(
-            text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)
-        )
-        for i in range(400)
+        TranscriptSegment(text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)) for i in range(400)
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_segments_result(
-            "user_123", "conv_456", "deepgram", segments_400
-        )
+        conversations.store_model_segments_result("user_123", "conv_456", "deepgram", segments_400)
 
     assert commit_log == [400]
     assert len(commit_log) == 1
 
     commit_log.clear()
     segments_800 = [
-        TranscriptSegment(
-            text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)
-        )
-        for i in range(800)
+        TranscriptSegment(text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)) for i in range(800)
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_segments_result(
-            "user_123", "conv_456", "deepgram", segments_800
-        )
+        conversations.store_model_segments_result("user_123", "conv_456", "deepgram", segments_800)
 
     assert commit_log == [400, 400]
     assert len(commit_log) == 2
@@ -109,16 +92,11 @@ def test_store_model_segments_result_under_chunk_size():
     mock_db = setup_mock_db(commit_log)
 
     segments_50 = [
-        TranscriptSegment(
-            text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)
-        )
-        for i in range(50)
+        TranscriptSegment(text=f"segment_{i}", is_user=True, start=float(i), end=float(i + 1)) for i in range(50)
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_segments_result(
-            "user_123", "conv_456", "deepgram", segments_50
-        )
+        conversations.store_model_segments_result("user_123", "conv_456", "deepgram", segments_50)
 
     assert commit_log == [50]
     assert len(commit_log) == 1
@@ -138,9 +116,7 @@ def test_store_model_emotion_predictions_result_250_chunks():
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_emotion_predictions_result(
-            "user_123", "conv_456", "hume", predictions
-        )
+        conversations.store_model_emotion_predictions_result("user_123", "conv_456", "hume", predictions)
 
     assert commit_log == [100, 100, 50]
     assert len(commit_log) == 3
@@ -152,9 +128,7 @@ def test_store_model_emotion_predictions_result_empty():
     mock_db = setup_mock_db(commit_log)
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_emotion_predictions_result(
-            "user_123", "conv_456", "hume", []
-        )
+        conversations.store_model_emotion_predictions_result("user_123", "conv_456", "hume", [])
 
     assert commit_log == []
     assert len(commit_log) == 0
@@ -174,9 +148,7 @@ def test_store_model_emotion_predictions_result_exact_multiples():
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_emotion_predictions_result(
-            "user_123", "conv_456", "hume", predictions_100
-        )
+        conversations.store_model_emotion_predictions_result("user_123", "conv_456", "hume", predictions_100)
 
     assert commit_log == [100]
     assert len(commit_log) == 1
@@ -191,9 +163,7 @@ def test_store_model_emotion_predictions_result_exact_multiples():
     ]
 
     with patch.object(conversations, "db", mock_db):
-        conversations.store_model_emotion_predictions_result(
-            "user_123", "conv_456", "hume", predictions_200
-        )
+        conversations.store_model_emotion_predictions_result("user_123", "conv_456", "hume", predictions_200)
 
     assert commit_log == [100, 100]
     assert len(commit_log) == 2

@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{سيتعرّف Omi على {name} في المرة القادمة.} pending{يستغرق هذا بضع ثوانٍ.} disabled{فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على {name}.} other{يحتاج Omi إلى مزيد من الكلام الواضح من {name} وسيواصل المحاولة.}}",
     "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
-    "speakerLabelTalkTime": "{duration} من هذا الصوت"
+    "speakerLabelTalkTime": "{duration} من هذا الصوت",
+    "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
+    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "renameDevice": "إعادة تسمية الجهاز",
+    "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
+    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}",
+    "tapToRename": "انقر لإعادة التسمية",
+    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا"
 }

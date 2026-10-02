@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi gjenkjenner {name} neste gang.} pending{Dette tar noen sekunder.} disabled{Slå på lagring av stemmer i Innstillinger, så Omi kan gjenkjenne {name}.} other{Omi trenger mer tydelig tale fra {name} og fortsetter å prøve.}}",
     "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemmen: {count}",
     "speakerLabelText": "{part, select, likely{Sannsynlig} soundsLike{Høres ut som {name}} notPerson{Ikke {name}} carried{Fortsatt {name}. Videreført fra den siste samtalen din.} change{Endre} alsoTitle{Er dette også {name}?} alsoBody{Omi fant den samme stemmen i tidligere samtaler.} confirmed{Du har bekreftet denne etiketten} other{Gjennomgå}}",
-    "speakerLabelTalkTime": "{duration} av denne stemmen"
+    "speakerLabelTalkTime": "{duration} av denne stemmen",
+    "deviceNameInvalidCharacters": "Navnet inneholder tegn som ikke støttes",
+    "deviceNameTooLong": "Navnet er for langt (opptil {maxBytes} tegn; emoji og aksenter teller ekstra)",
+    "renameDevice": "Gi enheten nytt navn",
+    "deviceRenameFailed": "Kunne ikke lagre navnet på Omi-enheten. Sjekk at den er tilkoblet, og prøv igjen.",
+    "renameDeviceDescription": "Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.",
+    "deviceRenamed": "Enheten har fått navnet {name}",
+    "tapToRename": "Trykk for å gi nytt navn",
+    "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt"
 }

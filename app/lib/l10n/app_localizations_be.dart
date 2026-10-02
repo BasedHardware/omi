@@ -11656,6 +11656,36 @@ class AppLocalizationsBe extends AppLocalizations {
       'Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.';
 
   @override
+  String get renameDevice => 'Перайменаваць прыладу';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не ўдалося захаваць імя на Omi. Пераканайцеся, што прылада падключана, і паспрабуйце яшчэ раз.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Імя захоўваецца на самім Omi, таму яно з\'явіцца на любым тэлефоне, з якім вы яго спалучыце.';
+
+  @override
+  String get tapToRename => 'Націсніце, каб перайменаваць';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Імя прылады не можа быць пустым';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Імя змяшчае непадтрымоўваныя сімвалы';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Імя занадта доўгае (да $maxBytes сімвалаў; эмодзі і дыякрытыка лічацца за больш)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Прылада перайменавана ў $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Не ўдалося стварыць зводку';
 
   @override

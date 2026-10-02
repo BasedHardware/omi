@@ -11339,5 +11339,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
     "speakerLabelEarlierMatches": "Претходни разговори со овој глас: {count}",
     "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} од овој глас"
+    "speakerLabelTalkTime": "{duration} од овој глас",
+    "renameDevice": "Преименувај го уредот",
+    "deviceRenameFailed": "Името не можеше да се зачува на Omi. Проверете дали е поврзан и обидете се повторно.",
+    "renameDeviceDescription": "Името се чува на самиот Omi, па се прикажува на секој телефон со кој ќе го спарите.",
+    "tapToRename": "Допрете за преименување",
+    "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
+    "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
+    "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
+    "deviceRenamed": "Уредот е преименуван во {name}"
 }

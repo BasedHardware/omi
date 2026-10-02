@@ -3782,5 +3782,13 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconocerá a {name} la próxima vez.} pending{Esto tarda unos segundos.} disabled{Activa el guardado de voces en Ajustes para que Omi pueda reconocer a {name}.} other{Omi necesita más habla clara de {name} y seguirá intentándolo.}}",
     "speakerLabelEarlierMatches": "Conversaciones anteriores con esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} de esta voz"
+    "speakerLabelTalkTime": "{duration} de esta voz",
+    "deviceNameInvalidCharacters": "El nombre contiene caracteres no compatibles",
+    "deviceNameTooLong": "El nombre es demasiado largo (hasta {maxBytes} caracteres; los emojis y acentos cuentan más)",
+    "renameDevice": "Renombrar dispositivo",
+    "deviceRenameFailed": "No se pudo guardar el nombre en tu Omi. Comprueba que esté conectado e inténtalo de nuevo.",
+    "renameDeviceDescription": "El nombre se guarda en tu Omi, así que aparece en cualquier teléfono con el que lo emparejes.",
+    "deviceRenamed": "Dispositivo renombrado a {name}",
+    "tapToRename": "Toca para renombrar",
+    "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío"
 }
