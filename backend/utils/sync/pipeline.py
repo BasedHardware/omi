@@ -25,6 +25,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import httpx
 import numpy as np
 from google.api_core import exceptions as google_exceptions
+from database._client import is_document_size_limit_error, is_expired_transaction_error
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -205,6 +206,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_dispatch_staging_failed',
     'sync_decode_failed',
     'sync_invalid_audio',
+    'sync_persistence_failed',
     'sync_staged_audio_expired',
     'sync_transcription_budget_exhausted',
     'sync_vad_failed',
@@ -213,15 +215,21 @@ _SYNC_FAILURE_REASON_CODES = {
 
 
 def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
-    """Identify a bounded persistence data-shape failure, never an unknown error.
+    """Identify a bounded, classified persistence failure, never an unknown error.
 
-    Inspect the full cause chain so an apparent data-shape error wrapping a
-    transient transport or Firestore failure cannot record a strike.
+    A fingerprint is one strike toward the three-strike / 24-hour pause, never
+    a permanent verdict. Inspect the full cause chain so an apparent classified
+    error wrapping a transient transport or Firestore failure cannot record one.
     """
     if phase != 'persistence':
         return None
+    structural = None
+    if isinstance(error, SyncAssignmentConflict) and error.subtype in {'provenance_mismatch', 'redirect_cycle'}:
+        structural = f'persistence:{error.subtype}'
+    if is_document_size_limit_error(error):
+        structural = 'persistence:document_size_limit'
     subtype = bounded_exception_class(error)
-    if subtype not in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS:
+    if structural is None and subtype not in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS:
         return None
     chain: list[BaseException] = []
     current: BaseException | None = error
@@ -247,17 +255,31 @@ def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | 
             ),
         )
         for item in chain
+        if not (item is error and structural == 'persistence:document_size_limit')
     ):
         return None
-    return f'persistence:{subtype}'
+    return structural or f'persistence:{subtype}'
 
 
 def _whole_job_persistence_fingerprint(
     failed_segments: int, total_segments: int, fingerprints: list[str]
 ) -> str | None:
-    if failed_segments > 0 and failed_segments == total_segments == len(fingerprints) and len(set(fingerprints)) == 1:
-        return fingerprints[0]
+    # One classified failure earns the batch a strike toward the bounded pause,
+    # so a healthy or transient sibling cannot keep a mixed batch retrying paid
+    # work forever. Sibling checkpoints stay; the batch need not fail entirely.
+    if failed_segments > 0 and fingerprints:
+        return fingerprints[0] if len(set(fingerprints)) == 1 else 'persistence:mixed'
     return None
+
+
+def _firestore_error_class(error: BaseException) -> str:
+    if is_document_size_limit_error(error):
+        return 'document_size_limit'
+    if is_expired_transaction_error(error):
+        return 'expired_transaction'
+    if isinstance(error, google_exceptions.InvalidArgument):
+        return 'invalid_argument_other'
+    return bounded_exception_class(error) if isinstance(error, google_exceptions.GoogleAPICallError) else 'none'
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -1399,16 +1421,27 @@ def process_segment(
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
-        if phase == 'persistence' and bounded_exception_class(e) == 'OtherException':
+        if phase == 'persistence':
             # Preserve a bounded code-defined subtype for incident diagnosis;
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
-                'event=sync_persistence_exception exception_type=%s job_ref=%s attempt_ref=%s',
+                'event=sync_persistence_exception exception_type=%s firestore_error=%s job_ref=%s attempt_ref=%s',
                 _bounded_exception_type(e),
+                _firestore_error_class(e),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
             )
-        failure = failure_from_exception(e, provider=provider)
+        fingerprint = _persistence_failure_fingerprint(e, phase)
+        if phase == 'persistence':
+            failure = TranscriptionFailure(
+                TranscriptionOutcome.UPSTREAM_ERROR,
+                provider=None,
+                retryable=fingerprint is None,
+            )
+            failure.error_code = 'sync_persistence_failed'
+            model = 'unknown'
+        else:
+            failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=failure.outcome,
@@ -1419,7 +1452,6 @@ def process_segment(
             exception_type=bounded_exception_class(e),
             failure_subtype=_sync_assignment_failure_subtype(e),
         )
-        fingerprint = _persistence_failure_fingerprint(e, phase)
         if deferred_outcome is not None and fingerprint:
             deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
             deferred_outcome['repeat_failure_fingerprint'] = fingerprint
@@ -2587,7 +2619,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     # task boundary; never reduce it to a retryable segment error.
                     _raise_sync_terminal_result(r)
                     if isinstance(r, Exception):
-                        failure = failure_from_exception(r, provider=sync_provider)
+                        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=None)
+                        failure.error_code = 'sync_persistence_failed'
                         with segment_lock:
                             if not first_segment_failure:
                                 first_segment_failure.append(
@@ -2595,7 +2628,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                                 )
                         await _record_sync_segment_failure_async(
                             failure,
-                            model=sync_model,
+                            model='unknown',
                             lane=sync_lane,
                             lock=segment_lock,
                             errors=segment_errors,
@@ -2694,6 +2727,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
             job_phase = 'finalize'
+            failure_phase, failure_class, failure_subtype = (
+                first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
+            )
+            job_provider = 'unknown' if failure_phase == 'persistence' else sync_provider
+            job_model = 'unknown' if failure_phase == 'persistence' else sync_model
             final_result = {
                 'new_memories': result['new_memories'],
                 'updated_memories': result['updated_memories'],
@@ -2702,8 +2740,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'errors': segment_errors[:10] if segment_errors else [],
                 'stage_timings': stage_timings,
                 'outcome': job_outcome.value,
-                'provider': bounded_provider(sync_provider),
-                'model': _bounded_sync_model(sync_model),
+                'provider': bounded_provider(job_provider),
+                'model': _bounded_sync_model(job_model),
                 'lane': sync_lane,
             }
             repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
@@ -2735,9 +2773,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # The fenced terminal write is the only state transition that can
             # authorize a retry-claim release. A stale owner cannot free the
             # current owner's material after its lease is replaced.
-            failure_phase, failure_class, failure_subtype = (
-                first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
-            )
             await run_blocking(
                 db_executor,
                 _finalize_sync_job_for_run,
@@ -2772,8 +2807,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             await _record_sync_job_outcome_async(
                 job_outcome,
-                provider=sync_provider,
-                model=sync_model,
+                provider=job_provider,
+                model=job_model,
                 lane=sync_lane,
                 job_id=job_id,
             )
@@ -2784,8 +2819,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'lane=%s successful_segments=%d total_segments=%d total_ms=%d '
                 'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
                 job_outcome.value,
-                bounded_provider(sync_provider),
-                _bounded_sync_model(sync_model),
+                bounded_provider(job_provider),
+                _bounded_sync_model(job_model),
                 _bounded_sync_lane(sync_lane),
                 successful_segments,
                 total_segments,

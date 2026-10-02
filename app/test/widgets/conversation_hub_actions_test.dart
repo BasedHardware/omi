@@ -220,11 +220,15 @@ void main() {
   });
 
   group('row titles (hub audit #21)', () {
-    testWidgets('a blank title reads Untitled Conversation; a discarded one says so with its length', (tester) async {
+    testWidgets('a blank title uses its recording date; a discarded one says so with its length', (tester) async {
       late BuildContext captured;
       await pump(tester, Builder(builder: (context) => (captured = context, const SizedBox()).$2));
 
-      expect(conversationRowTitle(captured, _conversation('a', title: '  ')), 'Untitled Conversation');
+      final blankTitle = _conversation('a', title: '  ');
+      expect(
+        conversationRowTitle(captured, blankTitle),
+        OmiDateFormat.of(captured).dateTime(blankTitle.createdAt.toLocal()),
+      );
       final start = DateTime(2026, 9, 20, 10);
       final discarded = _conversation(
         'b',

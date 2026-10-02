@@ -102,7 +102,8 @@ class ConversationDetailHeader extends StatelessWidget {
       focusNode: provider.titleFocusNode,
       controller: provider.titleController,
       style: titleStyle,
-      hintText: transcriptFallbackTitle(conversation),
+      hintText: transcriptFallbackTitle(conversation) ??
+          recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
     );
   }
 
