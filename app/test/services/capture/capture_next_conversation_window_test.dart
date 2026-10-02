@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -88,6 +90,24 @@ void main() {
     }
   }
 
+  /// Waits, in real time, until the phone's WALs satisfy [done] in memory and in the saved index, and
+  /// fails with their state if they never do. Stamping and release touch real files outside the
+  /// virtual scheduler, so a quiet moment does not prove they are done; and a release only counts once
+  /// it is saved, because an app kill reloads the index.
+  Future<List<Wal>> walsReach(String expectation, bool Function(List<Wal> wals) done) async {
+    for (var i = 0; i < 200; i++) {
+      final wals = await world.wal.syncs.phone.getAllWals();
+      if (done(wals) && done(await WalFileManager.loadWals())) return wals;
+      await world.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    final wals = await world.wal.syncs.phone.getAllWals();
+    final state = [
+      for (final wal in wals) '${wal.timerStart}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}'
+    ];
+    fail('WALs never reached "$expectation": ${state.join('; ')}');
+  }
+
   /// The server closes [memory]: processing starts, then the conversation arrives with its transcript.
   Future<void> serverCloses(ServerConversation memory) async {
     world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: memory));
@@ -103,17 +123,7 @@ void main() {
     await settleFiles();
   }
 
-  Future<String> describeWals(DateTime origin) async {
-    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
-    final rows = [
-      for (final wal in await world.wal.syncs.phone.getAllWals())
-        '${wal.timerStart - originSeconds}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}',
-    ];
-    return '${rows.join('; ')} | uploads=${world.uploads.attempts.length}';
-  }
-
   test('pendant: every conversation on one socket gets its copy stamped and released', () async {
-    final origin = world.clock.now();
     final link = await connectPendant();
     final sockets = world.socketCreates;
 
@@ -121,9 +131,7 @@ void main() {
       final start = world.clock.now();
       await streamPendant(link, 140);
       await serverCloses(conversation(id, start, 140));
-      printOnFailure('after $id: ${await describeWals(origin)}');
-      expect(await world.wal.syncs.phone.getAllWals(), isEmpty,
-          reason: '$id is confirmed the same way as the first conversation');
+      await walsReach('$id released like the first conversation', (wals) => wals.isEmpty);
     }
 
     await recoveryPass();
@@ -139,11 +147,55 @@ void main() {
 
     await streamPendant(link, 135);
     await serverCloses(conversation('c1', world.clock.now().subtract(const Duration(seconds: 140)), 140));
+    await walsReach('c1 released', (wals) => wals.isEmpty);
     await streamPendant(link, 5);
 
     final second = world.controller.activeCaptureSessionId;
     expect(second, isNotNull, reason: 'the pendant is still streaming into the next conversation');
     expect(second, isNot(first));
+  });
+
+  test('pendant: a conversation closed while muted still has the audio after unmute released', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+
+    await streamPendant(link, 140);
+    await world.controller.pauseDeviceRecording();
+    await world.settle();
+    await serverCloses(conversation('c1', origin, 140));
+    await walsReach('the muted conversation released', (wals) => wals.isEmpty);
+
+    await world.controller.resumeDeviceRecording();
+    await world.settle();
+    final start = world.clock.now();
+    await streamPendant(link, 140);
+    await serverCloses(conversation('c2', start, 140));
+    await walsReach('audio after the unmute released with the next conversation', (wals) => wals.isEmpty);
+
+    await recoveryPass();
+    expect(world.uploads.attempts, isEmpty, reason: 'audio the server already transcribed is not uploaded again');
+  });
+
+  test('phone mic: a conversation closed during a call opens the window the resumed audio needs', () async {
+    final origin = world.clock.now();
+    await world.startLiveCapture();
+    final session = world.hostApi.lastStartSessionId!;
+    world.emitNativeState(PhoneMicCaptureState.running);
+    for (var s = 0; s < 30; s++) {
+      world.injectAudioFrames(100, sessionId: session, firstFrameIndex: s * 100);
+      await world.elapse(const Duration(seconds: 1));
+    }
+    world.emitNativeState(PhoneMicCaptureState.interrupted);
+    await world.settle();
+
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', origin, 30)));
+    await settleFiles();
+    final next = world.controller.activeCaptureSessionId;
+    expect(next, isNotNull, reason: 'the call ends and audio resumes on the same socket');
+
+    world.emitNativeState(PhoneMicCaptureState.running);
+    await world.settle();
+    expect(world.controller.activeCaptureSessionId, next);
   });
 
   test('phone mic: a conversation closed after the user stopped opens no new window', () async {
