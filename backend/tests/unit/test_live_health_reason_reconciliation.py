@@ -12,7 +12,7 @@ from config.live_stt_registry import DEFAULT_TARGETS
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.fallback import ALLOWED_REASONS
 from utils.stt import live_chain, live_cost_health, live_failure, live_session, streaming as st
-from utils.stt.live_metrics import COST_OBSERVATIONS
+from utils.stt.live_metrics import COST_OBSERVATIONS, COST_SETTLEMENTS
 from utils.stt.parakeet_window import WindowedParakeetSocket
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
@@ -82,7 +82,10 @@ CASES = [
 
 @pytest.mark.parametrize('family,typed,raw_reason,reason,outcome', CASES)
 @pytest.mark.parametrize('observer', ['monitor', 'send_false', 'send_exception'])
-def test_serving_death_is_attributed_once_and_reconciles_fallback(family, typed, raw_reason, reason, outcome, observer):
+@pytest.mark.parametrize('settlement', ['recovered', 'degraded', 'exhausted'])
+def test_serving_death_is_attributed_once_and_reconciles_fallback(
+    family, typed, raw_reason, reason, outcome, observer, settlement
+):
     leg = serving_leg(family=family)
     before = observed(leg.routing_target, outcome, reason)
     if observer == 'monitor':
@@ -97,32 +100,32 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(family, typed,
 
         leg.raw.on_send = fail_on_send
         assert not leg.send(PCM)
-    assert observed(leg.routing_target, outcome, reason) == before + 1
+    # Death discovery is not a serving decision and emits nothing.
+    assert observed(leg.routing_target, outcome, reason) == before
     assert leg.normalized_death_reason == reason
-    assert leg.death_reason == leg.typed_death_reason == reason
-    # All observer vantage points see the same cause after the first observation.
-    assert live_failure.live_stt_terminal_reason(leg, 'send_failed') == reason
-    assert live_failure.live_stt_terminal_reason(leg, 'connection_lost') == reason
-    for recovered in (True, False):
-        hop = live_failure.PendingLiveFailover.from_socket(leg, family, 'soniox')
-        assert hop.reason == reason
-        hop.to_mode = 'modulate'  # PTT's connect fallback changes the successor, not the source.
-        fallback_reason = {'provider_budget_exhausted': 'quota', 'provider_auth_rejected': 'auth'}.get(reason, reason)
-        fallback = OMI_FALLBACK_TOTAL.labels(
-            component='stt_live_session',
-            from_mode=family,
-            to_mode='modulate',
-            reason=fallback_reason,
-            outcome='recovered' if recovered else 'exhausted',
-        )
-        baseline = fallback._value.get()
-        if recovered:
-            hop.note_transcript([{'text': 'synthetic'}])
-        else:
-            # A successor's different cause must not overwrite source attribution.
-            hop.note_failure('provider_auth_rejected')
-        hop.note_failure('connection_lost')
-        assert fallback._value.get() == baseline + 1
+    hop = live_failure.PendingLiveFailover.from_socket(leg, family, 'soniox')
+    assert hop.reason == reason
+    hop.to_mode = 'modulate'
+    fallback_reason = {'provider_budget_exhausted': 'quota', 'provider_auth_rejected': 'auth'}.get(reason, reason)
+    fallback = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session',
+        from_mode=family,
+        to_mode='modulate',
+        reason=fallback_reason,
+        outcome=settlement,
+    )
+    decision = COST_SETTLEMENTS.labels(target=leg.routing_target, outcome=outcome, reason=reason, path='failover')
+    baseline, decision_before = fallback._value.get(), decision._value.get()
+    if settlement == 'recovered':
+        hop.note_transcript([{'text': 'synthetic'}])
+    else:
+        hop.note_failure('provider_auth_rejected', continuing=settlement == 'degraded')
+    hop.note_failure('connection_lost')
+    # Even a second decision object cannot settle the same source twice.
+    live_failure.PendingLiveFailover.from_socket(leg, family, 'modulate').note_failure(None)
+    assert fallback._value.get() == baseline + 1
+    assert decision._value.get() == decision_before + 1
+    assert observed(leg.routing_target, outcome, reason) == before + 1
     leg.finish()
     leg.finish()
     assert leg.is_connection_dead
@@ -141,6 +144,7 @@ def test_window_bounded_raw_reason_wins_even_without_typed_proxy(cause):
     before = observed(leg.routing_target, 'censored', cause)
     leg.raw.on_send = lambda: leg.raw.die(raw=cause)
     assert not leg.send(PCM)
+    live_failure.settle_terminal_socket(leg, leg.service.value, 'connection_lost')
     leg.finish()
     assert observed(leg.routing_target, 'censored', cause) == before + 1
     assert not live_chain.health._cost_local
@@ -158,6 +162,7 @@ def test_false_send_while_raw_socket_is_alive_is_send_failed():
     raw.fail_send = True
     before = observed(leg.routing_target, 'provider_failure', 'send_failed')
     assert not leg.send(PCM)
+    live_failure.settle_terminal_socket(leg, leg.service.value, 'connection_lost')
     leg.finish()
     assert leg.normalized_death_reason == 'send_failed'
     assert observed(leg.routing_target, 'provider_failure', 'send_failed') == before + 1
@@ -200,12 +205,13 @@ def test_normal_client_close_records_no_provider_failure(text):
     assert all(state.failures == 0 for state in live_chain.health._cost_local.values())
 
 
-def test_early_teardown_flag_cannot_censor_a_later_attributable_death():
+def test_discovery_cannot_consume_later_serving_decision():
     leg = serving_leg()
-    leg._cost_censored_no_text = True
     leg.raw.die('modulate_serve_error', 'vendor diagnostic')
     baseline = observed(leg.routing_target, 'provider_failure', 'modulate_serve_error')
     assert leg.is_connection_dead
+    assert observed(leg.routing_target, 'provider_failure', 'modulate_serve_error') == baseline
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     assert observed(leg.routing_target, 'provider_failure', 'modulate_serve_error') == baseline + 1
 
 
@@ -236,6 +242,7 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
     raw._mark_dead('vendor diagnostic', typed_reason='modulate_serve_error')
     assert leg.is_connection_dead
     assert leg.normalized_death_reason == 'modulate_serve_error'
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     assert observed(leg.routing_target, 'provider_failure', 'modulate_serve_error') == baseline + 1
 
 
@@ -286,6 +293,7 @@ async def test_real_window_publishes_cause_before_latch_and_next_send_is_censore
     baseline = observed(leg.routing_target, 'censored', cause)
     raw.fail(cause)
     assert not leg.send(PCM)
+    live_failure.settle_terminal_socket(leg, leg.service.value, 'connection_lost')
     leg.finish()
     assert leg.normalized_death_reason == cause
     assert observed(leg.routing_target, 'censored', cause) == baseline + 1
@@ -308,6 +316,7 @@ async def test_real_window_failure_survives_raising_send_with_one_censored_obser
     baseline = observed(leg.routing_target, 'censored', 'first_text_deadline')
     raw.raise_after_fail = True
     assert not leg.send(PCM)
+    live_failure.settle_terminal_socket(leg, leg.service.value, 'connection_lost')
     leg.finish()
     assert leg.normalized_death_reason == 'first_text_deadline'
     assert observed(leg.routing_target, 'censored', 'first_text_deadline') == baseline + 1
@@ -317,7 +326,7 @@ async def test_real_window_failure_survives_raising_send_with_one_censored_obser
 def test_early_client_disconnect_is_not_a_provider_observation():
     leg = serving_leg()
     leg.finish()
-    assert leg._cost_censored_no_text
+    assert leg.leg_outcome.settled
     assert not live_chain.health._cost_local
 
 
@@ -330,6 +339,7 @@ def test_local_vad_failure_is_censored_rather_than_transport_failure(monkeypatch
     monkeypatch.setattr(leg.gate, 'process_audio', broken_gate)
     baseline = observed(leg.routing_target, 'censored', 'vad_failed')
     assert not leg.send(PCM)
+    live_failure.settle_terminal_socket(leg, leg.service.value, 'connection_lost')
     leg.finish()
     assert leg.normalized_death_reason == 'vad_failed'
     assert observed(leg.routing_target, 'censored', 'vad_failed') == baseline + 1

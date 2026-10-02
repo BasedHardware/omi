@@ -49,6 +49,14 @@ WINDOW_CANARY_OUTCOME = Counter(
     'Listen transcript outcome by stable window allocation arm',
     ['arm', 'outcome'],
 )
+COST_CANARY_OUTCOME = Counter(
+    'omi_stt_cost_routing_canary_outcome_total',
+    'Managed listen transcript outcome by router allocation at initialization',
+    ['arm', 'outcome'],
+)
+for _arm in ('on', 'control'):
+    for _outcome in ('transcribed', 'no_transcript', 'too_short'):
+        COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -128,6 +136,19 @@ COST_ALL_DEGRADED = Counter(
 )
 COST_OBSERVATIONS = Counter(
     'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome', 'reason']
+)
+COST_SETTLEMENTS = Counter(
+    'omi_stt_cost_routing_settlements_total',
+    'Serving decisions requiring matching health observations',
+    ['target', 'outcome', 'reason', 'path'],
+)
+COST_EVIDENCE_ERRORS = Counter(
+    'omi_stt_cost_routing_evidence_errors_total', 'Serving settlements whose health emission failed'
+)
+COST_VOTES = Counter(
+    'omi_stt_cost_routing_votes_total',
+    'Settled evidence applied or excluded by the shared gate',
+    ['target', 'scope', 'result'],
 )
 COST_SHADOW = Counter(
     'omi_stt_cost_routing_shadow_total',

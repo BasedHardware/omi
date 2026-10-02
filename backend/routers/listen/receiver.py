@@ -59,6 +59,7 @@ from utils.stt.live_failure import (
     live_stt_upstream_failure,
     note_typed_provider_death,
     send_live_stt_audio,
+    settle_terminal_socket,
     terminate_live_stt_session,
     terminate_live_stt_backoff,
 )
@@ -1017,6 +1018,7 @@ class ListenReceiver(ReplayFilterMixin):
                 release_live_stt_socket(socket)
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
+        self._settle_pending_live_failover_failure()
 
     def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
         """Keep send accounting when VAD is disabled or fails to initialize."""
@@ -1215,6 +1217,9 @@ class ListenReceiver(ReplayFilterMixin):
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except asyncio.CancelledError:
+            hop.note_failure(None)
+            raise
         except ProviderChainUnavailable as error:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
@@ -1288,6 +1293,8 @@ class ListenReceiver(ReplayFilterMixin):
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
                     continue
+                if self.host.state.active and not self.host.state.stt_terminal_failure:
+                    settle_terminal_socket(socket, self._serving_provider(), 'connection_lost')
                 await terminate_live_stt_session(
                     self.host.request.websocket,
                     self.host.state,
@@ -1724,6 +1731,12 @@ class ListenReceiver(ReplayFilterMixin):
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            # Teardown owns subsequent tail-send/transport symptoms. Mark the
+            # outcome before any await; drain may still deliver valid text.
+            for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
+                outcome = getattr(socket, 'leg_outcome', None)
+                if outcome is not None:
+                    outcome.owner_closing = True
             if decoded_audio_bytes:
                 self._emit_realtime_demand(request, decoded_audio_bytes)
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
@@ -1820,6 +1833,7 @@ class ListenReceiver(ReplayFilterMixin):
                     logger.warning('Failed to close a live STT socket during receiver shutdown')
                 finally:
                     release_live_stt_socket(socket)
+        self._settle_pending_live_failover_failure()
 
     def clear(self) -> None:
         self.image_chunks.clear()

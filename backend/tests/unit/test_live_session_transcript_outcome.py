@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from routers.listen.runtime import ListenSessionRuntime
-from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
 
 
 def _runtime(
@@ -263,3 +263,22 @@ def test_outcome_children_are_queryable_from_process_start_without_increments():
     for outcome in ('transcribed', 'no_transcript', 'too_short'):
         sample = REGISTRY.get_sample_value('omi_live_session_transcript_outcome_total', {'outcome': outcome})
         assert sample is not None, f'outcome="{outcome}" child must be pre-created at import'
+
+
+def test_router_canary_counts_admission_arm_once_even_after_config_change(monkeypatch):
+    runtime = _runtime(terminal=True)
+    runtime._cost_routing_arm = 'on'
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    counter = COST_CANARY_OUTCOME.labels(arm='on', outcome='no_transcript')
+    before = counter._value.get()
+    assert _outcome(runtime) == 'no_transcript'
+    assert counter._value.get() == before + 1
+
+
+def test_ineligible_session_has_no_router_canary_vote():
+    runtime = _runtime(delivered=True)
+    runtime._cost_routing_arm = None
+    counters = [COST_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed') for arm in ('on', 'control')]
+    before = [counter._value.get() for counter in counters]
+    assert _outcome(runtime) == 'transcribed'
+    assert [counter._value.get() for counter in counters] == before

@@ -2170,7 +2170,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            value: parakeet-window,soniox,modulate-velma-2,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:

@@ -12,7 +12,7 @@ from config.stt_provider_policy import provider_for_service
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
-from utils.stt.live_failure import PendingLiveFailover
+from utils.stt.live_failure import PendingLiveFailover, live_stt_terminal_reason, settle_terminal_socket
 from utils.stt.socket import release_live_stt_socket
 
 RING_SECONDS = 15
@@ -302,6 +302,7 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
     if not ring.admit('soniox', reason, samples=replay_ring.buffered_bytes // 2):
         return False
     receiver._settle_pending_live_failover_failure(continuing=True)
+    hop = PendingLiveFailover.from_socket(socket, 'soniox', 'soniox')
     replacement = None
     retire_window_replay_socket(receiver, socket)
     try:
@@ -314,6 +315,7 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
         release_live_stt_socket(socket)
     await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
     if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
+        hop.note_failure(None)
         RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
         return False
     replay = replay_ring.snapshot()
@@ -332,6 +334,8 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
         if raw is None or not await fallback_socket_is_serving(raw):
             if raw is not None:
                 retire_window_replay_socket(receiver, raw)
+                if receiver.host.state.active and not receiver.host.state.stt_terminal_failure:
+                    settle_terminal_socket(raw, 'soniox', 'connection_lost')
                 close_rejected_socket(raw)
             raise RuntimeError('Soniox reconnect refused')
         replacement = receiver._wrap_legacy_stt_socket(raw, epoch)
@@ -344,19 +348,26 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             ring.record_replay('soniox', len(data) // 2)
         if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
             replacement.finish()
+            hop.note_failure(None)
             RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
             return False
+    except asyncio.CancelledError:
+        hop.note_failure(None)
+        raise
     except Exception:
         if replacement is not None:
             retire_window_replay_socket(receiver, replacement)
+            if receiver.host.state.active and not receiver.host.state.stt_terminal_failure:
+                settle_terminal_socket(replacement, 'soniox', 'send_failed')
             replacement.finish()
+        hop.note_failure(None, continuing=True)
         RECONNECT.labels(provider='soniox', reason=reason, outcome='failed').inc()
         return False
     receiver._window_replay_cutoff_sample = cutoff
     receiver._replay_cutoff_sample = cutoff
     receiver.stt_socket = replacement
     receiver._record_selected_epoch(epoch, replacement)
-    receiver._pending_live_failover = PendingLiveFailover(from_mode='soniox', to_mode='soniox', reason=reason)
+    receiver._pending_live_failover = hop
     RECONNECT.labels(provider='soniox', reason=reason, outcome='connected').inc()
     return True
 
@@ -370,9 +381,15 @@ async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any
     receiver._pending_live_failover = hop
     # Keep the actual selected provider on host: the connector may already
     # have walked past the initially requested candidate.
+    outcome = getattr(raw, 'leg_outcome', None)
+    if outcome is not None:
+        outcome.claim(live_stt_terminal_reason(raw, 'connection_lost'))
     close_rejected_socket(raw)
     try:
-        return await receiver._rebuild_stt_socket_locked()
+        rebuilt = await receiver._rebuild_stt_socket_locked()
+        if not rebuilt:
+            settle_terminal_socket(raw, receiver.host.stt_service.value, 'connection_lost')
+        return rebuilt
     finally:
         if previous is not None:
             try:

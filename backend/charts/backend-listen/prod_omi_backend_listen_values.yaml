@@ -455,7 +455,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,soniox,modulate-velma-2,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

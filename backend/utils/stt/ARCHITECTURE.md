@@ -249,222 +249,147 @@ cannot override that safety control. Other target ramps use the same hash shape
 with their target ID. Recovery uses a separate, nested sticky cohort, so a 5%
 re-entry means 5% of sessions eligible under the configured ramp.
 
-### Health evidence and hysteresis
+### Serving-owned health evidence (cost-v6)
 
-`live_gate.py` uses three Page CUSUM log-likelihood scores. At the default
-`STT_ROUTING_DISRUPTION_GATE=0.08`, alternatives are 0.12, 0.16 and 0.60;
-for another gate g they are g + (1-g) times 1/23, 2/23 and 13/23.
-Each score updates as `max(0, score + log P_q(outcome)/P_g(outcome))`.
-Bench thresholds are 12, 11 and 10 respectively, with at least eight classified target/session outcomes. The rapid 60% alternative additionally needs eight failures in the
-last 32 sessions, so five failures after a long healthy history cannot alone
-trigger it. Scores continue across reporting-counter boundaries; there is no
-1,024-session test reset or repeated injection of fresh likelihood mass.
-This is an empirically calibrated change detector, **not an anytime-valid
-e-process, posterior probability or formal lifetime alpha guarantee**.
+`live_outcome.LiveLegOutcome.settle` is the single emission seam. Each managed
+leg owns one outcome. Observing `is_connection_dead` is pure; send only latches
+a bounded cause. The serving owner claims that outcome when it decides to
+replace the leg, rejects its connection, or exhausts recovery. `PendingLiveFailover`
+carries the claimed source until settlement and invokes the seam, which emits
+both `omi_fallback_total` and the matching cost observation synchronously.
+Connect rejections use the same object, including a socket rejected just after
+upgrade. There is no supplementary connect writer or per-writer receipt.
 
-A healthy target's fleet-wide bench requires at least four distinct failure
-UID fingerprints in the last 32 sessions, with no one UID supplying more than
-half of those failures. A smaller language cohort can bench only its language
-with at least two affected UIDs, sixteen recent failures, and a score >=14.
-One caller cannot bench a healthy target or language. Recovery promotion uses
-session count plus passing user-vote rate, without a distinct-user floor. A failed
-30/60-session recovery boundary must satisfy the same four-failing-user,
-no-majority breadth rule before re-benching the fleet and spending a strike.
-Narrow failures hold the current trial share without a fleet strike; the
-healthy-stage stronger two-user test may bench only their language. Fingerprints are bounded salted
-SHA-256 prefixes, never raw UIDs, labels, logs or content.
+A hop is recovered only on successor text. Failure/cancellation/teardown settles
+it as degraded or exhausted. A 30-second telemetry timer settles an unresolved
+managed hop as degraded: a silent successor cannot hide the source failure.
+The timer does not close sockets, alter audio, retry, or declare recovery.
+Terminal serving deaths with no remaining successor now emit one exhausted
+`stt_live_session` fallback and one observation. A second pending object,
+monitor/send race, repeated close, or late transcript cannot settle the same
+source twice. Actual text counts without a VAD minimum, as do accepted provider
+deaths before the first audio byte.
 
-Calibration uses 200 independent seeded runs of 20,000 sessions per baseline
-rate, resetting after false benches to count all episodes:
+Owner teardown is marked before receiver tail sends and before drain. It cannot
+claim a provider failure from a transport symptom. A source already claimed by
+a serving decision keeps its cause through cleanup. Ordinary finish/drain emits
+success if text was observed, otherwise censored no-text; neither reads socket
+liveness to determine blame. PTT/custom/BYOK/multichannel remain outside the
+managed cost-evidence population. Their legacy fallback telemetry is not a
+cost-router observation and must not be joined as though it were one.
 
-| True provider-error rate | False benches / 4,000,000 sessions | Runs with a bench / 200 | Episodes per 252,000 sessions (14 days at 18k/day) |
+| Terminal decision | Fault domain | Existing fallback reason | Router observation |
 | --- | --- | --- | --- |
-| 3% | 0 | 0 | 0 observed |
-| 5% | 1 | 1 | 0.063 |
-| 7.5% | 24 | 22 | 1.512 |
+| Completed text / owner end | none/client | none | success/text |
+| No text / client disconnect / our close | audio/client/us | none (normal_close if tail recovery was already attempted) | censored/no_text or normal_close |
+| Accepted provider death, with or without prior speech | provider/path | modulate_serve_error, connection_lost, send_failed, provider_5xx, provider_429, provider_rate_limited, timeout | provider_failure, same cause |
+| Connect transport/server failure | provider/path | provider_5xx or timeout | provider_failure, same cause, path=connect |
+| Quota / authentication | account/us | quota / auth | censored/provider_budget_exhausted or provider_auth_rejected (connect auth remains auth) |
+| Window first-text deadline / empty streak | unresolved audio/recognizer | first_text_deadline / empty_streak | censored, same cause |
+| Admission, PCM/replay/send-queue capacity | us/capacity | capacity_full | censored/capacity_full |
+| VAD / invalid request or audio / loop misuse | us/audio | vad_failed / other | censored, same cause |
+| Soniox 400 no-audio or 408 request timeout | client/input timing | soniox_idle_timeout | censored/soniox_idle_timeout |
+| Soniox duration rotation | protocol lifecycle | soniox_rotation | censored/soniox_rotation |
 
-The 3% experiment covers about 222 traffic-days. Zero observed events does not
-prove impossibility; the one-sided 95% upper bound on a 20k-session run having
-a false bench is about 1.49%. Near-gate 7.5% traffic has appreciably more false
-benches than the 3% baseline; the detector trades this for useful brownout
-sensitivity. Independent synthetic outcomes are not production qualification.
+The closed reason vocabulary stays in `live_reason.py`. Socket-owned typed
+causes precede bounded raw causes and observer symptoms. Unknown transport death
+is `connection_lost`; known local queue/loop failures are explicitly censored.
+Modulate's recognized invalid-input frames use `other`, while its typed serve
+errors remain provider failures. Soniox publishes reason metadata before its
+death latch, so an observer cannot consume an uninitialized cause. No transcript,
+audio, UID, endpoint, or free-text diagnostic enters labels or transition logs.
 
-Across 200 seeded outage runs after 500 healthy sessions:
+### Fair evidence and gate calibration
 
-| True provider-error rate | Median sessions to bench | 95th percentile sessions | Median / 95th percentile failed sessions |
+The 8% Page CUSUM is retained: alternatives 12%, 16%, 60%; thresholds 12, 11,
+10; minimum eight admitted outcomes, with eight failures in the recent 32 for
+the rapid alternative. This is an empirical change detector, not a posterior or
+an anytime-valid probability guarantee. Correcting attribution removes the
+5–7% no-word noise floor; increasing the threshold would hide real outages.
+
+Healthy-stage evidence admits at most **three classified outcomes per UID
+fingerprint per target/scope per five-minute Redis-time window**, symmetrically
+for success and failure. At most 512 salted SHA-256 prefixes and small counters
+are stored per state. A full window rejects unseen users until the next window;
+it never evicts identities and thereby restores their budget. At the measured
+~62 sessions/5 minutes this is ample headroom; `votes_total{result="window_full"}`
+must remain zero. CAS applies the cap across pods. Raw observations still count
+every settled leg for reconciliation; the separate votes metric explains which
+observations reached the gate. No raw UID is stored in Redis.
+
+A global bench still requires four failing fingerprints, no one contributing
+more than half the recent failures. Sparse language benches require two affected
+users, sixteen admitted recent failures and score >=14; the cap means two or
+three repeating callers need several windows, rather than one reconnect burst.
+A language restriction is independent of the global stage, which remains the
+only state exported by the stage gauge. Promotion uses 30/60 classified trial
+outcomes, one majority-outcome vote per user, and at most three sequential votes
+per user per trial window. Broad failures re-bench; narrow failures hold. Held
+windows reset at 120/240. Re-entry remains 5 → 25 → 100 with shared leases,
+generation fences and a 300-second initial cooldown doubling to four hours.
+Expensive benches receive no primary probes when a cheaper target can serve.
+
+Reproduce the v6 calibration from `backend/`:
+
+```sh
+.venv/bin/python scripts/stt/calibrate_live_gate.py
+```
+
+Twenty seeded runs of 20,000 sessions use 1,000 returning synthetic users at
+17,900 sessions/day. Every row below observed **0 false benches / 400,000 raw
+sessions**: 0% provider error with 5%, 7%, or 10% censored no-text; and 0.3%,
+1%, or 3% provider error with 10% censored no-text. This is empirical evidence,
+not a promise of zero false alarms for all future correlated workloads. With
+zero actual errors, censorship makes an audio-only false bench impossible.
+
+Two hundred seeded detection runs after 500 passing outcomes give:
+
+| True provider failure rate | Median / p95 sessions to bench | Median / p95 failures | Maximum sessions observed |
 | --- | --- | --- | --- |
-| 60% | 13 | 21 | 8 / 10 |
-| 80% | 10 | 13 | 8 / 8 |
-| 100% | 8 | 8 | 8 / 8 |
-| 16% (2x gate) | 264.5 | 557 | 44 / 78 |
-| 12% | 972.5 | 2362 | 119 / 249 |
+| 40% | 20 / 48 | 9 / 15 | 87 |
+| 60% | 13 / 21 | 8 / 9 | 31 |
+| 100% | 8 / 8 | 8 / 8 | 8 |
 
-Periodic 60% outage tests cover every phase and 0/100/1020/20,000 healthy
-warmups and bench within ten failed sessions. A stochastic 60% outage does
-not guarantee that bound for every possible random sequence; its measured
-95th percentile is ten failures. At 10%, there is **no prompt-bench SLA**:
-only 101/200 seeded runs bench within 5,000 sessions; censored median 4975.5.
-Changing the configured gate clears accumulated scores without clearing an
-existing bench. A hard outage's wall time depends on completed speech-session
-volume: eight failures at 62 sessions/5 minutes take about 39 seconds at full
-traffic or 155 seconds at 25%, plus outcome and cache delays.
+Injecting 46 additional passing reconnects from one UID does not change these
+non-churn-session distributions. At 62 representative sessions/5 minutes,
+48 sessions is 3.9 minutes, plus at most 30 seconds of hop settlement and the
+snapshot delay (normally 5 seconds; stale at 15). Eight hard failures are about
+39 seconds plus those delays. Low-volume fallback targets and exhausted user
+budgets take longer; at saturation a user may wait the remainder of five
+minutes for a new vote. There is no raw-session/wall-time guarantee without
+traffic breadth. Read admitted shared votes when diagnosing detection speed.
 
-The v5 gate measures provider-path availability, separate from transcript/audio
-quality. `live_signal.provider_observation` classifies one outcome per leg:
+### Fleet state and operational limits
 
-- Completed text after at least one second of VAD speech is a non-failure.
-  Actual text received after the diagnostic deadline also qualifies.
-- Serving death/failover counts only for `modulate_serve_error`,
-  `connection_lost`, `send_failed`, `provider_5xx`, `provider_rate_limited`,
-  `provider_429`, or `timeout`. Provider transport availability includes the
-  backend-to-provider path; this is not proof of a vendor incident.
-- Connect errors with those reasons also count once per target attempt, even
-  before speech. Account/config/capacity failures retain their separate gates.
-- Plain `no_text`, `first_text_deadline`, `empty_streak`, VAD/client failure,
-  idle/rotation and account/capacity outcomes are **censored**: neither numerator
-  nor denominator, and they cannot advance a trial. Existing leg no-text and
-  conversation transcript counters remain diagnostic and unchanged in shadow.
+`live_cost_health.py` stores target/global and bounded-language state under
+`omi:live-stt:cost-v6`. v5 mixed discovery/teardown evidence is not reinterpreted.
+Redis TIME owns windows and cooldowns; CAS preserves counts and stages across
+pods. Connect reads a cached snapshot, with Redis refresh/result work in bounded
+background tasks under the existing 75 ms deadline. Redis failure retains local
+evidence and known benches; no pod privately restarts a trial. Local benches
+reconcile before staged recovery, and generation fences reject stale completions.
+Connect rejection captures the generation at rejection, not before its handshake.
+A raw settlement counter proves synchronous emission, not Redis durability;
+write drops and admitted-vote counters are separate rollout gates.
 
-`live_reason.normalize_live_stt_reason` owns the closed 27-token vocabulary
-used by both cost observations and source-leg fallback metrics. The serving leg
-latches the first bounded cause: socket-owned typed reason, bounded raw socket
-reason, then the send/monitor symptom. Unknown/free-text transport death is
-`connection_lost` (or `send_failed` for a direct send failure), deliberately
-provider evidence; explicit window/session/account causes are censored.
-Provider and window sockets publish cause metadata before their death latch.
-A failed hop keeps its source reason even when its successor rejects the
-connection; that rejection determines settlement outcome, not source attribution.
-Observation labels are target/outcome/reason, never raw diagnostic messages.
+Health stages may demote but cannot empty an otherwise eligible chain. Explicit
+ramp/capability/account exclusions stay hard in the active chain: a withdrawn
+registered default endpoint cannot return disguised as an unregistered static
+tail. Unregistered configured families retain their legacy tail. An empty proposal
+or router exception still fails open to configured order. Local account/serve
+circuits and window admission/pressure gates remain fast protection. Target
+identity is preserved across same-family endpoints; account failures quarantine
+the credential family. Capacity refusals keep their five-second local cooldown
+and one-attempt all-capacity escape.
 
-No-text deadlines no longer seal health evidence early. Completed text waits
-until close; later attributable death therefore wins, once. Intentional client
-teardown is censored. A deadline-only window failover is not a hard failure,
-regardless of its successor: aggregate data has no successor/session join,
-and adding a cross-leg adjudication is outside this calibration. This loses
-automatic gate detection of a recognizer that connects but silently returns
-no words; watch deadline and conversation transcript SLIs for that incident.
-The prior 5–7% VAD/no-word floor must not become provider-error evidence.
-
-At independent 5%, 7% and 10% no-text floors with zero provider errors, each of
-20 seeded 20,000-session replays observed **0 false benches / 400,000 sessions**.
-For this clean v5 state and correctly classified zero-error condition, the
-false-bench probability is exactly zero: censored outcomes do nothing and
-successful outcomes cannot increase a CUSUM score. This is a conditional
-classification guarantee, not a lifetime guarantee when real errors exist.
-The older calibration table above now concerns genuine provider-error inputs.
-
-With a 10% censored noise floor, after 500 healthy outcomes, 200 seeded runs
-measure these total speech-session and failed-session detection counts:
-
-| Attributable error fraction of speech sessions | Median / p95 total sessions | Median / p95 failures |
-| --- | --- | --- |
-| 100% hard outage | 8 / 8 | 8 / 8 |
-| 60% hard outage | 13 / 19 | 8 / 9 |
-| 40% Modulate-like brownout | 22 / 47 | 9 / 15 |
-
-The 100% case has no residual noise slots. Stochastic p95 is not a worst-case
-bound. Tests bound Modulate-like median at 30 and p95 at 50 sessions in this
-seeded model. At 62 speech sessions per five minutes, 47 sessions is about
-3.8 minutes at full traffic, before completion/cache lag. Low-volume targets
-or 5% trials require longer wall time. The gate remains 8%: after censoring,
-measured healthy provider errors are about 0.3–1%, not the 5–7% audio floor.
-A relative cross-provider baseline would add language/traffic-mix and fallback
-selection bias without resolving this attribution error.
-
-Target-global and bounded-language tests remain independent. A language bench
-can restrict that language; sparse healthy languages inherit global health.
-The language view is used after 30 classified samples or a decisive test.
-
-A bench waits 300 seconds initially. Failed trials double the wait up to
-four hours. A fleet lease starts a shared 5% trial when that target would be
-preferred over surviving targets. Trial promotion counts only classified outcomes and gives each observed user
-one vote: a user is failing when more than half of their speech sessions in
-the current window fail. Promote after at least 30 sessions at 5%, or 60 at
-25%, when the failing-user fraction is <= the configured gate (default 8%).
-A healthy single-user trial still promotes. Per-user sequential evidence is
-limited to its first three outcomes per window; repeated failures cannot
-accumulate a language alarm while contributing only one promotion vote.
-The user's majority vote nevertheless updates from **all** their window
-outcomes, so late widespread failures can reject at the 30/60 boundary.
-Trial rejection needs an above-gate user rate and four failing users for a
-fleet strike. The healthy-stage session CUSUM and its sparse-language rule
-are unchanged.
-
-At 120/240 sessions, a held trial starts a new user-vote/evidence window,
-retaining stage, strikes and generation. State stores at most 240 hashed UID
-fingerprints, bounded outcome counts, and no content. Here is a deterministic
-coverage bound: with no more than two always-failing users and at least 23
-always-passing users observed within each stage's 120/240-session window
-(>=92% healthy observed users), the global and language trials reach 100%
-within **360 classified trial outcomes**, regardless of how many of
-those sessions the two callers supply. Censored noise does not advance this bound. If each 30/60-outcome prefix already
-has that coverage, the bound is 90 sessions. Coverage concerns each sticky
-stage cohort; a target-wide healthy majority that never appears in the trial
-cannot establish recovery. There is no unconditional raw-session or wall-time
-bound under arbitrary user arrivals, nor a statistical guarantee from 23 votes.
-Broad outages still bench early from sequential evidence. Acceptance votes
-do not prove an 8% confidence bound. Strike history clears after 1,024 healthy
-observations.
-Expensive benches receive no primary probes while cheaper targets can serve;
-they remain available only at the failover tail. No pod privately restarts a
-trial during Redis faults. Trial evidence must belong to the sticky re-entry
-cohort intersected with the target ramp. Stage generations reject stale
-completions, including samples admitted from a stale snapshot.
-
-The daily Modulate trial replay models 17,900 eligible speech sessions/day,
-61% disruption, sticky UID admission, 30-second outcome delay, 15-second cache
-lag, and initial 5-minute cooldown doubling to the 4-hour cap. Across 100 seeds,
-mean trial traffic is 122.08 sessions/day; mean disruptions **75.46/day**, median
-75, p95 80, maximum 83. Every run must remain below 100 trial disruptions;
-allowing ten initial outage failures still stays below 100 (maximum 93).
-A constant 5% trial without benches/backoff would instead expect
-`17900 * 0.05 * 0.61 = 545.95` disruptions/day. This is a conditional replay
-budget, not an absolute production traffic cap: burst arrivals, correlated
-heavy UIDs, longer outcome delays and dropped writes can change exposure.
-Local breakers are omitted from the replay, so their additional protection
-is not credited. Other providers' failures are outside this trial budget.
-
-`live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v5` Redis namespace. Compare-and-set updates preserve shared
-counts and transitions across pods; leases serialize trial starts. Fleet
-bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
-Redis-down local deadlines use the last known server offset and translate once
-on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
-skews and a ten-minute Redis outage with sixty successful connection decisions.
-The v5 namespace prevents v3 audio/no-text and misclassified v4 evidence from
-being reinterpreted as provider errors. It starts fresh shadow history; warm it before raising on-percent.
-A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
-faults use local evidence and retain known benches, then unknown health and
-configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
-through CAS before staged recovery; snapshot and generation capture use the
-same freshness/backoff predicate. Fresh shared health remains authoritative
-over an isolated pod's local rate; verified writes refresh the local fallback
-view so a later Redis blip cannot revive a stale pod-only bench.
-Account/billing refusals remain family-wide immediate protection. Connection
-and serve breakers remain fast local protection; a fleet bench demotes its
-target to the last-resort tail, with no forced account bypass.
-Targets with an active capacity signal or local capacity cooldown are excluded
-from terminal legs and their configured-default aliases. A `capacity_full`
-refusal starts a five-second, monotonic process-local target cooldown, including
-on empty-proposal configured fallback. It releases any circuit probe without
-recording a circuit failure or fleet health disruption. Static off/shadow
-connections retain existing behavior; active capacity cooldowns cannot be
-bypassed by the static last-resort force path. If **every** remaining candidate
-is capacity-signalled or cooled, permit one least-recently-refused candidate
-through its normal circuit/admission gate. This escape makes at most one dial
-per session and never bypasses account protection. A still-full sole candidate
-can therefore receive one attempt per session; a five-second process-wide
-attempt bound would strand sessions when it recovers earlier. With an
-alternative available, overflow cooldown protection remains unchanged. Retain
-refusal timestamps for ordering, bounded to 64 IDs; evict the oldest on churn.
-Legacy provider-score state is retained for static protection/telemetry but
-never ranks the active cost router. Registry fields and endpoint URL structure
-are validated before selection. Actual same-family initial overflow emits
-shared fallback telemetry; normal cost-selected primaries do not. Reconnects
-retain target identity. Initial connects and mid-session rebuilds use separate
-failed-target and failed-family sets. Ordinary serving deaths exclude only the
-selected target; typed quota/auth deaths exclude the family and its siblings.
-The receiver builds on #20157's replay/retry behavior without discarding capture.
+Accepted non-window streams that keep returning no words are consciously not
+benched by this availability detector. `STT_NO_TEXT_SECONDS` remains diagnostic;
+no speech/no-word timeout is added to serving. The leg no-text counter updates
+while audio flows, and the existing conversation transcript-success alert covers
+completed sessions. A quiet connection that emits nothing indefinitely has no
+new per-session rescue here. The runbook makes no-text/first-text SLIs mandatory
+and requires checking the live alert route; no content join or acoustic judgment
+is inferred from VAD alone.
 
 ### Adding a second Modulate endpoint and rollout
 
@@ -526,7 +451,7 @@ Stage/bench gauges are **pod views of global target state**, not a central
 fleet gauge. The old code published on selection/events only and refreshed
 only traffic-interest keys: an idle or Parakeet-ineligible pod could retain
 100 despite a remote trial. v3 already selected the global state, so the code
-provides no evidence of language-state leakage into that gauge. Every v5
+provides no evidence of language-state leakage into that gauge. Every v6
 background refresh watches all registry global keys and republishes gauges,
 even without eligible sessions. Unknown health is NaN, with
 `omi_stt_cost_routing_state_known{target}=0`, not a claimed healthy 100.
@@ -543,8 +468,9 @@ bench state, minimum recovery stage, transition counts, and dropped writes.
 Use traffic floors/dwell for alerts and the existing headline transcript SLI;
 no unvalidated Grafana rule changes are included here.
 
-### Aggregate shadow replay (2026-10-02)
+### Historical aggregate shadow replay (v4, 2026-10-02)
 
+This earlier v4 counterfactual is retained as context, not v6 qualification.
 The uncommitted 48-hour, five-minute Prometheus export was replayed locally.
 During 19:00Z–03:00Z, Parakeet and Soniox remained 100 with zero transitions;
 Modulate first benched around 19:02Z, then cycled 0/5 with exponential backoff,

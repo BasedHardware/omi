@@ -10,7 +10,7 @@ from functools import lru_cache
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
-from utils.stt import live_chain, live_health, live_router, streaming as st
+from utils.stt import live_failure, live_chain, live_health, live_router, streaming as st
 from utils.stt.live_cost_health import PREFIX
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
@@ -135,9 +135,10 @@ def test_no_text_does_not_fill_trial_or_mask_later_provider_failure(monkeypatch)
     leg.send(b'\x01\x00' * 16000)
     leg._first_speech_at -= 60
     leg._check_no_text_deadline()
-    assert not leg._cost_recorded
+    assert not leg.leg_outcome.settled
     leg._replay_failure_reason = 'modulate_serve_error'
     leg._dead = True
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     leg.finish()
     leg.finish()
     assert health._cost_local[('modulate-velma-2', 'all')].failures == 1
@@ -150,6 +151,7 @@ def test_deadline_only_failover_is_censored_even_with_vad_speech():
     leg.send(b'\x01\x00' * 16000)
     leg._replay_failure_reason = 'first_text_deadline'
     leg._dead = True
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     leg.finish()
     assert not live_chain.health._cost_local
 

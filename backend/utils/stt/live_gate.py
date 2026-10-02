@@ -22,6 +22,8 @@ class GateState:
     witnesses: tuple[str, ...] = ()
     recent_failures: tuple[str, ...] = ()
     trial_users: tuple[tuple[str, int, int], ...] = ()
+    healthy_window: int = -1
+    healthy_users: tuple[tuple[str, int], ...] = ()
 
     @classmethod
     def decode(cls, raw: dict[str, Any]) -> GateState:
@@ -47,6 +49,27 @@ class GateState:
         raw['trial_users'] = tuple(tuple(user) for user in users)
         if len({user[0] for user in users}) != len(users):
             raise ValueError('duplicate trial user')
+        healthy = raw.get('healthy_users', ())
+        if (
+            type(raw.get('healthy_window', -1)) is not int
+            or raw.get('healthy_window', -1) < -1
+            or not isinstance(healthy, (list, tuple))
+            or len(healthy) > 512
+        ):
+            raise ValueError('invalid healthy evidence window')
+        for user in healthy:
+            if (
+                not isinstance(user, (list, tuple))
+                or len(user) != 2
+                or not isinstance(user[0], str)
+                or len(user[0]) != 16
+                or type(user[1]) is not int
+                or not 1 <= user[1] <= 3
+            ):
+                raise ValueError('invalid healthy user budget')
+        if len({user[0] for user in healthy}) != len(healthy):
+            raise ValueError('duplicate healthy user')
+        raw['healthy_users'] = tuple(tuple(user) for user in healthy)
         for field in ('witnesses', 'recent_failures'):
             values: list[Any] = list(raw.get(field, ()))
             if any(
@@ -108,10 +131,23 @@ def transition(
             witnesses=(),
             recent_failures=(),
             trial_users=(),
+            healthy_users=(),
+            healthy_window=-1,
             generation=state.generation + 1,
         )
     if state.stage == 0:
         return state
+    if state.stage == 100 and witness is not None:
+        window = int(now // 300)
+        users = dict(state.healthy_users) if window == state.healthy_window else {}
+        count = users.get(witness, 0)
+        # Drop evidence symmetrically: reconnects cannot supply either failures
+        # or passing votes. Do not evict users on saturation (that would let a
+        # churned identity regain a budget). Redis TIME and CAS own this cap.
+        if count >= 3 or (not count and len(users) >= 512):
+            return state
+        users[witness] = count + 1
+        state = replace(state, healthy_window=window, healthy_users=tuple(users.items()))
     required = {5: 30, 25: 60}.get(state.stage)
     accepted = True
     if required and witness is not None:

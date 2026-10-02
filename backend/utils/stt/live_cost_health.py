@@ -19,6 +19,8 @@ from utils.stt.live_metrics import (
     COST_SNAPSHOT_AT,
     COST_STATE_KNOWN,
     COST_OBSERVATIONS,
+    COST_SETTLEMENTS,
+    COST_VOTES,
     COST_ALL_DEGRADED,
     FLEET_HEALTH_WRITE_DROPPED,
 )
@@ -32,7 +34,7 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v5'
+PREFIX = 'omi:live-stt:cost-v6'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -86,6 +88,9 @@ class CostHealthMixin(ABC):
                 continue
             self._cost_metrics_targets.add(target.id)
             COST_ALL_DEGRADED.labels(target=target.id)
+            for scope in ('global', 'language'):
+                for result in ('applied', 'user_cap', 'window_full', 'generation', 'stage'):
+                    COST_VOTES.labels(target=target.id, scope=scope, result=result)
             for event in ('bench', 'stage', 'unbench'):
                 for scope in ('global', 'language'):
                     COST_EVENTS.labels(target=target.id, event=event, scope=scope)
@@ -93,6 +98,8 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
+                for path in ('close', 'failover', 'connect'):
+                    COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
 
     @staticmethod
     def _publish_cost_state(target: str, state: GateState) -> None:
@@ -166,14 +173,6 @@ class CostHealthMixin(ABC):
         with self._lock:
             self._cost_preferred[(target, 'all')] = self._clock()
             self._cost_preferred[(target, language)] = self._clock()
-
-    def record_connect_failure(self, target: str, language: str, uid: str | None, reason: str) -> None:
-        # Connect precedes audio; account/config/capacity errors are censored by
-        # the same classifier as serving outcomes. Evidence cannot break failover.
-        try:
-            self.record_session(target, language, 'connect_failure', uid=uid, reason=reason)
-        except Exception:
-            logger.debug('Cost connect evidence unavailable; retaining configured failover', exc_info=True)
 
     def record_session(
         self,
@@ -329,16 +328,29 @@ class CostHealthMixin(ABC):
         async def write():
             now = await self._server_now()
             for lang in ('all', language):
+                result = 'applied'
 
                 def update(state: GateState, lang: str = lang) -> GateState:
+                    nonlocal result
+                    result = 'applied'
                     if 0 < state.stage < minimum_share:
+                        result = 'stage'
                         return state
                     if generations is not None and state.generation != generations.get(lang, state.generation):
+                        result = 'generation'
                         return state
-                    return transition(state, failed, now, witness=witness, language_only=lang != 'all')
+                    updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
+                    if updated == state:
+                        result = (
+                            'stage'
+                            if state.stage == 0
+                            else 'user_cap' if dict(state.healthy_users).get(witness, 0) >= 3 else 'window_full'
+                        )
+                    return updated
 
                 key = (target, lang)
                 written = await self._cost_update(key, update, failed)
+                COST_VOTES.labels(target=target, scope='global' if lang == 'all' else 'language', result=result).inc()
                 with self._lock:
                     local = self._cost_local.get(key, GateState())
                     if key not in self._cost_unreconciled and (

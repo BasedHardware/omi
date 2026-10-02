@@ -131,13 +131,19 @@ provider-attributable reason set; later failures after a no-text diagnostic
 remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
-The v5 reason vocabulary is shared by health and source-leg fallback telemetry;
-socket-owned causes precede send symptoms, and free-text transport deaths become
-bounded provider errors. Observations expose target/outcome/reason for rollout
-reconciliation. Window deadline/empty/capacity and session/account causes stay
-censored, even when a following send fails. Never-refreshed snapshots are NaN.
-Each user has one majority-outcome vote and at most three sequential-evidence
-outcomes per trial window. Health stages cannot empty an eligible chain;
+The cost-v6 evidence seam is `LiveLegOutcome.settle`: the serving decision
+settles both source-leg fallback and router observation exactly once. Liveness
+reads and transport closes do not infer provider blame. Accepted provider deaths
+and actual text have no VAD minimum. Receiver teardown is marked before tail
+sends; idle/request timeouts, rotation, local capacity and audio/client causes
+are censored. Connect rejection shares the accepted leg's outcome, without a
+second writer. Pending hops settle on successor text, failure, cancellation or
+owner close, with a 30-second telemetry-only degraded settlement bound.
+Per-target healthy evidence admits three outcomes per UID fingerprint per
+five-minute Redis-time window; trial user-vote rules remain. The bounded
+settlements/observations counters must reconcile exactly; shared vote admission
+and Redis write loss are separate metrics. Never-refreshed snapshots are NaN.
+Health stages cannot empty an eligible chain;
 all-degraded selection uses stage, observed provider error rate, then cost. The
 terminal target keeps its full eligible share when no cheaper stage-100 target
 can absorb the session. Explicit ramp/account/capability exclusions remain. Terminal
