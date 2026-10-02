@@ -176,7 +176,7 @@ def test_person_assignment_keeps_person_teaching(world):
     assert response.status_code == 200
     assert world.scheduled['owner'] == []
     assert world.scheduled['person'] == [
-        {'uid': UID, 'person_id': 'p1', 'conversation_id': CONV, 'segment_ids': ['s1']}
+        {'uid': UID, 'person_id': 'p1', 'conversation_id': CONV, 'segment_ids': ['s1'], 'allow_text_relocation': True}
     ]
     assert world.scheduled['deleted'] == ['old.wav']
 
