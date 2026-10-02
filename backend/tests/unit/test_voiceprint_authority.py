@@ -199,7 +199,7 @@ def test_duplicate_owner_delivery_has_one_contribution_and_correction_clears_col
     assert store.rows[USER]['owner_voice_confirmations'] == []
 
 
-@pytest.mark.parametrize('mutation', ['delete', 'tombstone', 'generation', 'optout', 'identity'])
+@pytest.mark.parametrize('mutation', ['unchanged', 'legacy', 'delete', 'tombstone', 'generation', 'optout', 'identity'])
 def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation):
     conv = source()
     conv['transcript_segments'][0].update(person_id='p', is_user=False)
@@ -213,14 +213,29 @@ def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation
         store.rows[CONV]['manual_speaker_assignments']['generation'] = 2
     elif mutation == 'optout':
         store.rows[CONV]['manual_speaker_assignments']['segments']['s']['use_for_speech_training'] = False
-    else:
+    elif mutation == 'identity':
         store.rows[CONV]['transcript_segments'][0]['person_id'] = 'other'
+    elif mutation == 'legacy':
+        store.rows[CONV].pop('manual_speaker_assignments')
     monkeypatch.setattr(users, 'db', store)
     result = users.replace_person_speech_profile(
-        'u', 'p', None, 'sample', 'synthetic', [1, 0], 'c', ['s'], expected_receipt_generation=1
+        'u',
+        'p',
+        None,
+        'sample',
+        'synthetic',
+        [1, 0],
+        'c',
+        ['s'],
+        expected_receipt_generation=0 if mutation == 'legacy' else 1,
     )
-    assert result is None
-    assert not store.rows[PERSON].get('speaker_embedding')
+    if mutation in {'unchanged', 'legacy'}:
+        assert result == []
+        assert store.rows[PERSON]['speaker_embedding'] == [1, 0]
+        assert store.rows[PERSON]['speech_sample_source'] == {'conversation_id': 'c', 'segment_ids': ['s']}
+    else:
+        assert result is None
+        assert not store.rows[PERSON].get('speaker_embedding')
 
 
 def test_owner_clip_coordinator_borrows_sync_pool(monkeypatch):
