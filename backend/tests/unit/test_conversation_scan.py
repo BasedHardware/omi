@@ -35,6 +35,8 @@ from typing import Any, Dict, List, Optional
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.api_core import exceptions as api_exceptions
+from google.api_core import retry as api_retry
 from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import firestore
 
@@ -115,8 +117,8 @@ class _Snap:
 class _StrictClient:
     """Evaluates the real query recipe in memory and refuses anything else.
 
-    ``offset`` raises, ``stream`` requires the budget timeout and the explicit
-    ``retry`` override, and a query without a positive server-side ``limit``
+    ``offset`` raises, ``stream`` requires the budget timeout and a retry that
+    excludes deadlines, and a query without a positive server-side ``limit``
     never reaches the wire.
     """
 
@@ -238,10 +240,15 @@ class _StrictQuery:
 
     def stream(self, **kwargs):
         timeout = kwargs.get('timeout')
-        assert timeout is not None and 0 < timeout <= 12.0, 'stream timeout must be a positive budget bound'
         assert (
-            kwargs.get('retry', 'missing') is None
-        ), 'scan streams must pin retry=None so retries cannot restart the timeout'
+            timeout is not None and 0 < timeout <= conversation_scan.CONVERSATION_SCAN_SECONDS
+        ), 'stream timeout must be a positive budget bound'
+        retry = kwargs.get('retry')
+        assert isinstance(retry, api_retry.Retry), 'scan streams must pass their own retry'
+        assert not retry._predicate(
+            api_exceptions.DeadlineExceeded('budget')
+        ), 'a deadline must end the scan, not restart the timeout'
+        assert retry._predicate(api_exceptions.ServiceUnavailable('transient')), 'transient failures still retry'
         assert self._bound is not None, 'unbounded query: missing limit'
         self._client.queries.append(
             {'limit': self._bound, 'cursor': self._cursor is not None, 'projection': self._projection}

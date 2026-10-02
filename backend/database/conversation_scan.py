@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterator, Optional, Sequence
 
+from google.api_core import exceptions as api_exceptions
+from google.api_core import retry as api_retry
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -41,8 +43,12 @@ from utils.other.list_budget import (
 logger = logging.getLogger(__name__)
 
 # Per-scan ceilings; an existing request budget only ever lowers them.
+# The time ceiling is set from production: on the paged reader this scan
+# replaced, People stats requests had p90 near 12 s and p99 near 20 s and all of
+# them completed. 20 s keeps every one of those complete while staying inside
+# the 30 s request deadline. Lower it once this reader's latency is measured.
 CONVERSATION_SCAN_MAX_DOCUMENTS = 2000
-CONVERSATION_SCAN_SECONDS = 12.0
+CONVERSATION_SCAN_SECONDS = 20.0
 
 # The speaker-browse recipe reads up to 1,000 visible rows in 50-row pages.
 SPEAKER_BROWSE_SCAN_CAP = 1000
@@ -77,6 +83,26 @@ def conversation_scan_budget(request: Any, *, route: str) -> ListReadBudget:
         route=route,
         seconds=min(CONVERSATION_SCAN_SECONDS, resolve_list_read_budget_seconds()),
         max_documents=min(CONVERSATION_SCAN_MAX_DOCUMENTS, resolve_list_read_max_documents()),
+    )
+
+
+def _scan_retry(budget: ListReadBudget) -> api_retry.Retry:
+    """Retry transient transport failures inside the budget, never a deadline.
+
+    Firestore's default query retry also retries ``DeadlineExceeded``, which
+    would restart the budget-derived timeout instead of ending the scan. No
+    retry at all would turn one transient ``UNAVAILABLE`` into a 500.
+    """
+    return api_retry.Retry(
+        predicate=api_retry.if_exception_type(
+            api_exceptions.InternalServerError,
+            api_exceptions.ResourceExhausted,
+            api_exceptions.ServiceUnavailable,
+        ),
+        initial=0.1,
+        maximum=1.0,
+        multiplier=1.3,
+        timeout=max(budget.remaining_seconds, 0.0),
     )
 
 
@@ -144,7 +170,7 @@ def iter_conversations(
                 if last_snapshot is not None:
                     page_query = page_query.start_after(last_snapshot)
                 page_query = page_query.limit(page_limit)
-                stream = budgeted_stream_iter(page_query, budget, retry=None)
+                stream = budgeted_stream_iter(page_query, budget, retry=_scan_retry(budget))
                 page_rows = 0
                 try:
                     for snapshot in stream:

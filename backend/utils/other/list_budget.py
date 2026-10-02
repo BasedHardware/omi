@@ -352,9 +352,9 @@ def budgeted_stream_iter(
     prefix. Deadline exceptions from the budget-derived RPC timeout become the
     typed exhaustion after the partial rows have been produced.
 
-    ``retry`` is forwarded to ``query.stream`` only when given — callers with a
-    bounded scan pass ``retry=None`` so the derived timeout applies to the
-    whole stream instead of restarting per retry attempt.
+    ``retry`` is forwarded to ``query.stream`` only when given. Firestore's
+    default query retry also retries ``DeadlineExceeded``, which restarts the
+    derived timeout; a bounded scan passes a retry that excludes it.
     """
     if budget is None:
         yield from query.stream()
