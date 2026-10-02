@@ -561,7 +561,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: isHovering ? OmiColors.surface1 : Colors.transparent,
+              color: isHovering ? OmiCanvas.cardOf(context) : Colors.transparent,
               borderRadius: OmiRadius.mdAll,
             ),
             child: Column(

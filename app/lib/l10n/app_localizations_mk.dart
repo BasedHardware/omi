@@ -10724,9 +10724,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceConnecting => 'Се поврзува…';
 
   @override
-  String get recordOptionsTip => 'Совет: допрете ја стрелката на копчето за снимање за да снимите телефонски повик.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Ажурирањето не успеа';
 
   @override
@@ -11274,9 +11271,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get recordWith => 'Снимај со';
 
   @override
-  String get moreWaysToRecord => 'Повеќе начини за снимање';
-
-  @override
   String get openCall => 'Отвори го повикот';
 
   @override
@@ -11314,10 +11308,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Меморијата е речиси полна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12293,4 +12283,16 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get askAnythingButton => 'Прашај било што';
+
+  @override
+  String get pendantLostConnection => 'Приврзокот ја изгуби врската со овој телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина.';
+
+  @override
+  String get pendantRecordingSafe => 'Сè што е снимено досега е безбедно.';
 }

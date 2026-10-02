@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Акумулятор {level}%",
     "updateOmiGlassFirmware": "Оновити прошивку OmiGlass",
     "deviceConnecting": "Підключення…",
-    "recordOptionsTip": "Порада: торкніться стрілки на кнопці запису, щоб записати телефонний дзвінок.",
     "firmwareUpdateFailedTitle": "Не вдалося оновити",
     "firmwareUpdateFailedMessage": "Оновлення не завершилося. Пристрій і далі має поточну прошивку, ним можна безпечно користуватися. Зарядіть його, тримайте поруч із телефоном і спробуйте знову.",
     "firmwareDownloadFailedMessage": "Не вдалося завантажити оновлення, пристрій не змінено. Перевірте підключення до інтернету і спробуйте знову.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "Кулон на паузі під час дзвінка",
     "keepUsingPendant": "Продовжити з кулоном",
     "recordWith": "Записати через",
-    "moreWaysToRecord": "Інші способи запису",
     "openCall": "Відкрити дзвінок",
     "captureRecoveryBanner": "Omi не передає звук — натисніть, щоб підключитися знову",
     "phoneRecordingBlockedByPendantBatch": "Зупиніть Transcribe Later на підвісці перед записом на телефоні.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
-    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
     "participantsSummaryUncounted": "{name} та інші",
     "deviceOnboardingVoiceReplyTitle": "Слухайте відповіді Omi",
     "deviceOnboardingVoiceReplySample": "Зрозуміло. Ваша наступна зустріч почнеться за двадцять хвилин.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi впізнає {name} наступного разу.} pending{Це займе кілька секунд.} disabled{Увімкніть збереження голосів у налаштуваннях, щоб Omi міг впізнавати {name}.} other{Omi потрібно більше чіткого мовлення від {name}, і він продовжить спроби.}}",
     "speakerLabelEarlierMatches": "Попередні розмови з цим голосом: {count}",
     "speakerLabelText": "{part, select, likely{Імовірно} soundsLike{Схоже на {name}} notPerson{Не {name}} carried{Досі {name}. Перенесено з вашої останньої розмови.} change{Змінити} alsoTitle{Це теж {name}?} alsoBody{Omi знайшов такий самий голос у попередніх розмовах.} confirmed{Ви підтвердили цю мітку} other{Переглянути}}",
-    "speakerLabelTalkTime": "{duration} цього голосу"
+    "speakerLabelTalkTime": "{duration} цього голосу",
+    "askAnythingButton": "Запитайте що завгодно",
+    "pendantLostConnection": "Кулон втратив зв’язок із цим телефоном.",
+    "pendantReconnectsOnItsOwn": "Omi перепідключиться сам, коли кулон буде ввімкнений і поруч.",
+    "pendantRecordingSafe": "Усе, що записано до цього, збережено."
 }

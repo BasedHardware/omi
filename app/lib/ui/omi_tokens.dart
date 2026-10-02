@@ -42,7 +42,21 @@ class OmiPalette {
       required this.successSurface,
       required this.warning,
       required this.danger,
-      required this.dangerSurface});
+      required this.dangerSurface,
+      required this.canvas,
+      required this.canvasCard,
+      required this.canvasBlend,
+      required this.glass,
+      required this.glassEdge,
+      required this.glassRim,
+      required this.glassShadow,
+      required this.floatGlass,
+      required this.floatEdge,
+      required this.floatRim,
+      required this.floatOutline,
+      required this.floatShadow,
+      required this.deviceTile,
+      required this.deviceTileInk});
 
   final Color surface0;
   final Color surface1;
@@ -78,6 +92,36 @@ class OmiPalette {
   final Color danger;
   final Color dangerSurface;
 
+  /// The canvas page (Home, Tasks, a conversation) and a card on it: white with grouped-grey cards
+  /// in light mode, the usual surfaces in dark. Read through `OmiCanvas`, never directly.
+  final Color canvas;
+  final Color canvasCard;
+
+  /// The warm tint Home's page blends into toward the bottom of the screen (Omi v8); clear in dark.
+  final Color canvasBlend;
+
+  /// A control on the canvas (`OmiGlass`): a translucent fill, its rim lit along the top
+  /// ([glassEdge]) and quieter below ([glassRim]).
+  final Color glass;
+  final Color glassEdge;
+  final Color glassRim;
+
+  /// The small soft shadow under a control on the canvas; clear in dark.
+  final Color glassShadow;
+
+  /// A control floating over the list, blurred (`OmiGlass(blur: true)`): its fill, its rim from top
+  /// ([floatEdge]) to bottom ([floatRim]), a hairline outside it ([floatOutline]) and a soft shadow
+  /// under it ([floatShadow]). In dark it is the same glass as [glass], with no outline or shadow.
+  final Color floatGlass;
+  final Color floatEdge;
+  final Color floatRim;
+  final Color floatOutline;
+  final Color floatShadow;
+
+  /// The tile behind a device glyph on a list row (`DeviceTile`).
+  final Color deviceTile;
+  final Color deviceTileInk;
+
   static const dark = OmiPalette(
     surface0: Color(0xFF000000),
     surface1: Color(0xFF1C1C1E),
@@ -105,6 +149,20 @@ class OmiPalette {
     warning: Color(0xFFFF9F0A),
     danger: Color(0xFFFF453A),
     dangerSurface: Color(0x26FF453A),
+    canvas: Color(0xFF000000),
+    canvasCard: Color(0xFF1C1C1E),
+    canvasBlend: Color(0x00000000),
+    glass: Color(0x803A3A3C),
+    glassEdge: Color(0x29FFFFFF),
+    glassRim: Color(0x12FFFFFF),
+    glassShadow: Color(0x00000000),
+    floatGlass: Color(0x803A3A3C),
+    floatEdge: Color(0x29FFFFFF),
+    floatRim: Color(0x12FFFFFF),
+    floatOutline: Color(0x00000000),
+    floatShadow: Color(0x00000000),
+    deviceTile: Color(0xFF1A1A1A),
+    deviceTileInk: Color(0xFF8E8982),
   );
 
   static const light = OmiPalette(
@@ -134,6 +192,23 @@ class OmiPalette {
     warning: Color(0xFFFF9500),
     danger: Color(0xFFFF3B30),
     dangerSurface: Color(0x26FF3B30),
+    canvas: Color(0xFFFFFFFF),
+    canvasCard: Color(0xFFF2F2F7),
+    // #C9B89A at 10%: over the white page, #FAF8F4.
+    canvasBlend: Color(0x1AC9B89A),
+    // Omi v8 in light: circles are frosted white (55%) with a 9% hairline and a faint 6% shadow; the
+    // Ask bar and record button are frosted white with a white edge, a faint outline and a soft shadow.
+    glass: Color(0x8CFFFFFF),
+    glassEdge: Color(0x17000000),
+    glassRim: Color(0x17000000),
+    glassShadow: Color(0x0F000000),
+    floatGlass: Color(0x9EFFFFFF),
+    floatEdge: Color(0xF2FFFFFF),
+    floatRim: Color(0xD9FFFFFF),
+    floatOutline: Color(0x12000000),
+    floatShadow: Color(0x1A000000),
+    deviceTile: Color(0xFFFAF8F4),
+    deviceTileInk: Color(0xFF8C877F),
   );
 }
 
@@ -170,6 +245,20 @@ abstract final class OmiColors {
   static Color get warning => active.warning;
   static Color get danger => active.danger;
   static Color get dangerSurface => active.dangerSurface;
+  static Color get canvas => active.canvas;
+  static Color get canvasCard => active.canvasCard;
+  static Color get canvasBlend => active.canvasBlend;
+  static Color get glass => active.glass;
+  static Color get glassEdge => active.glassEdge;
+  static Color get glassRim => active.glassRim;
+  static Color get glassShadow => active.glassShadow;
+  static Color get floatGlass => active.floatGlass;
+  static Color get floatEdge => active.floatEdge;
+  static Color get floatRim => active.floatRim;
+  static Color get floatOutline => active.floatOutline;
+  static Color get floatShadow => active.floatShadow;
+  static Color get deviceTile => active.deviceTile;
+  static Color get deviceTileInk => active.deviceTileInk;
 }
 
 /// Omi's type ramp, modelled on iOS text styles so that sizes land where the app's text already

@@ -10701,9 +10701,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
 
   @override
@@ -11245,9 +11242,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get recordWith => 'Snemaj z';
 
   @override
-  String get moreWaysToRecord => 'Več načinov snemanja';
-
-  @override
   String get openCall => 'Odpri klic';
 
   @override
@@ -11284,10 +11278,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12260,4 +12250,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
+
+  @override
+  String get askAnythingButton => 'Vprašaj kaj koli';
+
+  @override
+  String get pendantLostConnection => 'Obesek je izgubil povezavo s tem telefonom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini.';
+
+  @override
+  String get pendantRecordingSafe => 'Vse, kar je bilo posneto prej, je varno.';
 }

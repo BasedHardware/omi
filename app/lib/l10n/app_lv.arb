@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Akumulators {level}%",
     "updateOmiGlassFirmware": "Atjaunināt OmiGlass programmaparatūru",
     "deviceConnecting": "Savienojas…",
-    "recordOptionsTip": "Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.",
     "firmwareUpdateFailedTitle": "Atjaunināšana neizdevās",
     "firmwareUpdateFailedMessage": "Atjaunināšana netika pabeigta. Ierīcē joprojām ir pašreizējā programmaparatūra, un to ir droši lietot. Uzlādējiet to, turiet tālruņa tuvumā un mēģiniet vēlreiz.",
     "firmwareDownloadFailedMessage": "Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "Kulons ir apturēts zvana laikā",
     "keepUsingPendant": "Turpināt ar kulonu",
     "recordWith": "Ierakstīt ar",
-    "moreWaysToRecord": "Citi ierakstīšanas veidi",
     "openCall": "Atvērt zvanu",
     "captureRecoveryBanner": "Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu",
     "phoneRecordingBlockedByPendantBatch": "Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "Sāk…",
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
-    "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
     "participantsSummaryUncounted": "{name} un citi",
     "deviceOnboardingVoiceReplyTitle": "Klausieties Omi atbildes",
     "deviceOnboardingVoiceReplySample": "Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nākamreiz atpazīs {name}.} pending{Tas aizņem dažas sekundes.} disabled{Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt {name}.} other{Omi vajag vairāk skaidras {name} runas, un tas turpinās mēģināt.}}",
     "speakerLabelEarlierMatches": "Iepriekšējās sarunas ar šo balsi: {count}",
     "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
-    "speakerLabelTalkTime": "{duration} no šīs balss"
+    "speakerLabelTalkTime": "{duration} no šīs balss",
+    "askAnythingButton": "Jautājiet jebko",
+    "pendantLostConnection": "Kulons zaudēja savienojumu ar šo tālruni.",
+    "pendantReconnectsOnItsOwn": "Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.",
+    "pendantRecordingSafe": "Viss, kas ierakstīts līdz šim, ir drošībā."
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 /// Section header for the honest capture-gap group (SCA-381): calendar events
 /// that were booked but never recorded. Rendered above the day's audio rows,
@@ -16,19 +17,18 @@ class CaptureGapHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
       child: Text(
         context.l10n.conversationsNotCapturedCount(count),
-        style:
-            TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), fontSize: 13, fontWeight: FontWeight.w600),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
       ),
     );
   }
 }
 
-/// One compact "not captured" calendar row. Neutral greys only — brand UI keeps
-/// to white/neutral accents (INV-UI-1), and this row must read as quieter than
-/// a recorded conversation.
+/// One compact "not captured" calendar row: a dashed, empty tile where a recorded row has its
+/// device. Neutral greys only — brand UI keeps to white/neutral accents (INV-UI-1), and this row
+/// must read as quieter than a recorded conversation.
 class CaptureGapListItem extends StatelessWidget {
   final CalendarCaptureGap gap;
 
@@ -41,44 +41,32 @@ class CaptureGapListItem extends StatelessWidget {
         '${dateTimeFormat('h:mm a', gap.startTime.toLocal(), locale: locale)} – ${dateTimeFormat('h:mm a', gap.endTime.toLocal(), locale: locale)}';
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
-      child: Container(
-        width: double.maxFinite,
-        decoration: BoxDecoration(color: OmiColors.conversationCard, borderRadius: BorderRadius.circular(24.0)),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: OmiColors.categorySurface, borderRadius: BorderRadius.circular(12)),
-                child: Icon(Icons.event_busy, color: OmiColors.textTertiary, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      gap.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      timeStr,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: OmiColors.textTertiary, fontSize: 12),
-                    ),
-                  ],
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: DeviceTile.rowPadding),
+      child: Row(
+        children: [
+          const DeviceTile(icon: Icons.event_busy, missing: true),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  gap.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.callout.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                 ),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  timeStr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

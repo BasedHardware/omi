@@ -10658,9 +10658,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnecting => 'Connecting…';
 
   @override
-  String get recordOptionsTip => 'Tip: tap the arrow on the record button to record a phone call.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update Failed';
 
   @override
@@ -11203,9 +11200,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordWith => 'Record with';
 
   @override
-  String get moreWaysToRecord => 'More ways to record';
-
-  @override
   String get openCall => 'Open call';
 
   @override
@@ -11243,10 +11237,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storage almost full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12216,4 +12206,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration of this voice';
   }
+
+  @override
+  String get askAnythingButton => 'Ask anything';
+
+  @override
+  String get pendantLostConnection => 'Your pendant lost its connection to this phone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi reconnects on its own when the pendant is on and nearby.';
+
+  @override
+  String get pendantRecordingSafe => 'Everything recorded before this is safe.';
 }

@@ -10760,9 +10760,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
 
   @override
@@ -11311,9 +11308,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get recordWith => 'Mag-record gamit ang';
 
   @override
-  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
-
-  @override
   String get openCall => 'Buksan ang tawag';
 
   @override
@@ -11351,10 +11345,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12333,4 +12323,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get askAnythingButton => 'Tanungin ang kahit ano';
+
+  @override
+  String get pendantLostConnection => 'Nawalan ng koneksyon ang iyong pendant sa teleponong ito.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.';
+
+  @override
+  String get pendantRecordingSafe => 'Ligtas ang lahat ng na-record bago nito.';
 }

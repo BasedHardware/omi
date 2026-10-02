@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Baterie {level}%",
     "updateOmiGlassFirmware": "Actualizează firmware-ul OmiGlass",
     "deviceConnecting": "Se conectează…",
-    "recordOptionsTip": "Sfat: atinge săgeata de pe butonul de înregistrare pentru a înregistra un apel.",
     "firmwareUpdateFailedTitle": "Actualizarea a eșuat",
     "firmwareUpdateFailedMessage": "Actualizarea nu s-a încheiat. Dispozitivul are în continuare firmware-ul actual și poate fi folosit în siguranță. Ține-l încărcat și aproape de telefon, apoi încearcă din nou.",
     "firmwareDownloadFailedMessage": "Actualizarea nu a putut fi descărcată, iar dispozitivul nu a fost modificat. Verifică conexiunea la internet, apoi încearcă din nou.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "Pandantivul e în pauză în timpul apelului",
     "keepUsingPendant": "Continuă cu pandantivul",
     "recordWith": "Înregistrează cu",
-    "moreWaysToRecord": "Mai multe moduri de înregistrare",
     "openCall": "Deschide apelul",
     "captureRecoveryBanner": "Omi nu trimite audio — atinge pentru a reconecta",
     "phoneRecordingBlockedByPendantBatch": "Opriți Transcribe Later pe pandantiv înainte de a înregistra cu telefonul.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "Se pornește…",
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
-    "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
     "participantsSummaryUncounted": "{name} și alții",
     "deviceOnboardingVoiceReplyTitle": "Ascultă răspunsurile Omi",
     "deviceOnboardingVoiceReplySample": "Am înțeles. Următoarea întâlnire începe peste douăzeci de minute.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi va recunoaște persoana {name} data viitoare.} pending{Durează câteva secunde.} disabled{Activează salvarea vocilor în Setări ca Omi să poată recunoaște persoana {name}.} other{Omi are nevoie de mai multă vorbire clară de la {name} și va continua să încerce.}}",
     "speakerLabelEarlierMatches": "Conversații anterioare cu această voce: {count}",
     "speakerLabelText": "{part, select, likely{Probabil} soundsLike{Sună ca {name}} notPerson{Nu este {name}} carried{Tot {name}. Preluat din ultima ta conversație.} change{Schimbă} alsoTitle{Este și aceasta {name}?} alsoBody{Omi a găsit aceeași voce în conversații anterioare.} confirmed{Ai confirmat această etichetă} other{Revizuiește}}",
-    "speakerLabelTalkTime": "{duration} din această voce"
+    "speakerLabelTalkTime": "{duration} din această voce",
+    "askAnythingButton": "Întreabă orice",
+    "pendantLostConnection": "Pandantivul a pierdut conexiunea cu acest telefon.",
+    "pendantReconnectsOnItsOwn": "Omi se va reconecta singur când pandantivul este pornit și în apropiere.",
+    "pendantRecordingSafe": "Tot ce s-a înregistrat înainte este în siguranță."
 }

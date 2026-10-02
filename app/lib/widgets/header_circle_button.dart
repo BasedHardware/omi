@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// Smallest comfortable touch target. Same value as [kOmiMinTapTarget]; kept for existing callers.
@@ -27,6 +28,8 @@ class HeaderCircleButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback onTap;
   final String semanticLabel;
+
+  /// Circle colour for a control that is on or busy; on the canvas it tints the glass.
   final Color? color;
 
   /// Diameter of the painted circle. The touch target stays [kMinTapTarget].
@@ -42,7 +45,7 @@ class HeaderCircleButton extends StatelessWidget {
       icon: icon,
       label: semanticLabel,
       onPressed: onTap,
-      fillColor: color ?? OmiColors.surface1,
+      fillColor: color,
       diameter: diameter,
     );
     if (badgeCount <= 0) return button;
@@ -65,7 +68,7 @@ class HeaderCircleButton extends StatelessWidget {
 }
 
 /// The count pill on a [HeaderCircleButton]: capped at "9+", ringed in the page
-/// surface so it reads as sitting on top of the circle.
+/// colour so it reads as sitting on top of the circle.
 class HeaderCountBadge extends StatelessWidget {
   const HeaderCountBadge({super.key, required this.count});
 
@@ -82,7 +85,7 @@ class HeaderCountBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: OmiColors.accent,
         borderRadius: const BorderRadius.all(Radius.circular(10)),
-        border: Border.all(color: OmiColors.surface0, width: 2),
+        border: Border.all(color: OmiCanvas.pageOf(context), width: 2),
       ),
       child: Text(
         label,

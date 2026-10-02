@@ -10694,9 +10694,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceConnecting => 'Savienojas…';
 
   @override
-  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
 
   @override
@@ -11240,9 +11237,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get recordWith => 'Ierakstīt ar';
 
   @override
-  String get moreWaysToRecord => 'Citi ierakstīšanas veidi';
-
-  @override
   String get openCall => 'Atvērt zvanu';
 
   @override
@@ -11279,10 +11273,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12255,4 +12245,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get askAnythingButton => 'Jautājiet jebko';
+
+  @override
+  String get pendantLostConnection => 'Kulons zaudēja savienojumu ar šo tālruni.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.';
+
+  @override
+  String get pendantRecordingSafe => 'Viss, kas ierakstīts līdz šim, ir drošībā.';
 }

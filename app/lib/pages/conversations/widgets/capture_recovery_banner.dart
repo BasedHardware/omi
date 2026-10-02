@@ -44,7 +44,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                 key: const Key('capture_recovery_banner'),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: OmiColors.surface1,
+                  color: OmiCanvas.cardOf(context),
                   borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.md)),
                   border: Border.all(color: OmiColors.border, width: 0.5),
                 ),

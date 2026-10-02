@@ -10741,9 +10741,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
 
   @override
@@ -11289,9 +11286,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get recordWith => 'Εγγραφή με';
 
   @override
-  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
-
-  @override
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
@@ -11329,10 +11323,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12310,4 +12300,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
+
+  @override
+  String get pendantLostConnection => 'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά.';
+
+  @override
+  String get pendantRecordingSafe => 'Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 }

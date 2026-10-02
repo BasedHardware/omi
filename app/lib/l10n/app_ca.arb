@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Bateria {level}%",
     "updateOmiGlassFirmware": "Actualitza el firmware de l'OmiGlass",
     "deviceConnecting": "S'està connectant…",
-    "recordOptionsTip": "Consell: toca la fletxa del botó de gravació per gravar una trucada.",
     "firmwareUpdateFailedTitle": "L'actualització ha fallat",
     "firmwareUpdateFailedMessage": "L'actualització no ha acabat. El dispositiu continua amb el firmware actual i es pot fer servir amb seguretat. Mantén-lo carregat i a prop del telèfon i torna-ho a provar.",
     "firmwareDownloadFailedMessage": "No s'ha pogut baixar l'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "El penjoll es posa en pausa durant la trucada",
     "keepUsingPendant": "Continua amb el penjoll",
     "recordWith": "Grava amb",
-    "moreWaysToRecord": "Més maneres de gravar",
     "openCall": "Obre la trucada",
     "captureRecoveryBanner": "Omi no envia àudio — toca per tornar a connectar",
     "phoneRecordingBlockedByPendantBatch": "Atura Transcribe Later al penjoll abans d'enregistrar amb el telèfon.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "S'està iniciant…",
     "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
     "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
-    "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur.",
     "participantsSummaryUncounted": "{name} i altres",
     "deviceOnboardingVoiceReplyTitle": "Escolta les respostes d'Omi",
     "deviceOnboardingVoiceReplySample": "Entesos. La teva pròxima reunió comença d'aquí a vint minuts.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconeixerà {name} la propera vegada.} pending{Això triga uns segons.} disabled{Activa el desament de veus a Configuració perquè Omi pugui reconèixer {name}.} other{Omi necessita més parla clara de {name} i continuarà intentant-ho.}}",
     "speakerLabelEarlierMatches": "Converses anteriors amb aquesta veu: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
-    "speakerLabelTalkTime": "{duration} d’aquesta veu"
+    "speakerLabelTalkTime": "{duration} d’aquesta veu",
+    "askAnythingButton": "Pregunta qualsevol cosa",
+    "pendantLostConnection": "El penjoll ha perdut la connexió amb aquest telèfon.",
+    "pendantReconnectsOnItsOwn": "Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.",
+    "pendantRecordingSafe": "Tot el que s'ha gravat abans és segur."
 }

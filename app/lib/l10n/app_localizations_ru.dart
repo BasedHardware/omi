@@ -10706,9 +10706,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceConnecting => 'Подключение…';
 
   @override
-  String get recordOptionsTip => 'Совет: нажмите стрелку на кнопке записи, чтобы записать телефонный звонок.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Не удалось обновить';
 
   @override
@@ -11251,9 +11248,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get recordWith => 'Записать через';
 
   @override
-  String get moreWaysToRecord => 'Другие способы записи';
-
-  @override
   String get openCall => 'Открыть звонок';
 
   @override
@@ -11291,10 +11285,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Память почти заполнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12269,4 +12259,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get askAnythingButton => 'Спросите что угодно';
+
+  @override
+  String get pendantLostConnection => 'Кулон потерял связь с этим телефоном.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi переподключится сам, когда кулон будет включён и рядом.';
+
+  @override
+  String get pendantRecordingSafe => 'Всё, что записано до этого, сохранено.';
 }

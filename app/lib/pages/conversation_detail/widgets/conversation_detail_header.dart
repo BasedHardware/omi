@@ -27,14 +27,17 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// The conversation page's header (v3), shared by both tabs so switching between Summary and
 /// Transcript never loses the title or the facts.
 ///
-/// The title in large type (tap to rename), then one row of outlined chips: when it started and how
-/// long it ran, the folder, and — when they apply — who spoke and the event's recordings. Visibility
-/// lives in the ⋯ menu ([ConversationVisibilitySheet]).
+/// The title in large type (tap to rename), then outlined chips: when it started and how long it
+/// ran with the folder, always on one line, and below them — when they apply — who spoke and the
+/// event's recordings. Visibility lives in the ⋯ menu ([ConversationVisibilitySheet]).
 class ConversationDetailHeader extends StatelessWidget {
   const ConversationDetailHeader({super.key, required this.onOpenRecordings});
 
   /// Opens the recordings sheet for an event several devices recorded.
   final void Function(List<CaptureRecording> recordings) onOpenRecordings;
+
+  /// The most of the when/folder row a folder name may take before it is cut short.
+  static const double folderShare = 0.45;
 
   @override
   Widget build(BuildContext context) {
@@ -61,31 +64,37 @@ class ConversationDetailHeader extends StatelessWidget {
                 summary: (first, others) => context.l10n.participantsSummary(first, others),
                 uncountedSummary: context.l10n.participantsSummaryUncounted,
               );
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              final more = [
+                if (peopleLabel != null)
+                  _peopleChip(
+                    context,
+                    conversation,
+                    peopleLabel,
+                    ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
+                  ),
+                if (recordings.isNotEmpty)
+                  CaptureRecordingsChip(
+                    recordings: recordings,
+                    onTap: () {
+                      trackConversationAction(
+                        ConversationActionAction.recordingsOpen,
+                        ConversationActionSurface.detailBody,
+                      );
+                      onOpenRecordings(recordings);
+                    },
+                  ),
+              ];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _whenChip(context, conversation),
-                  _FolderChip(conversation: conversation, folder: folder),
-                  if (peopleLabel != null)
-                    _peopleChip(
-                      context,
-                      conversation,
-                      peopleLabel,
-                      ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
-                    ),
-                  if (recordings.isNotEmpty)
-                    CaptureRecordingsChip(
-                      recordings: recordings,
-                      onTap: () {
-                        trackConversationAction(
-                          ConversationActionAction.recordingsOpen,
-                          ConversationActionSurface.detailBody,
-                        );
-                        onOpenRecordings(recordings);
-                      },
-                    ),
+                  _OneLineChips(
+                    when: _whenChip(context, conversation),
+                    folder: _FolderChip(conversation: conversation, folder: folder),
+                  ),
+                  if (more.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: more),
+                  ],
                 ],
               );
             },
@@ -182,6 +191,38 @@ class ConversationDetailHeader extends StatelessWidget {
   static void _showCalendarEvent(BuildContext context, CalendarEventLink calendarEvent) {
     final provider = context.read<ConversationDetailProvider>();
     showCalendarEventDetailsSheet(context, calendarEvent, onUnlink: provider.unlinkCalendarEvent);
+  }
+}
+
+/// When it started and the folder, always on one line: a long folder name ends in an ellipsis,
+/// and if the pair still does not fit (large text on a small phone) both shrink together.
+class _OneLineChips extends StatelessWidget {
+  const _OneLineChips({required this.when, required this.folder});
+
+  final Widget when;
+  final Widget folder;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return FittedBox(
+          key: const Key('conversation_when_folder_row'),
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(constraints: BoxConstraints(maxWidth: width), child: when),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width * ConversationDetailHeader.folderShare), child: folder),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

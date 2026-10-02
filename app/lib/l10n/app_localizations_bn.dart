@@ -10671,9 +10671,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceConnecting => 'সংযোগ হচ্ছে…';
 
   @override
-  String get recordOptionsTip => 'টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতামের তীর চিহ্নে চাপুন।';
-
-  @override
   String get firmwareUpdateFailedTitle => 'আপডেট ব্যর্থ হয়েছে';
 
   @override
@@ -11214,9 +11211,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get recordWith => 'রেকর্ডের মাধ্যম';
 
   @override
-  String get moreWaysToRecord => 'রেকর্ড করার আরও উপায়';
-
-  @override
   String get openCall => 'কল খুলুন';
 
   @override
@@ -11254,10 +11248,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'স্টোরেজ প্রায় পূর্ণ';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12228,4 +12218,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get askAnythingButton => 'যেকোনো কিছু জিজ্ঞাসা করুন';
+
+  @override
+  String get pendantLostConnection => 'আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে।';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে।';
+
+  @override
+  String get pendantRecordingSafe => 'এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।';
 }

@@ -10685,9 +10685,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceConnecting => 'Jungiamasi…';
 
   @override
-  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, bakstelėkite rodyklę ant įrašymo mygtuko.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atnaujinti nepavyko';
 
   @override
@@ -11232,9 +11229,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get recordWith => 'Įrašyti naudojant';
 
   @override
-  String get moreWaysToRecord => 'Daugiau įrašymo būdų';
-
-  @override
   String get openCall => 'Atidaryti skambutį';
 
   @override
@@ -11272,10 +11266,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12249,4 +12239,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get askAnythingButton => 'Klauskite bet ko';
+
+  @override
+  String get pendantLostConnection => 'Pakabukas prarado ryšį su šiuo telefonu.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.';
+
+  @override
+  String get pendantRecordingSafe => 'Viskas, kas įrašyta iki šiol, išsaugota.';
 }

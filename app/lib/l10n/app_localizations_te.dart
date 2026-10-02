@@ -10717,9 +10717,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceConnecting => 'కనెక్ట్ అవుతోంది…';
 
   @override
-  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'అప్‌డేట్ విఫలమైంది';
 
   @override
@@ -11262,9 +11259,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get recordWith => 'రికార్డ్ చేసే విధానం';
 
   @override
-  String get moreWaysToRecord => 'రికార్డ్ చేయడానికి మరిన్ని మార్గాలు';
-
-  @override
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
@@ -11302,10 +11296,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'స్టోరేజ్ దాదాపు నిండింది';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12280,4 +12270,17 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
+
+  @override
+  String get askAnythingButton => 'ఏదైనా అడగండి';
+
+  @override
+  String get pendantLostConnection => 'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.';
+
+  @override
+  String get pendantRecordingSafe => 'దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
 }

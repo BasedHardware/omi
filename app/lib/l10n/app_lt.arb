@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Akumuliatorius {level} %",
     "updateOmiGlassFirmware": "Atnaujinti OmiGlass programinę aparatinę įrangą",
     "deviceConnecting": "Jungiamasi…",
-    "recordOptionsTip": "Patarimas: norėdami įrašyti skambutį, bakstelėkite rodyklę ant įrašymo mygtuko.",
     "firmwareUpdateFailedTitle": "Atnaujinti nepavyko",
     "firmwareUpdateFailedMessage": "Atnaujinimas nebaigtas. Įrenginyje vis dar yra dabartinė programinė aparatinė įranga, jį saugu naudoti. Įkraukite jį, laikykite prie telefono ir bandykite dar kartą.",
     "firmwareDownloadFailedMessage": "Atnaujinimo atsisiųsti nepavyko, įrenginys nepakeistas. Patikrinkite interneto ryšį ir bandykite dar kartą.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "Pakabukas pristabdomas skambučio metu",
     "keepUsingPendant": "Toliau naudoti pakabuką",
     "recordWith": "Įrašyti naudojant",
-    "moreWaysToRecord": "Daugiau įrašymo būdų",
     "openCall": "Atidaryti skambutį",
     "captureRecoveryBanner": "Omi nesiunčia garso — palieskite, kad prisijungtumėte iš naujo",
     "phoneRecordingBlockedByPendantBatch": "Prieš įrašinėdami telefonu, sustabdykite „Transcribe Later“ pakabuke.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "Paleidžiama…",
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
-    "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
     "participantsSummaryUncounted": "{name} ir kiti",
     "deviceOnboardingVoiceReplyTitle": "Klausykitės „Omi“ atsakymų",
     "deviceOnboardingVoiceReplySample": "Supratau. Kitas jūsų susitikimas prasidės po dvidešimties minučių.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi kitą kartą atpažins {name}.} pending{Tai užtrunka kelias sekundes.} disabled{Įjunkite balsų išsaugojimą nustatymuose, kad Omi galėtų atpažinti {name}.} other{Omi reikia daugiau aiškios {name} kalbos ir toliau bandys.}}",
     "speakerLabelEarlierMatches": "Ankstesni pokalbiai su šiuo balsu: {count}",
     "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
-    "speakerLabelTalkTime": "{duration} šio balso"
+    "speakerLabelTalkTime": "{duration} šio balso",
+    "askAnythingButton": "Klauskite bet ko",
+    "pendantLostConnection": "Pakabukas prarado ryšį su šiuo telefonu.",
+    "pendantReconnectsOnItsOwn": "Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.",
+    "pendantRecordingSafe": "Viskas, kas įrašyta iki šiol, išsaugota."
 }

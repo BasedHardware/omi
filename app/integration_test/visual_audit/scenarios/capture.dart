@@ -1,7 +1,7 @@
 // Home's capture surfaces where the app really draws them: the live card at the top of Home, the
 // record button to the right of the floating Ask Omi bar, the device chip in the header,
-// the sheets they open, and the live page. The frame mirrors HomePage's layout; its Ask Omi bar
-// is a copy of HomePage._buildChatBar (private there).
+// the sheets they open, and the live page. The frame mirrors HomePage's layout and draws the same
+// HomeAskOmiButton.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -223,38 +223,15 @@ class HomeFrame extends StatelessWidget {
             left: 16,
             right: 16,
             bottom: homeChatBarOffset(context),
-            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+            child: Row(children: [
+              Expanded(child: HomeAskOmiButton(onTap: () {})),
+              const SizedBox(width: 10),
+              const HomeRecordButton(),
+            ]),
           ),
       ]),
     );
   }
-}
-
-/// Copy of HomePage._buildChatBar's look.
-class _AskOmiBar extends StatelessWidget {
-  const _AskOmiBar();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        height: kHomeChatBarHeight,
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.pillAll,
-          border: Border.all(color: OmiColors.border, width: 1),
-        ),
-        child: Row(children: [
-          const SizedBox(width: 18),
-          Expanded(child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary))),
-          Container(
-            width: 42,
-            height: 42,
-            margin: const EdgeInsets.only(right: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-          ),
-        ]),
-      );
 }
 
 Future<void> _runHome(
@@ -263,7 +240,6 @@ Future<void> _runHome(
   bool pendantConnected = false,
   bool call = false,
   Finder? tap,
-  Finder? longPress,
   String action = 'Home',
 }) async {
   await a.pump(const HomeFrame(), scaffold: false, providers: [
@@ -275,7 +251,6 @@ Future<void> _runHome(
     if (call) ChangeNotifierProvider<PhoneCallProvider>.value(value: _CallInProgress()),
   ]);
   if (tap != null) await a.tap(tap);
-  if (longPress != null) await a.longPress(longPress);
   await a.shot(action);
 }
 
@@ -426,10 +401,8 @@ final captureScenarios = <AuditScenario>[
     id: 'home-capture-options',
     title: 'Other ways to record',
     page: _home,
-    state: 'Nothing recording; the record button is held (the ⌄ badge opens the same sheet)',
-    run: (a) async {
-      await _runHome(a, AuditLive.idle, longPress: find.byType(HomeRecordButton), action: 'Hold the record button');
-    },
+    state: 'Nothing recording; the record button is tapped',
+    run: (a) => _runHome(a, AuditLive.idle, tap: find.byType(HomeRecordButton), action: 'Tap the record button'),
   ),
   AuditScenario(
     id: 'conversation-live-pendant',

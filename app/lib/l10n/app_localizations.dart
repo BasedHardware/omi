@@ -19509,12 +19509,6 @@ abstract class AppLocalizations {
   /// **'Connecting…'**
   String get deviceConnecting;
 
-  /// One-time hint after the first phone-mic recording
-  ///
-  /// In en, this message translates to:
-  /// **'Tip: tap the arrow on the record button to record a phone call.'**
-  String get recordOptionsTip;
-
   /// Title of the firmware update failed state
   ///
   /// In en, this message translates to:
@@ -20427,12 +20421,6 @@ abstract class AppLocalizations {
   /// **'Record with'**
   String get recordWith;
 
-  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
-  ///
-  /// In en, this message translates to:
-  /// **'More ways to record'**
-  String get moreWaysToRecord;
-
   /// Accessibility hint on the live card during a call; tapping opens the call screen.
   ///
   /// In en, this message translates to:
@@ -20504,12 +20492,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
-
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
 
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
@@ -21896,6 +21878,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Home button that opens AI chat, beside a speech-bubble icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask anything'**
+  String get askAnythingButton;
+
+  /// Disconnected sheet: first line, what happened when the pendant dropped
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone.'**
+  String get pendantLostConnection;
+
+  /// Disconnected sheet: reassurance that reconnecting needs no action
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own when the pendant is on and nearby.'**
+  String get pendantReconnectsOnItsOwn;
+
+  /// Disconnected sheet: reassurance that nothing recorded is lost
+  ///
+  /// In en, this message translates to:
+  /// **'Everything recorded before this is safe.'**
+  String get pendantRecordingSafe;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

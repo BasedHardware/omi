@@ -10662,9 +10662,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceConnecting => 'Đang kết nối…';
 
   @override
-  String get recordOptionsTip => 'Mẹo: nhấn vào mũi tên trên nút ghi âm để ghi âm cuộc gọi điện thoại.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
 
   @override
@@ -11208,9 +11205,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get recordWith => 'Ghi âm bằng';
 
   @override
-  String get moreWaysToRecord => 'Thêm cách ghi âm';
-
-  @override
   String get openCall => 'Mở cuộc gọi';
 
   @override
@@ -11248,10 +11242,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12222,4 +12212,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
+
+  @override
+  String get pendantLostConnection => 'Mặt dây chuyền đã mất kết nối với điện thoại này.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.';
+
+  @override
+  String get pendantRecordingSafe => 'Mọi thứ đã ghi trước đó vẫn an toàn.';
 }

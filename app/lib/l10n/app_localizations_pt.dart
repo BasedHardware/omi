@@ -10681,9 +10681,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceConnecting => 'Conectando…';
 
   @override
-  String get recordOptionsTip => 'Dica: toque na seta do botão de gravar para gravar uma ligação.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Falha na atualização';
 
   @override
@@ -11228,9 +11225,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get recordWith => 'Gravar com';
 
   @override
-  String get moreWaysToRecord => 'Mais formas de gravar';
-
-  @override
   String get openCall => 'Abrir chamada';
 
   @override
@@ -11268,10 +11262,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Armazenamento quase cheio';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12247,4 +12237,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration desta voz';
   }
+
+  @override
+  String get askAnythingButton => 'Pergunte qualquer coisa';
+
+  @override
+  String get pendantLostConnection => 'Seu pendente perdeu a conexão com este telefone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'O Omi se reconecta sozinho quando o pendente estiver ligado e por perto.';
+
+  @override
+  String get pendantRecordingSafe => 'Tudo o que foi gravado antes está seguro.';
 }

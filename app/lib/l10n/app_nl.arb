@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "Batterij {level}%",
     "updateOmiGlassFirmware": "OmiGlass-firmware bijwerken",
     "deviceConnecting": "Verbinden…",
-    "recordOptionsTip": "Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.",
     "firmwareUpdateFailedTitle": "Update mislukt",
     "firmwareUpdateFailedMessage": "De update is niet voltooid. Je apparaat draait nog op de huidige firmware en is veilig te gebruiken. Houd het opgeladen en dicht bij je telefoon en probeer het opnieuw.",
     "firmwareDownloadFailedMessage": "De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "Hanger pauzeert tijdens het gesprek",
     "keepUsingPendant": "Hanger blijven gebruiken",
     "recordWith": "Opnemen met",
-    "moreWaysToRecord": "Meer manieren om op te nemen",
     "openCall": "Gesprek openen",
     "captureRecoveryBanner": "Omi verzendt geen audio — tik om opnieuw verbinding te maken",
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later op je hanger voordat je met je telefoon opneemt.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "Starten…",
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
-    "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
     "participantsSummaryUncounted": "{name} en anderen",
     "deviceOnboardingVoiceReplyTitle": "Luister naar Omi's antwoorden",
     "deviceOnboardingVoiceReplySample": "Begrepen. Je volgende vergadering begint over twintig minuten.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi herkent {name} de volgende keer.} pending{Dit duurt een paar seconden.} disabled{Zet stemmen opslaan aan in Instellingen zodat Omi {name} kan herkennen.} other{Omi heeft meer duidelijke spraak van {name} nodig en blijft het proberen.}}",
     "speakerLabelEarlierMatches": "Eerdere gesprekken met deze stem: {count}",
     "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} carried{Nog steeds {name}. Overgenomen uit je laatste gesprek.} change{Wijzigen} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
-    "speakerLabelTalkTime": "{duration} van deze stem"
+    "speakerLabelTalkTime": "{duration} van deze stem",
+    "askAnythingButton": "Vraag wat je wilt",
+    "pendantLostConnection": "Je hanger heeft de verbinding met deze telefoon verloren.",
+    "pendantReconnectsOnItsOwn": "Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is.",
+    "pendantRecordingSafe": "Alles wat eerder is opgenomen, is veilig."
 }

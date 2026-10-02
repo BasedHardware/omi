@@ -3422,7 +3422,6 @@
     "batteryLevelSemantics": "Bateria {level}%",
     "updateOmiGlassFirmware": "Zaktualizuj oprogramowanie OmiGlass",
     "deviceConnecting": "Łączenie…",
-    "recordOptionsTip": "Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.",
     "firmwareUpdateFailedTitle": "Aktualizacja nie powiodła się",
     "firmwareUpdateFailedMessage": "Aktualizacja nie została ukończona. Urządzenie nadal ma obecne oprogramowanie i można go bezpiecznie używać. Naładuj je, trzymaj blisko telefonu i spróbuj ponownie.",
     "firmwareDownloadFailedMessage": "Nie udało się pobrać aktualizacji, urządzenie nie zostało zmienione. Sprawdź połączenie z internetem i spróbuj ponownie.",
@@ -3575,7 +3574,6 @@
     "pendantPausesDuringCall": "Wisiorek jest wstrzymany podczas połączenia",
     "keepUsingPendant": "Używaj dalej wisiorka",
     "recordWith": "Nagraj za pomocą",
-    "moreWaysToRecord": "Więcej sposobów nagrywania",
     "openCall": "Otwórz połączenie",
     "captureRecoveryBanner": "Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie",
     "phoneRecordingBlockedByPendantBatch": "Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.",
@@ -3588,7 +3586,6 @@
     "captureStarting": "Uruchamianie…",
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
-    "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
     "participantsSummaryUncounted": "{name} i inni",
     "deviceOnboardingVoiceReplyTitle": "Posłuchaj odpowiedzi Omi",
     "deviceOnboardingVoiceReplySample": "Rozumiem. Twoje następne spotkanie zaczyna się za dwadzieścia minut.",
@@ -3819,5 +3816,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi rozpozna osobę {name} następnym razem.} pending{To potrwa kilka sekund.} disabled{Włącz zapisywanie głosów w Ustawieniach, aby Omi mógł rozpoznać osobę {name}.} other{Omi potrzebuje wyraźniejszej mowy osoby {name} i będzie próbować dalej.}}",
     "speakerLabelEarlierMatches": "Wcześniejsze rozmowy z tym głosem: {count}",
     "speakerLabelText": "{part, select, likely{Prawdopodobnie} soundsLike{Brzmi jak {name}} notPerson{To nie {name}} carried{Nadal {name}. Przeniesiono z ostatniej rozmowy.} change{Zmień} alsoTitle{Czy to też {name}?} alsoBody{Omi znalazł ten sam głos we wcześniejszych rozmowach.} confirmed{Potwierdzono tę etykietę} other{Sprawdź}}",
-    "speakerLabelTalkTime": "{duration} tego głosu"
+    "speakerLabelTalkTime": "{duration} tego głosu",
+    "askAnythingButton": "Zapytaj o cokolwiek",
+    "pendantLostConnection": "Wisiorek utracił połączenie z tym telefonem.",
+    "pendantReconnectsOnItsOwn": "Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu.",
+    "pendantRecordingSafe": "Wszystko nagrane wcześniej jest bezpieczne."
 }

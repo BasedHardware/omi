@@ -57,17 +57,29 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
                 child: GestureDetector(
                   onTap: _openAll,
-                  child: Semantics(header: true, child: Text(context.l10n.dailyRecaps, style: OmiType.headline)),
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      context.l10n.dailyRecaps,
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary),
+                    ),
+                  ),
                 ),
               ),
-              OmiButton.tertiary(label: context.l10n.viewAll, size: OmiButtonSize.compact, onPressed: _openAll),
+              OmiButton(
+                label: context.l10n.viewAll,
+                variant: OmiButtonVariant.tertiary,
+                size: OmiButtonSize.compact,
+                labelStyle: OmiType.subhead.copyWith(fontWeight: FontWeight.w500, decoration: TextDecoration.underline),
+                onPressed: _openAll,
+              ),
             ],
           ),
         ),
@@ -116,13 +128,14 @@ class _RecapCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final card = OmiCanvas.cardOf(context);
     return ShimmerWithTimeout(
-      baseColor: OmiColors.surface1,
+      baseColor: card,
       highlightColor: OmiColors.surface3,
       child: Container(
         width: DailySummaryCard.width,
         decoration: BoxDecoration(
-          color: OmiColors.surface1,
+          color: card,
           borderRadius: const BorderRadius.all(Radius.circular(DailySummaryCard.radius)),
         ),
       ),

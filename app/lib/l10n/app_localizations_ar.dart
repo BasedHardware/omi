@@ -10603,9 +10603,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceConnecting => 'جارٍ الاتصال…';
 
   @override
-  String get recordOptionsTip => 'نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'فشل التحديث';
 
   @override
@@ -11146,9 +11143,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get recordWith => 'التسجيل باستخدام';
 
   @override
-  String get moreWaysToRecord => 'طرق أخرى للتسجيل';
-
-  @override
   String get openCall => 'فتح المكالمة';
 
   @override
@@ -11185,10 +11179,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12156,4 +12146,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
+
+  @override
+  String get askAnythingButton => 'اسأل أي شيء';
+
+  @override
+  String get pendantLostConnection => 'فقد القلادة اتصالها بهذا الهاتف.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة.';
+
+  @override
+  String get pendantRecordingSafe => 'كل ما سُجّل قبل ذلك محفوظ.';
 }

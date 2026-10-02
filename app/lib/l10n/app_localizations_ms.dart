@@ -10696,9 +10696,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceConnecting => 'Menyambung…';
 
   @override
-  String get recordOptionsTip => 'Petua: ketik anak panah pada butang rakam untuk merakam panggilan telefon.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
 
   @override
@@ -11242,9 +11239,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get recordWith => 'Rakam dengan';
 
   @override
-  String get moreWaysToRecord => 'Lebih banyak cara merakam';
-
-  @override
   String get openCall => 'Buka panggilan';
 
   @override
@@ -11282,10 +11276,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12262,4 +12252,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get askAnythingButton => 'Tanya apa sahaja';
+
+  @override
+  String get pendantLostConnection => 'Loket anda terputus sambungan dengan telefon ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang dirakam sebelum ini selamat.';
 }

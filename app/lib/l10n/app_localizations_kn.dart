@@ -10701,9 +10701,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceConnecting => 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override
-  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ';
 
   @override
@@ -11248,9 +11245,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get recordWith => 'ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ';
 
   @override
-  String get moreWaysToRecord => 'ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು';
-
-  @override
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 
   @override
@@ -11288,10 +11282,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12267,4 +12257,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
+
+  @override
+  String get pendantLostConnection => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ.';
+
+  @override
+  String get pendantRecordingSafe => 'ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 }

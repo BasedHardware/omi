@@ -3429,7 +3429,6 @@
     "batteryLevelSemantics": "Batteri {level} %",
     "updateOmiGlassFirmware": "Opdater OmiGlass-firmware",
     "deviceConnecting": "Opretter forbindelse…",
-    "recordOptionsTip": "Tip: tryk på pilen på optageknappen for at optage et telefonopkald.",
     "firmwareUpdateFailedTitle": "Opdateringen mislykkedes",
     "firmwareUpdateFailedMessage": "Opdateringen blev ikke færdig. Din enhed kører stadig den nuværende firmware og er sikker at bruge. Hold den opladet og tæt på telefonen, og prøv igen.",
     "firmwareDownloadFailedMessage": "Opdateringen kunne ikke hentes, og din enhed er ikke ændret. Tjek din internetforbindelse, og prøv igen.",
@@ -3582,7 +3581,6 @@
     "pendantPausesDuringCall": "Vedhænget holder pause under opkaldet",
     "keepUsingPendant": "Fortsæt med vedhænget",
     "recordWith": "Optag med",
-    "moreWaysToRecord": "Flere måder at optage på",
     "openCall": "Åbn opkald",
     "captureRecoveryBanner": "Omi sender ikke lyd — tryk for at oprette forbindelse igen",
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later på din pendant, før du optager med telefonen.",
@@ -3595,7 +3593,6 @@
     "captureStarting": "Starter…",
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
-    "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
     "participantsSummaryUncounted": "{name} og andre",
     "deviceOnboardingVoiceReplyTitle": "Hør Omis svar",
     "deviceOnboardingVoiceReplySample": "Det er klaret. Dit næste møde begynder om tyve minutter.",
@@ -3826,5 +3823,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi genkender {name} næste gang.} pending{Det tager et par sekunder.} disabled{Slå lagring af stemmer til i Indstillinger, så Omi kan genkende {name}.} other{Omi har brug for mere tydelig tale fra {name} og bliver ved med at prøve.}}",
     "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemme: {count}",
     "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
-    "speakerLabelTalkTime": "{duration} af denne stemme"
+    "speakerLabelTalkTime": "{duration} af denne stemme",
+    "askAnythingButton": "Spørg om hvad som helst",
+    "pendantLostConnection": "Dit vedhæng mistede forbindelsen til denne telefon.",
+    "pendantReconnectsOnItsOwn": "Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden.",
+    "pendantRecordingSafe": "Alt optaget før dette er i sikkerhed."
 }

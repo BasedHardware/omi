@@ -10729,9 +10729,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
 
   @override
@@ -11277,9 +11274,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get recordWith => 'Grava amb';
 
   @override
-  String get moreWaysToRecord => 'Més maneres de gravar';
-
-  @override
   String get openCall => 'Obre la trucada';
 
   @override
@@ -11317,10 +11311,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12298,4 +12288,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get askAnythingButton => 'Pregunta qualsevol cosa';
+
+  @override
+  String get pendantLostConnection => 'El penjoll ha perdut la connexió amb aquest telèfon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot el que s\'ha gravat abans és segur.';
 }

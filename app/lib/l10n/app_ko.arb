@@ -3387,7 +3387,6 @@
     "batteryLevelSemantics": "배터리 {level}%",
     "updateOmiGlassFirmware": "OmiGlass 펌웨어 업데이트",
     "deviceConnecting": "연결 중…",
-    "recordOptionsTip": "팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.",
     "firmwareUpdateFailedTitle": "업데이트 실패",
     "firmwareUpdateFailedMessage": "업데이트가 완료되지 않았습니다. 기기는 현재 펌웨어를 그대로 사용하며 안전하게 쓸 수 있습니다. 충전한 상태로 휴대폰 가까이에 두고 다시 시도하세요.",
     "firmwareDownloadFailedMessage": "업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.",
@@ -3540,7 +3539,6 @@
     "pendantPausesDuringCall": "통화 중에는 펜던트가 일시중지됩니다",
     "keepUsingPendant": "펜던트 계속 사용",
     "recordWith": "녹음 방법",
-    "moreWaysToRecord": "다른 녹음 방법",
     "openCall": "통화 열기",
     "captureRecoveryBanner": "Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요",
     "phoneRecordingBlockedByPendantBatch": "휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.",
@@ -3553,7 +3551,6 @@
     "captureStarting": "시작하는 중…",
     "capturePhoneStorageFull": "휴대폰 저장 공간 부족",
     "captureStorageAlmostFull": "저장 공간 거의 참",
-    "capturePendantDisconnectedDetail": "펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.",
     "participantsSummaryUncounted": "{name} 외 여러 명",
     "deviceOnboardingVoiceReplyTitle": "Omi의 답변 듣기",
     "deviceOnboardingVoiceReplySample": "알겠습니다. 다음 회의가 20분 후에 시작됩니다.",
@@ -3784,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{다음부터 Omi가 {name}님을 알아볼 거예요.} pending{몇 초 정도 걸려요.} disabled{Omi가 {name}님을 알아보려면 설정에서 목소리 저장을 켜 주세요.} other{Omi에 {name}님의 또렷한 음성이 더 필요해요. 계속 시도할게요.}}",
     "speakerLabelEarlierMatches": "이 목소리의 이전 대화 수: {count}",
     "speakerLabelText": "{part, select, likely{추정} soundsLike{{name}님 목소리와 비슷해요} notPerson{{name}님 아님} carried{계속 {name}님이에요. 지난 대화에서 이어졌어요.} change{변경} alsoTitle{이분도 {name}님인가요?} alsoBody{Omi가 이전 대화에서 같은 목소리를 찾았어요.} confirmed{이 라벨을 확인했어요} other{검토}}",
-    "speakerLabelTalkTime": "이 목소리 {duration}"
+    "speakerLabelTalkTime": "이 목소리 {duration}",
+    "askAnythingButton": "무엇이든 물어보세요",
+    "pendantLostConnection": "펜던트와 이 휴대폰의 연결이 끊겼어요.",
+    "pendantReconnectsOnItsOwn": "펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요.",
+    "pendantRecordingSafe": "그 전에 녹음된 내용은 안전하게 보관돼요."
 }
