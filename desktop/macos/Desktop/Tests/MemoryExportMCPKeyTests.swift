@@ -4,8 +4,11 @@ import XCTest
 
 private actor MCPKeyCreationProbe {
   private(set) var count = 0
-  private var continuation: CheckedContinuation<String, Never>?
-  private var startedWaiter: CheckedContinuation<Void, Never>?
+  // Retain every pending mint: a scheduling regression that starts a second
+  // concurrent create() must not overwrite (and strand) the first continuation.
+  private var pending: [CheckedContinuation<String, Never>] = []
+  private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+  private var finished = false
   let suspended: Bool
 
   init(suspended: Bool = false) {
@@ -14,22 +17,27 @@ private actor MCPKeyCreationProbe {
 
   func create() async -> String {
     count += 1
-    if !suspended { return "test-key" }
+    // A mint that starts after finish() is itself the regression the test
+    // asserts on; return immediately so the failure is a clean count
+    // mismatch instead of a suspended-forever test hang.
+    if !suspended || finished { return "test-key" }
     return await withCheckedContinuation { continuation in
-      self.continuation = continuation
-      startedWaiter?.resume()
-      startedWaiter = nil
+      pending.append(continuation)
+      startedWaiters.forEach { $0.resume() }
+      startedWaiters.removeAll()
     }
   }
 
   func waitUntilStarted() async {
-    if continuation != nil { return }
-    await withCheckedContinuation { startedWaiter = $0 }
+    if !pending.isEmpty { return }
+    await withCheckedContinuation { startedWaiters.append($0) }
   }
 
   func finish() {
-    continuation?.resume(returning: "test-key")
-    continuation = nil
+    finished = true
+    let waiters = pending
+    pending = []
+    waiters.forEach { $0.resume(returning: "test-key") }
   }
 }
 
@@ -162,7 +170,14 @@ final class MemoryExportMCPKeyTests: XCTestCase {
 
   func testRevokedLocalKeyDoesNotRemintDuringStatusCheck() async throws {
     let (defaults, service, probe) = try fixture()
+    // Drive the claimed transition: a key was genuinely stored, then cleared
+    // (revoked/removed externally). A status check must observe the cleared
+    // state without minting a replacement.
+    defaults.set("stored-key", forKey: MemoryExportDefaultsKeyName.mcpKey)
     defaults.set("owner-a", forKey: MemoryExportDefaultsKeyName.mcpKeyOwner)
+    let storedBefore = await service.storedMCPKey()
+    XCTAssertEqual(storedBefore, "stored-key")
+
     defaults.removeObject(forKey: MemoryExportDefaultsKeyName.mcpKey)
     _ = await service.status(for: .obsidian)
     let stored = await service.storedMCPKey()

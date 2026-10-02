@@ -298,6 +298,9 @@ private struct ConnectOptionCard: View {
         statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
       } catch {
         resultMessage = .failure(setupFailureMessage(for: error))
+        // A failed Connect may still have minted and stored the key before
+        // connector setup threw; refresh so the manual fallback can copy it.
+        mcpKey = await MemoryExportService.shared.storedMCPKey()
       }
       isRunning = false
     }
