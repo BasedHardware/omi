@@ -1981,17 +1981,16 @@ def search_conversations_endpoint(
         start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
         end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
         browse_results = browse_conversations_by_speaker(
-            # Always scan through the scan-and-fill reader: a short page from
-            # the server-side limit/offset branch only means "some rows in this
-            # window were invisible", not the end of the data, and treating it
-            # as exhaustion ended this scan early (#19908). Discarded rows are
-            # filtered by the browse helper, which still counts them against
-            # the offset, so the caller's include_discarded is honoured.
+            # Pass the caller's include_discarded through rather than forcing the
+            # scan-and-fill branch: that branch restarts its stream from the
+            # newest row on every page, so a deep browse re-read the whole
+            # history once per page and ran for minutes. On the limit/offset
+            # branch a tombstone inside the window can end the scan early (#19908).
             lambda limit, offset: conversations_db.get_conversations_without_photos(
                 uid,
                 limit=limit,
                 offset=offset,
-                include_discarded=True,
+                include_discarded=include_discarded,
                 start_date=start_dt,
                 end_date=end_dt,
             ),

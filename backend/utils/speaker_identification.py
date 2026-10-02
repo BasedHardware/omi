@@ -3,7 +3,7 @@ import io
 import re
 import wave
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
 import av
 import numpy as np
@@ -16,8 +16,15 @@ from utils.audio_timeline import (
     chunk_span_bounds,
     coverage_outcome,
     is_audio_timeline_v2,
-    segment_wall_window,
 )
+from utils.conversations.audio_placement import (
+    CAPTURE_RETRY_MIN_SHIFT_SECONDS,
+    capture_shift,
+    capture_window,
+    locate,
+    provisional_window,
+)
+from utils.conversations.teaching_placement import OMI_SPEAKER_CAPTURE_RETRY_TOTAL, recover_teaching_clip
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL, OMI_PERSON_VOICE_LEARNING_TOTAL
 from utils.speaker_learning_policy import (
@@ -832,8 +839,6 @@ async def extract_speaker_samples(
             outcome = 'no_audio'
             return outcome
 
-        started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
-
         # Build segment lookup from conversation's transcript_segments
         conv_segments = conversation.get('transcript_segments', [])
 
@@ -875,6 +880,11 @@ async def extract_speaker_samples(
         plan = plan_pooled_intervals(candidates, conv_segments, allowed_source_ids=authorized_ids)
         clean_seconds = plan.total_seconds
 
+        coverage_conversation: Any = conversation
+        origin_window = provisional_window(conversation, 0.0, 1.0)
+        if origin_window is not None:
+            coverage_conversation = {**conversation, 'started_at': origin_window[0]}
+
         if is_audio_timeline_v2(conversation):
             # v2: extract only from validated coverage; an uncovered
             # window is unavailable, never an embedding of other audio.
@@ -882,7 +892,7 @@ async def extract_speaker_samples(
             kept_contributors: List[Any] = []
             uncovered = False
             for interval, contributors in zip(plan.intervals, plan.contributors):
-                coverage = coverage_outcome(conversation, interval[0], interval[1])
+                coverage = coverage_outcome(coverage_conversation, interval[0], interval[1])
                 OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode='v2', outcome=coverage).inc()
                 if coverage == 'covered':
                     kept_intervals.append(interval)
@@ -901,98 +911,172 @@ async def extract_speaker_samples(
 
         timeline_v2 = is_audio_timeline_v2(conversation)
         read_session = AudioChunkReadSession(uid, conversation_id, sample_rate)
-        clips: List[bytes] = []
-        kept_contributors = []
-        unavailable_window = False
-        decoded_seconds = 0.0
-        covered_end: Optional[float] = None
-        for (start, end), contributors in zip(plan.intervals, plan.contributors):
-            clip_start = start if covered_end is None else max(start, covered_end)
-            if clip_start >= end:
-                continue
-            covered_end = end
-            if not timeline_v2:
-                clip = await run_blocking(
-                    sync_executor,
-                    legacy_speaker_clip_pcm,
-                    uid,
-                    conversation_id,
-                    started_at_ts + clip_start,
-                    started_at_ts + end,
-                    sample_rate,
-                    session=read_session,
-                    timestamps=all_timestamps,
-                    caller='teaching',
-                )
-                if clip is None:
-                    unavailable_window = True
-                    continue
-                clips.append(clip)
-                kept_contributors.extend(contributors)
-                decoded_seconds += len(clip) / (sample_rate * 2)
-                continue
-            window = segment_wall_window(conversation, clip_start, end)
-            if window is None:
-                continue
-            abs_start, abs_end = window
-            relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
-            span_starts = [
-                bounds[0]
-                for audio_file in audio_files
-                for span in audio_file.get('chunk_spans') or []
-                if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
+        use_capture = False
+
+        def capture_retry() -> bool:
+            # The legacy position failed to yield verified speech. Live text and stored audio run on
+            # different clocks, so try once more where the receiver recorded hearing these segments.
+            nonlocal use_capture
+            if use_capture or timeline_v2:
+                return False
+            shifts = [
+                capture_shift(conversation, start, end, segments=contributors)
+                for (start, end), contributors in zip(plan.intervals, plan.contributors)
             ]
-            if not relevant_timestamps or not span_starts:
-                continue
-            buffer_start = min(span_starts)
-            # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
-            try:
-                merged = await run_blocking(
-                    sync_executor,
-                    download_audio_chunks_and_merge,
-                    uid,
-                    conversation_id,
-                    relevant_timestamps,
-                    fill_gaps=True,
-                    sample_rate=sample_rate,
-                )
-            except FileNotFoundError:
-                continue
-            # Use av for sample-accurate trimming
-            clip = _trim_pcm_audio(merged or b'', sample_rate, abs_start - buffer_start, abs_end - buffer_start)
-            clip = clip[: int(round((end - clip_start) * sample_rate)) * 2]
-            if clip:
-                clips.append(clip)
-                kept_contributors.extend(contributors)
-                decoded_seconds += len(clip) / (sample_rate * 2)
+            if not any(shift is not None and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS for shift in shifts):
+                return False
+            use_capture = True
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='person', outcome='attempted').inc()
+            return True
 
-        if not clips:
-            clean_seconds = 0.0
-            outcome = 'uncovered_audio' if unavailable_window else 'no_chunks'
-            return outcome
-        sample_audio = b''.join(clips)
-        clean_seconds = min(plan.total_seconds, decoded_seconds)
-        if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
-            outcome = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
-            return outcome
+        while True:
+            clips: List[bytes] = []
+            kept_contributors = []
+            fully_decoded: List[Tuple[float, float, List[Mapping[str, Any]]]] = []
+            unavailable_window = False
+            decoded_seconds = 0.0
+            covered_end: Optional[float] = None
+            for (start, end), contributors in zip(plan.intervals, plan.contributors):
+                clip_start = start if covered_end is None else max(start, covered_end)
+                if clip_start >= end:
+                    continue
+                covered_end = end
+                placement = locate(conversation, clip_start, end, segments=contributors)
+                if placement.reason in ('unplaced', 'invalid_window', 'missing_origin'):
+                    continue
+                if not timeline_v2:
+                    window = (
+                        placement.window
+                        or (
+                            capture_window(conversation, clip_start, end, segments=contributors)
+                            if use_capture
+                            else None
+                        )
+                        or provisional_window(conversation, clip_start, end)
+                    )
+                    if window is None:
+                        continue
+                    clip = await run_blocking(
+                        sync_executor,
+                        legacy_speaker_clip_pcm,
+                        uid,
+                        conversation_id,
+                        window[0],
+                        window[1],
+                        sample_rate,
+                        session=read_session,
+                        timestamps=all_timestamps,
+                        caller='teaching',
+                    )
+                    if clip is None:
+                        unavailable_window = True
+                        continue
+                    clips.append(clip)
+                    kept_contributors.extend(contributors)
+                    decoded_seconds += len(clip) / (sample_rate * 2)
+                    needed_bytes = (round(end * sample_rate) - round(clip_start * sample_rate)) * 2
+                    if len(clip) == needed_bytes:
+                        fully_decoded.append((clip_start, end, contributors))
+                    continue
+                if placement.reason != 'v2' or placement.window is None:
+                    continue
+                abs_start, abs_end = placement.window
+                relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
+                span_starts = [
+                    bounds[0]
+                    for audio_file in audio_files
+                    for span in audio_file.get('chunk_spans') or []
+                    if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
+                ]
+                if not relevant_timestamps or not span_starts:
+                    continue
+                buffer_start = min(span_starts)
+                # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
+                try:
+                    merged = await run_blocking(
+                        sync_executor,
+                        download_audio_chunks_and_merge,
+                        uid,
+                        conversation_id,
+                        relevant_timestamps,
+                        fill_gaps=True,
+                        sample_rate=sample_rate,
+                    )
+                except FileNotFoundError:
+                    continue
+                # Use av for sample-accurate trimming
+                clip = _trim_pcm_audio(merged or b'', sample_rate, abs_start - buffer_start, abs_end - buffer_start)
+                clip = clip[: int(round((end - clip_start) * sample_rate)) * 2]
+                if clip:
+                    clips.append(clip)
+                    kept_contributors.extend(contributors)
+                    decoded_seconds += len(clip) / (sample_rate * 2)
+                    needed_bytes = (round(end * sample_rate) - round(clip_start * sample_rate)) * 2
+                    if len(clip) == needed_bytes:
+                        fully_decoded.append((clip_start, end, contributors))
 
-        # Missing intervals must not abort later usable speech or contribute
-        # transcript text to the verification of audio we did not include.
-        contributing = {seg['id']: seg for seg in kept_contributors if seg.get('id')}
-        ordered_contributors = sorted(
-            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
-        )
-        expected_text = ' '.join(str(seg.get('text') or '').strip() for seg in ordered_contributors)
-        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
+            if not clips:
+                if capture_retry():
+                    continue
+                clean_seconds = 0.0
+                outcome = 'uncovered_audio' if unavailable_window else 'no_chunks'
+                return outcome
+            sample_audio = b''.join(clips)
+            clean_seconds = min(plan.total_seconds, decoded_seconds)
+            if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
+                if capture_retry():
+                    continue
+                outcome = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
+                return outcome
 
-        wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+            # Missing intervals must not abort later usable speech or contribute
+            # transcript text to the verification of audio we did not include.
+            contributing = {seg['id']: seg for seg in kept_contributors if seg.get('id')}
+            ordered_contributors = sorted(
+                contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
+            )
+            expected_text = ' '.join(str(seg.get('text') or '').strip() for seg in ordered_contributors)
+            contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
 
-        transcript, is_valid, reason = await verify_and_transcribe_sample(
-            wav_bytes, sample_rate, expected_text, language=sample_language
-        )
-        if not is_valid or transcript is None:
-            outcome = _verify_outcome(reason)
-            return outcome
+            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text, language=sample_language
+            )
+            if not is_valid or transcript is None:
+                if not reason.startswith('transcription_failed') and capture_retry():
+                    continue
+                if reason.startswith('text_mismatch') and len(plan.intervals) == len(clips) == len(fully_decoded) == 1:
+                    rec_start, rec_end, rec_contributors = fully_decoded[0]
+                    ordered_rec = sorted(
+                        (seg for seg in rec_contributors if seg.get('id')),
+                        key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id'))),
+                    )
+                    if (
+                        rec_end - rec_start >= TEACHING_MIN_TOTAL_SECONDS
+                        and ordered_rec
+                        and len({segment_group(seg) for seg in ordered_rec}) == 1
+                    ):
+                        rec_text = ' '.join(str(seg.get('text') or '').strip() for seg in ordered_rec)
+                        recovered = await recover_teaching_clip(
+                            uid,
+                            conversation,
+                            rec_start,
+                            rec_end,
+                            rec_text,
+                            sample_language,
+                            sample_rate,
+                            session=read_session,
+                            anchor_offset=rec_start - float(ordered_rec[0].get('start') or 0.0),
+                        )
+                        if recovered is not None:
+                            sample_audio, transcript = recovered
+                            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+                            is_valid = True
+                if not is_valid or transcript is None:
+                    outcome = _verify_outcome(reason)
+                    return outcome
+            break
 
         # Complete embedding work before replacing anything. A failed provider
         # call leaves the prior profile intact and allows a later retry.
@@ -1027,6 +1111,8 @@ async def extract_speaker_samples(
             outcome = 'stale_assignment'
             return outcome
         outcome = 'stored'
+        if use_capture:
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='person', outcome='stored').inc()
         try:
             for old_path in old_samples:
                 if old_path != path:

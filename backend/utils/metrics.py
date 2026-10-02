@@ -128,6 +128,11 @@ OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'Live transcript segments by audio-timeline mapping outcome',
     ['mode', 'outcome'],
 )
+OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
+    'omi_live_audio_capture_windows_total',
+    'Committed legacy live segment versions by capture-window availability',
+    ['outcome', 'reason'],
+)
 # Keep the established outcome metric stable for existing dashboards. This
 # companion metric exposes a fixed reason vocabulary for every rejected
 # provider interval, including clock-only sessions while the v2 flag is off.
@@ -1194,6 +1199,12 @@ OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     'omi_action_item_identity_total',
     'Task identity on a conversation task replace. outcome is a closed set: '
     'reused_identity|new|skipped_already_exported|disabled',
+    ['outcome'],
+)
+
+OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
+    'omi_action_item_refresh_total',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
     ['outcome'],
 )
 

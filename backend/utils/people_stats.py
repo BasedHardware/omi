@@ -82,15 +82,14 @@ def collect_people_stats(
 ) -> Dict[str, Dict[str, Any]]:
     """Aggregate stats over up to ``scan_cap`` newest conversations; ``fetch_page(limit, offset)``.
 
-    ``fetch_page`` must be a **scan-and-fill** reader (Firestore's
-    ``include_discarded=True`` branch): it keeps scanning until it has filled
-    the requested page, so a short page really is the end of the data. A
-    server-side ``limit().offset()`` reader drops invisible rows in Python
-    without padding, and there a short page only means "some rows in this
-    window were filtered out" — treating it as exhaustion truncates the scan
-    (#19908). Rows the reader returns but stats must not count (discarded,
-    locked) are kept in ``rows`` so the offset stays aligned, and dropped
-    during aggregation.
+    A short page ends the scan. That is exact for a reader that fills its pages.
+    The production reader is Firestore's server-side ``limit().offset()`` branch,
+    which drops invisible rows in Python without padding, so a tombstone inside
+    the window can end the scan early and under-count (#19908). Do not fix that
+    by passing ``include_discarded=True``: that branch re-reads from the newest
+    row on every page, which made this scan quadratic and timed the People list
+    out. Rows stats must not count (discarded, locked) are dropped during
+    aggregation.
     """
     rows: List[Dict[str, Any]] = []
     while len(rows) < scan_cap:
