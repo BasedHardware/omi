@@ -61,7 +61,9 @@ even if refresh hangs. It rechecks before every dispatch and mutation. Queued
 frames after stop use legacy with their original binding; late feature results
 are discarded. Stop during gate processing permits one bounded legacy recovery.
 These controls stop the new pipeline, and do not disable the legacy extractor or
-change reservation routing.
+change reservation routing. Already committed canonical outbox rows remain
+durable and can finish delivery under the current owner; admission leases govern
+new feature-frame work.
 
 The screenshot extractor makes one 3.8 Flash request through the existing proxy,
 thinking level low, 2048 output tokens and bounded JSON (at most eight tasks,
