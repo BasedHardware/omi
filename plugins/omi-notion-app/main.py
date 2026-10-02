@@ -1074,7 +1074,7 @@ async def notion_callback(
 ):
     """Handle Notion OAuth2 callback."""
     if error and isinstance(error, str):
-        safe_error = html.escape(error)
+        safe_error = html.escape(error, quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
