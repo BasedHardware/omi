@@ -457,7 +457,7 @@ actor GeminiClient {
     default:
       retryable = nil
     }
-    return .apiError("HTTP \(status): \(body)", retryable: [401, 402, 429].contains(status) ? false : retryable)
+    return .apiError("HTTP \(status): \(body)", retryable: retryable)
   }
 
   /// Check HTTP status code before attempting JSON decode.
@@ -1077,7 +1077,7 @@ extension GeminiClient {
     maximumAttempts: Int? = nil
   ) async throws -> ToolChatResult {
     if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
-    if let authorization, ScreenTaskBackpressure.shared.isBlocked(authorization) {
+    if maximumAttempts != nil, let authorization, ScreenTaskBackpressure.shared.isBlocked(authorization) {
       throw ScreenTaskFailure.backpressure
     }
     try await Self.enforceManagedProactivity()
@@ -1132,7 +1132,7 @@ extension GeminiClient {
           }
           try ScreenTaskWorkAuthority.require()
           let (data, urlResponse) = try await Self.send(urlRequest)
-          if let authorization, let response = urlResponse as? HTTPURLResponse,
+          if maximumAttempts != nil, let authorization, let response = urlResponse as? HTTPURLResponse,
             !(200...299).contains(response.statusCode)
           {
             ScreenTaskBackpressure.shared.record(

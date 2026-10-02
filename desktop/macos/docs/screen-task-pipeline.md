@@ -84,7 +84,9 @@ request, with no inner retry/model ladder. Thus a feature frame has at most one
 gate, one new screenshot request and one legacy screenshot request; provider
 internal retries are outside this client budget. A typed legacy retirement
 refusal is terminal and quiet. Feature-off retains the existing legacy loop,
-with original-owner/privacy hardening and terminal legacy auth/402/429 handling.
+with original-owner/privacy hardening and its existing retry/header behavior.
+The bounded feature recovery call honours the feature cooldown; ordinary
+feature-off work does not acquire that separate gate/extraction cooldown.
 Capture still proposes pending candidates, never accepted action items. Policy
 rejection, coalescence and an unsynced outbox are not delivered suggestions.
 
