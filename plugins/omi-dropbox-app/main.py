@@ -330,7 +330,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid}&sig={sig}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={uid_q}&sig={sig}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
