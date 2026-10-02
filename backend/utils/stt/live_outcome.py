@@ -43,6 +43,8 @@ class LiveLegOutcome:
         self.generations, self.record = generations, record
         self.client_has_left, self.text_seen = client_has_left, text_seen
         self.excluded_death = False
+        self.death_observed = False
+        self.death_eligible = False
         self.claimed = False
         self.settled = False
         self.reason: str | None = None
@@ -52,12 +54,23 @@ class LiveLegOutcome:
         self.handed_off = False
         self.transport_released = False
 
+    def observe_death(self) -> None:
+        """Freeze whether this provider death was observed while serving was eligible."""
+        if self.death_observed:
+            return
+        self.death_observed = True
+        self.death_eligible = not (self.owner_closing or bool(self.client_has_left and self.client_has_left()))
+
     def claim(self, reason: str, *, connect: bool = False) -> str:
         """Transfer settlement to the serving decision before closing transport."""
         if not self.claimed and not self.settled:
             self.claimed = True
             bounded_reason = normalize_live_stt_reason(reason)
-            self.excluded_death = self.owner_closing or bool(self.client_has_left and self.client_has_left())
+            self.excluded_death = (
+                not self.death_eligible
+                if self.death_observed
+                else self.owner_closing or bool(self.client_has_left and self.client_has_left())
+            )
             self.reason = 'normal_close' if self.excluded_death else bounded_reason
             if self.excluded_death:
                 try:

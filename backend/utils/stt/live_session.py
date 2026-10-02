@@ -537,7 +537,12 @@ class LiveLegSocket(STTSocket):
     def is_connection_dead(self) -> bool:
         # Observing liveness never settles evidence. Only the serving owner
         # knows whether this death caused failover or was found during teardown.
-        return self._dead or self.raw.is_connection_dead
+        raw_dead = self.raw.is_connection_dead
+        if raw_dead:
+            self._latch_failure()
+        elif self._dead and self._terminal_reason is not None:
+            self.leg_outcome.observe_death()
+        return self._dead or raw_dead
 
     def record_target_death(self, reason: str) -> bool:
         target = self._routing_target_entry
@@ -827,6 +832,7 @@ class LiveLegSocket(STTSocket):
     def _latch_failure(self, *, reason: str | None = None) -> None:
         if self._terminal_reason is None:
             self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
+        self.leg_outcome.observe_death()
 
     def _finish_transport(self) -> None:
         self._closing_for_health = True

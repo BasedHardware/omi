@@ -15,7 +15,9 @@ from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead
 from utils.metrics import OMI_FALLBACK_TOTAL, OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL
 from utils.observability.transcription import _deployment_environment
 from utils.stt import live_chain, live_failure, streaming as st
+from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, RECONNECT, COST_IGNORED_DEATHS
+from utils.stt.live_recovery import select_live_replacement
 
 
 def listener(monkeypatch, *, family='modulate', language='en'):
@@ -312,6 +314,64 @@ def test_death_claimed_with_connected_client_survives_later_teardown(monkeypatch
     leg.finish()
     assert observed(leg.routing_target, 'provider_failure', reason) == before + 1
     assert ignored_count(leg.routing_target, reason) == ignored_before
+
+
+@pytest.mark.parametrize('family,reason', [('modulate', 'modulate_serve_error'), ('soniox', 'connection_lost')])
+def test_death_observed_before_client_departure_remains_provider_failure(monkeypatch, family, reason):
+    receiver, raw = listener(monkeypatch, family=family)
+    leg = receiver.stt_socket
+    before = observed(leg.routing_target, 'provider_failure', reason)
+    ignored_before = ignored_count(leg.routing_target, reason)
+    raw.die(reason, 'synthetic provider death while client is connected')
+    assert leg.is_connection_dead  # First observation snapshots connected eligibility.
+    receiver.host.request.websocket.client_state = WebSocketState.DISCONNECTED
+    leg.leg_outcome.claim(reason)
+    assert leg.leg_outcome.settle()
+    assert observed(leg.routing_target, 'provider_failure', reason) == before + 1
+    assert ignored_count(leg.routing_target, reason) == ignored_before
+
+
+@pytest.mark.parametrize('family,reason', [('modulate', 'modulate_serve_error'), ('soniox', 'connection_lost')])
+def test_client_departure_before_death_observation_excludes_provider_failure(monkeypatch, family, reason):
+    receiver, raw = listener(monkeypatch, family=family)
+    leg = receiver.stt_socket
+    before = observed(leg.routing_target, 'provider_failure', reason)
+    ignored_before = ignored_count(leg.routing_target, reason)
+    receiver.host.request.websocket.client_state = WebSocketState.DISCONNECTED
+    raw.die(reason, 'synthetic provider death after client departure')
+    assert leg.is_connection_dead  # First observation snapshots departed eligibility.
+    leg.leg_outcome.claim(reason)
+    assert leg.leg_outcome.settle()
+    assert observed(leg.routing_target, 'provider_failure', reason) == before
+    assert ignored_count(leg.routing_target, reason) == ignored_before + 1
+
+
+def test_rebuild_exhaustion_settles_observed_leg_once_after_client_departure(monkeypatch):
+    receiver, raw = listener(monkeypatch)
+    leg = receiver.stt_socket
+    before = observed(leg.routing_target, 'provider_failure', 'modulate_serve_error')
+    fallback_before = fallback_count('modulate', 'modulate_serve_error')
+    raw.die('modulate_serve_error', 'synthetic provider death while client is connected')
+    assert leg.is_connection_dead
+    receiver.host.request.websocket.client_state = WebSocketState.DISCONNECTED
+    receiver._pending_live_failover = PendingLiveFailover(
+        from_mode='modulate',
+        to_mode='parakeet',
+        reason='modulate_serve_error',
+        source_outcome=leg.leg_outcome,
+    )
+    receiver._stt_rebuild_attempts = 3
+    select = lambda *_args, **_kwargs: pytest.fail('exhausted rebuild must not select another provider')
+
+    assert select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
+    assert leg.leg_outcome.settled
+    assert observed(leg.routing_target, 'provider_failure', 'modulate_serve_error') == before + 1
+    assert fallback_count('modulate', 'modulate_serve_error') == fallback_before + 1
+
+    assert select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
+    receiver._settle_pending_live_failover_failure()
+    assert observed(leg.routing_target, 'provider_failure', 'modulate_serve_error') == before + 1
+    assert fallback_count('modulate', 'modulate_serve_error') == fallback_before + 1
 
 
 @pytest.mark.parametrize('family,reason', [('modulate', 'modulate_serve_error'), ('soniox', 'connection_lost')])
