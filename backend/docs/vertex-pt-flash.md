@@ -1,4 +1,10 @@
-# Vertex Provisioned Throughput: 2.5 Flash to 3.8 Flash
+# Vertex Provisioned Throughput reservation state
+
+**One exclusive order, edited in place. Before purchasing a second order or
+splitting an order, declare a distinct order identity in `RESERVATIONS`. Never
+label concurrent/split capacity as the same order.** Automatic inactivity relies
+on this operator contract. `OMI_VERTEX_PT_MODEL=gemini-3.8-flash` explicitly
+declares that the old 2.5 order is gone; do not set it in anticipation of a move.
 
 We bought **5 GSU Provisioned Throughput** for `gemini-2.5-flash` in
 `us-central1` so company-paid Flash text is reserved and cheaper than Gemini
@@ -46,7 +52,7 @@ Company-paid desktop `generateContent` / `streamGenerateContent` /
 `routers/desktop_proxy.py` stays the BFF (auth, trial paywall, redis metering,
 body limits, model allowlist) and translates Gemini JSON ↔ the gateway's
 OpenAI surface (`utils/llm/desktop_gemini_gateway.py`). The PT policy itself —
-pin, promotion latch, overflow ladder, reachability table, the capacity
+declared reservation states, overflow ladder, reachability table, the capacity
 header, and the regional vs multi-region host split — lives in the gateway's
 `VertexGeminiProvider` (`backend/llm_gateway/gateway/providers.py`), driven by
 the same `backend/utils/llm/vertex_pt_routing.py` this document describes:
@@ -105,10 +111,8 @@ The host is always plain `aiplatform.googleapis.com` — `us-aiplatform.googleap
 is not a valid host (400 `Invalid hostname`). Only the `locations/{loc}` path
 segment changes.
 
-The 429 to a `dedicated` request is the "no PT order for this model" answer,
-which is what we expect while we own no 3.1 order. It also proves the capacity
-header is honored on the multi-region endpoint, so the auto-detect probe below
-works there. Note the message reads lowercase `provisioned throughput` where
+The 429 to a `dedicated` request is consistent with both no order and a saturated
+order. It cannot prove either. Only explicit PT traffic metadata teaches active state. Note the message reads lowercase `provisioned throughput` where
 the regional endpoint uses title case; the matcher casefolds, and must keep
 doing so.
 
@@ -211,6 +215,17 @@ A generic 429 (`Quota exceeded for requests per minute`) is backpressure and
 never triggers a fallback. Only a PT-exhaustion 429 or a model-unavailable 404
 does.
 
+Both transports call the pure `recovery_action()` policy. For a declared
+`overflow=shared` reservation (3.8), a dedicated capacity-signature error or
+unavailable dedicated endpoint retries **the same model shared** when overflow
+is enabled, including after activation. Generic 429, 401/403, 5xx, transport
+errors and malformed responses do not buy a same-model retry. `overflow=false`
+suppresses that recovery. A shared model-unavailable response may still use its
+existing cheaper fallback chain. Unknown/inactive target traffic starts shared;
+there is no separate customer-probe failure policy. The common status/body and
+traffic-metadata matrix runs through gateway/direct JSON and SSE paths.
+
+
 ## Thinking contract, measured
 
 Run 2026-08-18 via `backend/scripts/probe_gemini_thinking_contract.py`:
@@ -238,70 +253,232 @@ gateway wire. `model_payload()` adapts each actual attempt: 3.8 always uses
 low; a fallback to 2.5 replaces the level with budget 1024 (minimal becomes 0).
 This avoids sending unsupported 3.x thinking levels to a 2.5 fallback.
 
-## Migrating the reservation to `gemini-3.8-flash`
+## Reservation state and automatic cutoff
 
-`PT_MODEL_TARGET` is 3.8 Flash. No code deployment is required when the order
-moves, provided its location is already declared as above.
+Orders are declared in `backend/config/vertex_reservations.py`: model, dedicated
+location, optional location override, **exclusive order identity**, unknown-state
+capacity, overflow mode and thinking level. Both current entries describe the
+same single 5-GSU order: 2.5 Flash at **us-central1**, 3.8 Flash at the declared
+target location (default `us`). They are not two concurrent orders. A second
+purchased or split order must have a different identity before serving it.
+[Google supports splitting an order for partial migrations](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/provisioned-throughput/purchase-provisioned-throughput).
+Response metadata cannot verify that inventory or rule out fulfilment overlap;
+the exclusive-order declaration is an operator contract, not unconditional proof.
 
-Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
-(`dedicated` or `shared`); implicit spillover would hide double billing.
+`ReservationState` uses shared Redis when configured and the same strict reducer
+with process-local evidence when no Redis host is configured. Missing Redis is
+**not a startup dependency**. The first local use emits one bounded WARNING:
+`vertex_reservation_storage mode=process_local reason=not_configured`.
 
-1. Before migration, old-client 2.5 Flash stays on regional **dedicated**
-   capacity. New 3.8 requests ask for dedicated target capacity at most once
-   per instance per 600 seconds. Every failed dedicated probe (any HTTP error, timeout, connection or
-   malformed response) retries the same target on US **shared** capacity,
-   without surfacing the probe error or marking shared model health unavailable.
-   Gateway probes have a whole-attempt deadline of at most one second and one
-   quarter of the remaining request budget; shared recovery uses the original
-   deadline. Streaming probe output is bounded and buffered until success, so
-   partial output and ambiguous promotion cannot escape. This budget applies
-   to gateway capacity discovery, not requests on an already confirmed order.
-2. Only a successful dedicated target response promotes: HTTP 2xx, with
-   `usageMetadata.trafficType` equal to `PROVISIONED_THROUGHPUT` when present.
-   Streaming observes the completed response's final traffic metadata. No 429
-   of any wording, other HTTP error, timeout or connection failure promotes;
-   errors never prove that an order exists. Before promotion, any failed
-   dedicated target probe retries the same model shared and retains the
-   600-second probe TTL. After promotion, any dedicated target 429 leaves the
-   target promoted and spills this request to **gemini-3.8-flash shared**, at the same model/list price as its origin,
-   rather than a cheaper rung: this lane's value is its extraction precision.
-   Existing models keep
-   their original overflow ladder, deadlines and HTTP status handling (<400
-   accepts the body). Only target discovery probes require a 2xx response. Both streaming and nonstreaming providers observe
-   the actual model and capacity. The latch is process-local, so rollout is
-   gradual as instances receive 3.8 traffic; there is no startup probe.
-3. After promotion, new 3.8 requests use dedicated target capacity at its
-   declared location. Old-client 2.5 requests keep **2.5 Flash**, regional,
-   but now **shared/on-demand**. Pro remains the existing 3.1 Flash-Lite remap;
-   client-pinned 2.5 Flash-Lite and BYOK remain unchanged. Remapping old Flash
-   to 3.8 shared would raise both input/output prices, so it is disallowed.
-4. Existing-model reserved overflow uses shared 3.1 Flash-Lite then 2.5 Flash-Lite, subject to
-   reachability, live-reservation exclusion, and the lane's starting price
-   ceiling. Old 2.5 overflow never probes the more expensive target. Price
-   ceilings also apply to operator overrides and cross-family fallbacks.
+Two supported topologies:
 
-On 2026-10-02, a live dedicated `gemini-3.8-flash` request on `locations/us`,
-with no target order in existence, returned HTTP 429 / `RESOURCE_EXHAUSTED`:
+- **Both services share Redis:** BFF and gateway use fleet-wide 600-second leases,
+  publish dedicated evidence to the same project/location-scoped key and read the
+  same transitions. This requires matching the desktop Redis pool, not the separate
+  backend pool. Gateway-to-desktop-Redis network reachability is unverified.
+- **Desktop-backend Redis, gateway process-local (preferred without new cluster
+  wiring):** the BFF independently schedules both synthetic dedicated probes through
+  Vertex using its own credentials, records old-model capacity failures and strict
+  successor successes in its existing Redis, and can confirm inactivity/refuse
+  the configured old-build range without any gateway observations once armed. The gateway independently
+  probes and routes using its local strict evidence. Its state/leases reset on pod
+  restart and are not fleet-wide; routing may lag BFF cutoff. No wire/state exchange
+  or gateway Redis connection is required. An integration test advances the BFF
+  through four probe intervals while a separate gateway remains unknown and proves
+  BFF admission still refuses the eligible legacy request.
 
-> Too many requests. Exceeded the provisioned throughput. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.
+The gateway chart's Redis host/port ConfigMap and password Secret references are
+all `optional: true`. A missing reference cannot prevent a pod starting. Optional
+future wiring for David: provision `<env>-omi-reservation-runtime-config` with
+`REDIS_DB_HOST`/`REDIS_DB_PORT` from the existing desktop GitHub environment, and
+apply the `backend-secrets` password alias `VERTEX_RESERVATION_REDIS_PASSWORD`
+(prod source: `DESKTOP_REDIS_DB_PASSWORD`; dev: `REDIS_DB_PASSWORD`). No workflow
+change is made here, no new cluster resource is needed to deploy, and no GKE to
+Redis reachability is assumed. Partial or unreachable configuration degrades to
+unknown plus fresh local positives; a configured-store outage does not authorize
+refusal from cached negative state.
 
-The existing exhaustion matcher matches this absent-order response. It remains
-useful for legacy overflow routing, but must never authorize promotion. The live
-gateway smoke verified a bounded dedicated 429 followed by same-model US shared
-200 `ON_DEMAND`, no promotion, and a single shared attempt inside the probe TTL.
+Redis keys include compute project and declared order locations, expire after
+48 hours idle, and contain only timestamps, counters, states, leases and the first
+unknown shared-request time. WATCH/CAS uses three attempts and a 300ms total bound;
+Redis time orders committed observations. Unchanged reads do not write. Positive/
+unknown snapshots cache for one second; negative snapshots never cache. Local
+successes are merged per model and failed positive publications are retried after
+recovery, without erasing a newer confirmed failure window. Local state and
+pending evidence are cleared on project/order-location scope changes.
 
-Before migration 3.8 PayGo is incremental alongside the existing fixed fee.
-After migration old-client 2.5 PayGo becomes incremental at $0.30/$2.50 per
-million input/output tokens; 3.8's dedicated usage has prepaid marginal cost.
-This workload alone does not fill the order. Moving other lanes remains a
-separate evaluation and cost decision. Converting/cancelling an order is an
-operator commercial action, not a routing effect.
+The gateway performs its bounded state read **before** starting the full inference
+deadline. Publication after a response retains its separate bounded allowance.
+Both services close owned Redis pools and cancel their probes at shutdown.
 
-`test_screen_task_vertex_transition.py` pins absent-order/shared behavior,
-dedicated promotion at declared US/regional/global locations, old-client
-pricing, thinking adaptation, and bounded metadata. Existing proxy/provider
-contracts pin direct kill-switch and streaming recovery. No real order was
-queried or changed by this PR.
+State is `active`, `inactive`, or `unknown`, with its reason and observation
+timestamps. No order-list/control-plane API is called. An authenticated paid
+request can lease **one** synthetic `Reply OK.` dedicated probe for one declared
+model; each model has a 600-second lease (fleet-wide in Redis, per process without it). The tracked background task
+has its own **30-second whole-attempt deadline**, 16 output tokens, and declared
+model-specific thinking (zero budget on 2.5, low level on 3.8). It never retries
+shared. It closes/cancels with its owning service. Customer requests are never
+used as discovery probes: unknown 3.8 traffic goes directly shared. This removes
+the one-second screenshot-completion requirement and duplicated customer work.
+A 1.6-second synthetic response is covered by a cross-instance discovery test;
+successful dedicated 3.8 discovery remains unverified until that order exists.
+
+Discovery is demand-triggered, with no idle polling. Gateway pods can finish
+leased work independently of the triggering request. Request-based Cloud Run CPU
+may pause background work while idle. In the preferred topology the next BFF
+request resumes it; sustained traffic/probe completion within the freshness window
+is required for cutoff. Sparse traffic delays confirmation safely. Shared Redis
+with an always-running gateway is optional, not a correctness dependency under
+steady BFF traffic. Verify BFF lease completion during rollout; no discovery or
+confirmation guarantee is made during a total traffic/service outage. Demand in any
+managed lane can check all declarations, including an inactive/refused old lane.
+
+Any nonempty `OMI_VERTEX_PT_MODEL` pin suppresses all synthetic discovery. A
+per-model state override suppresses that model unless its value is `auto` (an
+existing global pin still suppresses discovery). Malformed overrides suppress
+discovery and fail admission open. A pin/location change during a probe prevents
+publishing its result. Normal completed dedicated responses still publish
+positive evidence immediately.
+
+Automatic inactivity requires **all** of:
+
+1. At least four spaced capacity-signature failures spanning at least 1,800
+   seconds; no dedicated success since the first failure.
+2. No gap over 900 seconds between failures, and the newest failure no older
+   than 900 seconds. Errors other than the capacity signature reset continuity.
+   Failures closer than 300 seconds count once (tolerates probe completion jitter).
+3. Positive `PROVISIONED_THROUGHPUT` success on another model declared as the
+   **same exclusive order**, newer than the failure-window start and no older
+   than 900 seconds.
+
+A 429 of any wording, or arbitrarily many saturated-order failures alone, never
+satisfies condition 3. A no-order 429 is still indistinguishable from saturation.
+This detector's additional evidence is the positive exclusive-order move, not
+an error-message heuristic. Safety is conditional on the single-order declaration
+being true; duplicate/concurrent orders mislabeled as one invalidate that proof.
+The policy makes no impossible claim that inference errors alone prove absence.
+Only a completed candidate response with explicit PT trafficType on a dedicated
+2xx resets failures and restores active immediately. Empty bodies/objects,
+metadata-only responses, unfinished candidates/SSE and contradictory traffic
+metadata never promote. Missing traffic metadata and 3xx never teach state, even
+where legacy wire handling still accepts the body. Active positive evidence
+expires to unknown after 24 hours; expired negative evidence also stops refusal.
+Typical detection under steady traffic takes 30–40 minutes, not the exact instant
+Google fulfils the change. If the new endpoint is wrong or never answers dedicated,
+cutoff waits rather than risking a false disablement.
+
+### Declared actions
+
+`POLICIES` defines lane dispositions; `policy()` resolves model defaults.
+`vertex_pt_routing.py` remains pure and accepts state/protected-model inputs.
+Both gateway and direct kill-switch paths consume it. There is no promotion latch
+that implicitly revokes another model. More than one active/protected model is
+excluded from overflow/fallback ladders, including during ambiguous transitions.
+
+| Lane / requested model | Active | Inactive | Unknown |
+| --- | --- | --- | --- |
+| Identified macOS legacy 2.5 task loop | Dedicated | Refuse | Dedicated |
+| Windows tasks/focus, macOS dictation/suggestions, unknown desktop, explicit backend 2.5 | Dedicated | Same model shared | Dedicated |
+| 3.8 new extraction | Dedicated | Same model shared | Same model shared; leased synthetic discovery |
+| Client-pinned Lite, Pro remap, BYOK | Existing policy | Existing policy | Existing policy |
+
+Refusal is the shipped tool loop's normal zero-task terminator, with bounded
+refusal headers; it never invokes a provider or charges metering. It neither
+prompts an update nor stops future normal capture requests. Observe mode increments
+`omi_vertex_reservation_policy_total{action="would_refuse"}` and serves normally;
+enforce mode records `action="refuse"`. Decisions use closed model/state/lane/action
+labels. `vertex_reservation_transition` records each committed state change. An inactive
+transition emits one **WARNING** with model, storage, reason, transition time,
+failure count, failure-window start/latest time, own success time and latest
+same-order successor success time; `vertex_reservation_policy` and `vertex_reservation_probe` record routing
+and synthetic usage without content or raw User-Agent. Gateway decisions also log
+which capacity the state selected. Storage fail-open uses standard fallback telemetry.
+
+### Missed-discovery alert
+
+`vertex_reservation_discovery_overdue` is a WARNING when a declared target is
+still sent shared/unknown at least **six hours (21,600 seconds)** after its first
+unknown shared request. Repeat warnings are limited to once per model per hour.
+Only declared model names, state/capacity and timestamps/elapsed seconds appear;
+no user, request, prompt or User-Agent fields. Known active/inactive state resets
+the local unknown timer. Redis transactions share the earliest timer across
+replicas; a newly noted first request is persisted on the next transaction.
+Without Redis, the timestamp resets on process restart.
+
+The bounded counter `omi_vertex_reservation_unknown_shared_total{model}` increments
+on each such shared/unknown dispatch. Alert on
+`sum by (model) (rate(omi_vertex_reservation_unknown_shared_total[5m])) > 0`
+with `for: 6h` to retain the alert condition across process churn under sustained
+traffic. Neither the counter nor warning asserts that an order actually exists:
+check the order/location, strict completion/traffic metadata, discovery permissions
+and probe completion before changing overrides. Alert provisioning is an operator
+follow-up; this PR emits the signal and does not change monitoring resources.
+
+[Client audit, lane costs, release tags, rollout dependency and smoke limits](vertex-reservation-lane-audit.md).
+Refusal requires a positive macOS identity, the extraction tag and complete
+five-task-tool signature, plus **7000 ≤ build < configured first-capable build**.
+`OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` is read per request and deliberately
+has no default. **When the first macOS release containing #20374 is cut, set this
+control on desktop-backend to that release's build number.** Do not derive it
+from #20265: builds 12433/12434 already contain that flag-off pipeline but not the
+required sibling refusal fix. Leave it unset until that capable release exists.
+
+Unset, empty or invalid control means **nothing is refused**, even in enforce
+mode. Eligible inactive task loops still produce `would_refuse` counts. Valid
+controls are positive decimal integers ≤ 2147483647; a value at/below 7000 selects
+no eligible build. Observe mode always serves. Unidentified/conflicting identities,
+Windows, builds below the audited 7000 safety floor, and builds at/above the
+configured capability build remain served. The exact JSON/SSE refusal is unchanged.
+
+The existing policy counter/log carries one of eight bounded `build_bucket`
+values (listed in the audit). For inactive candidate volume before arming, use
+`sum by (build_bucket) (rate(omi_vertex_reservation_policy_total{action="would_refuse"}[5m]))`.
+No raw User-Agent/version/build labels are emitted. Remove the minimum-capable
+control to restore service while retaining observation, or select observe mode.
+This PR does not override client consent/cohort flags.
+
+### Next year's move: 3.8 Flash to model X
+
+Add X to `RESERVATIONS` with the same order identity and its explicitly approved
+location; keep 3.8 declared so it remains observable. Set the desired unknown and
+overflow actions; declare the affected lane's inactive action in `POLICIES`.
+Add the normal model allowlist, price, thinking and gateway-lane declarations if X
+is a new served model, and test its wire contract. Keep distinct orders distinct.
+No new transition, storage, lease or detector code is needed. After old clients
+retire, remove their policy/model declaration and corresponding tests together.
+Never discover `global` automatically.
+
+### Operator runbook
+
+Before the move: deploy both serving images using the preferred BFF Redis /
+gateway process-local topology. Verify the BFF's two model probes complete and
+its Redis records the evidence. Gateway Redis wiring is optional; if added,
+verify the desktop pool binding and cross-service connectivity before relying on
+fleet-wide leases. Confirm the order's location and approve global residency
+separately if required. Keep the minimum-capable build unset until the first #20374 release is cut;
+then set its build number as described above, or hold observe mode. Watch old dedicated success and target capacity errors until fulfilled.
+Missing target positive evidence means no automatic cutoff.
+
+On the day: target PT successes make it active independently. Old dedicated errors
+still use the original 3.1 Flash-Lite overflow during the confirmation window
+(the brief's suspected quality change is real). After sustained evidence,
+old becomes inactive; tagged macOS legacy loops stop spending, preserved lanes
+stay 2.5 shared, and new extraction stays dedicated. Follow the refusal count and
+state transition events; no operator must watch the moment of fulfilment.
+
+False detection: set `OMI_VERTEX_RESERVATION_STATES` to
+`{"gemini-2.5-flash":"active"}` on **both** services, or set the BFF's
+`OMI_VERTEX_LEGACY_TASK_MODE=observe` to restore service immediately. `inactive`
+forces the reverse direction; `unknown` returns conservative defaults; `auto`
+or removing an entry uses evidence again. These JSON overrides beat the existing
+single-order `OMI_VERTEX_PT_MODEL` pin and are read at request boundaries.
+A legacy pin to a non-reservation Lite model changes capacity routing but does
+not fabricate inactivity at admission: refusal still needs observed inactivity
+or an explicit per-model inactive override.
+Invalid JSON fails open to unknown and emits a bounded error. Do not erase the
+shared evidence to clear a false detection: the first real dedicated success
+clears it transactionally. A missing/wrong shared binding, endpoint or permission
+must be repaired before treating unknown as evidence of no order.
 
 ## Never move dedicated traffic off a reservation early
 
@@ -357,15 +534,18 @@ shipping code.
 
 | Env | Effect |
 | --- | --- |
+| `OMI_VERTEX_RESERVATION_STATES` | JSON model → `active`/`inactive`/`unknown`/`auto`; highest priority, read per request; invalid configuration becomes unknown. |
+| `OMI_VERTEX_LEGACY_TASK_MODE` | `enforce` default, armed only by a valid minimum-capable build; `observe` counts would-refuse but serves normally. |
+| `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First release build containing #20374; per-request positive integer, no default. Unset/invalid serves everyone and retains bounded would-refuse counts; configured N selects identified task-loop builds 7000 ≤ build < N after confirmed inactivity. |
 | `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
-| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Gateway target discovery/full-capacity attempts retain same-model shared recovery to preserve extraction precision. |
+| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Target dedicated attempts also respect this switch; synthetic discovery never retries shared. |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Dedicated target order location. Default US multi-region; regional/global require an explicit declared order location. Global requires residency sign-off. Shared target traffic retains its residency default. |
 | `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 
 ## Keeping the reservation for work that must be Flash
 
-The 13,450 tok/s cap is oversubscribed, so the proxy actively keeps low-value
+The 13,450 tok/s cap can burst to exhaustion, so the proxy keeps low-value
 work off `gemini-2.5-flash`:
 
 - **Server-paid Pro is served by `gemini-3.1-flash-lite`** ($10.00 -> $1.50 per
@@ -423,6 +603,9 @@ Single `embedContent` uses Vertex `:predict` when a project is set.
 
 Incident: 2026-08-04 cutover. GitHub #6935 / SCA-323.
 
+Dedicated attempts send `X-Vertex-AI-LLM-Request-Type: dedicated`; shared attempts send
+`X-Vertex-AI-LLM-Request-Type: shared`. Only strict 2xx responses reporting
+`usageMetadata.trafficType=PROVISIONED_THROUGHPUT` establish active evidence.
 
 ### Accepted BFF thinking-config corrections
 

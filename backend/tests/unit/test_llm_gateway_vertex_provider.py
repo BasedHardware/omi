@@ -936,3 +936,11 @@ async def test_vertex_function_call_sse_emits_openai_tool_call_delta(monkeypatch
     assert b'"name":"no_advice"' in streamed
     assert b'"tool_calls"' in streamed
     assert streamed.endswith(b'data: [DONE]\n\n')
+
+
+@pytest.fixture(autouse=True)
+def held_discovery_leases_for_request_matrix(monkeypatch):
+    """Keep synthetic discovery separate from customer-attempt/accounting fixtures."""
+    from utils.llm import vertex_reservation_state
+
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
