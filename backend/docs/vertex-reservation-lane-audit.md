@@ -60,8 +60,10 @@ The audit explicitly includes Stable-era `v0.12.402+12402-macos` and older tags.
 **12433 and 12434 already contain the flag-off pipeline from #20265**; they were
 incorrectly called pre-pipeline in the prior audit. Capability for this cutoff
 means a release containing **#20374**, including quiet refusal handling, not just
-presence of `screen_task_jev_gate`. #20374 was still open at this audit; no capable
-build number is inferred or hardcoded.
+presence of `screen_task_jev_gate`. #20374 was open during the release-history
+audit and subsequently merged to main as `d84b84f860`. Its client records this HTTP 200 refusal as
+`outcome=refused`. The operator must still select the first released build
+containing it; no capable build number is inferred from the merge or hardcoded.
 
 `GeminiClient.httpError` reads `X-Omi-Retryable`; retry and secondary-model
 fallback require explicit true. A 426 with false stops that round but returns an

@@ -83,6 +83,9 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
     'case',
     [
         'windows',
+        'ios_user_agent',
+        'browser_user_agent',
+        'no_task_tools',
         'untagged',
         'dictation',
         'lite',
@@ -117,6 +120,14 @@ async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch
     }
     if case == 'windows':
         headers['X-App-Platform'] = 'windows'
+    elif case == 'ios_user_agent':
+        headers['User-Agent'] = 'Omi/1.0.543 (iPhone; iOS 18.0) CFNetwork/1.0 Darwin/1.0'
+    elif case == 'browser_user_agent':
+        headers['User-Agent'] = (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15'
+        )
+    elif case == 'no_task_tools':
+        body.pop('tools')
     elif case == 'unidentified':
         headers.pop('User-Agent')
     elif case == 'current_macos':

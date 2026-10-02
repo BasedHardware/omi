@@ -3,8 +3,10 @@
 Each request advances a deterministic clock by 300ms during the state read,
 then pins the full inference deadline and retry budget,
 including origin/main's acceptance of a valid body on a 3xx response.
+The 3.8 first-request shared route is an intentional departure from that baseline.
 """
 
+import asyncio
 import json
 import time
 
@@ -29,6 +31,7 @@ from llm_gateway.gateway.vertex_wire import _vertex_request
         ('gemini-2.5-flash', 'gemini-2.5-flash', 'us-central1', 'dedicated'),
         ('gemini-2.5-flash-lite', 'gemini-2.5-flash-lite', 'us-central1', 'shared'),
         ('gemini-2.5-pro', 'gemini-3.1-flash-lite', 'us', 'shared'),
+        ('gemini-3.8-flash', 'gemini-3.8-flash', 'us', 'shared'),
     ],
 )
 @pytest.mark.parametrize(
@@ -48,6 +51,7 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.REGIONAL_LOCATION_ENV, 'us-central1')
     monkeypatch.setenv(ptr.MULTI_REGION_LOCATION_ENV, 'us')
+    monkeypatch.setenv('OMI_VERTEX_PT_TARGET_LOCATION', 'us')
     monkeypatch.setenv('LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS', 'false')
     for name in [ptr.PT_MODEL_OVERRIDE_ENV, ptr.OVERFLOW_MODEL_OVERRIDE_ENV, ptr.OVERFLOW_ENABLED_ENV]:
         monkeypatch.delenv(name, raising=False)
@@ -139,7 +143,10 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
         # Do not derive this expectation using the helper under test.
         assert json.loads(request.content) == {
             'contents': [{'role': 'user', 'parts': [{'text': 'synthetic parity input'}]}],
-            'generationConfig': {'maxOutputTokens': 64, 'thinkingConfig': {'thinkingBudget': 0}},
+            'generationConfig': {
+                'maxOutputTokens': 64,
+                'thinkingConfig': ({'thinkingLevel': 'low'} if model == 'gemini-3.8-flash' else {'thinkingBudget': 0}),
+            },
         }
 
 
@@ -294,3 +301,68 @@ def test_bff_to_vertex_wire_accepts_explicit_zero_budget_and_flash_lite_level(th
     }
     translated = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-vertex-flash-lite', stream=False)
     assert _vertex_request(translated)['generationConfig']['thinkingConfig'] == thinking
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+async def test_first_target_customer_request_is_shared_with_separate_synthetic_discovery(monkeypatch, stream):
+    from utils.llm import vertex_reservation_state as state_module
+    from config.vertex_reservations import RESERVATIONS
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('OMI_VERTEX_PT_TARGET_LOCATION', 'us')
+    for key in ['REDIS_DB_HOST', 'OMI_VERTEX_PT_MODEL', 'OMI_VERTEX_RESERVATION_STATES']:
+        monkeypatch.delenv(key, raising=False)
+    # Undo this module's held-lease fixture: exercise actual scheduling and wire.
+    monkeypatch.setattr(state_module, 'discovery_models', lambda _: frozenset(RESERVATIONS))
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        if request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated':
+            return httpx.Response(429, json={'error': {'message': 'Exceeded the provisioned throughput.'}})
+        payload = {
+            'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}],
+            'usageMetadata': {'trafficType': 'ON_DEMAND'},
+        }
+        return httpx.Response(200, content=('data: ' + json.dumps(payload) + '\n\n') if stream else json.dumps(payload))
+
+    async def token():
+        return 'synthetic-token'
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        try:
+            kwargs = dict(
+                provider_ref=ProviderRef(provider='gemini', model='gemini-3.8-flash'),
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                timeout_ms=60000,
+            )
+            request = {'messages': [{'role': 'user', 'content': 'synthetic customer fixture'}], 'max_tokens': 64}
+            if stream:
+                chunks = [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+                assert chunks[-1] == b'data: [DONE]\n\n'
+            else:
+                result = await provider.create_chat_completion(request, **kwargs)
+                assert result.response['choices'][0]['message']['content'] == 'ok'
+            # The first refresh leases one model; the next refresh can lease the other.
+            await asyncio.gather(*provider._reservations._probe_tasks)
+            await provider._refresh_reservations(1.6)
+            await asyncio.gather(*provider._reservations._probe_tasks)
+            assert (await provider._reservations.refresh())['gemini-3.8-flash'] == State.UNKNOWN
+        finally:
+            await provider._reservations.aclose()
+    customer = [r for r in seen if r.headers[ptr.REQUEST_TYPE_HEADER] == 'shared']
+    probes = [r for r in seen if r.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated']
+    assert len(customer) == 1
+    assert '/locations/us/publishers/google/models/gemini-3.8-flash:' in customer[0].url.path
+    assert json.loads(customer[0].content)['contents'][0]['parts'] == [{'text': 'synthetic customer fixture'}]
+    assert {r.url.path.split('/models/')[1] for r in probes} == {
+        'gemini-2.5-flash:generateContent',
+        'gemini-3.8-flash:generateContent',
+    }
+    for probe in probes:
+        body = json.loads(probe.content)
+        assert body['contents'] == [{'role': 'user', 'parts': [{'text': 'Reply OK.'}]}]
+        assert body['generationConfig']['maxOutputTokens'] == 16
+        assert probe.extensions['timeout'] == dict(connect=30, read=30, write=30, pool=30)
