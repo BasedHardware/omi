@@ -934,5 +934,287 @@ class TestCli(unittest.TestCase):
             self.assertIn("0 conversation(s) written", result.stdout)
 
 
+class TestEscapeInvariants(unittest.TestCase):
+    """Whole-document invariants: for any generated .tex, every occurrence of a
+    LaTeX special character must be part of its own escape sequence. These hold
+    over the entire document (preamble included), because the preamble the
+    generator emits introduces none of the ten specials. A raw leak from user
+    data would break exactly these counts.
+    """
+
+    def export_text(self, payload):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = tmp / "in.json"
+            src.write_text(json.dumps(payload), encoding="utf-8")
+            dest = tmp / "out.tex"
+            c2tex.convert(str(src), str(dest))
+            return read_doc(dest)
+
+    ALL_SPECIALS_CONV = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ALL_SPECIALS_CONV = conv(
+            id="a_b",
+            source="x&y",
+            structured={
+                "title": "a&b%c$d#e_f{g}~h^i\\j",
+                "category": "c&_at",
+                "overview": "50% & 100$ #1 _u~s^e r \\name {x}",
+                "action_items": [
+                    {"description": "done & open ~ ^", "completed": "true"},
+                    "plain",
+                ],
+            },
+            transcript_segments=[
+                {"speaker": "R&D~Ops", "start": 0, "text": "a&b%c$d#e_f{g}~h^i\\j"},
+            ],
+        )
+
+    def check_invariants(self, text):
+        # the five "self-containing" escapes: every raw char is part of its escape
+        self.assertEqual(text.count("%"), text.count(r"\%"))
+        self.assertEqual(text.count("$"), text.count(r"\$"))
+        self.assertEqual(text.count("#"), text.count(r"\#"))
+        self.assertEqual(text.count("_"), text.count(r"\_"))
+        self.assertEqual(text.count("&"), text.count(r"\&"))
+        # the tilde/caret escapes (\textasciitilde{} / \textasciicircum{}) do NOT
+        # contain the raw char in their name, so the raw char must be fully absent
+        self.assertEqual(text.count("~"), 0)
+        self.assertEqual(text.count("^"), 0)
+        # braces balance once the escaped literal braces are removed
+        stripped = "".join(text.replace(r"\{", "").replace(r"\}", ""))
+        self.assertEqual(stripped.count("{"), stripped.count("}"))
+
+    def test_percent_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        self.assertIn(r"50\%", text)
+        self.assertNotIn("50%", text)
+
+    def test_dollar_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        self.assertIn(r"\$d", text)
+        self.assertNotIn("$d#", text)
+
+    def test_hash_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        self.assertIn(r"\#e", text)
+
+    def test_underscore_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        self.assertIn(r"\_f", text)
+        self.assertIn(r"\texttt{a\_b}", text)
+
+    def test_ampersand_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        self.assertIn(r"a\&b", text)
+
+    def test_tilde_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        # "…~h^i…" must render as …\textasciitilde{}h\textasciicircum{}i…
+        self.assertIn(r"\textasciitilde{}h", text)
+        self.assertNotIn("~h", text)
+
+    def test_caret_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.check_invariants(text)
+        # "…~h^i\j" must render as \textasciitilde{}h\textasciicircum{}i\textbackslash{}j
+        self.assertIn(r"h\textasciicircum{}i", text)
+        self.assertNotIn("h^i", text)
+
+    def test_backslash_invariant(self):
+        # every backslash must belong to a known escape/command, and the user's
+        # literal backslash must appear as \textbackslash{}
+        text = self.export_text([self.ALL_SPECIALS_CONV])
+        self.assertIn(r"\textbackslash{}j", text)
+        self.assertNotIn("\\\\j", text)
+
+    def test_brace_balance_invariant(self):
+        text = self.export_text([self.ALL_SPECIALS_CONV, conv(id="conv_2")])
+        stripped = "".join(text.replace(r"\{", "").replace(r"\}", ""))
+        self.assertEqual(stripped.count("{"), stripped.count("}"))
+
+    def test_empty_document_satisfies_invariants(self):
+        # the preamble alone must introduce no raw specials
+        text = self.export_text([])
+        self.check_invariants(text)
+
+    def test_split_files_satisfy_invariants(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = tmp / "in.json"
+            src.write_text(json.dumps([self.ALL_SPECIALS_CONV, conv(id="conv_2")]), encoding="utf-8")
+            out_dir = tmp / "reports"
+            c2tex.convert(str(src), "", output_dir=str(out_dir))
+            for p in out_dir.iterdir():
+                self.check_invariants(read_doc(p))
+
+
+class TestDocumentEdges(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def export(self, payload, destination="out.tex", **kwargs):
+        src = self.tmp / "conversations.json"
+        src.write_text(json.dumps(payload), encoding="utf-8")
+        dest = self.tmp / destination
+        c2tex.convert(str(src), str(dest), **kwargs)
+        return read_doc(dest)
+
+    def test_int_id_rendered(self):
+        c = conv(id=12345)
+        text = self.export([c])
+        self.assertIn(r"\item[ID] \texttt{12345}", text)
+        self.assertNotIn("unknown", text)
+
+    def test_non_utc_offset_normalized(self):
+        c = conv(started_at="2026-09-01T09:00:00+05:30")
+        text = self.export([c])
+        self.assertIn("2026-09-01 03:30:00 UTC", text)
+
+    def test_negative_utc_offset_normalized(self):
+        c = conv(started_at="2026-09-01T09:00:00-04:00")
+        text = self.export([c])
+        self.assertIn("2026-09-01 13:00:00 UTC", text)
+
+    def test_float_speaker_no_crash(self):
+        c = conv(transcript_segments=[{"speaker": 1.5, "text": "x"}])
+        text = self.export([c])
+        self.assertIn(r"\textbf{1.5}", text)
+
+    def test_long_duration_timestamp_three_hours(self):
+        c = conv(transcript_segments=[{"speaker": 1, "start": 12600, "text": "x"}])
+        text = self.export([c])
+        self.assertIn(r"\texttt{[03:30:00]}", text)
+
+    def test_string_float_timestamp(self):
+        c = conv(transcript_segments=[{"speaker": 1, "start": "90.5", "text": "x"}])
+        text = self.export([c])
+        self.assertIn(r"\texttt{[01:30]}", text)
+
+    def test_bad_timestamp_falls_back_to_zero(self):
+        c = conv(transcript_segments=[{"speaker": 1, "start": "abc", "text": "x"}])
+        text = self.export([c])
+        self.assertIn(r"\texttt{[00:00]}", text)
+
+    def test_action_item_uppercase_yes_marks_done(self):
+        c = conv(structured={"action_items": [{"description": "It", "completed": "YES"}]})
+        text = self.export([c])
+        self.assertIn(r"\item " + r"\checkmark{} It", text)
+
+    def test_action_item_zero_numeric_open(self):
+        c = conv(structured={"action_items": [{"description": "It", "completed": 0}]})
+        text = self.export([c])
+        self.assertIn(r"\item " + r"\square{} It", text)
+
+    def test_structured_as_list_falls_back(self):
+        c = conv(structured=["not", "a", "dict"])
+        text = self.export([c])
+        self.assertIn("Untitled Conversation", text)
+        self.assertNotIn("\\subsection{Summary}", text)
+
+    def test_date_metadata_line_shows_count(self):
+        text = self.export([conv(), conv(id="conv_2")])
+        self.assertIn(r"\date{2 conversation(s) exported from \texttt{omi --json conversation list}}", text)
+
+    def test_source_with_specials_escaped(self):
+        c = conv(source="a&b~c")
+        text = self.export([c])
+        self.assertIn(r"\item[Source] \texttt{a\&b\textasciitilde{}c}", text)
+
+    def test_category_with_specials_escaped(self):
+        c = conv(structured={"category": "r&d_v2"})
+        text = self.export([c])
+        self.assertIn(r"\item[Category] \texttt{r\&d\_v2}", text)
+
+    def test_section_header_untitled_fallback(self):
+        c = conv(structured=None)
+        text = self.export([c])
+        self.assertIn("\\section{1. Untitled Conversation}", text)
+
+    def test_hundred_segment_transcript_complete(self):
+        segs = [{"speaker": 1, "start": i * 60, "text": f"line {i} & {i}%"} for i in range(100)]
+        c = conv(transcript_segments=segs)
+        text = self.export([c])
+        self.assertIn("100 segment(s)", text)
+        self.assertIn(r"line 99 \& 99\%", text)
+        # 99 * 60 = 5940 s = 01:39:00 (hour form, since it exceeds one hour)
+        self.assertIn(r"\texttt{[01:39:00]}", text)
+
+
+class TestMoreEscapeLatex(unittest.TestCase):
+    def test_newlines_collapsed_before_escape(self):
+        self.assertEqual(c2tex.escape_latex("a\nb&c"), "a b\\&c")
+
+    def test_specials_inside_json_dumped_dict(self):
+        self.assertEqual(c2tex.escape_latex({"a&b": 1}), r'\{"a\&b": 1\}')
+
+    def test_specials_inside_json_dumped_list(self):
+        self.assertEqual(c2tex.escape_latex(["x~y", 2]), r'["x\textasciitilde{}y", 2]')
+
+    def test_bool_false_coerced_then_escaped(self):
+        self.assertEqual(c2tex.escape_latex(False), "False")
+
+    def test_only_specials_string(self):
+        # a string made purely of specials must map exactly to the single-pass
+        # table result; this pins that no escape feeds back into another
+        value = "\\\\&%$#_{ }~^"
+        out = c2tex.escape_latex(value)
+        expected = "".join(c2tex._LATEX_SPECIALS.get(ch, ch) for ch in value)
+        self.assertEqual(out, expected)
+        # the brace-introducing escapes survive intact (no double-escape of the
+        # braces they introduce)
+        self.assertIn(r"\textbackslash{}", out)
+        self.assertIn(r"\textasciitilde{}", out)
+        self.assertIn(r"\textasciicircum{}", out)
+        self.assertIn(r"\&", out)
+        self.assertIn(r"\%", out)
+
+
+class TestCliExtra(unittest.TestCase):
+    def run_cli(self, *argv, cwd=None, stdin=None):
+        return subprocess.run(
+            [sys.executable, str(script_path), *argv],
+            capture_output=True,
+            text=True,
+            input=stdin,
+            cwd=str(cwd) if cwd else str(script_path.parent),
+        )
+
+    def test_cli_no_args_exits_two(self):
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("usage:", result.stderr)
+
+    def test_cli_unknown_flag_exits_two(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = tmp / "in.json"
+            src.write_text(json.dumps([conv()]), encoding="utf-8")
+            result = self.run_cli(str(src), str(tmp / "a.tex"), "--bogus-flag")
+            self.assertEqual(result.returncode, 2)
+
+    def test_cli_split_and_destination_conflict_message(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = tmp / "in.json"
+            src.write_text(json.dumps([conv()]), encoding="utf-8")
+            result = self.run_cli(str(src), str(tmp / "a.tex"), "--output-dir", str(tmp / "d"))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("exactly one of destination or --output-dir", result.stderr)
+            self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
