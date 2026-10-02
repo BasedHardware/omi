@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.435",
+      "date": "2026-10-02",
+      "changes": [
+        "Fixed screen task suggestions across context switches, account changes, privacy exclusions and service limits"
+      ]
+    },
+    {
       "version": "0.12.434",
       "date": "2026-10-02",
       "changes": [
