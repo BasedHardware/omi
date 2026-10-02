@@ -184,7 +184,7 @@ async def relocate_person_sample(
             if any(c.get('is_batch') or not c.get('generation') for c in chunks):
                 outcome = 'unsupported_source'
                 return None
-            key = index_key(uid, conversation_id, chunks, language)
+            key = await run_blocking(db_executor, index_key, uid, conversation_id, chunks, language)
             index = await run_blocking(db_executor, cache.read_index, uid, key)
             decoded: dict[int, bytes] = {}
             for number, chunk in enumerate(chunks):
@@ -283,7 +283,8 @@ async def relocate_person_sample(
                     timeout=5,
                     require_complete=True,
                 )
-                if index_key(uid, conversation_id, current, language) != key:
+                current_key = await run_blocking(db_executor, index_key, uid, conversation_id, current, language)
+                if current_key != key:
                     outcome = 'source_changed'
                     return None
                 outcome = 'relocated'
