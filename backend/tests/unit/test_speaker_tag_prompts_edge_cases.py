@@ -57,7 +57,7 @@ def test_conversation_clip_pcm_falls_back_to_created_at_and_normalizes_naive_utc
         'audio_files': [{'chunk_timestamps': [expected_epoch], 'duration': 10.0}],
     }
 
-    def positioned_clip(uid, cid, start, end, sample_rate):
+    def positioned_clip(uid, cid, start, end, sample_rate, **kwargs):
         assert start == expected_epoch + 1.0
         assert end == expected_epoch + 6.0
         return b'\x01\x00' * round((end - start) * sample_rate)

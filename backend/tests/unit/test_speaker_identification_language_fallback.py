@@ -49,7 +49,7 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
     monkeypatch.setattr(
         speaker_identification_mod,
         "legacy_speaker_clip_pcm",
-        lambda uid, cid, start, end, rate: b"\x00" * round((end - start) * rate * 2),
+        lambda uid, cid, start, end, rate, **kwargs: b"\x00" * round((end - start) * rate * 2),
     )
     monkeypatch.setattr(
         speaker_identification_mod, "_trim_pcm_audio", lambda pcm, sr, s, e: b"\x00" * (SAMPLE_RATE * 10 * 2)

@@ -3,7 +3,7 @@ import io
 import re
 import wave
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 import av
 import numpy as np
@@ -35,6 +35,7 @@ from utils.other.storage import (
 )
 from utils.speaker_sample import verify_and_transcribe_sample, delete_sample_from_storage
 from utils.speaker_audio import legacy_speaker_clip_pcm
+from utils.other.audio_chunks import AudioChunkReadSession
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
@@ -904,25 +905,17 @@ async def extract_speaker_samples(
             outcome = 'contaminated' if plan.contaminated else 'insufficient_speech'
             return outcome
 
-        contributing: Dict[Any, Mapping] = {}
-        for contributors in plan.contributors:
-            for seg in contributors:
-                if seg.get('id'):
-                    contributing[seg['id']] = seg
-        ordered_contributors = sorted(
-            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
+        relocation_candidates = list(
+            {seg['id']: seg for group in plan.contributors for seg in group if seg.get('id')}.values()
         )
-        expected_text = ' '.join(
-            str(seg.get('text') or '').strip() for seg in ordered_contributors if str(seg.get('text') or '').strip()
-        )
-        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
-
         timeline_v2 = is_audio_timeline_v2(conversation)
+        read_session = AudioChunkReadSession(uid, conversation_id, sample_rate)
         clips: List[bytes] = []
-        covered_seconds_before_failure = 0.0
+        kept_contributors = []
+        unavailable_window = False
         decoded_seconds = 0.0
         covered_end: Optional[float] = None
-        for start, end in plan.intervals:
+        for (start, end), contributors in zip(plan.intervals, plan.contributors):
             clip_start = start if covered_end is None else max(start, covered_end)
             if clip_start >= end:
                 continue
@@ -936,14 +929,15 @@ async def extract_speaker_samples(
                     started_at_ts + clip_start,
                     started_at_ts + end,
                     sample_rate,
+                    session=read_session,
+                    timestamps=all_timestamps,
+                    caller='teaching',
                 )
                 if clip is None:
-                    covered_seconds_before_failure = decoded_seconds
-                    clean_seconds = decoded_seconds
-                    clips.clear()
-                    decoded_seconds = 0.0
-                    break
+                    unavailable_window = True
+                    continue
                 clips.append(clip)
+                kept_contributors.extend(contributors)
                 decoded_seconds += len(clip) / (sample_rate * 2)
                 continue
             window = segment_wall_window(conversation, clip_start, end)
@@ -978,7 +972,16 @@ async def extract_speaker_samples(
             clip = clip[: int(round((end - clip_start) * sample_rate)) * 2]
             if clip:
                 clips.append(clip)
+                kept_contributors.extend(contributors)
                 decoded_seconds += len(clip) / (sample_rate * 2)
+
+        # Verify only text from successfully retained stored-position audio.
+        contributing = {seg['id']: seg for seg in kept_contributors if seg.get('id')}
+        ordered_contributors = sorted(
+            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
+        )
+        expected_text = ' '.join(str(seg.get('text') or '').strip() for seg in ordered_contributors)
+        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
 
         relocated = False
         failure = None
@@ -986,10 +989,9 @@ async def extract_speaker_samples(
         sample_audio = b''.join(clips)
         clean_seconds = min(plan.total_seconds, decoded_seconds)
         if not clips:
-            clean_seconds = max(clean_seconds, covered_seconds_before_failure)
-            failure = 'uncovered_audio'
+            failure = 'uncovered_audio' if unavailable_window else 'no_chunks'
         elif decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
-            failure = 'insufficient_speech'
+            failure = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
         else:
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
             transcript, is_valid, reason = await verify_and_transcribe_sample(
@@ -1009,7 +1011,7 @@ async def extract_speaker_samples(
                     record_location('not_authorized')
                 else:
                     recovered = await relocate_person_sample(
-                        uid, conversation_id, ordered_contributors, sample_language
+                        uid, conversation_id, relocation_candidates, sample_language
                     )
                     if recovered is not None:
                         sample_audio = recovered.pcm

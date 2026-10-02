@@ -1340,24 +1340,47 @@ schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Legacy person teaching, owner confirmations and speaker-tag preview clips use
-`utils/speaker_audio.py` to position individual blobs on their own timestamps.
-Newer blobs fill each sample position first; earlier overlapping blobs can fill
-holes left by shorter or missing newer blobs. Batch blobs are rejected on this
-legacy path: their interior chunks may have been concatenated without retaining
-individual timestamps, so aggregate byte length cannot prove continuity.
-Every requested sample must exist: gaps and truncated windows return no clip,
-never silence padding or a shortened clip. Person teaching records
-`uncovered_audio` without replacing its previous voiceprint; a person without a
-usable profile remains pending. `omi_speaker_clip_coverage_total` reports bounded
-`covered`, `gap`, `missing` (including unverified batch-only storage), and
-`invalid_window` outcomes. V2 span validation remains unchanged. This does not
-repair legacy transcript-clock drift, and STT text-containment and speaker-purity
-checks still run before learning.
-Each window lists blobs once and tries at most 32 individual blob downloads,
-including missing blobs, newest first, stopping once complete. The result is at
-most 12 s PCM; underlying blob size/listing size are not bounded by this output
-cap. Person teaching retains its 12-window cap, one STT verification and one
-embedding call. Older covering blobs beyond the download cap fail closed.
+`utils/speaker_audio.py` to position individual blobs by their starts. Existing
+span metadata supplies the authoritative start and sample count; filename-only
+starts retain their ±0.5 ms rounding uncertainty. Newer blobs fill each position
+first, and earlier overlapping blobs fill remaining holes. Complete
+boundary-aligned chunks retain all real samples. Small uncertain boundary cuts
+or joins trim actual samples rather than invent silence. Proven gaps or
+truncation return no clip. Pooled teaching skips unavailable windows, includes
+only the contributing transcript text, and retains the unchanged 10 s floor.
+An unsuccessful attempt preserves an existing voiceprint.
+
+Unverified legacy/live batch recordings keep main's existing merger and timing
+behavior, including its limitations. They are never classified as proven
+`covered` audio. No producer or feature flag changes here: the live uploader
+still writes `.batch.bin` / `.batch.enc`. Text-containment (0.9) and
+dominant-speaker (0.7) verification still guard teaching. Batch continuity,
+legacy transcript-clock alignment, and recognition accuracy remain unverified.
+V2 conversation span validation is unchanged.
+
+One invocation-scoped storage session shares its listing and decoded cache
+across pooled legacy windows. Trustworthy span ends or conservative raw-PCM
+size bounds skip non-intersecting objects. Every download uses the existing
+32-slot global storage semaphore. The improved search admits at most 32
+uncached downloads and 64 MiB of listed object bytes under a 30 s admission
+and I/O deadline, with retries disabled on those reads. Unknown sizes use a
+capped range; failed reads are cached. These are search/I/O bounds, not a
+hard deadline around CPU decoding or all listing pagination.
+
+The governing compatibility rule takes priority over resource rejection:
+when the search exhausts a limit, main's selected paths may still be read,
+reusing the listing/cache and semaphore. That measured compatibility escape
+can exceed the search's count/byte/deadline limits; the full invocation is
+therefore not unconditionally bounded. A cap alone never removes a clip that
+main could supply. Per-window output remains at most 12 s; person teaching
+retains 30 s / 12 windows, one STT verification and one embedding request.
+
+`omi_speaker_clip_coverage_total` uses bounded `outcome`, `reason` and `caller`
+labels. Reasons distinguish `complete`, `timestamp_rounding`, `gap`,
+`unverified_batch`, `download_limit`, `decode_failed`, `download_failed`,
+`missing_blob` and `invalid_window`. Callers are `teaching`,
+`owner_confirmation`, `preview` and `unknown`. Compatibility success is
+reported separately from proven coverage; no user content enters labels.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of
