@@ -166,7 +166,7 @@ class ReservationState:
                 starts = [
                     v
                     for v in (doc.get('unknown_shared_since', {}).get(m), self._unknown_shared_since.get(m))
-                    if type(v) in (int, float) and 0 <= v <= now
+                    if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= now
                 ]
                 if starts:
                     unknown_since[m] = min(starts)
