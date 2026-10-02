@@ -26,7 +26,7 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first, now: now))
     dedupe.record(key: "owner:1:Telegram", lines: first, now: now)
     XCTAssertTrue(dedupe.shouldSkip(key: "owner:1:Telegram", lines: jitter, now: now.addingTimeInterval(10)))
-    XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first.union(["also send the budget"]), now: now))
+    XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first + ["also send the budget"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:2:Telegram", lines: first, now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first, now: now.addingTimeInterval(61)))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: [], now: now))
@@ -39,6 +39,51 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertTrue(dedupe.shouldSkip(key: "app", lines: ["send report friday"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["send report monday"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["do not send report friday"], now: now))
+  }
+
+  func testNewOccurrenceOfIdenticalMainPaneLinePassesDedupe() {
+    let now = Date(timeIntervalSince1970: 100)
+    var dedupe = ScreenTaskDedupe()
+    let first = ScreenTaskDedupe.lines(ocr: ocr([("ok", 0.5)]), app: "Messages")
+    dedupe.record(key: "chat", lines: first, now: now)
+    let repeated = ScreenTaskDedupe.lines(ocr: ocr([("ok", 0.5), ("OK!", 0.51)]), app: "Messages")
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: repeated, now: now.addingTimeInterval(5)))
+    dedupe.record(key: "chat", lines: repeated, now: now.addingTimeInterval(5))
+    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: Array(repeated.reversed()), now: now.addingTimeInterval(6)))
+    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: first, now: now.addingTimeInterval(6)))
+  }
+
+  @MainActor func testAuditedRejectStagesResultsAndCountsActualSuccessfulWrites() async throws {
+    let results = try response(relation: "new", id: "").results(app: "Messages", context: [], today: "2026-10-02")
+    let admission = ScreenTaskAdmission(shouldExtract: true, gateOutcome: "rejected", auditSample: true)
+    var writes: [String] = []
+    var events: [ScreenTaskAuditEvent] = []
+    await ScreenTaskDelivery.deliver(
+      ScreenTaskExtraction(results: results + results, searchCount: 1, admission: admission)
+    ) { result in
+      if writes.isEmpty {
+        writes.append(result.task?.title ?? "missing task")
+        return true
+      }
+      return false  // Failed persistence or a confidence-filtered result is not staged.
+    } recordAudit: {
+      events.append($0)
+    }
+    XCTAssertEqual(writes.count, 1)
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events[0].taskCount, 1)
+    XCTAssertEqual(events[0].candidateCount, 2)
+    XCTAssertEqual(events[0].gateOutcome, "rejected")
+    XCTAssertTrue(events[0].auditSample)
+    events.removeAll()
+    await ScreenTaskDelivery.deliver(ScreenTaskExtraction(results: [], searchCount: 1, admission: admission)) { _ in
+      XCTFail("Empty audit must not write a task")
+      return false
+    } recordAudit: {
+      events.append($0)
+    }
+    XCTAssertEqual(events[0].taskCount, 0)
+    XCTAssertEqual(events[0].candidateCount, 0)
   }
 
   private func row(_ id: String?, _ description: String, status: String = "active") -> TaskSearchResult {

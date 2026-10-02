@@ -2,6 +2,13 @@ import Foundation
 
 extension TaskAssistant {
   func processFrame(_ frame: CapturedFrame) async {
+    let screenTaskEnabled = await ScreenTaskFeature.isEnabled
+    await DesktopLogPrivacy.$suppressContent.withValue(screenTaskEnabled) {
+      await processFrame(frame, screenTaskEnabled: screenTaskEnabled)
+    }
+  }
+
+  private func processFrame(_ frame: CapturedFrame, screenTaskEnabled: Bool) async {
     let enabled = await isEnabled
     guard enabled else {
       log("Task: Skipping analysis (disabled)")
@@ -10,12 +17,16 @@ extension TaskAssistant {
 
     log("Task: Analyzing frame from \(frame.appName)...")
     do {
-      let screenTaskEnabled = await ScreenTaskFeature.isEnabled
       let authorization = screenTaskEnabled ? screenTaskFrameOwners.authorization(for: frame) : nil
-      let (results, searchCount) =
-        try await screenTaskEnabled
-        ? extractScreenTasks(frame: frame, authorization: authorization)
-        : extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+      let extraction: ScreenTaskExtraction
+      if screenTaskEnabled {
+        extraction = try await extractScreenTasks(frame: frame, authorization: authorization)
+      } else {
+        let (results, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+        extraction = ScreenTaskExtraction(results: results, searchCount: searchCount)
+      }
+      let results = extraction.results
+      let searchCount = extraction.searchCount
       if screenTaskEnabled {
         guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       }
@@ -25,13 +36,22 @@ extension TaskAssistant {
       }
 
       let extractedCount = results.filter { $0.hasNewTask }.count
-      log(
-        "Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)"
-      )
+      if screenTaskEnabled {
+        ScreenTaskLogging.completed(results: results.count, extracted: extractedCount, searches: searchCount)
+      } else {
+        log(
+          "Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)"
+        )
 
-      for result in results {
-        await handleResultWithScreenshot(
-          result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle
+      }
+
+      await ScreenTaskDelivery.deliver(extraction) { result in
+        if screenTaskEnabled {
+          guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return false }
+        }
+        return await handleResultWithScreenshot(
+          result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle,
+          recordExtractionEvent: extraction.admission?.auditSample != true
         ) { type, data in
           let boxed = TaskAssistantEventPayloadBox(data)
           Task { @MainActor in
@@ -41,24 +61,32 @@ extension TaskAssistant {
             AssistantCoordinator.shared.sendEvent(type: type, data: boxed.value)
           }
         }
+      } recordAudit: { event in
+        guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+        PostHogManager.shared.taskExtracted(
+          taskCount: event.taskCount, gateOutcome: event.gateOutcome, auditSample: event.auditSample,
+          candidateCount: event.candidateCount)
       }
     } catch {
-      logError("Task extraction error", error: error)
+      if screenTaskEnabled { ScreenTaskLogging.failed() } else { logError("Task extraction error", error: error) }
     }
   }
 
-  func extractScreenTasks(frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws -> (
-    [TaskExtractionResult], Int
-  ) {
+  func extractScreenTasks(frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws
+    -> ScreenTaskExtraction
+  {
     guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
       throw CancellationError()
     }
+    var admission: ScreenTaskAdmission?
     do {
       let ocr = try await RewindOCRService.shared.extractTextWithBounds(from: frame.jpegData)
       let lines = ScreenTaskDedupe.lines(ocr: ocr, app: frame.appName)
       let key = "\(authorization.ownerID):\(authorization.authorizationGeneration):\(frame.appName)"
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
-      if screenTaskDedupe.shouldSkip(key: key, lines: lines, now: frame.captureTime) { return ([], 0) }
+      if screenTaskDedupe.shouldSkip(key: key, lines: lines, now: frame.captureTime) {
+        return ScreenTaskExtraction(results: [], searchCount: 0)
+      }
       try await ScreenTaskFeature.enforceQuota()
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
       let text = String(ocr.fullText.prefix(12000))
@@ -90,9 +118,10 @@ extension TaskAssistant {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), !Task.isCancelled else {
         throw CancellationError()
       }
+      admission = gate
       guard gate.shouldExtract else {
         screenTaskDedupe.record(key: key, lines: lines, now: frame.captureTime)
-        return ([], 1)
+        return ScreenTaskExtraction(results: [], searchCount: 1)
       }
       let formatter = DateFormatter()
       formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -106,25 +135,17 @@ extension TaskAssistant {
       let results = try JSONDecoder().decode(ScreenTaskResponse.self, from: Data(response.utf8)).results(
         app: frame.appName, context: context, today: today)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
-      if gate.auditSample {
-        await MainActor.run {
-          // Audit observations do not count as accepted/staged user tasks. The existing
-          // Task Extracted event carries bounded candidate count, including zero.
-          PostHogManager.shared.taskExtracted(
-            taskCount: 0, gateOutcome: "rejected", auditSample: true,
-            candidateCount: results.filter { $0.hasNewTask }.count)
-        }
-      }
       screenTaskDedupe.record(key: key, lines: lines, now: frame.captureTime)
-      return (results, 1)
+      return ScreenTaskExtraction(results: results, searchCount: 1, admission: gate)
     } catch {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), !Task.isCancelled else {
         throw CancellationError()
       }
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "screen_task_extraction", from: "other", to: "other", reason: "other", outcome: .degraded)
-      return try await extractTaskSingleStage(
+      let (results, searchCount) = try await extractTaskSingleStage(
         from: frame.jpegData, appName: frame.appName, authorization: authorization)
+      return ScreenTaskExtraction(results: results, searchCount: searchCount, admission: admission)
     }
   }
 }

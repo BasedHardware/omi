@@ -13,36 +13,39 @@ enum ScreenTaskFeature {
 struct ScreenTaskDedupe {
   private struct Entry {
     let date: Date
-    let lines: Set<String>
+    let counts: [String: Int]
   }
   private var entries: [String: Entry] = [:]
 
-  static func lines(ocr: OCRResult, app: String) -> Set<String> {
+  static func lines(ocr: OCRResult, app: String) -> [String] {
     let blocks = ocr.blocks.filter { block in
       !["Telegram", "Messages"].contains(app) || (block.x + block.width / 2 >= 0.28 && block.y > 0.06 && block.y < 0.94)
     }
-    return Set(
-      blocks.map { block in
-        block.text.lowercased().components(
-          separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_")).inverted
-        )
-        .filter { !$0.isEmpty }.joined(separator: " ")
-      }.filter { !$0.isEmpty })
+    return blocks.map { block in
+      block.text.lowercased().components(
+        separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_")).inverted
+      )
+      .filter { !$0.isEmpty }.joined(separator: " ")
+    }.filter { !$0.isEmpty }
   }
 
-  func shouldSkip(key: String, lines: Set<String>, now: Date) -> Bool {
+  func shouldSkip(key: String, lines: [String], now: Date) -> Bool {
     guard !lines.isEmpty, let entry = entries[key], now >= entry.date,
       now.timeIntervalSince(entry.date) <= 60
     else { return false }
-    return lines.isSubset(of: entry.lines)
+    return Self.counts(lines).allSatisfy { line, count in count <= (entry.counts[line] ?? 0) }
   }
 
-  mutating func record(key: String, lines: Set<String>, now: Date) {
+  private static func counts(_ lines: [String]) -> [String: Int] {
+    lines.reduce(into: [:]) { $0[$1, default: 0] += 1 }
+  }
+
+  mutating func record(key: String, lines: [String], now: Date) {
     entries = entries.filter { now.timeIntervalSince($0.value.date) <= 60 }
     if entries.count >= 64, let oldest = entries.min(by: { $0.value.date < $1.value.date })?.key {
       entries.removeValue(forKey: oldest)
     }
-    entries[key] = Entry(date: now, lines: lines)
+    entries[key] = Entry(date: now, counts: Self.counts(lines))
   }
 }
 

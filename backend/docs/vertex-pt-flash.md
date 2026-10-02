@@ -248,8 +248,14 @@ Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
 
 1. Before migration, old-client 2.5 Flash stays on regional **dedicated**
    capacity. New 3.8 requests ask for dedicated target capacity at most once
-   per instance per 600 seconds. An absent-order PT 429 or publisher 404 retries
-   the same target on US **shared** capacity. Other failures do not promote.
+   per instance per 600 seconds. Every failed dedicated probe (any HTTP error, timeout, connection or
+   malformed response) retries the same target on US **shared** capacity,
+   without surfacing the probe error or marking shared model health unavailable.
+   Gateway probes have a whole-attempt deadline of at most one second and one
+   quarter of the remaining request budget; shared recovery uses the original
+   deadline. Streaming probe output is bounded and buffered until success, so
+   partial output and failed-probe promotion cannot escape. This budget applies
+   to gateway capacity discovery, not requests on an already confirmed order.
 2. Only a successful dedicated target response latches `_pt_target_ready`.
    Successful shared requests, generic 429s, 401s and 5xx responses prove
    nothing about an order. Both streaming and nonstreaming providers observe

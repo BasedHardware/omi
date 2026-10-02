@@ -4,6 +4,9 @@ tier: manual
 description: Synthetic screen fixtures verify default-off extraction, OCR admission, canonical suggestions and owner-bound recovery.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/DesktopLogPrivacy.swift
+  - desktop/macos/Desktop/Sources/Logger.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskDelivery.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPrompt.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskResponse.swift
@@ -21,7 +24,7 @@ steps:
 
   - id: S2
     name: Content admission avoids duplicate requests and rejected pixel uploads
-    do: "Enable the flag only in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Add a novel request or changed deadline and verify another gate request. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata."
+    do: "Enable the flag only in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Add a second identical message (for example, another ok), a novel request or changed deadline and verify another gate request. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata. Its real extracted task must stage and sync, with the true staged count, audit_sample=true and gate_outcome=rejected, without a duplicate ordinary extraction event."
 
   - id: S3
     name: Structured results remain pending suggestions
@@ -29,8 +32,8 @@ steps:
 
   - id: S4
     name: Fail-open and account revocation preserve authority
-    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub extraction failure and verify the legacy loop uses the original owner. Revoke that owner before gate completion and before a fallback retry; verify no subsequent request with another account's token and no late suggestion/event. Confirm fallback telemetry contains bounded fields and no screen text."
+    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub extraction failure and verify the legacy loop uses the original owner. Revoke that owner before gate completion and before a fallback retry; verify no subsequent request with another account's token and no late suggestion/event. Confirm flag-on local logs, including the normal result handler, legacy fallback and inherited observation tasks, contain only capped counts/outcomes and no context, task/window titles, queries or free-form errors. Disable the flag and verify the existing log lines are retained. Confirm fallback telemetry contains bounded fields and no screen text."
 
   - id: S5
     name: Focused behavioral evidence
-    do: "Run ScreenTaskPipelineTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Retain command results separately from live app acceptance."
+    do: "Run ScreenTaskLoggingTests, ScreenTaskPipelineTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Retain command results separately from live app acceptance."

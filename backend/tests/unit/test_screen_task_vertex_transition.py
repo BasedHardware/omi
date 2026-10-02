@@ -1,5 +1,6 @@
 """The moved-order behavior, wire thinking and per-origin overflow contract."""
 
+import asyncio
 import json
 
 import httpx
@@ -129,26 +130,98 @@ def test_bounded_gate_metadata_and_direct_model_adaptation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status', [401, 429, 500])
-async def test_generic_dedicated_failure_never_promotes(monkeypatch, status):
-    from llm_gateway.gateway.provider_types import ProviderFailure
-
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('failure', [401, 403, 404, 429, 500, 'timeout', 'connection', 'malformed'])
+async def test_any_dedicated_probe_failure_retries_shared_and_never_promotes(monkeypatch, failure, stream):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda request: httpx.Response(status, json={'error': {'message': 'generic failure'}})
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        if request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated':
+            if failure == 'timeout':
+                raise httpx.ReadTimeout('probe timed out', request=request)
+            if failure == 'connection':
+                raise httpx.ConnectError('probe disconnected', request=request)
+            if failure == 'malformed':
+                return httpx.Response(200, text='data: {invalid\n\n' if stream else '{invalid')
+            return httpx.Response(failure, json={'error': {'message': 'unclassified dedicated failure'}})
+        return (
+            httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
+            if stream
+            else httpx.Response(200, json=_response())
         )
-    ) as client:
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        with pytest.raises(ProviderFailure):
-            await provider.create_chat_completion(
-                {'messages': [{'role': 'user', 'content': 'test'}]},
-                provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=1000,
-            )
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=1000,
+        )
+        request = {'messages': [{'role': 'user', 'content': 'test'}]}
+        if stream:
+            assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+        else:
+            assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
+                'content'
+            ] == 'ok'
         assert not provider._pt_target_ready
         assert provider._provisioned_model() == ptr.PT_MODEL_CURRENT
+        assert ptr.PT_MODEL_TARGET not in provider._model_unavailable_at
+    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+async def test_probe_deadline_cancels_stalled_body_and_leaves_shared_request_budget(monkeypatch, stream):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen = []
+    cancelled = []
+
+    class StalledProbe(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            try:
+                if stream:
+                    response = {'candidates': [{'content': {'parts': [{'text': 'dedicated-partial'}]}}]}
+                    yield ('data: ' + json.dumps(response) + '\n\n').encode()
+                await asyncio.Future()  # Deliberately unresponsive upstream; production timeout must cancel it.
+            except asyncio.CancelledError:
+                cancelled.append(True)
+                raise
+
+    def handler(request):
+        seen.append(request)
+        if request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated':
+            return httpx.Response(200, stream=StalledProbe())
+        return (
+            httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
+            if stream
+            else httpx.Response(200, json=_response())
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=200,
+        )
+        request = {'messages': [{'role': 'user', 'content': 'test'}]}
+        # This outer assertion bounds the whole user request, not only httpx's declared timeout.
+        async with asyncio.timeout(0.2):
+            if stream:
+                chunks = [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+                assert b'dedicated-partial' not in b''.join(chunks)
+            else:
+                assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
+                    'content'
+                ] == 'ok'
+        assert cancelled == [True] and not provider._pt_target_ready
+    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
+    assert 0 < seen[0].extensions['timeout']['read'] <= 0.05
+    assert 0 < seen[1].extensions['timeout']['read'] <= 0.16
+    assert VertexGeminiProvider._pt_probe_timeout_ms(75000) == 1000
 
 
 @pytest.mark.asyncio

@@ -473,61 +473,106 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         payload = _vertex_request(request)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
         attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
-        decoder = SSEEventDecoder()
         while attempts:
             model, capacity = attempts.pop(0)
             remaining_ms = int((deadline - self._now()) * 1000)
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+            probe = self._is_target_probe(model, capacity)
+            attempt_ms = self._pt_probe_timeout_ms(remaining_ms) if probe else remaining_ms
+            buffered: list[bytes] = []
             try:
-                endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
-                headers = _vertex_headers(await self._vertex_access_token(), capacity)
-                async with self._http_client.stream(
-                    'POST',
-                    endpoint,
-                    params={'alt': 'sse'},
-                    json=ptr.model_payload(payload, model),
-                    headers=headers,
-                    timeout=remaining_ms / 1000.0,
-                ) as response:
-                    if response.status_code >= 400:
-                        error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                        self._observe_attempt(model, capacity, response.status_code, error_preview)
-                        recovery = self._recovery_attempts(
-                            model, response.status_code, error_preview, origin_model=origin_model, capacity=capacity
-                        )
-                        if recovery:
-                            attempts = recovery
-                            continue
-                        _raise_for_status(
-                            response.status_code,
-                            error_preview,
-                            credential_mode=credentials.mode,
-                            retry_after_header=response.headers.get('retry-after'),
-                        )
-                    self._observe_attempt(model, capacity, response.status_code, b'')
-                    self._record_model_available(model)
-                    async for chunk in response.aiter_bytes():
-                        for event in decoder.feed(chunk):
-                            event_data = event.data.strip()
-                            if not event_data or event_data == '[DONE]':
-                                continue
-                            event_parsed = _parse_limited_json_response(event_data.encode('utf-8'))
-                            translated, _ = _vertex_to_openai_stream_chunk(
-                                event_parsed,
-                                requested_model=provider_ref.model,
-                                usage=vertex_usage_from_response(event_parsed).usage,
-                            )
-                            if translated is not None:
-                                yield translated
-                    yield _openai_sse_done()
-                    return
-            except ProviderFailure:
+                # Buffer a probe until it succeeds. No partial dedicated output or
+                # failed-probe promotion can escape before shared recovery.
+                async with asyncio.timeout(attempt_ms / 1000.0 if probe else None):
+                    chunks = self._stream_content_once(
+                        payload,
+                        model=model,
+                        capacity=capacity,
+                        requested_model=provider_ref.model,
+                        timeout_ms=attempt_ms,
+                        bounded=probe,
+                    )
+                    if probe:
+                        buffered = [chunk async for chunk in chunks]
+                    else:
+                        async for chunk in chunks:
+                            yield chunk
+                self._observe_attempt(model, capacity, 200, b'')
+                self._record_model_available(model)
+                if probe:
+                    for chunk in buffered:
+                        yield chunk
+                yield _openai_sse_done()
+                return
+            except _VertexHttpError as error:
+                self._observe_attempt(model, capacity, error.status_code, error.preview)
+                if probe:
+                    attempts = [(model, ptr.REQUEST_TYPE_SHARED)]
+                    continue
+                recovery = self._recovery_attempts(
+                    model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
+                )
+                if recovery:
+                    attempts = recovery
+                    continue
+                _raise_for_status(
+                    error.status_code,
+                    error.preview,
+                    credential_mode=credentials.mode,
+                    retry_after_header=error.retry_after_header,
+                )
+            except Exception as exc:
+                if probe:
+                    attempts = [(model, ptr.REQUEST_TYPE_SHARED)]
+                    continue
+                if isinstance(exc, httpx.TimeoutException):
+                    raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+                if isinstance(exc, httpx.HTTPError):
+                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
                 raise
-            except httpx.TimeoutException as exc:
-                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
-            except httpx.HTTPError as exc:
-                raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def _stream_content_once(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        model: str,
+        capacity: str,
+        requested_model: str,
+        timeout_ms: int,
+        bounded: bool,
+    ):
+        endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
+        headers = _vertex_headers(await self._vertex_access_token(), capacity)
+        decoder = SSEEventDecoder()
+        received = 0
+        async with self._http_client.stream(
+            'POST',
+            endpoint,
+            params={'alt': 'sse'},
+            json=ptr.model_payload(payload, model),
+            headers=headers,
+            timeout=timeout_ms / 1000.0,
+        ) as response:
+            if not 200 <= response.status_code < 300:
+                preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                raise _VertexHttpError(response.status_code, preview, response.headers.get('retry-after'))
+            async for chunk in response.aiter_bytes():
+                received += len(chunk)
+                if bounded and received > _configured_max_response_bytes():
+                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+                for event in decoder.feed(chunk):
+                    data = event.data.strip()
+                    if not data or data == '[DONE]':
+                        continue
+                    parsed = _parse_limited_json_response(data.encode('utf-8'))
+                    translated, _ = _vertex_to_openai_stream_chunk(
+                        parsed,
+                        requested_model=requested_model,
+                        usage=vertex_usage_from_response(parsed).usage,
+                    )
+                    if translated is not None:
+                        yield translated
 
     async def create_embedding(
         self,
@@ -598,17 +643,23 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             remaining_ms = int((deadline - self._now()) * 1000)
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+            probe = self._is_target_probe(model, capacity)
+            attempt_ms = self._pt_probe_timeout_ms(remaining_ms) if probe else remaining_ms
             try:
-                parsed = await self._generate_content_once(
-                    model=model,
-                    capacity=capacity,
-                    payload=payload,
-                    credentials=credentials,
-                    timeout_ms=remaining_ms,
-                )
+                async with asyncio.timeout(attempt_ms / 1000.0 if probe else None):
+                    parsed = await self._generate_content_once(
+                        model=model,
+                        capacity=capacity,
+                        payload=payload,
+                        credentials=credentials,
+                        timeout_ms=attempt_ms,
+                    )
             except _VertexHttpError as error:
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
+                if probe:
+                    attempts = [(model, ptr.REQUEST_TYPE_SHARED)]
+                    continue
                 recovery = self._recovery_attempts(
                     model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
                 )
@@ -621,6 +672,11 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     credential_mode=credentials.mode,
                     retry_after_header=error.retry_after_header,
                 )
+            except Exception:
+                if probe:
+                    attempts = [(model, ptr.REQUEST_TYPE_SHARED)]
+                    continue
+                raise
             self._observe_attempt(model, capacity, 200, b'')
             self._record_model_available(model)
             assert parsed is not None
@@ -653,7 +709,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
-                if response.status_code >= 400:
+                if not 200 <= response.status_code < 300:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                     raise _VertexHttpError(
                         response.status_code,

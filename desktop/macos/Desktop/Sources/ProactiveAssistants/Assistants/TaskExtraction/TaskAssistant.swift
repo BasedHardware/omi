@@ -327,29 +327,31 @@ actor TaskAssistant: ProactiveAssistant {
     for await trigger in triggerStream {
       guard isRunning else { break }
 
-      // A prior capture may have been persisted while offline or left retryable
-      // after a transient delivery failure. Drain that durable outbox before
-      // extracting the new frame so an equivalent new observation can adopt or
-      // coalesce against a leader that has already had another delivery chance.
-      await retryCanonicalOutbox()
+      await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+        // A prior capture may have been persisted while offline or left retryable
+        // after a transient delivery failure. Drain that durable outbox before
+        // extracting the new frame so an equivalent new observation can adopt or
+        // coalesce against a leader that has already had another delivery chance.
+        await retryCanonicalOutbox()
 
-      let (frame, triggerType): (CapturedFrame, String) = {
-        switch trigger {
-        case .contextSwitch(let f): return (f, "context_switch")
-        case .timerFallback(let f): return (f, "timer_fallback")
-        }
-      }()
+        let (frame, triggerType): (CapturedFrame, String) = {
+          switch trigger {
+          case .contextSwitch(let f): return (f, "context_switch")
+          case .timerFallback(let f): return (f, "timer_fallback")
+          }
+        }()
 
-      log("Task: Processing \(triggerType) trigger from \(frame.appName) (window: \(frame.windowTitle ?? "nil"))")
+        log("Task: Processing \(triggerType) trigger from \(frame.appName) (window: \(frame.windowTitle ?? "nil"))")
 
-      // Cancel fallback timer before processing
-      fallbackTimerTask?.cancel()
-      fallbackTimerTask = nil
+        // Cancel fallback timer before processing
+        fallbackTimerTask?.cancel()
+        fallbackTimerTask = nil
 
-      await processFrame(frame)
+        await processFrame(frame)
 
-      // Start a new fallback timer after processing
-      startFallbackTimer()
+        // Start a new fallback timer after processing
+        startFallbackTimer()
+      }
     }
 
     log("Task assistant stopped")
@@ -456,13 +458,15 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   /// Handle result with screenshot ID for SQLite storage
+  @discardableResult
   func handleResultWithScreenshot(
     _ taskResult: TaskExtractionResult,
     screenshotId: Int64?,
     appName: String,
     windowTitle: String? = nil,
+    recordExtractionEvent: Bool = true,
     sendEvent: @escaping (String, [String: Any]) -> Void
-  ) async {
+  ) async -> Bool {
     // Save observation for every result (fire-and-forget)
     let observationApp = taskResult.task?.sourceApp ?? appName
     let observation = ObservationRecord(
@@ -496,7 +500,7 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     guard taskResult.hasNewTask, let task = taskResult.task else {
-      return
+      return false
     }
 
     let threshold = await minConfidence
@@ -504,7 +508,7 @@ actor TaskAssistant: ProactiveAssistant {
 
     guard task.confidence >= threshold else {
       log("Task: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(task.title)\"")
-      return
+      return false
     }
 
     log("Task: [\(confidencePercent)% conf.] \"\(task.title)\"")
@@ -529,8 +533,8 @@ actor TaskAssistant: ProactiveAssistant {
       windowTitle: windowTitle
     )
 
-    await MainActor.run {
-      AnalyticsManager.shared.taskExtracted(taskCount: 1)
+    if recordExtractionEvent {
+      await MainActor.run { AnalyticsManager.shared.taskExtracted(taskCount: 1) }
     }
 
     sendEvent(
@@ -540,6 +544,7 @@ actor TaskAssistant: ProactiveAssistant {
         "task": task.toDictionary(),
         "contextSummary": taskResult.contextSummary,
       ])
+    return extractionRecord != nil
   }
 
   /// Generate embedding for a newly saved staged task and store it
@@ -782,96 +787,100 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   func onAppSwitch(newApp: String) async {
-    if newApp != currentApp {
-      if let currentApp = currentApp {
-        log("Task: APP SWITCH: \(currentApp) -> \(newApp)")
-      } else {
-        log("Task: Active app: \(newApp)")
+    DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+      if newApp != currentApp {
+        if let currentApp = currentApp {
+          log("Task: APP SWITCH: \(currentApp) -> \(newApp)")
+        } else {
+          log("Task: Active app: \(newApp)")
+        }
+        currentApp = newApp
       }
-      currentApp = newApp
     }
   }
 
   func onContextSwitch(departingFrame: CapturedFrame?, newApp: String, newWindowTitle: String?) async {
-    // Use latestFrame if departing frame is unavailable or stale (from a different app due to delay periods)
-    let frame: CapturedFrame? = {
-      if let departing = departingFrame {
-        return departing
+    await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+      // Use latestFrame if departing frame is unavailable or stale (from a different app due to delay periods)
+      let frame: CapturedFrame? = {
+        if let departing = departingFrame {
+          return departing
+        }
+        return latestFrame
+      }()
+
+      guard let frame = frame else {
+        log("Task: Context switch but no frame available")
+        return
       }
-      return latestFrame
-    }()
 
-    guard let frame = frame else {
-      log("Task: Context switch but no frame available")
-      return
-    }
-
-    // Defense-in-depth: skip Rewind privacy-excluded apps
-    if RewindSettings.shared.isAppExcluded(frame.appName) {
-      log("Task: Context switch from Rewind-excluded app '\(frame.appName)', skipping")
-      fallbackTimerTask?.cancel()
-      fallbackTimerTask = nil
-      return
-    }
-
-    // Check frame's app is on the whitelist
-    let allowed = await MainActor.run { TaskAssistantSettings.shared.isAppAllowed(frame.appName) }
-    if !allowed {
-      log("Task: Context switch from non-whitelisted app '\(frame.appName)', skipping")
-      // Still cancel fallback timer on any context switch
-      fallbackTimerTask?.cancel()
-      fallbackTimerTask = nil
-      return
-    }
-
-    // Check window is allowed for browser apps
-    let windowAllowed = await MainActor.run {
-      TaskAssistantSettings.shared.isWindowAllowed(appName: frame.appName, windowTitle: frame.windowTitle)
-    }
-    if !windowAllowed {
-      log("Task: Context switch from filtered browser window, skipping")
-      fallbackTimerTask?.cancel()
-      fallbackTimerTask = nil
-      return
-    }
-
-    log("Task: Context switch from \(frame.appName) (window: \(frame.windowTitle ?? "nil")) -> \(newApp)")
-
-    // Per-window dedupe instead of one global cooldown. A different chat / window /
-    // browser tab has a different key, so 10 chats with 10 people in <60s all flow
-    // through. Re-entering the same chat within the dedupe window is skipped (the
-    // semantic dedupe inside the Claude prompt already catches duplicate tasks if
-    // we ever do re-analyze the same window later).
-    // Messaging apps use a shorter dedupe so a new message in the same chat doesn't
-    // wait a full minute before getting re-analyzed.
-    let analysisDelay = await MainActor.run { AssistantSettings.shared.analysisDelay }
-    let dedupeKey = Self.analyzedKey(for: frame)
-    let dedupeTTL: TimeInterval =
-      Self.messagingFastPathApps.contains(frame.appName)
-      ? Self.messagingFastPathDelay
-      : TimeInterval(analysisDelay)
-    let now = Date()
-    let screenTaskEnabled = await ScreenTaskFeature.isEnabled
-    if !screenTaskEnabled, dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
-      let elapsed = now.timeIntervalSince(last)
-      if elapsed < dedupeTTL {
-        log(
-          "Task: Context switch dedupe — already analyzed '\(dedupeKey)' \(Int(elapsed))s ago (<\(Int(dedupeTTL))s), skipping"
-        )
+      // Defense-in-depth: skip Rewind privacy-excluded apps
+      if RewindSettings.shared.isAppExcluded(frame.appName) {
+        log("Task: Context switch from Rewind-excluded app '\(frame.appName)', skipping")
         fallbackTimerTask?.cancel()
         fallbackTimerTask = nil
         return
       }
+
+      // Check frame's app is on the whitelist
+      let allowed = await MainActor.run { TaskAssistantSettings.shared.isAppAllowed(frame.appName) }
+      if !allowed {
+        log("Task: Context switch from non-whitelisted app '\(frame.appName)', skipping")
+        // Still cancel fallback timer on any context switch
+        fallbackTimerTask?.cancel()
+        fallbackTimerTask = nil
+        return
+      }
+
+      // Check window is allowed for browser apps
+      let windowAllowed = await MainActor.run {
+        TaskAssistantSettings.shared.isWindowAllowed(appName: frame.appName, windowTitle: frame.windowTitle)
+      }
+      if !windowAllowed {
+        log("Task: Context switch from filtered browser window, skipping")
+        fallbackTimerTask?.cancel()
+        fallbackTimerTask = nil
+        return
+      }
+
+      log("Task: Context switch from \(frame.appName) (window: \(frame.windowTitle ?? "nil")) -> \(newApp)")
+
+      // Per-window dedupe instead of one global cooldown. A different chat / window /
+      // browser tab has a different key, so 10 chats with 10 people in <60s all flow
+      // through. Re-entering the same chat within the dedupe window is skipped (the
+      // semantic dedupe inside the Claude prompt already catches duplicate tasks if
+      // we ever do re-analyze the same window later).
+      // Messaging apps use a shorter dedupe so a new message in the same chat doesn't
+      // wait a full minute before getting re-analyzed.
+      let analysisDelay = await MainActor.run { AssistantSettings.shared.analysisDelay }
+      let dedupeKey = Self.analyzedKey(for: frame)
+      let dedupeTTL: TimeInterval =
+        Self.messagingFastPathApps.contains(frame.appName)
+        ? Self.messagingFastPathDelay
+        : TimeInterval(analysisDelay)
+      let now = Date()
+      let screenTaskEnabled = await ScreenTaskFeature.isEnabled
+      if !screenTaskEnabled, dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
+        let elapsed = now.timeIntervalSince(last)
+        if elapsed < dedupeTTL {
+          log(
+            "Task: Context switch dedupe — already analyzed '\(dedupeKey)' \(Int(elapsed))s ago (<\(Int(dedupeTTL))s), skipping"
+          )
+          fallbackTimerTask?.cancel()
+          fallbackTimerTask = nil
+          return
+        }
+      }
+
+      // Cancel fallback timer — context switch replaces it
+      fallbackTimerTask?.cancel()
+      fallbackTimerTask = nil
+
+      // Yield context switch trigger with the frame
+      lastAnalyzedByKey[dedupeKey] = now
+      pruneStaleDedupeEntries(now: now, ttl: TimeInterval(max(analysisDelay, 60) * 5))
+      triggerContinuation.yield(.contextSwitch(frame))
     }
-
-    // Cancel fallback timer — context switch replaces it
-    fallbackTimerTask?.cancel()
-    fallbackTimerTask = nil
-
-    // Yield context switch trigger with the frame
-    lastAnalyzedByKey[dedupeKey] = now
-    pruneStaleDedupeEntries(now: now, ttl: TimeInterval(max(analysisDelay, 60) * 5))
-    triggerContinuation.yield(.contextSwitch(frame))
   }
 
   /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing

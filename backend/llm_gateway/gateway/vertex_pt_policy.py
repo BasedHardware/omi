@@ -45,6 +45,17 @@ class VertexPTPolicyMixin:
             return [(serving, ptr.REQUEST_TYPE_DEDICATED), (serving, ptr.REQUEST_TYPE_SHARED)]
         return [(serving, self._capacity_for(serving))]
 
+    def _is_target_probe(self, model: str, capacity: str) -> bool:
+        return (
+            model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED and not self._pt_target_is_ready()
+        )
+
+    @staticmethod
+    def _pt_probe_timeout_ms(remaining_ms: int) -> int:
+        # At most one second and one quarter of the original remaining budget.
+        # The shared attempt keeps the same request deadline, without a reset.
+        return max(1, min(1000, remaining_ms // 4))
+
     def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
         intended = self._validated_pin(
             lambda: ptr.desktop_serving_model(
@@ -79,13 +90,10 @@ class VertexPTPolicyMixin:
         self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
-        if (
-            served_model == ptr.PT_MODEL_TARGET
-            and capacity == ptr.REQUEST_TYPE_DEDICATED
-            and not self._pt_target_is_ready()
-        ):
-            if self._overflow_triggered(status_code, message) or ptr.is_model_unavailable(status_code, message):
-                return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+        if self._is_target_probe(served_model, capacity):
+            # Probe failures describe capacity/location, never shared model health.
+            # Even unclassified errors must leave the user request on PayGo.
+            return [(served_model, ptr.REQUEST_TYPE_SHARED)]
         if ptr.is_model_unavailable(status_code, message):
             self._record_model_unavailable(served_model)
             return [

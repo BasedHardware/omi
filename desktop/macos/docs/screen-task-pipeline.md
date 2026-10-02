@@ -5,10 +5,10 @@
 Privacy approval is required: screen OCR and bounded local task/profile context
 are a new data class sent to TypeSafe/Jev. No enablement is performed here.
 
-When enabled, local Vision OCR feeds a conservative line-subset dedupe, keyed
+When enabled, local Vision OCR feeds a conservative occurrence-aware line-subset dedupe, keyed
 by owner, authorization generation and app, with a 60-second TTL and 64-entry
 bound. Telegram/Messages ignore the approximate sidebar; other apps retain
-all blocks. Novel text always passes; empty OCR and errors fail open. Messaging
+all blocks. Novel text or any additional occurrence of an existing line always passes; empty OCR and errors fail open. Messaging
 triggers use content dedupe rather than unread-count window titles. This is
 not visual equivalence: layout-only/attachment changes can remain a limitation.
 
@@ -37,17 +37,25 @@ late results. Queued frames retain their admission owner in a 64-entry bounded m
 
 Existing proxy terminal telemetry adds only bounded `gate_outcome` and
 `audit_sample`. The existing Task Extracted event records rejected audit
-candidate counts (0–8), including zero, separately from accepted tasks.
+the true successful staging count and bounded candidate count (0–8), including zero,
+with `audit_sample=true` and `gate_outcome=rejected`. Audit extraction is a precise
+stage: found tasks enter the normal staging/sync path. These are not shadow-only
+observations or automatically accepted tasks. The ordinary per-task event is
+suppressed for audits to avoid double counting. Flag-on logging is scoped across
+extraction, fallback and staging; free-form context, titles, queries and errors
+are suppressed, while analysis summaries contain only capped counts/outcomes.
+Flag-off logs retain their existing content.
 One bounded gate decision log contains no user text, identifiers or scores.
 PR #20184 was open on 2026-10-02; this change does not depend on its required
 lane/client_platform tags. Reconcile tags when that independent PR lands.
 
 Benchmark aggregates: expanded mock schema 30/30 recall, zero false tasks,
 5/5 relation cases. Real replay has no labeled ground truth: dedupe removed
-7/250 (2.8%), gate passed 63/243 (25.93%), retaining all three previously
+7/250 (2.8%) with the original set-based rule, gate passed 63/243 (25.93%), retaining all three previously
 reviewed emitting frames. Expected expanded-schema real cost is modeled at
 about $1.54/1k incoming frames, $29.2/day at 19k, plus the fixed reservation
-fee. Expanded schema was not rerun on personal frames. Production FTS ranking,
+fee. The occurrence-aware correction was verified with synthetic regressions;
+that personal replay was not rerun, so those savings are historical. Expanded schema was not rerun on personal frames. Production FTS ranking,
 user mix, OCR layouts and schema costs require consented rollout validation.
 
 Recommended ramp after approval: consenting dogfood, then 1%, 5%, 25%, 100%
