@@ -90,10 +90,18 @@ def sdk_world(monkeypatch):
 
 @pytest.mark.parametrize('path', [GATE, MARKER])
 @pytest.mark.parametrize('error', [Aborted, DeadlineExceeded, ServiceUnavailable, InvalidArgument])
-def test_failed_fence_rpc_rolls_back_and_uses_fresh_transaction(sdk_world, path, error):
+@pytest.mark.parametrize('rollback_fails', [False, True])
+def test_failed_fence_rpc_rolls_back_and_uses_fresh_transaction(sdk_world, path, error, rollback_fails):
     test = sdk_world
     test.failure.read_path = path
     test.failure.read_error = error('synthetic failed read')
+    if rollback_fails:
+
+        def rollback(*, request, **kwargs):
+            test.rollbacks.append(request['transaction'])
+            raise ServiceUnavailable('synthetic rollback failure masks callback exception')
+
+        test.api.rollback.side_effect = rollback
     assert _merge(test.world) is True
     assert test.failed_reads <= set(test.rollbacks)
     assert all(request['transaction'] not in test.failed_reads for request in test.committed)

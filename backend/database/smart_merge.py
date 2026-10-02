@@ -159,8 +159,9 @@ def absorb_conversation(
     survivor_ref = collection.document(survivor_id)
     donor_ref = collection.document(donor_id)
 
-    @firestore.transactional
-    def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+    audit_io_failed = False
+
+    def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -199,9 +200,22 @@ def absorb_conversation(
         )
         return AbsorbResult('absorbed', 'absorbed', audit)
 
+    @firestore.transactional
+    def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal audit_io_failed
+        try:
+            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+        except audit_db.AuditUnavailable:
+            # The SDK's rollback RPC can mask this exception. Remember that
+            # the callback failed before commit even if rollback also fails.
+            audit_io_failed = True
+            raise
+
     try:
         result = run_transactional(client, absorb)
-    except audit_db.AuditUnavailable:
+    except Exception:
+        if not audit_io_failed:
+            raise
         # No commit was attempted. Never continue writing on a transaction whose
         # optional read/staging failed; re-read and re-plan on a fresh transaction.
         logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
