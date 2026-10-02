@@ -542,6 +542,8 @@ private struct CaptureActions: View {
     private var state: OmiCaptureAttributes.ContentState { snapshot.state }
 
     var body: some View {
+        // No buttons without the card's App Intent (OmiCaptureIntents.swift).
+        #if compiler(>=6.4)
         if #available(iOS 17.0, *), !snapshot.isStale, state.status != "ended" {
             HStack(spacing: 8) {
                 // Shared by the Lock Screen and expanded Island. Start/Stop keep the existing
@@ -556,8 +558,10 @@ private struct CaptureActions: View {
             }
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
         }
+        #endif
     }
 
+    #if compiler(>=6.4)
     @available(iOS 17.0, *)
     private func action(_ label: LocalizedStringKey, value: String, enabled: Bool, primary: Bool = false) -> some View {
         // Busy blocks duplicate intents without recoloring the whole action row.
@@ -577,6 +581,7 @@ private struct CaptureActions: View {
         .buttonStyle(CaptureActionStyle())
         .disabled(!available)
     }
+    #endif
 }
 
 /// The system's plain style dims every busy button. Keep these fills stable while

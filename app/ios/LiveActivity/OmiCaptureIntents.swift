@@ -1,3 +1,7 @@
+// The card's buttons follow the Siri build boundary (contracts/siri/README.md): App Intents
+// compile only with Xcode 27, because the required Xcode 26.6 CI build must emit no App Intents
+// metadata. Releases are built with Xcode 27.
+#if compiler(>=6.4)
 import AppIntents
 
 @available(iOS 17.0, *)
@@ -22,3 +26,4 @@ struct OmiCaptureIntent: LiveActivityIntent {
         return .result()
     }
 }
+#endif
