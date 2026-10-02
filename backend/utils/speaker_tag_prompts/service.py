@@ -17,7 +17,7 @@ import time
 import uuid
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 
@@ -662,7 +662,11 @@ def _pool(vectors: List[List[float]]) -> List[float]:
 
 
 def owner_clip_window(
-    conversation: Dict[str, Any], segment_ids: List[str], *, return_key: bool = False
+    conversation: Dict[str, Any],
+    segment_ids: List[str],
+    *,
+    return_key: bool = False,
+    consented: Optional[Set[str]] = None,
 ) -> Optional[Union[Tuple[float, float, str], Tuple[float, float, str, Tuple[Any, int]]]]:
     """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
 
@@ -670,8 +674,10 @@ def owner_clip_window(
     contiguous owner run (same capture scope + speaker id, gaps at most
     MAX_GAP_SECONDS) whose distinct speech reaches MIN_CLIP_SECONDS, then
     center-crop to MAX_CLIP_SECONDS. Cross-scope duplicates are ignored; a
-    non-owner, a different speaker, or an owner segment outside ``segment_ids``
-    overlapping the window in the same scope rejects that run.
+    non-owner or a different speaker overlapping the window in the same scope
+    rejects that run. With ``consented`` (every segment id the owner currently
+    allows teaching from), an overlapping owner segment outside it rejects the
+    run too: its speech would ride inside the clip without consent.
     """
     wanted = set(segment_ids)
     all_segments = list(conversation.get('transcript_segments') or [])
@@ -721,9 +727,11 @@ def owner_clip_window(
                 and s.get('speaker_id_scope') == scope
                 and float(s.get('start') or 0) < end
                 and float(s.get('end') or 0) > start
-                # Same voice but outside the authorized set (opted out, or never
-                # confirmed): its audio must not ride along inside the window.
-                and (speaker_id_of(s) != speaker_id or not s.get('is_user') or s.get('id') not in wanted)
+                and (
+                    speaker_id_of(s) != speaker_id
+                    or not s.get('is_user')
+                    or (consented is not None and s.get('id') not in consented)
+                )
                 for s in all_segments
             )
             if impure:
@@ -768,7 +776,16 @@ async def store_owner_voice_sample(
         if set(authorized) != set(segment_ids) or not authorized:
             outcome = 'stale_assignment'
             return outcome
-        window = owner_clip_window(conversation, authorized, return_key=True)
+        # Everything the owner currently allows teaching from, not only this job's
+        # segments: an earlier confirmed segment may overlap the window, an opted-out one must not.
+        consented = set(
+            authorized_owner_segments(
+                conversation,
+                [s['id'] for s in conversation.get('transcript_segments') or [] if s.get('id')],
+                card_generation=card_generation,
+            )
+        )
+        window = owner_clip_window(conversation, authorized, return_key=True, consented=consented)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
@@ -804,13 +821,14 @@ async def store_owner_voice_sample(
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
             card_generation=card_generation,
-            # Record only the selected run's segments: the confirmation retracts
-            # by intersection, and overlapping owner segments from another capture
-            # scope must not be retracted by a later edit in this scope.
+            # Record every consented segment inside the selected run's window: the
+            # confirmation retracts by intersection, so each contributor must be named,
+            # and overlapping owner segments from another capture scope must not be
+            # retracted by a later edit in this scope.
             segment_ids=[
                 s['id']
                 for s in conversation['transcript_segments']
-                if s.get('id') in authorized
+                if s.get('id') in consented
                 and s.get('speaker_id_scope') == win_scope
                 and speaker_id_of(s) == win_speaker
                 and s.get('start', end) < end

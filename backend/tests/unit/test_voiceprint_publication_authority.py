@@ -237,4 +237,6 @@ def test_owner_window_must_not_include_opted_out_same_voice_segment():
         'use_for_speech_training': False,
     }
     assert authorized_owner_segments(conv, ['s', 'optout']) == ['s']
-    assert service.owner_clip_window(conv, ['s']) is None, 'clip still contains opted-out speech at 2-6 seconds'
+    consented = set(authorized_owner_segments(conv, ['s', 'optout']))
+    assert service.owner_clip_window(conv, ['s'], consented=consented) is None, 'clip contains opted-out speech'
+    assert service.owner_clip_window(conv, ['s'], consented={'s', 'optout'}) is not None
