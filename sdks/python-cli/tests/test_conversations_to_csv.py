@@ -73,6 +73,11 @@ class TestExtractConversations(unittest.TestCase):
         items = c2csv.extract_conversations(payload)
         self.assertEqual(len(items), 1)
 
+    def test_wrapped_results_dict(self):
+        payload = json.dumps({"results": [{"id": "c1"}, {"id": "c2"}, {"id": "c3"}]})
+        items = c2csv.extract_conversations(payload)
+        self.assertEqual([item["id"] for item in items], ["c1", "c2", "c3"])
+
     def test_single_object(self):
         payload = json.dumps({"id": "c1", "structured": {"title": "Solo"}})
         items = c2csv.extract_conversations(payload)
@@ -177,6 +182,44 @@ class TestConvertConversationsToCsv(unittest.TestCase):
                 c2csv.convert(Path(tmp_dir) / "nonexistent.json", Path(tmp_dir) / "out.csv")
 
 
+    def test_stdin_source(self):
+        stdin = mock.Mock()
+        stdin.buffer = io.BytesIO(b'\xef\xbb\xbf{"results": [{"id": "s1", "structured": {"title": "Piped"}}]}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_file = Path(tmp_dir) / "out.csv"
+            with mock.patch.object(c2csv.sys, "stdin", stdin):
+                count = c2csv.convert("-", out_file)
+            self.assertEqual(count, 1)
+            rows = list(csv.reader(io.StringIO(out_file.read_text(encoding="utf-8-sig"))))
+            self.assertEqual(rows[1][:2], ["s1", "Piped"])
+
+    def test_overwrite_failure_keeps_previous_export_intact(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "out.csv"
+            in_file.write_text('[{"id": "new"}]', encoding="utf-8")
+            out_file.write_text("previous export", encoding="utf-8")
+
+            with mock.patch.object(c2csv.os, "fsync", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    c2csv.convert(in_file, out_file, overwrite=True)
+
+            self.assertEqual(out_file.read_text(encoding="utf-8"), "previous export")
+            self.assertEqual(sorted(p.name for p in Path(tmp_dir).iterdir()), ["input.json", "out.csv"])
+
+    def test_overwrite_replaces_existing_export(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "out.csv"
+            in_file.write_text('[{"id": "new"}]', encoding="utf-8")
+            out_file.write_text("previous export", encoding="utf-8")
+
+            c2csv.convert(in_file, out_file, overwrite=True)
+
+            rows = list(csv.reader(io.StringIO(out_file.read_text(encoding="utf-8-sig"))))
+            self.assertEqual(rows[1][0], "new")
+
+
 class TestCli(unittest.TestCase):
     def test_cli_success(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -199,6 +242,19 @@ class TestCli(unittest.TestCase):
                 code = c2csv.main([str(in_file), "-o", str(out_file)])
             self.assertEqual(code, 0)
             self.assertTrue(out_file.exists())
+
+    def test_cli_rejects_both_destination_forms(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "conv.json"
+            in_file.write_text('[{"id": "c1"}]', encoding="utf-8")
+            positional, flagged = Path(tmp_dir) / "a.csv", Path(tmp_dir) / "b.csv"
+
+            with mock.patch("sys.stderr", new_callable=io.StringIO):
+                with self.assertRaises(SystemExit) as ctx:
+                    c2csv.main([str(in_file), str(positional), "-o", str(flagged)])
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertFalse(positional.exists())
+            self.assertFalse(flagged.exists())
 
     def test_cli_overwrite_flag(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

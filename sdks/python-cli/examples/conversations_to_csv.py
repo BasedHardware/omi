@@ -22,6 +22,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 FIELDS: Tuple[str, ...] = ("id", "title", "category", "started_at", "source")
@@ -132,7 +133,18 @@ def convert(source: Union[str, Path], destination: Union[str, Path], overwrite: 
 
     # Write payload atomically to avoid corrupting or leaving partial files
     if overwrite:
-        dest_path.write_bytes(payload)
+        # Write a sibling temp file and swap it in only after a complete write,
+        # so a full disk or an interruption never truncates the previous export.
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{dest_path.name}.", suffix=".tmp", dir=dest_path.parent)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_name, dest_path)
+        except BaseException:
+            Path(tmp_name).unlink(missing_ok=True)
+            raise
     else:
         try:
             with dest_path.open("xb") as fh:
@@ -181,6 +193,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.output_flag and args.destination:
+        parser.error("Give the destination either as the second argument or via -o/--output, not both")
     destination = args.output_flag or args.destination
     if not destination:
         parser.error("Destination CSV path must be provided as second argument or via -o/--output")
