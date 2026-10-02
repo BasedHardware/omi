@@ -14,7 +14,7 @@ struct ScreenTaskHTTPFailure: Error {
       if let seconds = Double(value), seconds.isFinite { return max(0, seconds) }
       let formatter = DateFormatter()
       formatter.locale = Locale(identifier: "en_US_POSIX")
-      formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+      formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"  // omi-ux-allow: date-format-string -- HTTP Retry-After wire date, never user-facing UI.
       return formatter.date(from: value).map { max(0, $0.timeIntervalSinceNow) }
     }
     let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
