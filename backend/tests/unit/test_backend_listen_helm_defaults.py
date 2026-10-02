@@ -197,7 +197,7 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(dev, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '1'
     assert _env_value(dev, 'STT_SERVICE_MODELS') == _env_value(prod, 'STT_SERVICE_MODELS')
     assert _env_value(prod, 'STT_SERVICE_MODELS') == 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
-    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '8'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '16'
     assert _env_value(prod, 'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS') == '12'
     assert _env_value(prod, 'PARAKEET_WINDOW_MAX_EMPTY_STREAK') == '4'
     assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
