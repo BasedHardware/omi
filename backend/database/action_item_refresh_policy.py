@@ -57,11 +57,18 @@ def plan(
             aliases = [identity, *(k for k, ids in donor_keys.items() if task_id in ids and k != identity)]
             matches = next((available[k] for k in aliases if available.get(k)), [])
             patch: dict[str, Any] = {'conversation_id': conversation_id}
+            # Transfer is never a new-task delivery. Retire even a donor's
+            # pre-claim retry marker before the survivor can observe it.
+            if row.get('refresh_delivery') == 'pending':
+                patch['refresh_delivery'] = 'transferred'
             # Retain original evidence and every user/external field on the donor.
-            # A duplicate becomes a retained alias, never a destructive delete.
+            # Exact text does not prove two live rows have interchangeable user
+            # state. Keep both visible; only user-deleted targets suppress a donor.
             if matches:
                 target_id = matches[0]
-                patch.update(deleted=True, refresh_duplicate_of=target_id)
+                patch['refresh_duplicate_of'] = target_id
+                if target_id not in rows or rows[target_id].get('deleted'):
+                    patch['deleted'] = True
                 for ids in available.values():
                     if target_id in ids:
                         ids.remove(target_id)

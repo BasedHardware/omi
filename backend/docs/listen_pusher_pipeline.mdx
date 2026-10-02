@@ -1008,15 +1008,22 @@ titles edited before the first receipt are unknowable**; a delete-time identity
 tombstone would close that historical gap, but is outside this change.
 
 Before smart-merge donor cleanup, an atomic transaction transfers donor task ids
-to the survivor without delivery. Exact duplicates become retained deleted aliases
-(`refresh_duplicate_of`); donor provenance and conflicting user/external fields
-remain on that alias, not merged into the survivor task. Donor deletion receipts
-transfer too. Existing duplicate external objects are not deleted or reconciled.
+to the survivor without delivery. Exact matches are annotated with
+`refresh_duplicate_of`; both live rows remain visible because equal descriptions
+cannot prove their completion, edits, folders or external links are interchangeable.
+Only a user-deleted survivor target (soft deletion or missing receipt target) suppresses
+a matching donor. Donor provenance and user/external fields stay on their own rows.
+Pending donor delivery markers are retired atomically on transfer, so survivor refresh
+cannot export or reschedule them. Donor deletion receipts transfer too. Existing
+duplicate external objects are not deleted or reconciled.
 Transactions read current rows before writes and retry conflicts, check the
 conversation sync revision and account generation, and never fall back to replace
 on error. Bounds are 200 task documents, 200 identity hashes and 400 alias slots;
-overflow fails closed. Pure planning and database/orchestration live in separate
-small modules.
+overflow fails closed for that conversation: further automatic additions or donor
+cleanup can remain blocked until explicitly resolved. Manual task creation and other
+conversations are unaffected; rollback restores the destructive legacy behavior and
+must not be treated as a lossless capacity recovery. No receipt pruning is introduced.
+Pure planning and database/orchestration live in separate small modules.
 
 New tasks persist atomically with the receipt, then receive vectors, then a durable
 one-time delivery claim. Exported, completed, deleted, Apple-linked or pending
