@@ -5,13 +5,14 @@ import math
 import random
 import statistics
 from collections import Counter
+from functools import lru_cache
 
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
 from utils.stt import live_chain, live_health, live_router, streaming as st
 from utils.stt.live_cost_health import PREFIX
-from utils.stt.live_gate import GateState, begin_trial, transition
+from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, COST_SNAPSHOT_AT, COST_ALL_DEGRADED
 from tests.unit.test_live_cost_router import MemoryRedis, controls
@@ -48,10 +49,16 @@ def test_audio_client_capacity_and_account_reasons_are_not_gate_failures(reason)
     assert provider_observation('failover', reason) is None
 
 
-def detect_provider(rate, seed, floor=0.10):
-    rng, state, failures = random.Random(seed), GateState(), 0
+@lru_cache(maxsize=16)
+def healthy_warmup(gate):
+    state = GateState(threshold=gate)
     for n in range(500):
         state = transition(state, False, n, witness=f'{n:016x}')
+    return state  # immutable; every experiment transitions to its own new state
+
+
+def detect_provider(rate, seed, floor=0.10):
+    rng, state, failures = random.Random(seed), healthy_warmup(gate_rate()), 0
     for n in range(1, 5001):
         draw = rng.random()
         outcome = 'failover' if draw < rate else 'no_text' if draw < rate + floor else 'text'
@@ -74,14 +81,15 @@ def test_provider_outage_and_modulate_brownout_detection(rate, median_limit, p95
     assert sorted(failures for _, failures in samples)[189] <= p95_failed_limit
 
 
-def test_24_hour_measured_floors_replay_has_no_healthy_benches_or_empty_proposals(monkeypatch):
+@pytest.mark.parametrize('sessions', [1200, pytest.param(17900, marks=pytest.mark.slow)])
+def test_24_hour_measured_floors_replay_has_no_healthy_benches_or_empty_proposals(monkeypatch, sessions):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '25')
     rng = random.Random(20261002)
     states = {target.id: GateState() for target in DEFAULT_TARGETS}
     events, shares = [], Counter()
     first_modulate_bench = None
-    for i in range(17900):
-        now, uid = i * 86400 / 17900, str(i)
+    for i in range(sessions):
+        now, uid = i * 86400 / sessions, str(i)
         hour = int(now // 3600)
         preferred = set()
         language = 'ja' if i % 10 == 0 else 'en'
@@ -111,8 +119,8 @@ def test_24_hour_measured_floors_replay_has_no_healthy_benches_or_empty_proposal
             elif state.stage == 0 and first_modulate_bench is None:
                 first_modulate_bench = i + 1
     assert first_modulate_bench is not None and first_modulate_bench <= 50
-    assert shares['parakeet-window'] > 3500
-    assert shares['soniox'] > 12000
+    assert shares['parakeet-window'] > 0.195 * sessions
+    assert shares['soniox'] > 0.67 * sessions
     assert events and all(target == 'modulate-velma-2' for target, _, _ in events)
 
 
