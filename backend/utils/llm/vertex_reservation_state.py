@@ -28,6 +28,7 @@ from config.vertex_reservations import (
     observed_state,
 )
 from utils.observability.fallback import record_fallback
+from utils.llm.vertex_pt_routing import COMPANY_PAID_VERTEX_TEXT_MODELS
 
 logger = logging.getLogger(__name__)
 Probe = Callable[[str, str], Awaitable[str]]
@@ -150,7 +151,9 @@ def effective_states(observed: Mapping[str, State], env: Mapping[str, str]) -> d
     states = {m: observed.get(m, State.UNKNOWN) for m in RESERVATIONS}
     # Retain the existing single-order operator pin; per-model overrides win.
     pin = env.get('OMI_VERTEX_PT_MODEL', '').strip()
-    if pin:
+    # Invalid pins are rejected by routing; they cannot fabricate absence at
+    # the earlier admission boundary.
+    if pin in COMPANY_PAID_VERTEX_TEXT_MODELS:
         states = {m: State.ACTIVE if m == pin else State.INACTIVE for m in RESERVATIONS}
     raw = env.get(STATE_OVERRIDE_ENV, '').strip()
     if raw:

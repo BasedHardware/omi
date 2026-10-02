@@ -293,3 +293,10 @@ async def test_synthetic_probe_requires_explicit_pt_and_never_discovers_an_endpo
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         assert await probe_reservation(client, token, OLD, 'us-central1') == expected
+
+
+def test_invalid_legacy_pin_cannot_fabricate_inactivity_before_routing_validation():
+    assert effective_states({}, {'OMI_VERTEX_PT_MODEL': 'gemini-pro-image'}) == {
+        OLD: vr.State.UNKNOWN,
+        NEW: vr.State.UNKNOWN,
+    }
