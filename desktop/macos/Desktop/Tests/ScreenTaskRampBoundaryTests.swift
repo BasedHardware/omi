@@ -253,6 +253,21 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertEqual(httpFailure(429, retryAfter: "60").retryAfter, 60)
   }
 
+  func testGateAuthDenialRemainsTerminalWhenFeatureStopsDuringResponse() async {
+    let state = RampState()
+    state.suspendAt = "gate"
+    state.change = "feature"
+    state.gateError = httpFailure(401)
+    do {
+      _ = try await ScreenTaskPipeline().run(
+        frame: frame(), key: "owner:1:window", services: services(state), metrics: ScreenTaskFrameMetrics())
+      XCTFail("auth denial became stop recovery")
+    } catch {
+      XCTAssertEqual(ScreenTaskErrorPolicy.errorClass(error), "auth")
+    }
+    XCTAssertEqual(state.sent, ["gate"])
+  }
+
   func testRetryAfterDefersOnlyOriginalOwnerSession() throws {
     let state = RampState()
     let cooldown = ScreenTaskBackpressure(now: { state.now })

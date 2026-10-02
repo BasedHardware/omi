@@ -71,7 +71,8 @@ actor ScreenTaskPipeline {
           }
         }
       } catch {
-        try requireFeature()
+        try services.validateFrame()
+        try Task.checkCancellation()
         let malformedGate =
           error is DecodingError
           || (error as? APIError).map {
@@ -80,6 +81,7 @@ actor ScreenTaskPipeline {
           } == true
         guard let reason = ScreenTaskErrorPolicy.outageReason(error) ?? (malformedGate ? "gate_invalid_response" : nil)
         else { throw error }
+        try requireFeature()
         metrics.clientBypass = true
         metrics.fallbackReason = reason
         services.fallback("screen_task_gate", reason)
