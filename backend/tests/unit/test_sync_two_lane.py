@@ -354,8 +354,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=3' in action
-    assert '--max-instances=15' in action
-    assert '--max=15' in action
+    assert '--max-instances=18' in action
+    assert '--max=18' in action
     assert '--concurrency=3' in action
     assert '--cpu=2' in action
     assert '--memory=8Gi' in action
@@ -366,7 +366,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=40' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=36' in action
+    assert '--max-concurrent-dispatches=40' in action
     assert '--max-dispatches-per-second=10' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
@@ -406,7 +406,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     run = queue['run']
     for flag in (
-        '--max-concurrent-dispatches=36',
+        '--max-concurrent-dispatches=40',
         '--max-dispatches-per-second=10',
         '--min-backoff=5s',
         '--max-backoff=60s',
