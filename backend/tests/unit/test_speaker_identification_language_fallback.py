@@ -109,7 +109,7 @@ def test_uses_conversation_language_without_consulting_user_preference(monkeypat
     assert captured['language'] == "de"
 
 
-def test_sync_name_detection_receives_selected_language(monkeypatch):
+def test_sync_name_detection_receives_selected_language(monkeypatch, paid_sync_entitlement):
     from utils.sync import pipeline
     from models.transcript_segment import TranscriptSegment
 
@@ -125,7 +125,7 @@ def test_sync_name_detection_receives_selected_language(monkeypatch):
     assert seen == ['pt']
 
 
-def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog):
+def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog, paid_sync_entitlement):
     import logging
     from models.transcript_segment import TranscriptSegment
     from utils.sync import pipeline
@@ -173,7 +173,11 @@ def test_live_name_detection_receives_session_language(monkeypatch):
     assert seen == ['ja']
 
 
-@pytest.fixture(autouse=True)
+# Only the sync name-detection tests need the paid entitlement; the sample-
+# extraction tests never consult the gate, and the live test carries its own
+# named_speakers_allowed stub. Keeping them off the fixture preserves their
+# default/free-plan context.
+@pytest.fixture
 def paid_sync_entitlement(monkeypatch):
     from utils.sync import speaker_identity
 

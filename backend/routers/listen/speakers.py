@@ -494,13 +494,24 @@ class SpeakerMatcher:
                 voice_wide = manual.get('source') == 'carried' or manual is (receipt.get('speakers') or {}).get(
                     str(speaker_id)
                 )
-                if person_id and known and voice_wide:
+                if person_id and voice_wide:
+                    # A manual label is authoritative without a loaded profile: on a
+                    # free plan non-owner profiles stay unloaded, so resolve the name
+                    # from the receipt decision's voice rather than dropping the map.
+                    if known is not None:
+                        name = known['name']
+                    else:
+                        person = await self.host.persistence.call(user_db.get_person, self.host.request.uid, person_id)
+                        if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                            self._record_exit(drop_reason, speaker_id)
+                            return
+                        name = (person or {}).get('name') or person_id
                     status = (
                         SpeakerIdentityStatus.user
                         if person_id == USER_SELF_PERSON_ID
                         else SpeakerIdentityStatus.not_user
                     )
-                    self.speaker_to_person[speaker_id] = (person_id, known['name'])
+                    self.speaker_to_person[speaker_id] = (person_id, name)
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True

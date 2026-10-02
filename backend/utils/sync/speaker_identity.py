@@ -71,7 +71,15 @@ def build_person_embeddings_cache(
     users_db = dependencies.users_db
     get_user_name = dependencies.get_user_name
     usable_person_voiceprint = dependencies.usable_person_voiceprint
-    cache = PersonEmbeddingsCache(named_speaker_prompts_allowed(uid))
+    # An entitlement read failure must fail closed for non-owner candidates only:
+    # sync still replaces the cache, and the owner's own voiceprint must survive
+    # it or free-plan owner recognition goes dark for the batch.
+    try:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    except Exception as error:
+        logger.warning('sync speaker entitlement read failed type=%s', type(error).__name__)
+        named_allowed = False
+    cache = PersonEmbeddingsCache(named_allowed)
 
     # Load user's own speaker embedding
     embedding_list = users_db.get_user_speaker_embedding(uid)

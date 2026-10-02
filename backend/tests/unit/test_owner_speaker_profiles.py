@@ -87,7 +87,6 @@ def test_live_audio_recovery_keeps_resolved_owner_name(profile_sources, monkeypa
 @pytest.fixture(autouse=True)
 def paid_named_speaker_entitlement(monkeypatch):
     from utils.sync import speaker_identity
-    from routers.listen import speakers
 
     monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
     monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

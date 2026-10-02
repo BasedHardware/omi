@@ -17,6 +17,7 @@ def authorized_owner_segments(
 ) -> list[str]:
     """A card grants teaching only to its exact decision, never a later opt-out."""
     receipt = conversation.get('manual_speaker_assignments') or {}
+    speakers = receipt.get('speakers') or {}
     wanted = set(segment_ids)
     allowed = []
     for segment in conversation.get('transcript_segments') or []:
@@ -24,6 +25,14 @@ def authorized_owner_segments(
             continue
         decision = winning_receipt_decision(receipt, segment)
         if not decision or not decision.get('is_user') or decision.get('person_id') or decision.get('rejection'):
+            continue
+        # A merged conversation can reuse numeric speaker ids across capture
+        # scopes; a speaker-level entry only covers segments in its own scope.
+        if (
+            decision is speakers.get(str(segment.get('speaker_id')))
+            and decision.get('speaker_id_scope') is not None
+            and decision.get('speaker_id_scope') != segment.get('speaker_id_scope')
+        ):
             continue
         card_authorized = card_generation is not None and decision.get('generation') == card_generation
         if decision.get('use_for_speech_training', True) is not False or card_authorized:
@@ -33,7 +42,14 @@ def authorized_owner_segments(
 
 def _as_utc(value: Any) -> Optional[datetime]:
     if isinstance(value, str):
-        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if not value.strip():
+            return None
+        try:
+            value = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            # One malformed legacy timestamp must not abort pooling or
+            # retraction; treat it as absent, like database.voice_profiles.as_utc.
+            return None
     return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)) if isinstance(value, datetime) else None
 
 
@@ -47,20 +63,22 @@ def owner_base(data: Mapping[str, Any]) -> Any:
 
 
 def retract_owner_contributions(
-    data: Mapping[str, Any], conversation_id: str, segment_ids: Sequence[str], now: datetime
+    data: Mapping[str, Any], conversation_ids: Sequence[str], segment_ids: Sequence[str], now: datetime
 ) -> dict[str, Any]:
     """Retire intersecting contributions atomically with every explicit edit.
 
     Legacy confirmations have conversation provenance only: conservatively retire
-    the source conversation on correction. Other conversations and the explicit
+    the source conversation on correction — including a merged-away donor when the
+    edit landed on its redirect target. Other conversations and the explicit
     enrollment base survive. No migration or provider inference is required.
     """
+    ids = set(conversation_ids)
     confirmations = list(data.get('owner_voice_confirmations') or [])
     affected = set(segment_ids)
     kept = [
         item
         for item in confirmations
-        if item.get('conversation_id') != conversation_id
+        if item.get('conversation_id') not in ids
         or (item.get('segment_ids') and not affected.intersection(item['segment_ids']))
     ]
     if len(kept) == len(confirmations):

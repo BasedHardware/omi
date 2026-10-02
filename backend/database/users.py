@@ -1172,10 +1172,12 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
     """Recover a vector only while the sample snapshot that produced it is current."""
-    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    # user_ref revalidates save_other_voice_profiles; recovery needs no source fence.
+    user_ref = db.collection('users').document(uid)
+    ref = user_ref.collection('people').document(person_id)
     return (
         _replace_speech_profile_transaction(
-            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}
+            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}, user_ref=user_ref
         )
         is not None
     )

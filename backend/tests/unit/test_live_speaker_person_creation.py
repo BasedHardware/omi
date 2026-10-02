@@ -168,6 +168,11 @@ def test_owner_name_veto_uses_unicode_casefold(monkeypatch):
 
 def test_free_introduction_cannot_load_or_create_named_person():
     recorder = _Recorder()
-    _run(_processor(recorder, paid=False), "My name is Sam.")
+    events = []
+    processor = _processor(recorder, paid=False)
+    processor.host.send_event = events.append
+    _run(processor, "My name is Sam.")
     assert recorder.created == []
     assert recorder.lookups == []
+    # The free plan must not even receive a name suggestion for the voice.
+    assert events == []

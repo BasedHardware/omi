@@ -175,13 +175,19 @@ def _conversation_matches(
 def _competing_voiceprints(uid: str) -> dict[str, np.ndarray]:
     """Called only after the request entitlement; include owner and usable people."""
     prints = {}
-    owner = unit_voice_vector(users_db.get_user_speaker_embedding(uid))
-    if owner is not None:
-        prints['user'] = owner
-    for person in users_db.get_people(uid) or []:
-        vector = unit_voice_vector(usable_person_voiceprint(person))
+    # 'user' is the owner identity that select_speaker_match reserves.
+    competitors = [('user', users_db.get_user_speaker_embedding(uid))]
+    competitors += [(person.get('id'), usable_person_voiceprint(person)) for person in users_db.get_people(uid) or []]
+    for identity, raw in competitors:
+        if raw is None:
+            continue
+        try:
+            vector = unit_voice_vector(raw)
+        except (TypeError, ValueError):
+            # One unusable stored embedding must not 500 the whole scan.
+            continue
         if vector is not None:
-            prints[person['id']] = vector
+            prints[identity] = vector
     return prints
 
 
@@ -190,11 +196,11 @@ async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesRes
     now = datetime.now(timezone.utc)
     matches: list[VoiceMatch] = []
     try:
-        if not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
-            return VoiceMatchesResponse()
         person = await _read(db_executor, partial(users_db.get_person, uid, person_id), deadline)
         if person is None:
             raise LookupError('Person not found')
+        if not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
+            return VoiceMatchesResponse()
         raw_print = usable_person_voiceprint(person)
         if raw_print is None:
             return VoiceMatchesResponse()

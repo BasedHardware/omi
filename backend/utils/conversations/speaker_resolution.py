@@ -132,7 +132,14 @@ def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
         prints[OWNER_IDENTITY] = np.asarray(owner, dtype=np.float32)
-    if not named_speaker_prompts_allowed(uid):
+    # Owner recognition is plan-independent: an entitlement read failure fails
+    # closed for person prints only, never for the owner's own voiceprint.
+    try:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    except Exception as error:
+        logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        return prints
+    if not named_allowed:
         return prints
     for person in users_db.get_people(uid) or []:
         embedding = usable_person_voiceprint(person)

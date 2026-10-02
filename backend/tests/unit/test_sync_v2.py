@@ -1415,6 +1415,11 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
+
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is
         # dependency-free production code (exec the real module); the latter
@@ -3417,6 +3422,11 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
 
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is

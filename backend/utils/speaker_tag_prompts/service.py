@@ -17,7 +17,7 @@ import time
 import uuid
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union, cast
 
 import numpy as np
 
@@ -666,7 +666,9 @@ def _pool(vectors: List[List[float]]) -> List[float]:
     return centroid.flatten().tolist()
 
 
-def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> Optional[Tuple[float, float, str]]:
+def owner_clip_window(
+    conversation: Dict[str, Any], segment_ids: List[str], *, return_key: bool = False
+) -> Optional[Union[Tuple[float, float, str], Tuple[float, float, str, Tuple[Any, int]]]]:
     """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
 
     A whole-speaker label may resolve to several captures; choose the longest
@@ -739,10 +741,12 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
             if not text:
                 continue
             if best is None or speech > best[0]:
-                best = (speech, start, end, text)
+                best = (speech, start, end, text, (scope, speaker_id))
     if best is None:
         return None
-    return best[1], best[2], best[3]
+    if return_key:
+        return best[1], best[2], best[3], best[4]
+    return cast(Tuple[float, float, str], (best[1], best[2], best[3]))
 
 
 async def store_owner_voice_sample(
@@ -767,11 +771,11 @@ async def store_owner_voice_sample(
         if set(authorized) != set(segment_ids) or not authorized:
             outcome = 'stale_assignment'
             return outcome
-        window = owner_clip_window(conversation, authorized)
+        window = owner_clip_window(conversation, authorized, return_key=True)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
-        start, end, text = window
+        start, end, text, (win_scope, win_speaker) = cast(Tuple[float, float, str, Tuple[Any, int]], window)
         pcm = await run_blocking(sync_executor, conversation_clip_pcm, uid, conversation, start, end)
         if not pcm:
             outcome = 'no_audio'
@@ -800,10 +804,17 @@ async def store_owner_voice_sample(
             _pool,
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+            # Record only the selected run's segments: the confirmation retracts
+            # by intersection, and overlapping owner segments from another capture
+            # scope must not be retracted by a later edit in this scope.
             segment_ids=[
                 s['id']
                 for s in conversation['transcript_segments']
-                if s.get('id') in authorized and s.get('start', end) < end and s.get('end', start) > start
+                if s.get('id') in authorized
+                and s.get('speaker_id_scope') == win_scope
+                and speaker_id_of(s) == win_speaker
+                and s.get('start', end) < end
+                and s.get('end', start) > start
             ],
         )
         if not stored:

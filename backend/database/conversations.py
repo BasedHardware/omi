@@ -2683,7 +2683,7 @@ def assign_conversation_speaker(
         updates, removed = person_updates_for_assignment(
             *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
         )
-        if owner_update := retract_owner_contributions(user_doc, current_id, resolved, now):
+        if owner_update := retract_owner_contributions(user_doc, (current_id, *seen), resolved, now):
             transaction.update(user_ref, owner_update)
         for pid, update in updates.items():
             transaction.update(people[pid][0], update)
