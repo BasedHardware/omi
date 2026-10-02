@@ -23,7 +23,10 @@ def person_teaching_authorized(
     receipt = decode_manual_speaker_assignments(
         uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
     )
-    if generation is None or receipt.get('generation', 0) != generation:
+    # The attempt must have observed a receipt no newer than the current one. A later
+    # edit to another voice bumps the generation without touching this label, so the
+    # per-segment authority below, not generation equality, decides.
+    if generation is None or receipt.get('generation', 0) < generation:
         return False
     segments = decode_transcript_segments_verified(
         uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))

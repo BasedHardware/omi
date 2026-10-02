@@ -199,7 +199,10 @@ def test_duplicate_owner_delivery_has_one_contribution_and_correction_clears_col
     assert store.rows[USER]['owner_voice_confirmations'] == []
 
 
-@pytest.mark.parametrize('mutation', ['unchanged', 'legacy', 'delete', 'tombstone', 'generation', 'optout', 'identity'])
+@pytest.mark.parametrize(
+    'mutation',
+    ['unchanged', 'legacy', 'other_voice_edit', 'delete', 'tombstone', 'older_receipt', 'optout', 'identity'],
+)
 def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation):
     conv = source()
     conv['transcript_segments'][0].update(person_id='p', is_user=False)
@@ -209,8 +212,11 @@ def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation
         store.rows.pop(CONV)
     elif mutation == 'tombstone':
         store.rows[CONV]['deleted'] = True
-    elif mutation == 'generation':
+    elif mutation == 'other_voice_edit':
+        # Tagging a second speaker bumps the receipt generation but leaves this label alone.
         store.rows[CONV]['manual_speaker_assignments']['generation'] = 2
+    elif mutation == 'older_receipt':
+        store.rows[CONV]['manual_speaker_assignments']['generation'] = 0
     elif mutation == 'optout':
         store.rows[CONV]['manual_speaker_assignments']['segments']['s']['use_for_speech_training'] = False
     elif mutation == 'identity':
@@ -229,7 +235,7 @@ def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation
         ['s'],
         expected_receipt_generation=0 if mutation == 'legacy' else 1,
     )
-    if mutation in {'unchanged', 'legacy'}:
+    if mutation in {'unchanged', 'legacy', 'other_voice_edit'}:
         assert result == []
         assert store.rows[PERSON]['speaker_embedding'] == [1, 0]
         assert store.rows[PERSON]['speech_sample_source'] == {'conversation_id': 'c', 'segment_ids': ['s']}
@@ -278,3 +284,25 @@ def test_live_entitlement_read_cannot_restore_old_conversation_permission():
     )
     assert asyncio.run(matcher.named_speakers_allowed()) is False
     assert matcher._named_speakers_allowed is None
+
+
+def test_live_entitlement_read_failure_stays_closed_and_is_retried():
+    calls = []
+
+    async def call(fn, *a, **kw):
+        calls.append(fn)
+        if len(calls) == 1:
+            raise RuntimeError('subscription read failed')
+        return True
+
+    matcher = speakers.SpeakerMatcher(
+        SimpleNamespace(request=SimpleNamespace(uid='u'), persistence=SimpleNamespace(call=call))
+    )
+
+    async def run():
+        assert await matcher.named_speakers_allowed() is False
+        assert matcher._named_speakers_allowed is None
+        assert await matcher.named_speakers_allowed() is True
+
+    asyncio.run(run())
+    assert len(calls) == 2

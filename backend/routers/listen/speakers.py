@@ -143,7 +143,12 @@ class SpeakerMatcher:
         async with self._entitlement_lock:
             if self._named_speakers_allowed is None:
                 generation = self._generation
-                allowed = await self.host.persistence.call(named_speaker_prompts_allowed, self.host.request.uid)
+                try:
+                    allowed = await self.host.persistence.call(named_speaker_prompts_allowed, self.host.request.uid)
+                except Exception as error:
+                    # Unresolved is not denied: stay closed for this call and ask again next time.
+                    logger.error('Speaker ID entitlement read failed type=%s', type(error).__name__)
+                    return False
                 if generation != self._generation:
                     return False
                 self._named_speakers_allowed = bool(allowed)
