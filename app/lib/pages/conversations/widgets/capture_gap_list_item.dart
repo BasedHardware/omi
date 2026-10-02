@@ -17,7 +17,7 @@ class CaptureGapHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 4, OmiSpacing.md, 2),
       child: Text(
         context.l10n.conversationsNotCapturedCount(count),
         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
@@ -41,7 +41,7 @@ class CaptureGapListItem extends StatelessWidget {
         '${dateTimeFormat('h:mm a', gap.startTime.toLocal(), locale: locale)} – ${dateTimeFormat('h:mm a', gap.endTime.toLocal(), locale: locale)}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: DeviceTile.rowPadding),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: DeviceTile.rowPadding),
       child: Row(
         children: [
           const DeviceTile(icon: Icons.event_busy, missing: true),

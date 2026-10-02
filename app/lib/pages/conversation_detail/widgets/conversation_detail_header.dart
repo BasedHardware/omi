@@ -251,7 +251,7 @@ class _PeopleAvatars extends StatelessWidget {
             shape: BoxShape.circle,
             color: first ? OmiColors.accent : OmiColors.textPrimary.withValues(alpha: 0.32),
             border: first
-                ? Border.all(color: OmiColors.surface0, width: 2, strokeAlign: BorderSide.strokeAlignOutside)
+                ? Border.all(color: OmiCanvas.pageOf(context), width: 2, strokeAlign: BorderSide.strokeAlignOutside)
                 : null,
           ),
           child: Text(
