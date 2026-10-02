@@ -660,7 +660,17 @@ def get_all_people(
         from utils.people_stats import apply_people_stats, collect_people_stats
 
         stats = collect_people_stats(
-            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+            # include_discarded=True reads through the scan-and-fill branch, so a
+            # short page really means the data ended. The default server-side
+            # limit/offset branch drops invisible rows in Python without padding,
+            # and there a short page only means "some rows in this window were
+            # filtered out" — which ended this scan early and under-counted
+            # conversation_count, last_heard_at and talk_seconds for anyone whose
+            # conversations sat after a deleted-but-not-discarded tombstone
+            # (#19908). Discarded rows are excluded during aggregation.
+            lambda limit, offset: conversations_db.get_conversations_without_photos(
+                uid, limit=limit, offset=offset, include_discarded=True
+            )
         )
         apply_people_stats(people, stats)
     if include_speech_samples:
