@@ -443,7 +443,7 @@ actor GeminiClient {
     default:
       retryable = nil
     }
-    return .apiError("HTTP \(status): \(body)", retryable: retryable)
+    return .apiError("HTTP \(status): \(body)", retryable: [401, 402, 429].contains(status) ? false : retryable)
   }
 
   /// Check HTTP status code before attempting JSON decode.
@@ -1059,9 +1059,13 @@ extension GeminiClient {
     tools: [GeminiTool],
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0,
-    authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
+    maximumAttempts: Int? = nil
   ) async throws -> ToolChatResult {
     if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
+    if let authorization, ScreenTaskBackpressure.shared.isBlocked(authorization) {
+      throw ScreenTaskFailure.backpressure
+    }
     try await Self.enforceManagedProactivity()
     // Try the primary model first; if it keeps failing transiently, fall back to the
     // secondary model (e.g. Pro overloaded → Flash) before giving up.
@@ -1069,10 +1073,10 @@ extension GeminiClient {
       if let fb = fallbackModel, fb != model { return [model, fb] }
       return [model]
     }()
-    let maxRetries = 2
+    let maxRetries = maximumAttempts.map { max(0, $0 - 1) } ?? 2
     var lastError: Error?
 
-    for (modelIndex, activeModel) in models.enumerated() {
+    for (modelIndex, activeModel) in models.prefix(maximumAttempts == nil ? models.count : 1).enumerated() {
       for attempt in 0...maxRetries {
         do {
           // Wrap JSON serialization in autoreleasepool (contents may include
@@ -1112,7 +1116,14 @@ extension GeminiClient {
           if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
             throw CancellationError()
           }
+          try ScreenTaskWorkAuthority.require()
           let (data, urlResponse) = try await Self.send(urlRequest)
+          if let authorization, let response = urlResponse as? HTTPURLResponse,
+            !(200...299).contains(response.statusCode)
+          {
+            ScreenTaskBackpressure.shared.record(
+              ScreenTaskHTTPFailure(response: response, data: data), owner: authorization)
+          }
           try checkHTTPStatus(urlResponse, data: data)
 
           let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)

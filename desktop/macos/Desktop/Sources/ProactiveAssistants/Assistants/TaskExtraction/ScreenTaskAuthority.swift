@@ -1,0 +1,146 @@
+import Foundation
+
+/// Immutable capture authority survives suppressed distribution, departure and rollback queues.
+struct ScreenTaskFrameBinding: Sendable {
+  let authorization: RuntimeOwnerAuthorizationSnapshot
+  let exclusion: RewindCaptureExclusionSnapshot
+
+  static func capture(app: String, title: String?) -> Self? {
+    guard !ScreenTaskPrivacy.isPrivateWindow(app: app, title: title),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      let exclusion = RewindCaptureExclusionGeneration.snapshot(appName: app)
+    else { return nil }
+    return Self(authorization: authorization, exclusion: exclusion)
+  }
+
+  func isCurrent() -> Bool {
+    RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      && RewindCaptureExclusionGeneration.isCurrent(exclusion)
+  }
+}
+
+enum ScreenTaskPrivacy {
+  static func isPrivateWindow(app: String, title: String?) -> Bool {
+    guard TaskAssistantSettings.isBrowser(app), let title else { return false }
+    // The known browsers use these title markers. A missing marker cannot prove privacy.
+    let markers = [
+      "incognito", "private browsing", "inprivate", "private window", "private tab", "guest window", "(private)",
+      "[private]", "- private", "— private",
+      "navigation privée", "navegación privada", "privates fenster", "ẩn danh",
+    ]
+    return markers.contains { title.localizedStandardContains($0) }
+  }
+}
+
+/// Admission expires even when a flag reload never completes. Uptime is monotonic.
+final class ScreenTaskAdmissionAuthority: @unchecked Sendable {
+  private let lock = NSLock()
+  private var enabled = false
+  private var generation: UInt64 = 0
+  private var expires: TimeInterval = 0
+  private let now: @Sendable () -> TimeInterval
+
+  init(now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) { self.now = now }
+
+  func refresh(enabled: Bool, requestedAt: TimeInterval? = nil) {
+    lock.withLock {
+      if self.enabled != enabled || now() >= expires { generation &+= 1 }
+      self.enabled = enabled
+      expires = (requestedAt ?? now()) + 55
+    }
+  }
+
+  func disable() {
+    lock.withLock {
+      if enabled { generation &+= 1 }
+      enabled = false
+      expires = 0
+    }
+  }
+
+  func snapshot() -> UInt64? { lock.withLock { enabled && now() < expires ? generation : nil } }
+  func isCurrent(_ token: UInt64) -> Bool { snapshot() == token }
+}
+
+struct ScreenTaskLease: Sendable {
+  let flag: UInt64
+  let server: UInt64
+  func isCurrent() -> Bool {
+    ScreenTaskFeature.authority.isCurrent(flag) && ScreenTaskFeature.serverAuthority.isCurrent(server)
+  }
+}
+
+enum ScreenTaskFreshFlagResponse {
+  static func enabled(_ data: Data) throws -> Bool {
+    guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      body["errorsWhileComputingFlags"] as? Bool != true,
+      !(body["quotaLimited"] as? [String] ?? []).contains("feature_flags")
+    else { throw ScreenTaskFailure.stopped }
+    if let flags = body["featureFlags"] as? [String: Any] {
+      return flags[ScreenTaskFeature.flagName] as? Bool ?? false
+    }
+    if let flags = body["flags"] as? [String: [String: Any]] {
+      return flags[ScreenTaskFeature.flagName]?["enabled"] as? Bool ?? false
+    }
+    throw ScreenTaskFailure.invalidResponse
+  }
+}
+
+@MainActor enum ScreenTaskFlagRefresh {
+  private static var timer: Timer?
+  private static var reloadInFlight = false
+  static func start() {
+    guard timer == nil else { return }
+    reload()
+    timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+      Task { @MainActor in reload() }
+    }
+  }
+
+  private static func reload() {
+    PostHogManager.shared.reloadFeatureFlags()
+    guard !reloadInFlight, PostHogManager.shared.isFeatureEnabled(ScreenTaskFeature.flagName),
+      let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return }
+    reloadInFlight = true
+    let requestedAt = ProcessInfo.processInfo.systemUptime
+    Task { @MainActor in
+      defer { reloadInFlight = false }
+      do {
+        let flagEnabled = try await PostHogManager.shared.screenTaskFlagAdmission(authorization: owner)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
+        ScreenTaskFeature.authority.refresh(enabled: flagEnabled, requestedAt: requestedAt)
+        let serverEnabled = try await APIClient.shared.screenTaskAdmissionStatus(authorization: owner)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
+        ScreenTaskFeature.serverAuthority.refresh(enabled: serverEnabled, requestedAt: requestedAt)
+      } catch {
+        // Failure cannot renew either cached lease. Already granted leases expire at request start +55s.
+      }
+    }
+  }
+}
+
+/// Shared transport checks this at the actual dispatch, including auth retries.
+/// Legacy recovery retains frame privacy/owner authority but does not need a feature lease.
+enum ScreenTaskWorkAuthority {
+  @TaskLocal static var validate: (@Sendable () throws -> Void)?
+  static func require() throws {
+    guard let validate else { return }
+    try Task.checkCancellation()
+    try validate()
+  }
+}
+
+/// Never let an awaited helper's return value cross an original-owner mutation boundary.
+enum ScreenTaskAuthorizedOperation {
+  static func run<T>(
+    authorization: LocalMutationAuthorization,
+    isolation: isolated (any Actor)? = #isolation,
+    operation: () async throws -> T
+  ) async throws -> T {
+    try authorization.require()
+    let value = try await operation()
+    try authorization.require()
+    return value
+  }
+}

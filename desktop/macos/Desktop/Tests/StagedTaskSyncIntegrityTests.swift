@@ -33,6 +33,44 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testRevocationInsideInsertTransactionRollsBackForOwnerSwapAndSameUIDReauthorization() async throws {
+    for sameUID in [false, true] {
+      let probe = StorageRevocationProbe(owner: testUserId, sameUID: sameUID)
+      let authorization = LocalMutationAuthorization { probe.validate() }
+      do {
+        _ = try await StagedTaskStorage.shared.insertLocalStagedTask(
+          StagedTaskRecord(description: "synthetic old-owner task"), authorization: authorization)
+        XCTFail("revoked transaction committed")
+      } catch {}
+      let queue = await RewindDatabase.shared.getDatabaseQueue()
+      let db = try XCTUnwrap(queue)
+      let count = try await db.read { database in
+        try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM staged_tasks") ?? 0
+      }
+      XCTAssertEqual(count, 0)
+    }
+  }
+
+  func testRevokedReceiptAndDiscardCannotMutateOutbox() async throws {
+    let record = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      StagedTaskRecord(description: "synthetic outbox", source: "candidate_outbox"))
+    let id = try XCTUnwrap(record.id)
+    let revoked = LocalMutationAuthorization { false }
+    do {
+      try await StagedTaskStorage.shared.markCanonicalReceipt(
+        id: id, candidateID: "synthetic-candidate", status: "pending", taskID: nil, authorization: revoked)
+      XCTFail("revoked receipt update succeeded")
+    } catch {}
+    do {
+      try await StagedTaskStorage.shared.discardCanonicalOutbox(id: id, authorization: revoked)
+      XCTFail("revoked discard succeeded")
+    } catch {}
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertNil(receipt)
+    let outbox = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertEqual(outbox.count, 1)
+  }
+
   func testMarkSyncedIsIdempotentWhenBackendIdAlreadyExists() async throws {
     let backendId = "backend-task-\(UUID().uuidString)"
 
@@ -76,5 +114,30 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM staged_tasks WHERE id = ?", arguments: [duplicateId]) ?? 0
     }
     XCTAssertEqual(duplicateExists, 0)
+  }
+}
+
+private final class StorageRevocationProbe: @unchecked Sendable {
+  private let lock = NSLock()
+  private let authority = RuntimeOwnerAuthorizationAuthority()
+  private let snapshot: RuntimeOwnerAuthorizationSnapshot
+  private let owner: String
+  private let sameUID: Bool
+  private var checks = 0
+  init(owner: String, sameUID: Bool) {
+    self.owner = owner
+    self.sameUID = sameUID
+    snapshot = authority.capture(ownerID: owner, expectedOwnerID: owner)!
+  }
+  func validate() -> Bool {
+    lock.withLock {
+      checks += 1
+      // First check is admission, second acquires the commit lease, third runs inside SQLite.
+      if checks == 3 {
+        authority.beginTransition()
+        authority.endTransition(ownerID: sameUID ? owner : "synthetic-other")
+      }
+      return authority.isCurrent(snapshot, ownerID: owner)
+    }
   }
 }

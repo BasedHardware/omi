@@ -31,6 +31,7 @@ enum ScreenTaskPrompt {
 
     title: verb-first, 6 to 15 words, names the person or project and the concrete deliverable, in English.
     deadline: yyyy-MM-dd only if stated or clearly implied; resolve relative dates from today's date; never in the past; otherwise "".
+    Return at most eight tasks. Keep description under 64 characters and evidence empty. Keep summaries under 96 characters.
     If nothing qualifies, return "tasks": [].
     Also emit capture_kind (explicit_command, clear_commitment, direct_request, inferred_next_step, already_done), owner (user, other, unknown), concrete_deliverable, public_broadcast, direct_mention, ownership_confidence, tags, source_category and source_subcategory using the canonical capture policy. For completes set capture_kind=already_done. Never invent an existing-task ID. context_summary and current_activity describe the screen.
     """#
@@ -53,13 +54,16 @@ enum ScreenTaskPrompt {
             "type": "object",
             "properties": {
               "title": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 96
               },
               "description": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               "deadline": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 10
               },
               "priority": {
                 "type": "string",
@@ -67,7 +71,8 @@ enum ScreenTaskPrompt {
                   "high",
                   "medium",
                   "low"
-                ]
+                ],
+                "maxLength": 40
               },
               "confidence": {
                 "type": "number"
@@ -79,13 +84,16 @@ enum ScreenTaskPrompt {
                   "duplicate",
                   "refines",
                   "completes"
-                ]
+                ],
+                "maxLength": 40
               },
               "related_id": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               "evidence": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 0
               },
               "capture_kind": {
                 "type": "string",
@@ -96,7 +104,8 @@ enum ScreenTaskPrompt {
                   "direct_request",
                   "inferred_next_step",
                   "already_done"
-                ]
+                ],
+                "maxLength": 40
               },
               "owner": {
                 "type": "string",
@@ -105,7 +114,8 @@ enum ScreenTaskPrompt {
                   "user",
                   "other",
                   "unknown"
-                ]
+                ],
+                "maxLength": 40
               },
               "concrete_deliverable": {
                 "type": "boolean",
@@ -127,8 +137,10 @@ enum ScreenTaskPrompt {
                 "type": "array",
                 "description": "1-3 relevant tags",
                 "items": {
-                  "type": "string"
-                }
+                  "type": "string",
+                  "maxLength": 16
+                },
+                "maxItems": 2
               },
               "source_category": {
                 "type": "string",
@@ -140,7 +152,8 @@ enum ScreenTaskPrompt {
                   "reactive",
                   "external_system",
                   "other"
-                ]
+                ],
+                "maxLength": 40
               },
               "source_subcategory": {
                 "type": "string",
@@ -163,7 +176,8 @@ enum ScreenTaskPrompt {
                   "alert",
                   "documentation",
                   "other"
-                ]
+                ],
+                "maxLength": 40
               }
             },
             "required": [
@@ -185,13 +199,16 @@ enum ScreenTaskPrompt {
               "source_category",
               "source_subcategory"
             ]
-          }
+          },
+          "maxItems": 8
         },
         "context_summary": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 96
         },
         "current_activity": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 96
         }
       },
       "required": [

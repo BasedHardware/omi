@@ -4,11 +4,26 @@ import logging
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from routers import desktop_task_gate as route
 from utils.llm import screen_task_gate as gate
 from utils.llm.jev_client import JevAnswers
+from utils.managed_compute import Decision
+from utils.rate_limit_config import get_effective_limit
+from utils.llm import screen_task_admission as admission
+import redis
+
+
+@pytest.fixture(autouse=True)
+def managed_admission(monkeypatch):
+    monkeypatch.delenv('SCREEN_TASK_STOP', raising=False)
+    monkeypatch.setattr(
+        route,
+        'authorize_managed_compute',
+        lambda *a: Decision(True, 'plan_paid', 'screen_frame_judge', 'omi', None, True),
+    )
+    monkeypatch.setattr(route, 'check_screen_task_limit', lambda *a: None)
 
 
 def _answers(score):
@@ -85,3 +100,77 @@ async def test_http_gate_preserves_trial_paywall(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
         result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'screen'})
     assert result.status_code == 402
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason,status', [('basic_not_entitled', 402), ('authorization_unavailable', 503)])
+async def test_managed_denial_is_terminal_and_never_calls_provider(monkeypatch, reason, status):
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.get_current_user_uid] = lambda: 'synthetic-user'
+    monkeypatch.setattr(
+        route, 'authorize_managed_compute', lambda *a: Decision(False, reason, 'screen_frame_judge', 'omi', None, True)
+    )
+    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('denied request spent provider work'))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
+        result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'})
+    assert result.status_code == status
+    assert result.headers['X-Omi-Retryable'] == 'false'
+
+
+@pytest.mark.asyncio
+async def test_gate_has_separate_burst_and_daily_budgets_and_typed_quota(monkeypatch):
+    seen = []
+
+    def limit(uid, policy):
+        seen.append((uid, policy))
+        if policy.endswith('_daily'):
+            raise HTTPException(429, headers={'Retry-After': '70'})
+
+    monkeypatch.setattr(route, 'check_screen_task_limit', limit)
+    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('quota request spent provider work'))
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.get_current_user_uid] = lambda: 'synthetic-user'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
+        result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'})
+    assert [p for _, p in seen] == ['screen_task:gate', 'screen_task:gate_daily']
+    assert result.status_code == 429
+    assert result.headers['Retry-After'] == '70'
+    assert result.headers['X-Omi-Retryable'] == 'false'
+    assert get_effective_limit('screen_task:gate', boost=100) == (30, 60)
+    assert get_effective_limit('screen_task:gate_daily', boost=100) == (1500, 86400)
+
+
+@pytest.mark.asyncio
+async def test_runtime_stop_is_typed_and_admission_lease_is_bounded(monkeypatch):
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.get_current_user_uid] = lambda: 'synthetic-user'
+    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('stopped request spent provider work'))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
+        before = await client.get('/v1/screen-task/admission')
+        monkeypatch.setenv('SCREEN_TASK_STOP', 'true')
+        after = await client.get('/v1/screen-task/admission')
+        stopped = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'})
+    assert before.json() == {'enabled': True, 'lease_seconds': 55}
+    assert after.json()['enabled'] is False
+    assert stopped.status_code == 409
+    assert stopped.json()['detail']['error'] == 'screen_task_stopped'
+    assert stopped.headers['X-Omi-Retryable'] == 'false'
+
+
+def test_gate_budget_fails_closed_on_redis_and_never_obeys_shadow(monkeypatch):
+    def unavailable(*args):
+        raise redis.exceptions.ConnectionError('synthetic unavailable')
+
+    monkeypatch.setattr(admission, 'check_rate_limit', unavailable)
+    with pytest.raises(HTTPException) as caught:
+        admission.check_screen_task_limit('synthetic-user', 'screen_task:gate')
+    assert caught.value.status_code == 503
+    assert caught.value.headers['X-Omi-Retryable'] == 'false'
+    monkeypatch.setattr(admission, 'check_rate_limit', lambda *args: (False, 0, 65))
+    with pytest.raises(HTTPException) as caught:
+        admission.check_screen_task_limit('synthetic-user', 'screen_task:gate')
+    assert caught.value.status_code == 429
+    assert caught.value.headers['Retry-After'] == '65'

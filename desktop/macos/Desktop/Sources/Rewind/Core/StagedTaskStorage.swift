@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-struct CanonicalCaptureReceipt: Equatable {
+struct CanonicalCaptureReceipt: Equatable, Sendable {
   let candidateID: String
   let status: String
   let taskID: String?
@@ -10,7 +10,7 @@ struct CanonicalCaptureReceipt: Equatable {
 /// Single atomic decision for whether a local outbox row may call backend create.
 /// Closes the first-writer dual-create window and the dismiss-vs-reuse race in one
 /// DB transaction immediately before delivery.
-enum CanonicalCaptureDeliveryDecision: Equatable {
+enum CanonicalCaptureDeliveryDecision: Equatable, Sendable {
   /// Adopted a reusable pending/accepted synced receipt and retired this outbox row.
   case adoptedExistingReceipt(CanonicalCaptureReceipt)
   /// A newer equivalent observation: retired/coalesced into the elected oldest
@@ -73,17 +73,34 @@ actor StagedTaskStorage {
     return db
   }
 
+  private nonisolated static func authorizedWrite<T: Sendable>(
+    _ db: DatabasePool, authorization: LocalMutationAuthorization,
+    operation: @escaping @Sendable (Database) throws -> T
+  ) async throws -> T {
+    try await authorization.withCommitLeaseSuppressingSupersededResult {
+      try await db.write { database in
+        try authorization.require()
+        let value = try operation(database)
+        try authorization.require()
+        return value
+      }
+    }
+  }
+
   // MARK: - Insert
 
   @discardableResult
-  func insertLocalStagedTask(_ record: StagedTaskRecord) async throws -> StagedTaskRecord {
+  func insertLocalStagedTask(_ record: StagedTaskRecord, authorization: LocalMutationAuthorization = .unrestricted)
+    async throws -> StagedTaskRecord
+  {
+    try authorization.require()
     let db = try await ensureInitialized()
 
     var insertRecord = record
     insertRecord.backendSynced = false
     let recordToInsert = insertRecord
 
-    let inserted = try await db.write { database in
+    let inserted = try await Self.authorizedWrite(db, authorization: authorization) { database in
       try recordToInsert.inserted(database)
     }
 
@@ -207,15 +224,19 @@ actor StagedTaskStorage {
     }
   }
 
-  func markCanonicalReceipt(id: Int64, candidateID: String, status: String, taskID: String?) async throws {
+  func markCanonicalReceipt(
+    id: Int64, candidateID: String, status: String, taskID: String?,
+    authorization: LocalMutationAuthorization = .unrestricted
+  ) async throws {
+    try authorization.require()
     let db = try await ensureInitialized()
 
-    enum MarkReceiptResult {
+    enum MarkReceiptResult: Sendable {
       case updated
       case mergedDuplicate(existingId: Int64)
     }
 
-    let result: MarkReceiptResult = try await db.write { database in
+    let result: MarkReceiptResult = try await Self.authorizedWrite(db, authorization: authorization) { database in
       guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
         throw ActionItemStorageError.recordNotFound
       }
@@ -320,12 +341,15 @@ actor StagedTaskStorage {
   func resolveCanonicalCaptureDelivery(
     for record: StagedTaskRecord,
     localOutboxID: Int64,
-    now: Date = Date()
+    now: Date = Date(),
+    authorization: LocalMutationAuthorization = .unrestricted
   ) async throws -> CanonicalCaptureDeliveryDecision {
+    try authorization.require()
     let db = try await ensureInitialized()
     let cutoff = now.addingTimeInterval(-ScreenCandidateReconciliation.reuseWindow)
 
-    let decision: CanonicalCaptureDeliveryDecision = try await db.write { database in
+    let decision: CanonicalCaptureDeliveryDecision = try await Self.authorizedWrite(db, authorization: authorization) {
+      database in
       guard let localRow = try StagedTaskRecord.fetchOne(database, key: localOutboxID),
         localRow.deleted == false
       else {
@@ -522,9 +546,10 @@ actor StagedTaskStorage {
     }
   }
 
-  func discardCanonicalOutbox(id: Int64) async throws {
+  func discardCanonicalOutbox(id: Int64, authorization: LocalMutationAuthorization = .unrestricted) async throws {
+    try authorization.require()
     let db = try await ensureInitialized()
-    try await db.write { database in
+    try await Self.authorizedWrite(db, authorization: authorization) { database in
       try database.execute(
         sql: "UPDATE staged_tasks SET completed = 1, deleted = 1, updatedAt = ? WHERE id = ?",
         arguments: [Date(), id]
@@ -546,10 +571,12 @@ actor StagedTaskStorage {
   /// outbox and burns quota on deterministic 4xx responses.
   func recordCanonicalOutboxRejection(
     id: Int64,
-    limit: Int = CandidateOutboxRetryPolicy.maxPermanentRejections
+    limit: Int = CandidateOutboxRetryPolicy.maxPermanentRejections,
+    authorization: LocalMutationAuthorization = .unrestricted
   ) async throws -> CanonicalOutboxRejectionOutcome {
+    try authorization.require()
     let db = try await ensureInitialized()
-    return try await db.write { database in
+    return try await Self.authorizedWrite(db, authorization: authorization) { database in
       guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
         throw ActionItemStorageError.recordNotFound
       }

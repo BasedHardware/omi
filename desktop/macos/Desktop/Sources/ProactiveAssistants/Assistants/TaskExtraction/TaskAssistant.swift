@@ -34,8 +34,7 @@ actor TaskAssistant: ProactiveAssistant {
   // MARK: - Properties
 
   private let geminiClient: GeminiClient
-  var screenTaskDedupe = ScreenTaskDedupe()
-  var screenTaskFrameOwners = ScreenTaskFrameOwners()
+  let screenTaskPipeline = ScreenTaskPipeline()
   private var isRunning = false
   private var previousTasks: [ExtractedTask] = []  // Last 10 extracted tasks for context
   private let maxPreviousTasks = 10
@@ -43,13 +42,10 @@ actor TaskAssistant: ProactiveAssistant {
   private var processingTask: Task<Void, Never>?
 
   // MARK: - Event-Driven Trigger System
-  private enum TriggerEvent {
-    case contextSwitch(CapturedFrame)  // departing frame from context being left
-    case timerFallback(CapturedFrame)  // latest frame after extraction interval
-  }
-
-  private let triggerStream: AsyncStream<TriggerEvent>
-  private let triggerContinuation: AsyncStream<TriggerEvent>.Continuation
+  private let pendingFrames = ScreenTaskFrameMailbox()
+  private var exclusionObserver: NSObjectProtocol?
+  private let triggerStream: AsyncStream<Void>
+  private let triggerContinuation: AsyncStream<Void>.Continuation
 
   /// Always holds the most recent frame for fallback timer use
   private var latestFrame: CapturedFrame?
@@ -243,7 +239,7 @@ actor TaskAssistant: ProactiveAssistant {
       fallbackModel: "gemini-2.5-flash",
       workload: .extraction)
 
-    let (stream, continuation) = AsyncStream.makeStream(of: TriggerEvent.self, bufferingPolicy: .bufferingNewest(1))
+    let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.triggerStream = stream
     self.triggerContinuation = continuation
 
@@ -268,6 +264,14 @@ actor TaskAssistant: ProactiveAssistant {
   // MARK: - Processing
 
   private func startProcessing() {
+    let mailbox = pendingFrames
+    exclusionObserver = NotificationCenter.default.addObserver(
+      forName: .screenCaptureExclusionChanged, object: nil, queue: nil
+    ) { notification in
+      guard let app = notification.object as? String else { return }
+      mailbox.purge(app: app)
+      Task { await self.purgeExcludedLatestFrame(app: app) }
+    }
     isRunning = true
     processingTask = Task {
       await retryCanonicalOutbox()
@@ -276,6 +280,7 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   private func retryCanonicalOutbox() async {
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     let records: [StagedTaskRecord]
     do {
       records = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
@@ -307,7 +312,7 @@ actor TaskAssistant: ProactiveAssistant {
         refinesTask: metadata["refines_task"] as? String,
         ownershipConfidence: metadata["ownership_confidence"] as? Double
       )
-      await syncTaskToBackend(
+      _ = await syncTaskToBackend(
         task: task,
         taskResult: TaskExtractionResult(
           hasNewTask: true,
@@ -316,7 +321,8 @@ actor TaskAssistant: ProactiveAssistant {
           currentActivity: record.currentActivity ?? ""
         ),
         localRecord: record,
-        windowTitle: record.windowTitle
+        windowTitle: record.windowTitle,
+        authorization: authorization
       )
     }
   }
@@ -324,22 +330,18 @@ actor TaskAssistant: ProactiveAssistant {
   private func processLoop() async {
     log("Task assistant started (event-driven)")
 
-    for await trigger in triggerStream {
+    for await _ in triggerStream {
       guard isRunning else { break }
+      guard let (frame, kind) = pendingFrames.take() else { continue }
 
-      await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+      await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isConfigured) {
         // A prior capture may have been persisted while offline or left retryable
         // after a transient delivery failure. Drain that durable outbox before
         // extracting the new frame so an equivalent new observation can adopt or
         // coalesce against a leader that has already had another delivery chance.
         await retryCanonicalOutbox()
 
-        let (frame, triggerType): (CapturedFrame, String) = {
-          switch trigger {
-          case .contextSwitch(let f): return (f, "context_switch")
-          case .timerFallback(let f): return (f, "timer_fallback")
-          }
-        }()
+        let triggerType = kind == .contextSwitch ? "context_switch" : "timer_fallback"
 
         log("Task: Processing \(triggerType) trigger from \(frame.appName) (window: \(frame.windowTitle ?? "nil"))")
 
@@ -366,7 +368,7 @@ actor TaskAssistant: ProactiveAssistant {
       guard !Task.isCancelled else { return }
       guard let frame = self.latestFrame else { return }
       log("Task: Fallback timer fired after \(Int(interval))s")
-      self.triggerContinuation.yield(.timerFallback(frame))
+      self.enqueue(frame, kind: .timerFallback)
     }
   }
 
@@ -407,9 +409,6 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     // Store as latest frame (used by fallback timer and context switch)
-    if await ScreenTaskFeature.isEnabled {
-      screenTaskFrameOwners.record(frame, authorization: RuntimeOwnerIdentity.captureAuthorizationSnapshot())
-    }
     latestFrame = frame
 
     // Start fallback timer if not already running
@@ -432,7 +431,7 @@ actor TaskAssistant: ProactiveAssistant {
   private func armFastFallbackIfNeeded(frame: CapturedFrame) async {
     guard Self.messagingFastPathApps.contains(frame.appName) else { return }
     if await ScreenTaskFeature.isEnabled {
-      triggerContinuation.yield(.timerFallback(frame))
+      enqueue(frame, kind: .timerFallback)
       return
     }
 
@@ -449,12 +448,12 @@ actor TaskAssistant: ProactiveAssistant {
 
     log("Task: Fast in-app trigger firing immediately for messaging window '\(key)'")
     lastAnalyzedByKey[key] = Date()
-    triggerContinuation.yield(.timerFallback(frame))
+    enqueue(frame, kind: .timerFallback)
   }
 
   func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
-    guard let taskResult = result as? TaskExtractionResult else { return }
-    await handleResultWithScreenshot(taskResult, screenshotId: nil, appName: "Unknown", sendEvent: sendEvent)
+    // analyze(frame:) only queues immutable bound frames and returns nil. Delivery
+    // runs in processFrame; an unbound protocol result must never acquire the current owner.
   }
 
   /// Handle result with screenshot ID for SQLite storage
@@ -465,8 +464,12 @@ actor TaskAssistant: ProactiveAssistant {
     appName: String,
     windowTitle: String? = nil,
     recordExtractionEvent: Bool = true,
+    authorization: RuntimeOwnerAuthorizationSnapshot?,
     sendEvent: @escaping (String, [String: Any]) -> Void
-  ) async -> Bool {
+  ) async -> ScreenTaskDeliveryCounts {
+    guard let authorization else { return .failure }
+    let mutation = Self.mutationAuthorization(authorization)
+    guard (try? mutation.require()) != nil else { return .failure }
     // Save observation for every result (fire-and-forget)
     let observationApp = taskResult.task?.sourceApp ?? appName
     let observation = ObservationRecord(
@@ -480,17 +483,12 @@ actor TaskAssistant: ProactiveAssistant {
       sourceSubcategory: taskResult.task?.sourceSubcategory,
       createdAt: Date()
     )
-    let observationAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    let observationAuthorizationSnapshot = authorization
     Task {
-      guard let observationAuthorizationSnapshot else { return }
       do {
         try await ActionItemStorage.shared.insertObservation(
           observation,
-          authorization: LocalMutationAuthorization {
-            RuntimeOwnerIdentity.isAuthorizationCurrent(
-              observationAuthorizationSnapshot
-            )
-          }
+          authorization: mutation
         )
       } catch {
         if RuntimeOwnerIdentity.isAuthorizationCurrent(observationAuthorizationSnapshot) {
@@ -500,15 +498,19 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     guard taskResult.hasNewTask, let task = taskResult.task else {
-      return false
+      return ScreenTaskDeliveryCounts(policyRejected: taskResult.hasNewTask ? 1 : 0)
     }
 
-    let threshold = await minConfidence
+    guard
+      let threshold = try? await ScreenTaskAuthorizedOperation.run(
+        authorization: mutation, operation: { await self.minConfidence })
+    else { return .failure }
+    guard (try? mutation.require()) != nil else { return .failure }
     let confidencePercent = Int(task.confidence * 100)
 
     guard task.confidence >= threshold else {
       log("Task: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(task.title)\"")
-      return false
+      return ScreenTaskDeliveryCounts(policyRejected: taskResult.hasNewTask ? 1 : 0)
     }
 
     log("Task: [\(confidencePercent)% conf.] \"\(task.title)\"")
@@ -523,20 +525,28 @@ actor TaskAssistant: ProactiveAssistant {
       task: task,
       screenshotId: screenshotId,
       contextSummary: taskResult.contextSummary,
-      windowTitle: windowTitle
+      windowTitle: windowTitle,
+      authorization: mutation
     )
 
-    await syncTaskToBackend(
+    guard (try? mutation.require()) != nil else { return .failure }
+    var counts = await syncTaskToBackend(
       task: task,
       taskResult: taskResult,
       localRecord: extractionRecord,
-      windowTitle: windowTitle
+      windowTitle: windowTitle,
+      authorization: authorization
     )
 
-    if recordExtractionEvent {
-      await MainActor.run { AnalyticsManager.shared.taskExtracted(taskCount: 1) }
+    counts.outboxSaved = extractionRecord == nil ? 0 : 1
+    guard (try? mutation.require()) != nil else { return .failure }
+    if recordExtractionEvent, counts.pendingDelivered > 0 {
+      await MainActor.run {
+        if (try? mutation.require()) != nil { AnalyticsManager.shared.taskExtracted(taskCount: 1) }
+      }
     }
 
+    guard (try? mutation.require()) != nil else { return .failure }
     sendEvent(
       "taskExtracted",
       [
@@ -544,7 +554,23 @@ actor TaskAssistant: ProactiveAssistant {
         "task": task.toDictionary(),
         "contextSummary": taskResult.contextSummary,
       ])
-    return extractionRecord != nil
+    return counts
+  }
+
+  nonisolated static func mutationAuthorization(_ authorization: RuntimeOwnerAuthorizationSnapshot)
+    -> LocalMutationAuthorization
+  {
+    let workValidator = ScreenTaskWorkAuthority.validate
+    return LocalMutationAuthorization {
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        && RewindDatabase.currentUserId == authorization.ownerID
+        && {
+          do {
+            try workValidator?()
+            return true
+          } catch { return false }
+        }()
+    }
   }
 
   /// Generate embedding for a newly saved staged task and store it
@@ -565,7 +591,8 @@ actor TaskAssistant: ProactiveAssistant {
     task: ExtractedTask,
     screenshotId: Int64?,
     contextSummary: String,
-    windowTitle: String? = nil
+    windowTitle: String? = nil,
+    authorization: LocalMutationAuthorization
   ) async -> StagedTaskRecord? {
     var metadata: [String: Any] = [
       "tags": task.tags,
@@ -634,7 +661,7 @@ actor TaskAssistant: ProactiveAssistant {
     )
 
     do {
-      let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(record)
+      let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(record, authorization: authorization)
       log("Task: Saved retryable capture outbox row (id: \(inserted.id ?? -1))")
       return inserted
     } catch {
@@ -648,24 +675,30 @@ actor TaskAssistant: ProactiveAssistant {
     task: ExtractedTask,
     taskResult: TaskExtractionResult,
     localRecord: StagedTaskRecord?,
-    windowTitle: String? = nil
-  ) async {
-    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else { return }
+    windowTitle: String? = nil,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) async -> ScreenTaskDeliveryCounts {
+    let mutation = Self.mutationAuthorization(authorization)
+    guard (try? mutation.require()) != nil else { return .failure }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else { return .failure }
     guard let localRecord, let localID = localRecord.id else {
       log("Task: Capture outbox persistence failed; refusing an untracked backend write")
-      return
+      return .failure
     }
     do {
-      let control = try await APIClient.shared.getCandidateWorkflowControl()
+      let control = try await ScreenTaskAuthorizedOperation.run(authorization: mutation) {
+        try await APIClient.shared.getCandidateWorkflowControl(
+          expectedOwnerId: authorization.ownerID, authorizationSnapshot: authorization)
+      }
       guard let mode = control.workflowMode else {
         log("Task: Workflow control omitted mode; capture remains retryable")
-        return
+        return .failure
       }
 
       if mode == .read {
         guard let generation = control.accountGeneration else {
           log("Task: Workflow control omitted generation; capture remains retryable")
-          return
+          return .failure
         }
         let evidenceVersion = ScreenCandidateAdapter.evidenceVersion(
           for: localRecord.screenshotId
@@ -678,8 +711,8 @@ actor TaskAssistant: ProactiveAssistant {
           evidenceVersion: evidenceVersion
         )
         guard decision.candidate != nil else {
-          try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
-          return
+          try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID, authorization: mutation)
+          return ScreenTaskDeliveryCounts(policyRejected: 1)
         }
 
         // The model's duplicate search is advisory. Repeated screenshots can
@@ -689,23 +722,24 @@ actor TaskAssistant: ProactiveAssistant {
         // mint two Candidates for the same observation burst.
         switch try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
           for: localRecord,
-          localOutboxID: localID
+          localOutboxID: localID,
+          authorization: mutation
         ) {
         case .adoptedExistingReceipt(let receipt):
           log(
             "Task: Reused canonical capture candidate=\(receipt.candidateID) for semantically equivalent observation"
           )
-          return
+          return ScreenTaskDeliveryCounts(coalesced: 1)
         case .coalescedIntoDeliveryLeader:
           log(
             "Task: Coalesced equivalent capture into older delivery leader; skipping backend create"
           )
-          return
+          return ScreenTaskDeliveryCounts(coalesced: 1)
         case .proceedAsDeliveryLeader:
           break
         }
         let delivery = CanonicalScreenCandidateDelivery(
-          client: APICanonicalScreenCandidateClient()
+          client: APICanonicalScreenCandidateClient(authorization: authorization)
         )
         guard
           let canonicalState = try await delivery.deliver(
@@ -714,14 +748,15 @@ actor TaskAssistant: ProactiveAssistant {
             deviceID: ClientDeviceService.shared.deviceIdHash,
             accountGeneration: generation
           )
-        else { return }
+        else { return .failure }
         let canonicalStatus = canonicalState.status
         let canonicalTaskID = canonicalState.taskID
         try await StagedTaskStorage.shared.markCanonicalReceipt(
           id: localID,
           candidateID: canonicalState.candidateID,
           status: canonicalStatus.rawValue,
-          taskID: canonicalTaskID
+          taskID: canonicalTaskID,
+          authorization: mutation
         )
         let confidenceBand = TaskIntelligenceConfidenceBand.forCapture(
           confidence: task.confidence,
@@ -756,6 +791,7 @@ actor TaskAssistant: ProactiveAssistant {
           return nil
         }()
         await MainActor.run {
+          guard (try? mutation.require()) != nil else { return }
           AnalyticsManager.shared.taskIntelligenceAttribution(capturedAttribution)
           if let resolvedAttribution {
             AnalyticsManager.shared.taskIntelligenceAttribution(resolvedAttribution)
@@ -764,7 +800,7 @@ actor TaskAssistant: ProactiveAssistant {
         log(
           "Task: Canonical capture reconciled candidate=\(canonicalState.candidateID) outcome=\(decision.outcome.rawValue)"
         )
-        return
+        return ScreenTaskDeliveryCounts(pendingDelivered: canonicalStatus == .pending ? 1 : 0)
       }
 
       // I1: screen capture proposes, it never creates. `.read` above is the only
@@ -780,14 +816,15 @@ actor TaskAssistant: ProactiveAssistant {
         outcome: .degraded
       )
       log("Task: Non-canonical workflow mode \(mode); capture deferred and remains retryable")
-      return
+      return ScreenTaskDeliveryCounts()
     } catch {
-      await CandidateOutboxRetryPolicy.handleDeliveryFailure(error, localID: localID)
+      await CandidateOutboxRetryPolicy.handleDeliveryFailure(error, localID: localID, authorization: mutation)
+      return .failure
     }
   }
 
   func onAppSwitch(newApp: String) async {
-    DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+    DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isConfigured) {
       if newApp != currentApp {
         if let currentApp = currentApp {
           log("Task: APP SWITCH: \(currentApp) -> \(newApp)")
@@ -800,7 +837,7 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   func onContextSwitch(departingFrame: CapturedFrame?, newApp: String, newWindowTitle: String?) async {
-    await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isEnabled) {
+    await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isConfigured) {
       // Use latestFrame if departing frame is unavailable or stale (from a different app due to delay periods)
       let frame: CapturedFrame? = {
         if let departing = departingFrame {
@@ -879,7 +916,7 @@ actor TaskAssistant: ProactiveAssistant {
       // Yield context switch trigger with the frame
       lastAnalyzedByKey[dedupeKey] = now
       pruneStaleDedupeEntries(now: now, ttl: TimeInterval(max(analysisDelay, 60) * 5))
-      triggerContinuation.yield(.contextSwitch(frame))
+      enqueue(frame, kind: .contextSwitch)
     }
   }
 
@@ -894,6 +931,19 @@ actor TaskAssistant: ProactiveAssistant {
     lastAnalyzedByKey = lastAnalyzedByKey.filter { $0.value >= cutoff }
   }
 
+  private func enqueue(_ frame: CapturedFrame, kind: ScreenTaskFrameMailbox.Kind) {
+    pendingFrames.enqueue(frame, kind: kind)
+    triggerContinuation.yield(())
+  }
+
+  private func purgeExcludedLatestFrame(app: String) {
+    if latestFrame?.appName == app {
+      latestFrame = nil
+      fallbackTimerTask?.cancel()
+      fallbackTimerTask = nil
+    }
+  }
+
   func clearPendingWork() async {
     fallbackTimerTask?.cancel()
     fallbackTimerTask = nil
@@ -904,10 +954,11 @@ actor TaskAssistant: ProactiveAssistant {
     isRunning = false
     fallbackTimerTask?.cancel()
     fallbackTimerTask = nil
+    if let exclusionObserver { NotificationCenter.default.removeObserver(exclusionObserver) }
+    exclusionObserver = nil
     triggerContinuation.finish()
     processingTask?.cancel()
     latestFrame = nil
-    screenTaskFrameOwners = ScreenTaskFrameOwners()
   }
 
   // MARK: - Single-Stage Analysis with Tool Calling
@@ -920,7 +971,8 @@ actor TaskAssistant: ProactiveAssistant {
   /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
   /// terminator result when zero tasks were extracted.
   func extractTaskSingleStage(
-    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
+    maximumRequests: Int? = nil
   ) async throws -> (
     [TaskExtractionResult], Int
   ) {
@@ -1084,14 +1136,15 @@ actor TaskAssistant: ProactiveAssistant {
     var lastContextSummary = ""
     var lastCurrentActivity = ""
 
-    toolLoop: for iteration in 0..<8 {
+    toolLoop: for iteration in 0..<(maximumRequests ?? 8) {
       let result = try await geminiClient.sendImageToolLoop(
         contents: contents,
         systemPrompt: prompts.system,
         tools: [tools],
         forceToolCall: iteration == 0,
         thinkingBudget: 1024,
-        authorization: authorization
+        authorization: authorization,
+        maximumAttempts: maximumRequests == nil ? nil : 1
       )
 
       guard let toolCall = result.toolCalls.first else {

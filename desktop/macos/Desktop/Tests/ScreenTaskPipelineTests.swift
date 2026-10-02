@@ -22,19 +22,19 @@ final class ScreenTaskPipelineTests: XCTestCase {
     let jitter = ScreenTaskDedupe.lines(
       ocr: ocr([("Unread 8", 0.05), ("please  send Alex the draft!", 0.51)]), app: "Telegram")
     var dedupe = ScreenTaskDedupe()
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first, now: now))
     dedupe.record(key: "owner:1:Telegram", lines: first, now: now)
-    XCTAssertTrue(dedupe.shouldSkip(key: "owner:1:Telegram", lines: jitter, now: now.addingTimeInterval(10)))
+    XCTAssertTrue(dedupe.shouldSkip(key: "owner:1:Telegram", lines: jitter, now: (now + 10)))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first + ["also send the budget"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:2:Telegram", lines: first, now: now))
-    XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first, now: now.addingTimeInterval(61)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: first, now: (now + 61)))
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: [], now: now))
   }
 
   func testScrolledFrameAndChangedDeadlinePass() {
     var dedupe = ScreenTaskDedupe()
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     dedupe.record(key: "app", lines: ["send report friday", "older line"], now: now)
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["send report friday"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["send report monday"], now: now))
@@ -42,37 +42,37 @@ final class ScreenTaskPipelineTests: XCTestCase {
   }
 
   func testNewOccurrenceOfIdenticalMainPaneLinePassesDedupe() {
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     var dedupe = ScreenTaskDedupe()
     let first = ScreenTaskDedupe.lines(ocr: ocr([("ok", 0.5)]), app: "Messages")
     dedupe.record(key: "chat", lines: first, now: now)
     let repeated = ScreenTaskDedupe.lines(ocr: ocr([("ok", 0.5), ("OK!", 0.51)]), app: "Messages")
-    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: repeated, now: now.addingTimeInterval(5)))
-    dedupe.record(key: "chat", lines: repeated, now: now.addingTimeInterval(5))
-    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: Array(repeated.reversed()), now: now.addingTimeInterval(6)))
-    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: first, now: now.addingTimeInterval(6)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: repeated, now: (now + 5)))
+    dedupe.record(key: "chat", lines: repeated, now: (now + 5))
+    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: Array(repeated.reversed()), now: (now + 6)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: first, now: (now + 6)))
   }
 
   func testIdenticalOrderedFrameSkipsWithinSixtySeconds() {
     var dedupe = ScreenTaskDedupe()
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     dedupe.record(key: "chat", lines: ["ok", "send budget"], now: now)
-    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: now.addingTimeInterval(60)))
-    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: now.addingTimeInterval(61)))
+    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: (now + 60)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: (now + 61)))
   }
 
   func testRepeatedNewLinePassesWhenEarlierOccurrenceScrolledOut() {
     var dedupe = ScreenTaskDedupe()
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     dedupe.record(key: "chat", lines: ["ok", "send budget", "ok"], now: now)
-    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok", "ok"], now: now.addingTimeInterval(5)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok", "ok"], now: (now + 5)))
   }
 
   func testReplacedLineWithSameCountsButDifferentOrderPasses() {
     var dedupe = ScreenTaskDedupe()
-    let now = Date(timeIntervalSince1970: 100)
+    let now: TimeInterval = 100
     dedupe.record(key: "chat", lines: ["ok", "send budget"], now: now)
-    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok"], now: now.addingTimeInterval(5)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok"], now: (now + 5)))
   }
 
   @MainActor func testAuditedRejectStagesResultsAndCountsActualSuccessfulWrites() async throws {
@@ -80,14 +80,14 @@ final class ScreenTaskPipelineTests: XCTestCase {
     let admission = ScreenTaskAdmission(shouldExtract: true, gateOutcome: "rejected", auditSample: true)
     var writes: [String] = []
     var events: [ScreenTaskAuditEvent] = []
-    await ScreenTaskDelivery.deliver(
+    _ = await ScreenTaskDelivery.deliver(
       ScreenTaskExtraction(results: results + results, searchCount: 1, admission: admission)
     ) { result in
       if writes.isEmpty {
         writes.append(result.task?.title ?? "missing task")
-        return true
+        return ScreenTaskDeliveryCounts(outboxSaved: 1, pendingDelivered: 1)
       }
-      return false  // Failed persistence or a confidence-filtered result is not staged.
+      return .failure  // Failed persistence or a confidence-filtered result is not staged.
     } recordAudit: {
       events.append($0)
     }
@@ -98,9 +98,9 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertEqual(events[0].gateOutcome, "rejected")
     XCTAssertTrue(events[0].auditSample)
     events.removeAll()
-    await ScreenTaskDelivery.deliver(ScreenTaskExtraction(results: [], searchCount: 1, admission: admission)) { _ in
+    _ = await ScreenTaskDelivery.deliver(ScreenTaskExtraction(results: [], searchCount: 1, admission: admission)) { _ in
       XCTFail("Empty audit must not write a task")
-      return false
+      return .failure
     } recordAudit: {
       events.append($0)
     }
@@ -164,11 +164,12 @@ final class ScreenTaskPipelineTests: XCTestCase {
 
   func testUnknownOrStagedRelationCannotUpdateAnExistingTask() throws {
     let result = try response(relation: "refines", id: "unknown")
-    XCTAssertThrowsError(
-      try result.results(app: "Messages", context: [row(nil, "Local staged task")], today: "2026-10-02"))
-    XCTAssertThrowsError(
+    XCTAssertTrue(
+      try result.results(app: "Messages", context: [row(nil, "Local staged task")], today: "2026-10-02").isEmpty)
+    XCTAssertTrue(
       try response(relation: "completes", id: "canonical").results(
-        app: "Messages", context: [row("canonical", "Known task")], today: "2026-10-02"))
+        app: "Messages", context: [row("canonical", "Known task")], today: "2026-10-02"
+      ).isEmpty)
   }
 
   func testEmptyResponsePreservesActivityObservation() throws {
@@ -197,24 +198,47 @@ final class ScreenTaskPipelineTests: XCTestCase {
     } catch is CancellationError {}
   }
 
-  func testQueuedFramesKeepTheirAdmissionOwnerAndAreBounded() throws {
-    let a = RuntimeOwnerAuthorizationAuthority()
-    let b = RuntimeOwnerAuthorizationAuthority()
-    let first = try XCTUnwrap(a.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
-    let second = try XCTUnwrap(b.capture(ownerID: "synthetic-b", expectedOwnerID: "synthetic-b"))
-    var owners = ScreenTaskFrameOwners()
-    func frame(_ number: Int) -> CapturedFrame {
-      CapturedFrame(
-        jpegData: Data(), appName: "Messages", frameNumber: number,
-        captureTime: Date(timeIntervalSince1970: Double(number)))
+  func testInvalidSiblingDoesNotDiscardCompleteTasksAndMaxTokensKeepsClosedObjects() throws {
+    let item = try response(relation: "new", id: "").tasks[0]
+    let data = try JSONEncoder().encode(item)
+    let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+    let mixed =
+      "{\"screen_kind\":\"other\",\"context_summary\":\"\",\"current_activity\":\"\",\"tasks\":[\(text),{\"priority\":\"invalid\"}]}"
+    let decoded = try JSONDecoder().decode(ScreenTaskResponse.self, from: Data(mixed.utf8))
+    XCTAssertEqual(decoded.invalidItemCount, 1)
+    XCTAssertEqual(try decoded.results(app: "Messages", context: [], today: "2026-10-02").count, 1)
+    let truncated = "{\"screen_kind\":\"other\",\"tasks\":[\(text),{\"title\":\"unfinished"
+    let wire: [String: Any] = [
+      "candidates": [["finishReason": "MAX_TOKENS", "content": ["parts": [["text": truncated]]]]]
+    ]
+    let response = try JSONDecoder().decode(
+      ScreenTaskGeminiResponse.self, from: JSONSerialization.data(withJSONObject: wire))
+    let recovered = try JSONDecoder().decode(ScreenTaskResponse.self, from: Data(response.text().utf8))
+    XCTAssertEqual(try recovered.results(app: "Messages", context: [], today: "2026-10-02").count, 1)
+  }
+
+  func testSchemaBoundsEightItemsAndEveryStringUnderOutputCap() throws {
+    let data = try ScreenTaskPrompt.request(jpeg: Data(), app: "Messages", profile: "", tasks: [], today: "2026-10-02")
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let config = try XCTUnwrap(object["generationConfig"] as? [String: Any])
+    let schema = try XCTUnwrap(config["responseSchema"] as? [String: Any])
+    let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+    let tasks = try XCTUnwrap(properties["tasks"] as? [String: Any])
+    XCTAssertEqual(tasks["maxItems"] as? Int, 8)
+    let items = try XCTUnwrap(tasks["items"] as? [String: Any])
+    let fields = try XCTUnwrap(items["properties"] as? [String: [String: Any]])
+    for field in fields.values where field["type"] as? String == "string" { XCTAssertNotNil(field["maxLength"]) }
+    XCTAssertEqual(config["maxOutputTokens"] as? Int, 2048)
+  }
+
+  func testLegacyRetirementAndBackpressureRemainNonRetryableEvenWithReplayHeader() {
+    for status in [401, 402, 429, 410] {
+      let response = HTTPURLResponse(
+        url: URL(string: "http://local")!, statusCode: status, httpVersion: nil,
+        headerFields: ["X-Omi-Retryable": status == 410 ? "false" : "true", "Retry-After": "60"])!
+      let error = GeminiClient.httpError(response: response, data: Data(#"{"detail":"model_retired"}"#.utf8))
+      XCTAssertEqual(error?.shouldAutoRetry, false)
     }
-    owners.record(frame(0), authorization: first)
-    owners.record(frame(1), authorization: second)
-    XCTAssertEqual(owners.authorization(for: frame(0)), first)
-    XCTAssertEqual(owners.authorization(for: frame(1)), second)
-    for number in 2..<65 { owners.record(frame(number), authorization: second) }
-    XCTAssertNil(owners.authorization(for: frame(0)))
-    XCTAssertEqual(owners.authorization(for: frame(64)), second)
   }
 
   func testDatesDoNotInventOrRetainInvalidPastDeadlines() {

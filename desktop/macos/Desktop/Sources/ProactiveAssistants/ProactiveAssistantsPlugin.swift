@@ -790,6 +790,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     // the refresh (and its cooldown) on nothing. On failure — or on macOS 13,
     // which has no window-image capture path here — the anchor is backdated so
     // the refresh retries in ~10s instead of waiting out the full cooldown.
+    let departingTaskBinding = ScreenTaskFrameBinding.capture(app: appName, title: windowTitle)
+    guard !ScreenTaskPrivacy.isPrivateWindow(app: appName, title: windowTitle) else { return }
     var capturedFreshFrame = false
     if #available(macOS 14.0, *) {
       let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
@@ -813,7 +815,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             appName: appName,
             windowTitle: windowTitle,
             frameNumber: frameCount,
-            captureTime: Date()
+            captureTime: Date(),
+            taskBinding: departingTaskBinding
           ))
         capturedFreshFrame = true
       }
@@ -840,6 +843,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       log("Context dwell refresh aborted: coordinator refused the transition; retrying shortly")
       return
     }
+    let arrivingTaskBinding = ScreenTaskFrameBinding.capture(app: appName, title: windowTitle)
     // Capture AGAIN after the visit opened: the entry evaluation only grounds
     // on frames captured at or after the visit began, and a static screen may
     // never produce another full frame through the preview-skip path.
@@ -861,7 +865,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             appName: appName,
             windowTitle: windowTitle,
             frameNumber: frameCount,
-            captureTime: Date()
+            captureTime: Date(),
+            taskBinding: arrivingTaskBinding
           ))
       }
     }
@@ -1264,6 +1269,10 @@ public class ProactiveAssistantsPlugin: NSObject {
       break
     }
 
+    // Bind before the capture suspension; a later account/privacy transition cannot rebind pixels.
+    let taskBinding = appName.flatMap { ScreenTaskFrameBinding.capture(app: $0, title: currentWindowTitle) }
+    if let appName, ScreenTaskPrivacy.isPrivateWindow(app: appName, title: currentWindowTitle) { return }
+
     // Always capture frames (other features may need them)
     // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
     // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
@@ -1341,7 +1350,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             appName: appName,
             windowTitle: currentWindowTitle,
             frameNumber: frameCount,
-            captureTime: captureTime
+            captureTime: captureTime,
+            taskBinding: taskBinding
           )
           AssistantCoordinator.shared.trackFrame(frame)
           if !isInDelayPeriod {
@@ -1410,7 +1420,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         appName: resolvedApp,
         windowTitle: currentWindowTitle,
         frameNumber: frameCount,
-        captureTime: captureTime
+        captureTime: captureTime,
+        taskBinding: taskBinding
       )
 
       // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
