@@ -40,23 +40,25 @@ def test_twenty_thousand_session_baseline(rate, seed, baseline_counts):
     assert state.n <= 20000
 
 
-def detect(rate, seed, *, warmup=500):
+def detect(rate, seed, *, warmup=500, horizon=5000):
     rng, state = random.Random(seed), GateState()
     for _ in range(warmup):
         state = transition(state, False, 0)
     failures = 0
-    for n in range(1, 5001):
+    for n in range(1, horizon + 1):
         failed = rng.random() < rate
         failures += failed
         state = transition(state, failed, n, witness=f'{n:016x}')
         if state.stage == 0:
             return n, failures
-    return 5001, failures
+    return horizon + 1, failures
 
 
 @pytest.mark.parametrize('rate,limit', [(0.12, 1500), (0.16, 300)])
 def test_brownout_median_detection(rate, limit):
-    samples = [detect(rate, seed)[0] for seed in range(30)]
+    # A run that has not detected by the limit cannot lower the median below it,
+    # so stopping there proves the same bound without running undetected seeds on.
+    samples = [detect(rate, seed, horizon=limit)[0] for seed in range(30)]
     assert statistics.median(samples) <= limit
 
 

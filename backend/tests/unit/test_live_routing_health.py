@@ -693,7 +693,7 @@ def test_speech_then_silence_past_deadline_yields_no_text_once(monkeypatch):
     assert observed == [('modulate', 'en', 'no_text')]
 
 
-def test_on_mode_waits_for_text_and_no_text_opens_breaker(monkeypatch):
+def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
@@ -712,4 +712,4 @@ def test_on_mode_waits_for_text_and_no_text_opens_breaker(monkeypatch):
     leg._first_speech_at = time.monotonic() - 60
     leg.finish()
     assert closed == [True]
-    assert quarantines == [('modulate', 'selection', 180.0)]
+    assert quarantines == []

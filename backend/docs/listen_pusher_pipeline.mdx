@@ -90,6 +90,19 @@ and the known best-effort background-task limit.
 
 ## 1. Connection + Streaming + Transcription
 
+### Segment-upload processing shape
+
+Both `POST /v1/conversations/from-segments` and
+`POST /v1/dev/user/conversations/from-segments` accept conversation source
+provenance, including `workflow` and `external_integration`. Omitted or null
+source defaults to `phone`. A session-id upload builds a stored `Conversation`;
+an upload without a session id builds `CreateConversation`. Both summarize their
+transcript segments regardless of the source label. Only an
+`ExternalIntegrationCreateConversation` with integration provenance uses its
+`text`, `text_source`, and `text_source_spec` fields for text-based processing.
+Segment validation continues to return 422, and processing failures keep the
+existing privacy-safe 5xx / BYOK 429 contract.
+
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
 supports the requested mode wins: Parakeet's live RNNT model is English-only,
@@ -106,22 +119,29 @@ When `STT_ROUTING_MODE=shadow`, listen computes the cost-ordered, capability-
 filtered primary against static selection and counts agreement without changing
 connections. `on` applies that policy only to the stable UID cohort selected by
 `STT_ROUTING_ON_PERCENT` (default zero). Fleet health is a binary gate on
-speech-session disruptions, including no text and death after text, with shared
+classified provider errors and completed text, with shared
 5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
 admission stay intact. Redis refresh/write work stays off connect with a 75 ms
 default deadline; faults use local evidence and known benches, and router errors
 restore configured order. No worst-provider probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than
-additional health samples. Failed recovery trials require the same failure-user
+additional health samples. Plain no-text and deadline-only outcomes are
+censored: they neither bench nor promote. Serving/connect errors use a closed
+provider-attributable reason set; later failures after a no-text diagnostic
+remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
 Each user has one majority-outcome vote and at most three sequential-evidence
-outcomes per trial window. Terminal
+outcomes per trial window. Health stages cannot empty an eligible chain;
+all-degraded selection uses stage, observed provider error rate, then cost. The
+terminal target keeps its full eligible share when no cheaper stage-100 target
+can absorb the session. Explicit ramp/account/capability exclusions remain. Terminal
 legs honor capacity signals and a five-second process-local cooldown after
 `capacity_full`, without treating capacity as provider disruption. If every
 candidate is capacity-blocked, one least-recently-refused candidate may dial
 through its normal circuit/admission gate so a sole recovered target can serve.
-Global stage and transition metrics plus static/proposed shadow pairs are
+Global-stage pod cache views (including freshness/unknown state), scoped CAS
+transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
