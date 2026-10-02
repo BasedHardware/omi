@@ -11,6 +11,7 @@ import html
 import json
 import os
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,87 @@ os.environ["OMI_APP_SECRET"] = "test-app-secret"
 
 APP_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_ROOT))
+
+# Lightweight stubs for hermetic stdlib-only execution, mirroring
+# plugins/iq_rating/test_main.py so this suite also runs in the dependency-free
+# CI Hygiene lane. The real packages are used whenever they are installed.
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi  # type: ignore
+        import fastapi.responses  # type: ignore
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class APIRouter:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get(self, *args, **kwargs):
+                return lambda f: f
+
+            def post(self, *args, **kwargs):
+                return lambda f: f
+
+            def on_event(self, *args, **kwargs):
+                return lambda f: f
+
+        class Query:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def include_router(self, *args, **kwargs):
+                pass
+
+        class HTTPException(Exception):
+            def __init__(self, status_code=500, detail=""):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
+
+        fastapi.APIRouter = APIRouter
+        fastapi.FastAPI = FastAPI
+        fastapi.Query = Query
+        fastapi.HTTPException = HTTPException
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            # Carries the rendered content through .body so the escaping
+            # assertions below still inspect the real generated HTML rather
+            # than a placeholder.
+            def __init__(self, content=None, **kwargs):
+                self.body = content
+
+        class JSONResponse:
+            def __init__(self, content=None, **kwargs):
+                self.body = content
+
+        responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
+        sys.modules["fastapi.responses"] = responses
+        fastapi.responses = responses
+
+if "requests" not in sys.modules:
+    try:
+        import requests  # type: ignore
+    except ImportError:
+        requests = types.ModuleType("requests")
+
+        def _dummy_request(*args, **kwargs):
+            return None
+
+        class RequestException(Exception):
+            pass
+
+        requests.post = _dummy_request
+        requests.get = _dummy_request
+        requests.RequestException = RequestException
+        sys.modules["requests"] = requests
 
 import main as iq_main
 
