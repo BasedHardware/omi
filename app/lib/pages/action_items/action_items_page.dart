@@ -689,6 +689,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   /// "Completed n ›" under the open sections, folded by default. Open, it lists the done tasks
   /// (ring filled, text struck) with Clear on the right; a ring tap brings a task back.
   Widget _buildCompletedHeader(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+    // Paywalled tasks cannot be deleted (the backend refuses every write), so Clear leaves them.
+    final deletable = items.where((item) => !item.isLocked).toList(growable: false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Column(
@@ -713,11 +715,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
                 const Spacer(),
-                if (_completedExpanded)
+                if (_completedExpanded && deletable.isNotEmpty)
                   _SectionHeaderTapTarget(
                     semanticLabel: context.l10n.tasksClearCompleted,
                     reach: const EdgeInsets.only(left: 16),
-                    onTap: () => _confirmClearCompleted(provider, items),
+                    onTap: () => _confirmClearCompleted(provider, deletable),
                     child: Text(context.l10n.clear, style: _sectionLabelStyle),
                   ),
               ],
@@ -1291,7 +1293,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   // Trailing square selection box — only in selection mode.
                   // Different shape + position from the leading completion circle
                   // so completion vs. selection cannot be confused.
-                  if (provider.isSelectionMode)
+                  // A paywalled task cannot be selected (every write is refused), so it shows none.
+                  if (provider.isSelectionMode && !item.isLocked)
                     Padding(
                       padding: const EdgeInsets.only(left: 8, right: 8),
                       child: TaskSelectionSquare(selected: isSelected),

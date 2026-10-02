@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -121,11 +122,15 @@ class _TaskPageState extends State<TaskPage> {
       _completed = next;
       _toggling = true;
     });
-    final ok = await context.read<ActionItemsProvider>().updateActionItemState(widget.item, next);
+    final provider = context.read<ActionItemsProvider>();
+    final ok = await provider.updateActionItemState(widget.item, next);
     if (!mounted) return;
+    // Another surface may have toggled the same task meanwhile; the provider's record, not this
+    // request's outcome, says where the task stands now.
+    final latest = provider.actionItems.firstWhereOrNull((i) => i.id == widget.item.id);
     setState(() {
       _toggling = false;
-      if (!ok) _completed = !next;
+      _completed = latest?.completed ?? (ok ? next : !next);
     });
     if (!ok) {
       OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
