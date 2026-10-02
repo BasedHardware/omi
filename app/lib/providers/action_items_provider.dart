@@ -80,6 +80,9 @@ class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
   int _sessionGeneration = 0;
 
+  /// Latest in-flight state toggle per task id; see [updateActionItemState].
+  final Map<String, int> _stateMutationTokens = {};
+
   bool _isLoading = false;
   bool _isFetching = false;
   bool _hasMore = false;
@@ -510,6 +513,11 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
     final generation = _sessionGeneration;
+    // Toggling again before the first request answers makes the earlier response stale: only the
+    // latest toggle for an item may revert or adopt what the server says.
+    final token = (_stateMutationTokens[item.id] ?? 0) + 1;
+    _stateMutationTokens[item.id] = token;
+    bool isLatest() => _stateMutationTokens[item.id] == token;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
       surface: ProductSurface.tasks,
@@ -528,14 +536,16 @@ class ActionItemsProvider extends ChangeNotifier {
       }
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
-        notifyListeners();
+        if (isLatest()) {
+          _findAndUpdateItemState(item.id, !newState);
+          notifyListeners();
+        }
         Logger.debug('Failed to update action item state on server');
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
       SiriIntegration.current.queueUpsertTasks([success]);
-      _adoptServerRecord(success);
+      if (isLatest()) _adoptServerRecord(success);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);

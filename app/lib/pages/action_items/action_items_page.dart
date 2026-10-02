@@ -733,7 +733,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: Builder(
         builder: (ctx) {
           rowContext = ctx;
-          return _buildTaskItemContent(item, provider, 0, items);
+          return _buildTaskItemContent(item, provider, item.indentLevel * 28.0, items);
         },
       ),
     );
@@ -1306,7 +1306,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final days =
         (DateTime(local.year, local.month, local.day).difference(DateTime(now.year, now.month, now.day)).inHours / 24)
             .round();
-    final locale = Localizations.localeOf(context).toLanguageTag();
+    final locale = OmiDateFormat.of(context).localeName;
     return days.abs() < 7 ? DateFormat.E(locale).format(local) : DateFormat.MMMd(locale).format(local);
   }
 

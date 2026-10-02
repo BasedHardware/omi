@@ -52,9 +52,14 @@ void main() {
   });
 
   test('Select All leaves paywalled tasks out and reports "all selected" from the same set', () async {
+    // A fully loaded set: Select All is "all" at once.
     final provider = ActionItemsProvider(getActionItems: _onePage);
     addTearDown(provider.dispose);
     await provider.ensureLoaded();
+    provider.startSelection();
+    provider.selectAllItems();
+    expect(provider.selectedCount, 2);
+    expect(provider.allSelectableSelected, isTrue);
 
     final lockedProvider = ActionItemsProvider(getActionItems: _twoPages);
     addTearDown(lockedProvider.dispose);
@@ -114,6 +119,43 @@ void main() {
     final pending = provider.updateActionItemState(_open, true);
     expect(provider.completedItemsNewestFirst.map((i) => i.id).toList(), ['open', 'old-done']);
     await pending;
+  });
+
+  test('a slow answer to an earlier toggle does not undo a newer one', () async {
+    Future<ActionItemsResponse?> items({
+      int limit = 100,
+      int offset = 0,
+      bool? completed,
+      String? conversationId,
+      DateTime? startDate,
+      DateTime? endDate,
+      DateTime? dueStartDate,
+      DateTime? dueEndDate,
+    }) async =>
+        const ActionItemsResponse(actionItems: [_open]);
+    // Completing answers late; the restore that follows answers at once.
+    final provider = ActionItemsProvider(
+      getActionItems: items,
+      updateActionItemRequest: (id, {description, completed, dueAt}) => Future.delayed(
+        Duration(milliseconds: completed == true ? 80 : 1),
+        () => ActionItemWithMetadata(
+            id: id,
+            description: 'Draft the update',
+            completed: completed!,
+            completedAt: completed ? DateTime.now() : null),
+      ),
+    );
+    addTearDown(provider.dispose);
+    await provider.ensureLoaded();
+
+    final complete = provider.updateActionItemState(_open, true);
+    final restore = provider.updateActionItemState(_open, false);
+    await Future.wait([complete, restore]);
+
+    final item = provider.actionItems.firstWhere((i) => i.id == 'open');
+    // The late "completed" answer is stale and must not win over the restore.
+    expect(item.completed, isFalse);
+    expect(provider.completedItems, isEmpty);
   });
 
   testWidgets('exporting a stale copy of an already-exported task is skipped, with the app named', (tester) async {

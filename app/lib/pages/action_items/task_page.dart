@@ -324,6 +324,7 @@ class _SourceLine extends StatelessWidget {
     return Semantics(
       button: true,
       label: context.l10n.openConversation,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
@@ -405,6 +406,7 @@ class _CardRow extends StatelessWidget {
       button: true,
       checked: semanticsChecked,
       label: title,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
