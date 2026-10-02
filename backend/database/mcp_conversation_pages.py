@@ -64,7 +64,7 @@ def _normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
     if not isinstance(dt, datetime):
-        return None
+        raise ValueError('Invalid datetime parameter: expected datetime instance or None')
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
@@ -129,19 +129,14 @@ def get_mcp_conversation_cards(
         .offset(safe_offset)
     )
     conversations: List[Dict[str, Any]] = []
-    try:
-        for doc in query.stream():
-            conversation = document_data_with_revision(doc)
-            if conversation is None:
-                continue
-            if is_soft_deleted(conversation):
-                continue
-            conversation.setdefault('id', doc.id)
-            conversations.append(conversation)
-    except FailedPrecondition:
-        raise
-    except Exception:
-        logger.exception('Failed streaming conversation cards for uid=%s', valid_uid)
+    for doc in query.stream():
+        conversation = document_data_with_revision(doc)
+        if conversation is None:
+            continue
+        if is_soft_deleted(conversation):
+            continue
+        conversation.setdefault('id', doc.id)
+        conversations.append(conversation)
     return conversations
 
 
@@ -220,14 +215,7 @@ def get_mcp_conversation_cards_page(
             if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
                 raise ValueError('conversation keyset doc id is invalid')
             query = query.start_after({'created_at': after_ts, '__name__': collection.document(after_id.strip())})
-        try:
-            raw_docs = list(query.stream())
-        except FailedPrecondition:
-            raise
-        except Exception:
-            logger.exception('mcp_conversation_pages: query stream failed for uid=%s', valid_uid)
-            exhausted = True
-            break
+        raw_docs = list(query.stream())
         if not raw_docs:
             exhausted = True
             break

@@ -86,6 +86,8 @@ def conversation_cards_page_core(
             )
         except FailedPrecondition as e:
             raise_conversation_index_error(e)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602) from e
         return fetched, None
 
     try:
@@ -100,6 +102,8 @@ def conversation_cards_page_core(
         )
     except FailedPrecondition as e:
         raise_conversation_index_error(e)
+    except ValueError as e:
+        raise ToolExecutionError(str(e), code=-32602) from e
 
     next_cursor = None
     if resume is not None:

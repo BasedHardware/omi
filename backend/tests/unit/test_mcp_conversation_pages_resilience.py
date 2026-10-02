@@ -74,7 +74,8 @@ class _DescKeysetQuery:
         if self.after_values is not None:
             ts = self.after_values["created_at"]
             doc_id = self.after_values["__name__"].id
-            rows = [d for d in rows if (d._data.get("created_at"), d.id) < (ts, doc_id)]
+            min_dt = datetime.min.replace(tzinfo=timezone.utc)
+            rows = [d for d in rows if (d._data.get("created_at") or min_dt, d.id) < (ts, doc_id)]
         start = self.offset_value or 0
         end = start + self.limit_value if self.limit_value is not None else None
         return iter(rows[start:end])
@@ -155,7 +156,8 @@ def test_normalize_datetime_attaches_utc_timezone():
     assert pages_db._normalize_datetime(already_aware) is already_aware
 
     assert pages_db._normalize_datetime(None) is None
-    assert pages_db._normalize_datetime("not-a-datetime") is None
+    with pytest.raises(ValueError, match="Invalid datetime parameter"):
+        pages_db._normalize_datetime("not-a-datetime")
 
 
 def test_clean_categories_sanitizes_input():
@@ -209,15 +211,14 @@ def test_get_mcp_conversation_cards_clamps_parameters():
     assert query.offset_value == 0
 
 
-def test_query_stream_failure_recovers_gracefully():
+def test_query_stream_failure_propagates_exception():
     query = _DescKeysetQuery([], stream_error=RuntimeError("Transient Firestore transport error"))
     with _stub_client(query):
-        cards = pages_db.get_mcp_conversation_cards(UID, 10, 0)
-        assert cards == []
+        with pytest.raises(RuntimeError, match="Transient Firestore transport error"):
+            pages_db.get_mcp_conversation_cards(UID, 10, 0)
 
-        page, resume = pages_db.get_mcp_conversation_cards_page(UID, 10)
-        assert page == []
-        assert resume is None
+        with pytest.raises(RuntimeError, match="Transient Firestore transport error"):
+            pages_db.get_mcp_conversation_cards_page(UID, 10)
 
 
 def test_query_stream_reraises_failed_precondition():
@@ -228,3 +229,55 @@ def test_query_stream_reraises_failed_precondition():
 
         with pytest.raises(FailedPrecondition):
             pages_db.get_mcp_conversation_cards_page(UID, 10)
+
+
+def test_normalize_datetime_rejects_invalid_types():
+    assert pages_db._normalize_datetime(None) is None
+    dt = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert pages_db._normalize_datetime(dt) == dt
+
+    with pytest.raises(ValueError, match="Invalid datetime parameter"):
+        pages_db._normalize_datetime("2026-01-01")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Invalid datetime parameter"):
+        pages_db._normalize_datetime(123456789)  # type: ignore[arg-type]
+
+
+def test_conversation_cards_page_core_maps_value_error_to_tool_execution_error():
+    import sys
+    sys.modules.setdefault("langchain_anthropic", MagicMock())
+    sys.modules.setdefault("langchain_core", MagicMock())
+    sys.modules.setdefault("langchain_core.language_models", MagicMock())
+    sys.modules.setdefault("database.vector_db", MagicMock())
+    from utils.mcp_server.errors import ToolExecutionError
+    from utils.mcp_server.handlers.conversations import conversation_cards_page_core
+
+    # Test page path (offset == 0)
+    with pytest.raises(ToolExecutionError) as exc_info:
+        conversation_cards_page_core(
+            "bad/uid/with/slashes",
+            limit=10,
+            offset=0,
+            cursor_token=None,
+            start_dt=None,
+            end_dt=None,
+            categories=[],
+            cursor_kind="get_conversations",
+        )
+    assert exc_info.value.code == -32602
+    assert "path traversal characters are forbidden" in str(exc_info.value)
+
+    # Test offset path (offset > 0)
+    with pytest.raises(ToolExecutionError) as exc_info_offset:
+        conversation_cards_page_core(
+            "bad/uid/with/slashes",
+            limit=10,
+            offset=5,
+            cursor_token=None,
+            start_dt=None,
+            end_dt=None,
+            categories=[],
+            cursor_kind="get_conversations",
+        )
+    assert exc_info_offset.value.code == -32602
+    assert "path traversal characters are forbidden" in str(exc_info_offset.value)
