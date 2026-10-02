@@ -66,11 +66,11 @@ def reserve(uid: str, conversation_id: str, *, seconds: int = 0, downloads: int 
             2,
             f'speaker_location:budget:{day}:{identity(uid, conversation_id)}',
             f'speaker_location:global:{day}',
-            seconds,
-            downloads,
-            CONVERSATION_SECONDS_PER_DAY,
-            CONVERSATION_DOWNLOADS_PER_DAY,
-            GLOBAL_SECONDS_PER_DAY,
+            str(seconds),
+            str(downloads),
+            str(CONVERSATION_SECONDS_PER_DAY),
+            str(CONVERSATION_DOWNLOADS_PER_DAY),
+            str(GLOBAL_SECONDS_PER_DAY),
         )
     )
 
@@ -89,6 +89,8 @@ def read_index(uid: str, key: str) -> dict[str, Any]:
         return {}
     if isinstance(raw, bytes):
         raw = raw.decode()
+    if not isinstance(raw, str):
+        raise ValueError('invalid speaker location ciphertext')
     result = json.loads(encryption.decrypt(raw, uid))
     if not isinstance(result, dict):
         raise ValueError('invalid speaker location index')

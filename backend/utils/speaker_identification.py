@@ -987,13 +987,13 @@ async def extract_speaker_samples(
         failure = None
         transcript = None
         sample_audio = b''.join(clips)
+        wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
         clean_seconds = min(plan.total_seconds, decoded_seconds)
         if not clips:
             failure = 'uncovered_audio' if unavailable_window else 'no_chunks'
         elif decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
             failure = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
         else:
-            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
             transcript, is_valid, reason = await verify_and_transcribe_sample(
                 wav_bytes, sample_rate, expected_text, language=sample_language
             )
@@ -1023,6 +1023,9 @@ async def extract_speaker_samples(
             if not relocated:
                 outcome = failure
                 return outcome
+        if transcript is None:
+            outcome = 'transcription_failed'
+            return outcome
         if relocated and conversation.get('updated_at') is None:
             outcome = 'stale_assignment'
             return outcome  # Relocation requires the server conversation revision fence.
