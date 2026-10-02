@@ -1089,6 +1089,7 @@ class TestRichFailOpen:
 
         import utils.conversations.meeting_notes_wiring as wiring
         import utils.conversations.process_conversation as pc
+        from models.conversation import ExternalIntegrationCreateConversation
         from models.conversation_enums import ExternalIntegrationConversationSource
         from models.structured import Structured
 
@@ -1118,14 +1119,13 @@ class TestRichFailOpen:
             return Structured()
 
         monkeypatch.setattr(pc, 'get_conversation_notes', fake_notes)
-        conversation = SimpleNamespace(
+        conversation = ExternalIntegrationCreateConversation(
             source=ConversationSource.external_integration,
-            external_data={},
             text_source=ExternalIntegrationConversationSource.audio,
             text='[s1 0] hello everyone',
             started_at=START,
-            id='conv-x',
-            calendar_meeting_context=_context([MeetingParticipant(name='Ash Kalb', email='ash@fulcra.com')]),
+        ).model_copy(
+            update={'calendar_meeting_context': _context([MeetingParticipant(name='Ash Kalb', email='ash@fulcra.com')])}
         )
         structured, discarded = pc._get_structured('uid', 'en', conversation)
         assert structured is not None
