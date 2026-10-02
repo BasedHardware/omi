@@ -40,7 +40,17 @@ Transcript segments are excluded by default to keep lines small. Add
 omi --json conversation list --include-transcript --limit 200 | python conversations_to_jsonl.py - --include-transcript -o conversations_full.jsonl
 ```
 
-### Option 4: Filter by category
+### Option 4: Print to stdout (pipe straight into another tool)
+
+Omit `-o` to print the JSONL to stdout (plain UTF-8, no BOM) for redirecting
+or piping — `head`-style early exits from the consumer are handled quietly:
+
+```bash
+omi --json conversation list --limit 200 | python conversations_to_jsonl.py - | head -1
+omi --json conversation list --limit 200 | python conversations_to_jsonl.py - | jq -r '.title'
+```
+
+### Option 5: Filter by category
 
 ```bash
 omi --json conversation list --limit 200 | python conversations_to_jsonl.py - --category work,personal -o work_and_personal.jsonl

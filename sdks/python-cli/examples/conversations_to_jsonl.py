@@ -21,6 +21,8 @@ makes no network requests.
 
 import argparse
 import json
+import math
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,17 +48,26 @@ def _as_text(value: Any, fallback: str = "") -> str:
 
 
 def _as_number(value: Any) -> float:
-    """Coerce a loosely typed timing field to a finite float."""
+    """Coerce a loosely typed timing field to a finite float.
+
+    Non-finite results (``1e9999`` → ``inf``) and overflowed magnitudes would
+    serialize as non-RFC JSONL (``Infinity``) or blow up ``json.dumps`` — both
+    fall back to 0.0 instead.
+    """
     if isinstance(value, bool):
         return float(value)
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
+    try:
+        if isinstance(value, (int, float)):
+            number = float(value)
+        elif isinstance(value, str):
+            number = float(value.strip())
+        else:
             return 0.0
-    return 0.0
+    except (ValueError, OverflowError):
+        return 0.0
+    if not math.isfinite(number):
+        return 0.0
+    return number
 
 
 def normalize_timestamp(value: Any) -> Optional[str]:
@@ -103,6 +114,25 @@ def normalize_segment(seg: Any) -> Optional[dict]:
     }
 
 
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
+def is_completed(value: Any) -> bool:
+    """Normalize a loosely typed completed flag.
+
+    Native booleans, non-zero numbers, and loose strings ('true', 'yes', '1',
+    'done', 'completed') are True; legacy strings like 'false' and '0' are
+    False rather than victims of Python truthiness.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in DONE_WORDS
+    return False
+
+
 def normalize_action_items(items: Any) -> List[dict]:
     """Coerce a loosely typed action-items field into plain JSON-safe dicts."""
     if not isinstance(items, list):
@@ -111,7 +141,7 @@ def normalize_action_items(items: Any) -> List[dict]:
     for item in items:
         if isinstance(item, dict):
             description = _as_text(item.get("description") or item.get("title")) or "Untitled action item"
-            completed = bool(item.get("completed", False))
+            completed = is_completed(item.get("completed", False))
         else:
             description = _as_text(item)
             completed = False
@@ -150,12 +180,21 @@ def filter_conversations(items: List[Any], category_filter: Optional[str] = None
     if not category_filter:
         return items
     target_cats = {c.strip().lower() for c in category_filter.split(",") if c.strip()}
-    return [
-        it
-        for it in items
-        if not isinstance(it, dict)
-        or str((it.get("structured") or {}).get("category") or "").strip().lower() in target_cats
-    ]
+
+    def _category_of(item: Any) -> Optional[str]:
+        # None marks non-dict rows: they pass the filter untouched and are
+        # dropped later by conversation_record, like in the unfiltered export.
+        # Dict rows always return a string (empty when the category is missing
+        # or unreadable), so they only survive when they match the filter —
+        # the same semantics as the conversations CSV recipe.
+        if not isinstance(item, dict):
+            return None
+        structured = item.get("structured")
+        category = structured.get("category") if isinstance(structured, dict) else None
+        return str(category or "").strip().lower()
+
+    categories = [_category_of(it) for it in items]
+    return [it for it, cat in zip(items, categories) if cat is None or cat in target_cats]
 
 
 def conversation_record(conv: Any, include_transcript: bool = False) -> Optional[dict]:
@@ -307,8 +346,18 @@ def main() -> int:
             return 1
         sys.stderr.write(f"Successfully exported conversations to {args.output}\n")
     else:
-        sys.stdout.buffer.write(payload_bytes)
-        sys.stdout.buffer.flush()
+        try:
+            sys.stdout.buffer.write(payload_bytes)
+            sys.stdout.buffer.flush()
+        except BrokenPipeError:
+            # A downstream consumer exited early (e.g. `| head -1`). That is a
+            # successful producer run, not an error: swallow the pipe signal so
+            # no traceback leaks to stderr.
+            try:
+                devnull = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(devnull, sys.stdout.fileno())
+            except OSError:
+                pass
 
     return 0
 

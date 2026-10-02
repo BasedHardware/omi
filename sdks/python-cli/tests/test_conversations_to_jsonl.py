@@ -18,6 +18,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_jsonl.py"
 spec = importlib.util.spec_from_file_location("conversations_to_jsonl", script_path)
@@ -103,6 +104,23 @@ class TestRecordNormalization(unittest.TestCase):
         self.assertEqual(records[0]["title"], "Untitled Conversation")
         self.assertEqual(records[0]["category"], "general")
 
+    def test_non_finite_and_overflowed_timing_fall_back_to_zero(self):
+        conv = make_conversation(
+            transcript_segments=[
+                {"speaker": 1, "start": 1e9999, "end": "9" * 400, "text": "x"},
+                {"speaker": 1, "start": float("inf"), "end": float("nan"), "text": "y"},
+            ]
+        )
+        records = records_from([conv], include_transcript=True)
+        for segment in records[0]["transcript_segments"]:
+            self.assertEqual(segment["start"], 0.0)
+            self.assertEqual(segment["end"], 0.0)
+
+    def test_json_output_is_rfc_safe_for_timing_values(self):
+        payload = c2j.convert(json.dumps([make_conversation()]))
+        self.assertNotIn(b"Infinity", payload)
+        self.assertNotIn(b"NaN", payload)
+
     def test_non_string_speaker_falls_back(self):
         self.assertEqual(c2j.speaker_label({"a": 1}), "Speaker")
         self.assertEqual(c2j.speaker_label(True), "Speaker")
@@ -119,6 +137,23 @@ class TestRecordNormalization(unittest.TestCase):
                 {"description": "plain string item", "completed": False},
             ],
         )
+
+    def test_action_items_completed_string_tokens_normalized(self):
+        conv = make_conversation(
+            structured={
+                "action_items": [
+                    {"description": "a", "completed": "false"},
+                    {"description": "b", "completed": "0"},
+                    {"description": "c", "completed": "true"},
+                    {"description": "d", "completed": "done"},
+                    {"description": "e", "completed": 1},
+                    {"description": "f", "completed": 0},
+                ]
+            }
+        )
+        records = records_from([conv])
+        flags = [item["completed"] for item in records[0]["action_items"]]
+        self.assertEqual(flags, [False, False, True, True, True, False])
 
     def test_action_items_non_list_renders_empty(self):
         records = records_from([make_conversation(structured={"action_items": "nope"})])
@@ -237,6 +272,17 @@ class TestCategoryFilter(unittest.TestCase):
         raw = json.dumps([make_conversation(id="a", structured={"category": "Work"})])
         records = [json.loads(line) for line in c2j.convert_filtered(raw, category="WORK").decode("utf-8").splitlines()]
         self.assertEqual([r["id"] for r in records], ["a"])
+
+    def test_filter_with_non_dict_structured_does_not_crash(self):
+        raw = json.dumps(
+            [
+                make_conversation(id="a", structured={"category": "work"}),
+                make_conversation(id="b", structured="oops"),
+                make_conversation(id="c"),
+            ]
+        )
+        records = [json.loads(line) for line in c2j.convert_filtered(raw, category="work").decode("utf-8").splitlines()]
+        self.assertEqual([r["id"] for r in records], ["a", "c"])
 
     def test_filter_with_non_dict_rows_does_not_crash(self):
         raw = json.dumps([make_conversation(id="a", structured={"category": "work"}), "junk", 42])
@@ -384,6 +430,35 @@ class TestCliExitCodes(unittest.TestCase):
             self.assertFalse(result.stdout.startswith(b"\xef\xbb\xbf"))
             self.assertIn("Tiếng Việt ☕".encode("utf-8"), result.stdout)
 
+    def test_stdout_broken_pipe_is_swallowed_not_traced(self):
+        import io
+        import unittest.mock as mock
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "in.json"
+            src.write_text(json.dumps([make_conversation()]), encoding="utf-8")
+
+            class EarlyExitBuffer:
+                def write(self, data):
+                    raise BrokenPipeError("consumer exited early")
+
+                def flush(self):
+                    raise BrokenPipeError("consumer exited early")
+
+            fake_stdout = SimpleNamespace(buffer=EarlyExitBuffer(), fileno=lambda: 1)
+            stderr_capture = io.StringIO()
+            with (
+                mock.patch.object(sys, "argv", ["conversations_to_jsonl.py", str(src)]),
+                mock.patch.object(sys, "stdout", fake_stdout),
+                mock.patch("sys.stderr", stderr_capture),
+                mock.patch("os.dup2"),
+                mock.patch("os.open", return_value=99),
+            ):
+                exit_code = c2j.main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertNotIn("Traceback", stderr_capture.getvalue())
+
     def test_bom_prefixed_input_is_tolerated(self):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "in.json"
@@ -405,6 +480,41 @@ class TestCliExitCodes(unittest.TestCase):
             self.assertEqual(result.returncode == 1, True, result.stderr.decode("utf-8", "replace"))
             self.assertIn(b"failed to write", result.stderr)
             self.assertNotIn(b"Traceback", result.stderr)
+
+    def test_mid_write_failure_removes_the_partial_output(self):
+        # open() succeeds, the first write() fails (disk full): the partial
+        # file must be removed and a clean error returned — this is the path
+        # the directory-as-file subprocess test cannot reach.
+        import io
+        import unittest.mock as mock
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "in.json"
+            src.write_text(json.dumps([make_conversation()]), encoding="utf-8")
+            target = Path(td) / "c.jsonl"
+
+            real_unlink_calls = []
+            original_unlink = Path.unlink
+
+            def spy_unlink(path, *args, **kwargs):
+                real_unlink_calls.append(Path(path))
+                return original_unlink(path, *args, **kwargs)
+
+            mocked_open = mock.mock_open()
+            mocked_open.return_value.write.side_effect = OSError("disk full")
+
+            stderr_capture = io.StringIO()
+            with (
+                mock.patch.object(sys, "argv", ["conversations_to_jsonl.py", str(src), "-o", str(target)]),
+                mock.patch("builtins.open", mocked_open),
+                mock.patch.object(Path, "unlink", spy_unlink),
+                mock.patch("sys.stderr", stderr_capture),
+            ):
+                exit_code = c2j.main()
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("failed to write", stderr_capture.getvalue())
+            self.assertEqual(real_unlink_calls, [target])
 
 
 if __name__ == "__main__":
