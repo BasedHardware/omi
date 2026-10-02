@@ -699,7 +699,12 @@ For an allocated windowed-TDT session, listen retains a bounded 90-second
 capture-positioned PCM ring. Delivered window segments advance its finalized
 sample boundary. If the socket dies after accepting audio, the receiver starts
 the replacement provider epoch at the first unfinished sample and replays that
-audio before sending the current unsent chunk. A full ring triggers failover
+audio before sending the current unsent chunk. Replay uses 1x audio-time pacing,
+a 20-second prefix budget, and a 5-second setup bound. A longer unanswered ring
+is cut to its newest 20 seconds with a bounded skipped-seconds metric; this
+explicit cut is not an emitted-text safe trim. Live ingestion continues into a
+bounded 26-second ordered PCM tail. See the replay pacing and latency contract
+in `backend/docs/operational/windowed-live-stt.md`. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
 Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest
@@ -713,7 +718,7 @@ to report fresh telemetry; busy plus unknown replicas reaching half the pool
 stands down. A single hot pod in a larger healthy pool does not deny the fleet.
 DNS failure and lost quorum still stand down; admission performs no I/O. The
 window POST explicitly marks its live lane; unmarked requests remain backfill.
-A partial replay retains **all un-emitted audio**, including bytes accepted by
+Within the 20-second replay audio budget, a partial replay retains un-emitted audio, including bytes accepted by
 a replacement that dies before returning text, for the next vendor leg. The
 ring continues across downstream providers; emitted capture positions trim it.
 A failed replacement is excluded by its actual provider, including a rejection
@@ -725,7 +730,7 @@ during replay: speech admitted with window gain cannot be discarded by a
 different downstream VAD decision. Ordinary sends keep their existing gate.
 Each adopted replacement gets 15 seconds of new capture headroom while it
 processes a potentially full source backlog. The finite three-provider suffix
-bounds retention at 135 seconds; stalled un-emitted audio still fails over
+bounds retention at 150 seconds; stalled un-emitted audio still fails over
 before eviction. This ceiling grows from the original 90-second ring only
 while a replacement is handling its replay obligation. As soon as transcript
 progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
@@ -733,7 +738,7 @@ without evicting pending audio, leaving the full 15-second headroom free.
 A later replacement can reserve headroom again.
 The ring survives until session teardown, but emitted text continuously settles
 its contents; healthy continuous speech normally retains only its current tail.
-135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB
+150 seconds of mono PCM16 is 2.4 MB at 8 kHz, 4.8 MB at 16 kHz, or 14.4 MB
 at 48 kHz. With the ordinary 30ms flush floor, owned Python ring objects add
 about 0.565 MB per ring. At 60 sessions/pod and three post-failover sessions,
 the conservative 16 kHz planning allowance for these changes is about 16 MiB of added

@@ -226,6 +226,11 @@ class PendingLiveFailover:
         if self._settled:
             return
         self._mark_settled()
+        # A hop still unproven when its owner departs is degraded recovery,
+        # not evidence that we terminated an active client's transcription.
+        source = self.source_outcome
+        if source is not None and (source.owner_closing or source.client_has_left and source.client_has_left()):
+            continuing = True
         # The hop belongs to the source leg; a successor failure changes the
         # outcome, never the source cause used to reconcile health evidence.
         reason = fallback_metric_reason(self.reason)
@@ -252,13 +257,13 @@ class LiveSTTSession(Protocol):
     client_live_transcription_attempt: Any
 
 
-def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str) -> None:
+def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str, *, departing: bool = False) -> None:
     """Settle a managed serving leg when the owner has exhausted recovery."""
     outcome = getattr(stt_socket, 'leg_outcome', None)
     if outcome is None or outcome.settled or outcome.owner_closing and not outcome.claimed:
         return
     if outcome.pending is not None:
-        outcome.pending.note_failure(None)
+        outcome.pending.note_failure(None, continuing=departing)
         return
     hop = PendingLiveFailover(
         from_mode=provider or 'unknown',
@@ -266,7 +271,7 @@ def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str) -
         reason=live_stt_terminal_reason(stt_socket, reason),
         source_outcome=outcome,
     )
-    hop.note_failure(None)
+    hop.note_failure(None, continuing=departing)
 
 
 class LiveSTTClientSocket(Protocol):

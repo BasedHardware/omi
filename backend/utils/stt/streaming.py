@@ -1327,6 +1327,8 @@ def modulate_death_reason(err: Any) -> Optional[str]:
 
 
 class SafeModulateSocket(STTSocket):
+    max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+
     def __init__(
         self,
         ws: Any,

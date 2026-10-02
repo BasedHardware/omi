@@ -1,8 +1,11 @@
 """Bounded Soniox rotation replay and dark-path regressions."""
 
+import asyncio
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 from config.stt_provider_policy import provider_for_service
 from routers.listen import receiver as listen_receiver
@@ -176,7 +179,10 @@ async def test_window_ring_trims_only_after_all_speech_is_transcribed(monkeypatc
     monkeypatch.setattr(listen_receiver, 'flush_live_stt_buffer', flush)
     listener._failover_stt_socket = AsyncMock(return_value=True)
     before = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    listener.host.spawn = lambda coro, **kw: asyncio.create_task(coro)
     await listener._flush_stt_buffer(bytearray(b'B\x00' * 2), force=True)
+    if listener._replay_recovery_task is not None:
+        await listener._replay_recovery_task
     assert raw.failure is None
     listener._failover_stt_socket.assert_not_awaited()
     assert sent == [(old, 6, b'B\x00' * 2)]
@@ -207,19 +213,22 @@ async def test_window_ring_limit_with_pending_speech_replays_before_current_chun
     monkeypatch.setattr(listen_receiver, 'fallback_socket_is_serving', AsyncMock(return_value=True))
 
     async def flush(_websocket, _state, *, stt_socket, buffer, start_sample, **_kwargs):
-        assert stt_socket is new
+        assert getattr(stt_socket, 'connection', stt_socket) is new
         stt_socket.send(bytes(buffer), start_sample=start_sample)
         buffer.clear()
         return True
 
     monkeypatch.setattr(listen_receiver, 'flush_live_stt_buffer', flush)
+    listener.host.spawn = lambda coro, **kw: asyncio.create_task(coro)
     await listener._flush_stt_buffer(bytearray(b'B\x00' * 2), force=True)
+    if listener._replay_recovery_task is not None:
+        await listener._replay_recovery_task
     assert raw.failure == 'capacity_full'
     assert old.finished
     assert live_stt_terminal_reason(old, 'connection_lost') == 'capacity_full'
     assert listener._pending_live_failover.reason == 'capacity_full'
-    assert replayed == [(0, b'A\x00' * 6)]
-    assert new.sent == [(0, b'A\x00' * 6), (6, b'B\x00' * 2)]
+    assert replayed == [(0, b'A\x00' * 6 + b'B\x00' * 2)]
+    assert new.sent == replayed
     assert ring.snapshot() == ((0, b'A\x00' * 6), (6, b'B\x00' * 2))
 
 
