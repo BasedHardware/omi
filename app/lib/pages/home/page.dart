@@ -854,7 +854,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
             HeaderCircleButton(
               semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : null,
+              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
               icon: FaIcon(
                 FontAwesomeIcons.solidCircleCheck,
                 size: 16,
