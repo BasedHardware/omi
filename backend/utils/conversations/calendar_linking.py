@@ -40,6 +40,13 @@ MIN_OVERLAP_PERCENTAGE = 0.50
 MAX_CAPTURE_GAP_EVENT_SECONDS = 8 * 60 * 60
 
 
+def normalize_event_title(raw_title: Any) -> str:
+    """Safely extract event title, defaulting to 'Untitled Event' if None or blank."""
+    if isinstance(raw_title, str) and raw_title.strip():
+        return raw_title.strip()
+    return 'Untitled Event'
+
+
 def _as_utc(value) -> Optional[datetime]:
     if not isinstance(value, datetime):
         return None
@@ -168,8 +175,7 @@ def select_capture_gaps(
         )
         if covered:
             continue
-        raw_title = event.get('summary')
-        title = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else 'Untitled Event'
+        title = normalize_event_title(event.get('summary'))
         rows.append(
             {
                 'event_id': str(event.get('id', '')),
@@ -279,8 +285,7 @@ async def get_overlapping_calendar_event(
     if event_start is None or event_end is None:
         return None
 
-    raw_title = best_match.get('summary')
-    title = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else 'Untitled Event'
+    title = normalize_event_title(best_match.get('summary'))
     return CalendarEventLink(
         event_id=str(best_match.get('id', '')),
         title=title,

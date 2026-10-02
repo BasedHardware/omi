@@ -6,10 +6,9 @@ Verifies:
    or storing literal 'None' strings.
 2. Missing access tokens when refresh_token exists automatically trigger token refresh
    instead of failing with HTTP 400.
-3. Auth errors (GoogleAPIError 401, httpx 401, invalid_grant, authentication failed)
-   trigger refresh_google_token and transparent retry.
-4. Retry failures or fatal provider errors raise sanitized HTTP 500 without leaking credentials.
-5. Calendar capture gaps and conversation link builders handle null event summaries defensively.
+3. Auth errors (GoogleAPIError 401, httpx 401, invalid_grant, token expired)
+   trigger refresh_google_token and transparent retry with refreshed tokens.
+4. Capture gaps and conversation link builders handle null event summaries defensively.
 """
 
 from datetime import datetime, timezone
@@ -116,11 +115,10 @@ def test_is_google_auth_error_recognizes_auth_failures():
     resp_401 = httpx.Response(401, request=req)
     assert _is_google_auth_error(httpx.HTTPStatusError('401 Unauthorized', request=req, response=resp_401)) is True
 
-    # Substring matches in general Exceptions
-    assert _is_google_auth_error(RuntimeError("Client error '401 Unauthorized' for url")) is True
-    assert _is_google_auth_error(RuntimeError("authentication failed")) is True
-    assert _is_google_auth_error(RuntimeError("invalid_grant token expired")) is True
+    # Substring matches in general Exceptions (narrowed to invalid_grant and token expired)
+    assert _is_google_auth_error(RuntimeError("oauth2: invalid_grant: Bad Request")) is True
     assert _is_google_auth_error(RuntimeError("token expired")) is True
+    assert _is_google_auth_error(RuntimeError("Token expired")) is True
 
 
 def test_is_google_auth_error_rejects_non_auth_errors():
@@ -131,6 +129,8 @@ def test_is_google_auth_error_rejects_non_auth_errors():
     resp_500 = httpx.Response(500, request=req)
     assert _is_google_auth_error(httpx.HTTPStatusError('500 Server Error', request=req, response=resp_500)) is False
 
+    # Generic messages containing 401 or unauthorized without structured error should not misclassify
+    assert _is_google_auth_error(RuntimeError("Failed to reach http://host:4010/api")) is False
     assert _is_google_auth_error(RuntimeError("Connection timeout")) is False
     assert _is_google_auth_error(RuntimeError("DNS resolution failed")) is False
 
@@ -208,6 +208,7 @@ async def test_list_events_automatic_refresh_when_access_token_is_empty(monkeypa
 
     gc_routes.refresh_google_token.assert_awaited_once_with("user-123", integration)
     mock_get_events.assert_awaited_once()
+    assert mock_get_events.call_args.kwargs['access_token'] == 'new-access-token'
     assert len(events) == 1
     assert events[0].event_id == 'event-101'
     assert events[0].title == 'Untitled Event'
@@ -298,7 +299,8 @@ async def test_capture_gaps_automatic_refresh_and_null_summary(monkeypatch):
             'end': {'dateTime': '2026-10-01T11:00:00Z'},
         }
     ]
-    monkeypatch.setattr(gc_routes, "get_google_calendar_events", AsyncMock(return_value=mock_events))
+    mock_get_events = AsyncMock(return_value=mock_events)
+    monkeypatch.setattr(gc_routes, "get_google_calendar_events", mock_get_events)
 
     gaps = await gc_routes.get_calendar_capture_gaps(
         start=datetime(2026, 10, 1, tzinfo=timezone.utc),
@@ -306,6 +308,8 @@ async def test_capture_gaps_automatic_refresh_and_null_summary(monkeypatch):
         uid="user-123",
     )
 
+    mock_get_events.assert_awaited_once()
+    assert mock_get_events.call_args.kwargs['access_token'] == 'new-access-token'
     assert len(gaps) == 1
     assert gaps[0].event_id == 'gap-null-summary'
     assert gaps[0].title == 'Untitled Event'
@@ -383,3 +387,39 @@ def test_select_capture_gaps_null_and_blank_summary_yields_untitled_event():
     assert rows[0]['title'] == 'Untitled Event'
     assert rows[0]['title'] != 'None'
     assert rows[1]['title'] == 'Untitled Event'
+
+
+@pytest.mark.asyncio
+async def test_get_overlapping_calendar_event_null_summary(monkeypatch):
+    """When a matched overlapping calendar event has a null summary, links with 'Untitled Event'."""
+    from utils.conversations import calendar_linking
+    from models.conversation import CalendarEventLink
+
+    integration = {'connected': True, 'access_token': 'valid-token'}
+    monkeypatch.setattr(calendar_linking, "run_blocking", AsyncMock(return_value=integration))
+    monkeypatch.setattr(
+        calendar_linking,
+        "get_google_calendar_events",
+        AsyncMock(
+            return_value=[
+                {
+                    'id': 'overlap-null-summary',
+                    'summary': None,
+                    'status': 'confirmed',
+                    'start': {'dateTime': '2026-10-01T10:00:00Z'},
+                    'end': {'dateTime': '2026-10-01T11:00:00Z'},
+                }
+            ]
+        ),
+    )
+
+    link = await calendar_linking.get_overlapping_calendar_event(
+        uid="user-123",
+        conversation_start=datetime(2026, 10, 1, 10, 5, tzinfo=timezone.utc),
+        conversation_end=datetime(2026, 10, 1, 10, 45, tzinfo=timezone.utc),
+    )
+
+    assert link is not None
+    assert isinstance(link, CalendarEventLink)
+    assert link.event_id == 'overlap-null-summary'
+    assert link.title == 'Untitled Event'

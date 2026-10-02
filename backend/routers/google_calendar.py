@@ -27,6 +27,7 @@ from utils.integration_telemetry import (
     emit_sync_failed,
     emit_sync_succeeded,
 )
+from utils.conversations.calendar_linking import normalize_event_title
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
@@ -43,20 +44,10 @@ def _is_google_auth_error(e: Exception) -> bool:
     if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 401:
         return True
     error_msg = str(e).lower()
-    return (
-        "401" in error_msg
-        or "invalid_grant" in error_msg
-        or "authentication failed" in error_msg
-        or "unauthorized" in error_msg
-        or "token expired" in error_msg
-    )
+    return "invalid_grant" in error_msg or "token expired" in error_msg
 
 
-def _normalize_event_title(raw_title: Any) -> str:
-    """Safely extract event title, defaulting to 'Untitled Event' if None or blank."""
-    if isinstance(raw_title, str) and raw_title.strip():
-        return raw_title.strip()
-    return 'Untitled Event'
+_normalize_event_title = normalize_event_title
 
 
 class GoogleCalendarEvent(BaseModel):

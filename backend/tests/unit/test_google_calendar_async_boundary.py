@@ -41,7 +41,13 @@ def calendar_route_harness() -> Iterator[SimpleNamespace]:
         pass
 
     calendar_tools = _module("utils.retrieval.tools.calendar_tools", get_google_calendar_events=get_events)
-    calendar_linking = _module("utils.conversations.calendar_linking", select_capture_gaps=MagicMock())
+    calendar_linking = _module(
+        "utils.conversations.calendar_linking",
+        select_capture_gaps=MagicMock(),
+        normalize_event_title=lambda title: (
+            title.strip() if isinstance(title, str) and title.strip() else "Untitled Event"
+        ),
+    )
     google_utils = _module(
         "utils.retrieval.tools.google_utils",
         refresh_google_token=refresh_token,
