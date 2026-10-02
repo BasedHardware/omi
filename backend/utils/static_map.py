@@ -13,14 +13,19 @@ Coordinates are never logged — only counts and outcomes (see
 
 import asyncio
 import hashlib
+import io
 import json
 import logging
+import math
 import os
 import time
+from functools import lru_cache
 from typing import List, Literal, Optional, Tuple
 
+from PIL import Image, ImageDraw, ImageFilter
+
 from database.redis_db import r
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.http_client import get_maps_client, get_maps_semaphore
 
 logger = logging.getLogger(__name__)
@@ -37,7 +42,8 @@ _MAX_PINS = 50
 # image/png under launch-load authorization degradation) that were cached and
 # shared to every user for the full TTL before the reject below existed.
 # Bumped 2->3 for the black-and-white light/dark restyle (theme is now part of the key).
-_CACHE_VERSION = 3
+# Bumped 3->4: the pin is drawn here (a dot), not by the provider.
+_CACHE_VERSION = 4
 _CACHE_TTL_SECONDS = 604800  # 7 days
 # Stampede dedup: per-key render lock TTL (bounds how long a crashed holder can
 # wedge waiters), how often waiters poll the cache, and how long they wait
@@ -98,9 +104,20 @@ _LIGHT_STYLES = [
 ]
 
 _STYLES = {'dark': _DARK_STYLES, 'light': _LIGHT_STYLES}
-# Markers take the theme's ink: white on dark, near-black on light (and never
-# purple, the brand rule).
-_MARKER_COLORS = {'dark': '0xFFFFFF', 'light': '0x0A0A0A'}
+
+# The provider draws no marker. Each pin is the app's dot, drawn onto the render
+# where it lands: a disc in the theme's ink (white on dark, black on light, never
+# purple, the brand rule) ringed in the opposite colour, a small centre dot, and a
+# soft shadow. Every app build gets the same pin. Sizes are logical pixels.
+_SCALE = 2
+_TILE_PX = 256
+_STREET_ZOOM = 15
+# Room kept between the outermost pins and the frame, so their dots stay whole.
+_FIT_MARGIN_PX = 24
+_PIN_RADIUS = 9.0
+_PIN_RING = 3.4  # centred on the disc's edge
+_PIN_CENTER = 2.7
+_PIN_INK = {'dark': ((255, 255, 255), (0, 0, 0)), 'light': ((0, 0, 0), (255, 255, 255))}
 
 
 class MalformedPinsError(ValueError):
@@ -142,13 +159,89 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
     return parsed
 
 
+def _world(latitude: float, longitude: float) -> Tuple[float, float]:
+    """Web Mercator position as a fraction of the world, 0..1 on each axis."""
+    sin_lat = min(max(math.sin(math.radians(latitude)), -0.9999), 0.9999)
+    return (longitude + 180) / 360, 0.5 - math.log((1 + sin_lat) / (1 - sin_lat)) / (4 * math.pi)
+
+
+def _from_world(x: float, y: float) -> Tuple[float, float]:
+    return math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y)))), x * 360 - 180
+
+
+def frame_pins(pins: List[Tuple[float, float]], width: int, height: int) -> Tuple[Tuple[float, float], int]:
+    """The render's centre and zoom: one pin centred at street zoom; several, the
+    closest zoom (at most street zoom) that keeps every pin a margin inside the
+    frame. Framed here rather than by the provider so the pins can be drawn where
+    they land."""
+    if len(pins) == 1:
+        return pins[0], _STREET_ZOOM
+    xs, ys = zip(*(_world(*pin) for pin in pins))
+    span_x, span_y = max(xs) - min(xs), max(ys) - min(ys)
+    room_x, room_y = max(width - 2 * _FIT_MARGIN_PX, 1), max(height - 2 * _FIT_MARGIN_PX, 1)
+    zoom = _STREET_ZOOM
+    while zoom > 0 and (span_x * _TILE_PX * 2**zoom > room_x or span_y * _TILE_PX * 2**zoom > room_y):
+        zoom -= 1
+    return _from_world((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2), zoom
+
+
+def pin_pixels(
+    pins: List[Tuple[float, float]], center: Tuple[float, float], zoom: int, width: int, height: int
+) -> List[Tuple[float, float]]:
+    """Where each pin lands in the render, in its ``scale=2`` pixels."""
+    center_x, center_y = _world(*center)
+    world_px = _TILE_PX * 2**zoom * _SCALE
+    points = []
+    for pin in pins:
+        x, y = _world(*pin)
+        points.append((width * _SCALE / 2 + (x - center_x) * world_px, height * _SCALE / 2 + (y - center_y) * world_px))
+    return points
+
+
+@lru_cache(maxsize=2)
+def _pin_sprite(theme: MapTheme) -> Image.Image:
+    """One pin with its shadow, drawn at 4x and box-averaged down: smooth edges, no halo."""
+    supersample = 4
+    k = _SCALE * supersample
+    outer = (_PIN_RADIUS + _PIN_RING / 2) * k
+    half = supersample * math.ceil((outer + 6 * k) / supersample)  # room for the shadow's drop and blur
+    ink, ring = _PIN_INK[theme]
+
+    def disc(radius: float, drop: float = 0) -> List[float]:
+        return [half - radius, half - radius + drop, half + radius, half + radius + drop]
+
+    sprite = Image.new('RGBA', (2 * half, 2 * half), (0, 0, 0, 0))
+    ImageDraw.Draw(sprite).ellipse(disc(outer, 1.5 * k), fill=(0, 0, 0, 71))
+    sprite = sprite.filter(ImageFilter.GaussianBlur(1.6 * k))
+    draw = ImageDraw.Draw(sprite)
+    draw.ellipse(disc(outer), fill=ring)
+    draw.ellipse(disc((_PIN_RADIUS - _PIN_RING / 2) * k), fill=ink)
+    draw.ellipse(disc(_PIN_CENTER * k), fill=ring)
+    return sprite.resize((2 * half // supersample, 2 * half // supersample), Image.BOX)
+
+
+def draw_pins(image: bytes, pins: List[Tuple[float, float]], width: int, height: int, theme: MapTheme) -> bytes:
+    """Draw each pin's dot onto a provider render (PNG in, PNG out)."""
+    with Image.open(io.BytesIO(image)) as render:
+        canvas = render.convert('RGB')
+    sprite = _pin_sprite(theme)
+    offset = sprite.width // 2
+    center, zoom = frame_pins(pins, width, height)
+    for x, y in pin_pixels(pins, center, zoom, width, height):
+        canvas.paste(sprite, (round(x) - offset, round(y) - offset), sprite)
+    out = io.BytesIO()
+    canvas.save(out, format='PNG')
+    return out.getvalue()
+
+
 def build_static_map_url(
     pins: List[Tuple[float, float]], width: int, height: int, api_key: str, theme: MapTheme = 'dark'
 ) -> str:
     """Build the provider URL for the quantized pin set, size and theme.
 
-    One pin renders centered at street zoom; several pins use the provider's
-    ``visible=`` auto-fit so every stop lands inside the frame.
+    The frame comes from ``frame_pins`` (one pin centred at street zoom; several
+    fitted inside the frame), and the provider draws no marker: ``draw_pins``
+    adds the dots after the render.
 
     Callers pass already-normalized dimensions (see ``_effective_dimensions``);
     the provider serves at most 640px per axis (1280 with ``scale=2``).
@@ -157,19 +250,15 @@ def build_static_map_url(
     characters (https://developers.google.com/maps/documentation/maps-static/
     start). The old 2,048 figure is the legacy v2 limit and now belongs to the
     separate Maps URLs service — do not guard against it. Measured worst case
-    with either theme's style list is ~3.3KB at the 50-pin cap (the pin list appears
-    twice, in ``markers`` and ``visible``), comfortably inside the limit;
-    re-measure if the style list, pin cap, or provider changes.
+    with either theme's style list is about 1.2KB whatever the pin count, since the
+    pins no longer appear in the URL; re-measure if the style list or provider
+    changes.
     """
-    size = f'size={width}x{height}'
-    scale = 'scale=2'
-    locations = '%7C'.join(f'{latitude:.4f},{longitude:.4f}' for latitude, longitude in pins)
-    markers = f'markers=color:{_MARKER_COLORS[theme]}%7C{locations}'
-    framing = f'center={locations}&zoom=15' if len(pins) == 1 else f'visible={locations}'
+    (latitude, longitude), zoom = frame_pins(pins, width, height)
     styles = '&'.join(_STYLES[theme])
     return (
-        f'https://maps.googleapis.com/maps/api/staticmap?{framing}&{size}&{scale}'
-        f'&format=png&{markers}&{styles}&key={api_key}'
+        f'https://maps.googleapis.com/maps/api/staticmap?center={latitude:.6f},{longitude:.6f}&zoom={zoom}'
+        f'&size={width}x{height}&scale={_SCALE}&format=png&{styles}&key={api_key}'
     )
 
 
@@ -250,7 +339,13 @@ async def _render_from_provider(
             warning[:120],
         )
         return None
-    return response.content
+    try:
+        # Short leaf image work, off the event loop.
+        return await run_blocking(storage_executor, draw_pins, response.content, pins, width, height, theme)
+    except Exception as error:
+        # A render without its pins would mislead; fail like any other bad render.
+        logger.error('static map pin drawing failed error_type=%s pin_count=%d', type(error).__name__, len(pins))
+        return None
 
 
 async def fetch_static_map(

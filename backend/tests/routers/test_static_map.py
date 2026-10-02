@@ -11,6 +11,7 @@ paths are covered with a fake Redis against the real fetch_static_map.
 """
 
 import asyncio
+import io
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -20,6 +21,9 @@ from fastapi.testclient import TestClient
 
 import utils.static_map as static_map_mod
 from routers import static_map as static_map_router
+
+# The real drawing, kept before any test swaps it for a passthrough.
+_REAL_DRAW_PINS = static_map_mod.draw_pins
 
 UID = 'user-1'
 
@@ -169,30 +173,31 @@ def test_parse_pins_rejects_out_of_bounds_coordinates_before_quantization():
     assert static_map_mod.parse_pins('-90.0,-180.0') == [(-90.0, -180.0)]
 
 
-def test_single_pin_url_centers_at_street_zoom():
+def test_single_pin_url_centers_at_street_zoom_without_a_provider_marker():
     url = static_map_mod.build_static_map_url([(37.7749, -122.4194)], 300, 150, 'k-test')
-    assert 'center=37.7749,-122.4194' in url
+    assert 'center=37.774900,-122.419400' in url
     assert 'zoom=15' in url
     assert 'visible=' not in url
+    assert 'markers=' not in url, 'the pin is drawn by draw_pins, not the provider'
 
 
-def test_multi_pin_url_uses_visible_autofit_with_the_given_size():
+def test_multi_pin_url_is_framed_here_with_the_given_size():
     # Callers normalize dimensions before building (see _effective_dimensions);
     # the builder passes them through.
-    url = static_map_mod.build_static_map_url([(37.7749, -122.4194), (37.7849, -122.4094)], 640, 640, 'k-test')
-    assert 'visible=37.7749,-122.4194%7C37.7849,-122.4094' in url
+    pins = [(37.7749, -122.4194), (37.7849, -122.4094)]
+    url = static_map_mod.build_static_map_url(pins, 640, 640, 'k-test')
+    (latitude, longitude), zoom = static_map_mod.frame_pins(pins, 640, 640)
+    assert f'center={latitude:.6f},{longitude:.6f}&zoom={zoom}' in url
     assert 'size=640x640' in url
-    assert 'center=' not in url
-    assert 'markers=color:0xFFFFFF%7C' in url
+    assert 'visible=' not in url
+    assert 'markers=' not in url
 
 
-def test_light_theme_url_uses_the_light_styles_and_dark_markers():
+def test_light_theme_url_uses_the_light_styles():
     pins = [(37.7749, -122.4194), (37.7849, -122.4094)]
     light = static_map_mod.build_static_map_url(pins, 300, 150, 'k-test', 'light')
     dark = static_map_mod.build_static_map_url(pins, 300, 150, 'k-test', 'dark')
 
-    assert 'markers=color:0x0A0A0A%7C' in light
-    assert 'markers=color:0xFFFFFF%7C' in dark
     assert 'style=element:geometry%7Ccolor:0xeaeaea' in light
     assert 'style=element:geometry%7Ccolor:0x161616' in dark
     for style in static_map_mod._LIGHT_STYLES:
@@ -283,6 +288,8 @@ def _patch_environment(monkeypatch, response=None, redis=None, delay=0.0):
 
     monkeypatch.setattr(static_map_mod, 'r', fake_redis)
     monkeypatch.setattr(static_map_mod, 'run_blocking', passthrough_run_blocking)
+    # These tests cover caching and locking with fake bytes; drawing the pins has its own tests.
+    monkeypatch.setattr(static_map_mod, 'draw_pins', lambda image, *_: image)
     monkeypatch.setattr(static_map_mod, 'get_maps_client', _get_client)
     monkeypatch.setattr(static_map_mod, 'get_maps_semaphore', _AsyncNull)
     return fake_redis, captured
@@ -319,9 +326,9 @@ async def test_light_and_dark_render_and_cache_separately(monkeypatch):
     pins = [(37.7749, -122.4194)]
 
     await static_map_mod.fetch_static_map(pins, 300, 150, 'light')
-    assert 'markers=color:0x0A0A0A' in captured['url']
+    assert 'style=element:geometry%7Ccolor:0xeaeaea' in captured['url']
     await static_map_mod.fetch_static_map(pins, 300, 150, 'dark')
-    assert 'markers=color:0xFFFFFF' in captured['url']
+    assert 'style=element:geometry%7Ccolor:0x161616' in captured['url']
     # A repeat of either theme is a hit; the other theme never serves it.
     await static_map_mod.fetch_static_map(pins, 300, 150, 'light')
 
@@ -450,3 +457,74 @@ async def test_redis_write_failure_still_returns_the_image(monkeypatch):
     _patch_environment(monkeypatch, redis=_BrokenSetRedis(), response=_fake_response())
     result = await static_map_mod.fetch_static_map([(37.7749, -122.4194)], 300, 150)
     assert result == b'png-bytes'
+
+
+# --- The pin: the app's dot, drawn onto the render where each pin lands ---
+
+
+def _render_png(width=300, height=150, color=(234, 234, 234)):
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new('RGB', (width * 2, height * 2), color).save(out, format='PNG')
+    return out.getvalue()
+
+
+def test_several_pins_are_framed_a_margin_inside_the_render():
+    pins = sorted([(40.7233, -74.0030), (40.7411, -73.9897), (40.7580, -73.9855)])
+    center, zoom = static_map_mod.frame_pins(pins, 350, 200)
+    margin = static_map_mod._FIT_MARGIN_PX * 2
+    for x, y in static_map_mod.pin_pixels(pins, center, zoom, 350, 200):
+        assert margin - 1 <= x <= 700 - margin + 1
+        assert margin - 1 <= y <= 400 - margin + 1
+    # One zoom closer would push a pin past the margin, so the frame is as close as it can be.
+    tighter = static_map_mod.pin_pixels(pins, center, zoom + 1, 350, 200)
+    assert any(not (margin <= x <= 700 - margin and margin <= y <= 400 - margin) for x, y in tighter)
+    # Two pins a street apart stay at street zoom rather than zooming in further.
+    assert static_map_mod.frame_pins([(40.7233, -74.0030), (40.7234, -74.0029)], 350, 200)[1] == 15
+
+
+def test_the_pin_is_a_dot_in_the_theme_ink_drawn_where_it_lands():
+    from PIL import Image
+
+    pins = [(37.7749, -122.4194)]
+    for theme, ink, ring in (('light', (0, 0, 0), (255, 255, 255)), ('dark', (255, 255, 255), (0, 0, 0))):
+        drawn = Image.open(io.BytesIO(static_map_mod.draw_pins(_render_png(), pins, 300, 150, theme)))
+        assert drawn.size == (600, 300)
+        assert drawn.getpixel((300, 150)) == ring, f'{theme}: the centre dot'
+        assert drawn.getpixel((300 + 11, 150)) == ink, f'{theme}: the disc'
+        assert drawn.getpixel((300 + 19, 150)) == ring, f'{theme}: the ring'
+        assert drawn.getpixel((40, 40)) == (234, 234, 234), f'{theme}: the map elsewhere is untouched'
+
+
+def test_a_pin_near_the_edge_is_clipped_not_an_error():
+    pins = [(37.7749, -122.4194), (37.7749, -122.3)]
+    assert static_map_mod.draw_pins(_render_png(), pins, 300, 150, 'dark').startswith(b'\x89PNG')
+
+
+@pytest.mark.asyncio
+async def test_a_render_whose_pins_cannot_be_drawn_is_not_served_or_cached(monkeypatch):
+    redis, _ = _patch_environment(monkeypatch)
+
+    def broken(*_):
+        raise OSError('cannot identify image file')
+
+    monkeypatch.setattr(static_map_mod, 'draw_pins', broken)
+    result = await static_map_mod.fetch_static_map([(37.7749, -122.4194)], 300, 150, 'light')
+
+    assert result is None
+    assert static_map_mod._cache_key([(37.7749, -122.4194)], 300, 150, 'light') not in redis.store
+
+
+@pytest.mark.asyncio
+async def test_the_render_path_draws_the_pins_on_the_provider_image(monkeypatch):
+    redis, _ = _patch_environment(monkeypatch, response=_fake_response(content=_render_png()))
+    monkeypatch.setattr(static_map_mod, 'draw_pins', _REAL_DRAW_PINS)
+    pins = [(37.7749, -122.4194)]
+
+    result = await static_map_mod.fetch_static_map(pins, 300, 150, 'light')
+
+    from PIL import Image
+
+    assert Image.open(io.BytesIO(result)).getpixel((300 + 11, 150)) == (0, 0, 0)
+    assert redis.store[static_map_mod._cache_key(pins, 300, 150, 'light')] == result
