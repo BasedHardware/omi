@@ -807,6 +807,10 @@ class LiveLegSocket(STTSocket):
             )
         return True
 
+    async def wait_send_capacity(self) -> bool:
+        wait = getattr(self.raw, 'wait_send_capacity', None)
+        return await cast(Callable[[], Awaitable[bool]], wait)() if callable(wait) else not self.is_connection_dead
+
     def replay_send(self, data: bytes, start_sample: int) -> bool:
         ring = getattr(self.session.receiver, '_window_ring', None)
         # Source admission and capture retention already decided this replay

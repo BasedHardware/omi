@@ -254,8 +254,9 @@ resets it. Once that budget is exhausted, the deadline remains armed. The
 timer also fires during a slow POST or after four consecutive speech-containing
 empty POSTs, whichever comes first. The existing listen death monitor selects
 the next vendor and replays the untranscribed capture from the 90-second ring;
-failover happens at most once per session, and the failed Parakeet leg is
-excluded for the rest of that session. Once text has been emitted, these
+the failed Parakeet leg is excluded for the rest of that session. The managed
+chain permits up to three failed routes before exhaustion (legacy listen and
+PTT retain their two-failover limit). Once text has been emitted, these
 startup bounds are disarmed. No sentence anchor or emitted text is changed.
 `omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
@@ -269,6 +270,26 @@ Speech-free capture can still roll off, and the current chunk must fit. The
 `omi_stt_window_replay_safe_trims_total` counter records actual anchor and
 speech-free trims. If pending audio itself exceeds the ring, the leg fails
 with `capacity_full` and replays from the anchor onto the next vendor.
+
+Replay coalesces contiguous capture spans into at most 16 KiB PCM packets,
+preserving sample positions and gaps, then yields between queue admissions.
+Soniox and Modulate retain their 2,000-item send queues; replay waits for a
+consumer to free space rather than overflowing them with thousands of small
+capture frames. A queue that makes no room for two seconds rejects the leg
+with the existing `capacity_full` cause. A successor dying during replay is
+retired and the remaining un-emitted capture walks to the next eligible provider
+within the same failover budget. Managed recovery consults the owner-teardown
+fence, not a provider's internal transport-cleanup flag.
+
+New live capture follows the replay prefix under the receiver's failover lock;
+replay does not sleep for the audio duration. Replacement headroom grows by 15
+seconds up to an absolute 150-second retained-PCM ceiling (4.8 MB at 16 kHz
+mono s16le), allowing a full 135-second backlog plus a live tail. Text progress
+reclaims that temporary headroom. Cancellation/client teardown closes an
+unadopted successor without starting another hop. Synthetic provider-pair tests
+exercise real Soniox/Modulate queues and send loops with fake transports,
+including concurrent live audio and router-on with Modulate benched. PTT has
+no capture-ring replay and its policy excludes window Parakeet and Soniox.
 The window socket separately retains PCM from its POST anchor. Its VAD speech
 spans are pruned on each POST-anchor advance; rapid speech/silence toggles
 coalesce the closest adjacent spans at the 1,024-entry bound rather than
@@ -360,9 +381,9 @@ as a new utterance onset. Repeated short utterances still cannot defeat the
 per-session POST limit: pacing applies between POST *starts*, and teardown
 skips that delay for the final flush. Admission is released as soon as drain
 starts; the final POST may finish without holding the slot. Cancellation
-releases admission and cancels the outstanding request. Failed windows are not
-replayed to a second provider: the normal offline capture/sync recovery still
-owns that gap, as with existing mid-stream provider deaths.
+releases admission and cancels the outstanding request. Failed live windows replay their un-emitted capture to the next provider as
+described above. Offline capture/sync recovery still owns any gap after the
+finite live chain is exhausted.
 
 Posted contexts overlap by design (held sentence + new audio). Each sample is
 still in at most one *emitted* segment: re-anchoring drops already-emitted

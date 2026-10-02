@@ -6,7 +6,7 @@ import time
 import os
 import asyncio
 from collections import deque
-from typing import Any, Callable, Literal, cast
+from typing import Any, Awaitable, Callable, Iterator, Literal, cast
 
 from config.stt_provider_policy import provider_for_service
 
@@ -122,8 +122,9 @@ class ResilientAudio:
     def reserve_replacement_headroom(self) -> None:
         # A full source backlog must not make the first live packet kill its
         # replacement before replay can produce text. Reserve one normal
-        # tail per adopted downstream leg; the finite chain bounds retention.
-        self.ring_seconds = min(90 + 3 * RING_SECONDS, self.ring_seconds + RING_SECONDS)
+        # tail per adopted downstream leg, including a full 135s replay. The
+        # absolute 150s ceiling bounds retention even across repeated calls.
+        self.ring_seconds = min(90 + 4 * RING_SECONDS, self.ring_seconds + RING_SECONDS)
 
 
 def trim_window_replay_to_anchor(ring: ResilientAudio | None, socket: Any) -> None:
@@ -263,7 +264,11 @@ def socket_is_finishing(socket: Any) -> bool:
         seen.add(id(current))
         try:
             outcome = getattr(current, 'leg_outcome', None)
-            if getattr(current, '_finishing', False) or outcome is not None and outcome.owner_closing:
+            if outcome is not None:
+                # Managed transport cleanup also calls raw.finish() after a
+                # failed send. Only its serving owner can declare teardown.
+                return bool(outcome.owner_closing)
+            if getattr(current, '_finishing', False):
                 return True
             pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
         except Exception:
@@ -341,12 +346,16 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             raise RuntimeError('Soniox reconnect refused')
         replacement = receiver._wrap_legacy_stt_socket(raw, epoch)
         cutoff = replay_ring.finalized_sample
-        replay_send = getattr(replacement, 'replay_send', None)
-        for start, data in replay:
-            accepted = replay_send(data, start) if callable(replay_send) else replacement.send(data, start_sample=start)
-            if not accepted:
-                raise RuntimeError('Soniox replay send failed')
-            ring.record_replay('soniox', len(data) // 2)
+        rejected = await replay_chunks(
+            replacement,
+            replay,
+            source=ring,
+            provider='soniox',
+            soniox=None,
+            is_active=lambda: receiver.host.state.active and not receiver.host.state.stt_terminal_failure,
+        )
+        if rejected is not None:
+            raise RuntimeError('Soniox replay send failed')
         if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
             replacement.finish()
             hop.note_failure(None)
@@ -354,6 +363,9 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             return False
     except asyncio.CancelledError:
         hop.note_failure(None)
+        if replacement is not None:
+            retire_window_replay_socket(receiver, replacement)
+            close_rejected_socket(replacement)
         raise
     except Exception:
         if replacement is not None:
@@ -402,25 +414,63 @@ async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any
                 release_live_stt_socket(previous)
 
 
-def replay_chunks(
+REPLAY_PACKET_BYTES = 16 * 1024
+
+
+def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int, bytes]]:
+    """Coalesce adjacent s16le capture spans; bound copies and preserve gaps."""
+    pending = bytearray()
+    first = 0
+    for start, data in chunks:
+        if pending and start != first + len(pending) // 2:
+            yield first, bytes(pending)
+            pending.clear()
+        offset = 0
+        while offset < len(data):
+            if not pending:
+                first = start + offset // 2
+            count = min(REPLAY_PACKET_BYTES - len(pending), len(data) - offset)
+            pending.extend(data[offset : offset + count])
+            offset += count
+            if len(pending) == REPLAY_PACKET_BYTES:
+                yield first, bytes(pending)
+                pending.clear()
+    if pending:
+        yield first, bytes(pending)
+
+
+async def replay_chunks(
     socket: Any,
     chunks: tuple[tuple[int, bytes], ...],
     *,
     source: ResilientAudio | None,
     provider: str,
     soniox: ResilientAudio | None,
+    is_active: Callable[[], bool] = lambda: True,
 ) -> int | None:
     """Return the first rejected sample, or None when the snapshot was accepted."""
     if source is None:
         return None
     accepted_chunks: list[tuple[int, bytes]] = []
-    for start, data in chunks:
+    for start, data in replay_packets(chunks):
+        if not is_active():
+            return start
+        wait = getattr(socket, 'wait_send_capacity', None)
+        if callable(wait) and not await cast(Callable[[], Awaitable[bool]], wait)():
+            return start
+        if not is_active():
+            return start
         replay_send = getattr(socket, 'replay_send', None)
         accepted = replay_send(data, start) if callable(replay_send) else socket.send(data, start_sample=start)
         if not accepted:
             return start
         accepted_chunks.append((start, data))
         source.record_replay(provider, len(data) // 2)
+        # Let transport/receive tasks run; a provider can die after accepting
+        # a packet. No real-time-duration sleep, and no unbounded replay task.
+        await asyncio.sleep(0)
+        if socket.is_connection_dead:
+            return start
     if soniox is not None:
         for start, data in accepted_chunks:
             soniox.append(data, start)
