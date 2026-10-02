@@ -2285,3 +2285,23 @@ the transactional deletion fence. Late commits after a worker timeout are valid 
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+
+### Empty-title presentation and diagnosis
+
+Flutter's presentation-only fallback uses the shared transcript parity fixtures and,
+without text, the localized Recording label plus `OmiDateFormat` in local time.
+It never changes `structured.title` or the title editor's value. The existing
+`Conversation Untitled Rendered` event measures use of this clock fallback;
+compare within a build. It fires at most once per conversation and surface per
+app session (subject to the session budget), **not once per newly created
+empty-title conversation**. Old recording dates and repeated sessions prevent
+using it as a daily creation count.
+
+`recovery_structure_unavailable` means no rich structure survived, not a provider
+timeout. Provider exceptions leave `_get_structured` through the existing typed
+processing-failure retry path. The `selfheal_guard` refusal log now includes a
+bounded `structure_reason`: `transcript_decode_failed` or `no_enriched_structure`.
+Neither field contains transcript content. Do not retry unreadable blobs as
+provider outages. The existing `omi-journey-capture-fail` alert
+uses the durable terminal projection; inspect the current alert manifest for
+its 30-minute denominator and dwell rather than adding a raw-count page.
