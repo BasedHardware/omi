@@ -41,7 +41,8 @@ def get_integration_checked(
     try:
         integration = users_db.get_integration(uid, key)
     except Exception as e:
-        return None, f"{error_prefix}: {str(e)}"
+        logger.error(f"Failed to fetch integration {key} for user {uid}: {e}", exc_info=True)
+        return None, f"{error_prefix}. Please try again later."
     if not integration or not integration.get('connected'):
         return None, not_connected_msg
     return integration, None
@@ -81,7 +82,8 @@ def parse_iso_with_tz(
             return None, f"Error: {field_name} must include timezone {tz_required_msg}: {value}"
         return dt, None
     except ValueError as e:
-        return None, f"Error: Invalid {field_name} format. Expected {tz_required_msg}: {value} - {str(e)}"
+        logger.error(f"Invalid {field_name} format for value {value}: {e}", exc_info=True)
+        return None, f"Error: Invalid {field_name} format. Expected {tz_required_msg}: {value}"
 
 
 def prepare_access(
@@ -129,17 +131,23 @@ def retry_on_auth(
         return call_fn(**call_kwargs), None
     except Exception as e:
         msg = str(e)
+        logger.error(f"Error in retry_on_auth for user {uid}: {e}", exc_info=True)
         if any(m in msg for m in markers):
-            new_token = refresh_fn(uid, integration)
+            try:
+                new_token = refresh_fn(uid, integration)
+            except Exception as ref_err:
+                logger.error(f"Error refreshing token for user {uid}: {ref_err}", exc_info=True)
+                return None, expired_msg
             if new_token:
                 call_kwargs = dict(call_kwargs)
                 call_kwargs['access_token'] = new_token
                 try:
                     return call_fn(**call_kwargs), None
                 except Exception as e2:
-                    return None, f"Error after token refresh: {str(e2)}"
+                    logger.error(f"Error after token refresh for user {uid}: {e2}", exc_info=True)
+                    return None, "Error after token refresh. Please try again later."
             return None, expired_msg
-        return None, f"Error: {msg}"
+        return None, "Error executing request. Please try again later."
 
 
 async def retry_on_auth_async(
@@ -160,14 +168,20 @@ async def retry_on_auth_async(
         return await call_fn(**call_kwargs), None
     except Exception as e:
         msg = str(e)
+        logger.error(f"Error in retry_on_auth_async for user {uid}: {e}", exc_info=True)
         if any(m in msg for m in markers):
-            new_token = await refresh_fn(uid, integration)
+            try:
+                new_token = await refresh_fn(uid, integration)
+            except Exception as ref_err:
+                logger.error(f"Error refreshing token for user {uid}: {ref_err}", exc_info=True)
+                return None, expired_msg
             if new_token:
                 call_kwargs = dict(call_kwargs)
                 call_kwargs['access_token'] = new_token
                 try:
                     return await call_fn(**call_kwargs), None
                 except Exception as e2:
-                    return None, f"Error after token refresh: {str(e2)}"
+                    logger.error(f"Error after token refresh for user {uid}: {e2}", exc_info=True)
+                    return None, "Error after token refresh. Please try again later."
             return None, expired_msg
-        return None, f"Error: {msg}"
+        return None, "Error executing request. Please try again later."

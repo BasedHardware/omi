@@ -2332,6 +2332,10 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
+        conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+        if not conversation or conversation.get('deleted', False):
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'deleted_conversation'})
+
         existing = await run_blocking(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
@@ -2406,7 +2410,9 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
-        if not conversation or not conversation.get('audio_files'):
+        if not conversation or conversation.get('deleted', False):
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'deleted_conversation'})
+        if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
         fingerprint = compute_audio_files_fingerprint(audio_files)
