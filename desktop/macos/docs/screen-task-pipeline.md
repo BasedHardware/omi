@@ -49,7 +49,9 @@ telemetry while authority remains valid. Plan/auth/quota/backpressure denials ar
 terminal. Rejection uploads no screenshot unless audited.
 
 A fresh admission read every 30 seconds grants a 55-second lease measured from
-request start. SDK cached reload notifications cannot renew that lease. The
+request start and bound to the owner/session that fetched it. An account or
+same-UID session transition revokes the lease immediately. SDK cached reload
+notifications cannot renew that lease. The
 client reads the public flag-evaluation endpoint and authenticated
 `GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
 `SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged

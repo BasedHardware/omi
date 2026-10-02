@@ -39,12 +39,24 @@ final class ScreenTaskAdmissionAuthority: @unchecked Sendable {
   private var generation: UInt64 = 0
   private var expires: TimeInterval = 0
   private let now: @Sendable () -> TimeInterval
+  private var authorization: RuntimeOwnerAuthorizationSnapshot?
+  private let ownerIsCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
 
-  init(now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) { self.now = now }
+  init(
+    now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+    ownerIsCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    }
+  ) {
+    self.now = now
+    self.ownerIsCurrent = ownerIsCurrent
+  }
 
-  func refresh(enabled: Bool, requestedAt: TimeInterval? = nil) {
+  func refresh(enabled: Bool, requestedAt: TimeInterval? = nil, authorization: RuntimeOwnerAuthorizationSnapshot? = nil)
+  {
     lock.withLock {
-      if self.enabled != enabled || now() >= expires { generation &+= 1 }
+      if self.enabled != enabled || now() >= expires || self.authorization != authorization { generation &+= 1 }
+      self.authorization = authorization
       self.enabled = enabled
       expires = (requestedAt ?? now()) + 55
     }
@@ -58,7 +70,12 @@ final class ScreenTaskAdmissionAuthority: @unchecked Sendable {
     }
   }
 
-  func snapshot() -> UInt64? { lock.withLock { enabled && now() < expires ? generation : nil } }
+  func snapshot() -> UInt64? {
+    let value = lock.withLock { (enabled && now() < expires ? generation : nil, authorization) }
+    // Owner validation runs outside this lock to preserve commit-lease lock order.
+    guard value.1.map(ownerIsCurrent) ?? true else { return nil }
+    return value.0
+  }
   func isCurrent(_ token: UInt64) -> Bool { snapshot() == token }
 }
 
@@ -109,10 +126,11 @@ enum ScreenTaskFreshFlagResponse {
       do {
         let flagEnabled = try await PostHogManager.shared.screenTaskFlagAdmission(authorization: owner)
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
-        ScreenTaskFeature.authority.refresh(enabled: flagEnabled, requestedAt: requestedAt)
+        ScreenTaskFeature.authority.refresh(enabled: flagEnabled, requestedAt: requestedAt, authorization: owner)
         let serverEnabled = try await APIClient.shared.screenTaskAdmissionStatus(authorization: owner)
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
-        ScreenTaskFeature.serverAuthority.refresh(enabled: serverEnabled, requestedAt: requestedAt)
+        ScreenTaskFeature.serverAuthority.refresh(
+          enabled: serverEnabled, requestedAt: requestedAt, authorization: owner)
       } catch {
         // Failure cannot renew either cached lease. Already granted leases expire at request start +55s.
       }

@@ -192,6 +192,31 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertNil(authority.snapshot())
   }
 
+  func testAdmissionLeaseCannotCrossOwnerOrSameUIDSessionTransition() throws {
+    for sameUID in [false, true] {
+      let state = RampState()
+      let runtime = RuntimeOwnerAuthorizationAuthority()
+      let original = try XCTUnwrap(runtime.capture(ownerID: state.owner, expectedOwnerID: state.owner))
+      let lease = ScreenTaskAdmissionAuthority(
+        now: { state.now },
+        ownerIsCurrent: { snapshot in
+          runtime.isCurrent(snapshot, ownerID: state.lock.withLock { state.owner })
+        })
+      lease.refresh(enabled: true, authorization: original)
+      let token = try XCTUnwrap(lease.snapshot())
+      runtime.beginTransition()
+      let nextOwner = sameUID ? "synthetic-a" : "synthetic-b"
+      runtime.endTransition(ownerID: nextOwner)
+      state.lock.withLock { state.owner = nextOwner }
+      XCTAssertNil(lease.snapshot())
+      XCTAssertFalse(lease.isCurrent(token))
+      let fresh = try XCTUnwrap(runtime.capture(ownerID: nextOwner, expectedOwnerID: nextOwner))
+      lease.refresh(enabled: true, authorization: fresh)
+      XCTAssertNotNil(lease.snapshot())
+      XCTAssertFalse(lease.isCurrent(token))
+    }
+  }
+
   func testFlagTransportErrorsAndDelayedResponsesCannotRenewCachedTrueLease() throws {
     let state = RampState()
     let authority = ScreenTaskAdmissionAuthority(now: { state.now })
