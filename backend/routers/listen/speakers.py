@@ -19,6 +19,7 @@ from utils.live_speaker_suggestions import reconcile_pinned_suggestion
 from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
@@ -102,6 +103,8 @@ class SpeakerMatcher:
         self.tasks: set[asyncio.Task[Any]] = set()
         self._profile_conversation_id: Optional[str] = None
         self._profile_lock = asyncio.Lock()
+        self._entitlement_lock = asyncio.Lock()
+        self._named_speakers_allowed: Optional[bool] = None
         # The account owner's own first name, so hearing it in the transcript cannot
         # mint a person who is really the user. Resolved lazily by
         # resolve_owner_name(); used for display and as a veto, never as voice-match evidence.
@@ -135,6 +138,22 @@ class SpeakerMatcher:
             self.owner_name = name.strip()
         return self.owner_name
 
+    async def named_speakers_allowed(self) -> bool:
+        """One subscription read per conversation; rotation/reconnect observes plan changes."""
+        async with self._entitlement_lock:
+            if self._named_speakers_allowed is None:
+                generation = self._generation
+                try:
+                    allowed = await self.host.persistence.call(named_speaker_prompts_allowed, self.host.request.uid)
+                except Exception as error:
+                    # Unresolved is not denied: stay closed for this call and ask again next time.
+                    logger.error('Speaker ID entitlement read failed type=%s', type(error).__name__)
+                    return False
+                if generation != self._generation:
+                    return False
+                self._named_speakers_allowed = bool(allowed)
+            return bool(self._named_speakers_allowed)
+
     async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:
             try:
@@ -164,6 +183,8 @@ class SpeakerMatcher:
             except Exception as error:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:
+            if not await self.named_speakers_allowed():
+                return
             people = await self.host.persistence.call(user_db.get_people, self.host.request.uid)
             for person in people:
                 if person.get('speech_samples'):
@@ -473,13 +494,24 @@ class SpeakerMatcher:
                 voice_wide = manual.get('source') == 'carried' or manual is (receipt.get('speakers') or {}).get(
                     str(speaker_id)
                 )
-                if person_id and known and voice_wide:
+                if person_id and voice_wide:
+                    # A manual label is authoritative without a loaded profile: on a
+                    # free plan non-owner profiles stay unloaded, so resolve the name
+                    # from the receipt decision's voice rather than dropping the map.
+                    if known is not None:
+                        name = known['name']
+                    else:
+                        person = await self.host.persistence.call(user_db.get_person, self.host.request.uid, person_id)
+                        if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                            self._record_exit(drop_reason, speaker_id)
+                            return
+                        name = (person or {}).get('name') or person_id
                     status = (
                         SpeakerIdentityStatus.user
                         if person_id == USER_SELF_PERSON_ID
                         else SpeakerIdentityStatus.not_user
                     )
-                    self.speaker_to_person[speaker_id] = (person_id, known['name'])
+                    self.speaker_to_person[speaker_id] = (person_id, name)
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True
@@ -612,6 +644,7 @@ class SpeakerMatcher:
     def clear(self) -> None:
         self._generation += 1
         self._profile_conversation_id = None
+        self._named_speakers_allowed = None
         self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

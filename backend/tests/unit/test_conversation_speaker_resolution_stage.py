@@ -87,6 +87,7 @@ class FakeDiarizer:
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda uid: True)
     store = {}
     monkeypatch.setattr(stage, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(stage, 'download_speaker_embedding_cache', lambda uid, cid: store.get(cid))

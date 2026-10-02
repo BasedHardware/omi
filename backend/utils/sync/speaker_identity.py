@@ -17,6 +17,7 @@ from database import users as users_db
 from database.auth import get_user_name
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes, speaker_embedding_configured
@@ -51,6 +52,14 @@ _DEFAULT_DEPS = SpeakerIdentityDependencies()
 USER_SELF_PERSON_ID = 'user'
 
 
+class PersonEmbeddingsCache(dict):
+    """Batch-scoped candidate snapshot, including permission for text introductions."""
+
+    def __init__(self, named_allowed: bool):
+        super().__init__()
+        self.named_allowed = named_allowed
+
+
 def build_person_embeddings_cache(
     uid: str, *, dependencies: SpeakerIdentityDependencies = _DEFAULT_DEPS
 ) -> Dict[str, dict]:
@@ -62,7 +71,15 @@ def build_person_embeddings_cache(
     users_db = dependencies.users_db
     get_user_name = dependencies.get_user_name
     usable_person_voiceprint = dependencies.usable_person_voiceprint
-    cache: Dict[str, dict] = {}
+    # An entitlement read failure must fail closed for non-owner candidates only:
+    # sync still replaces the cache, and the owner's own voiceprint must survive
+    # it or free-plan owner recognition goes dark for the batch.
+    try:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    except Exception as error:
+        logger.warning('sync speaker entitlement read failed type=%s', type(error).__name__)
+        named_allowed = False
+    cache = PersonEmbeddingsCache(named_allowed)
 
     # Load user's own speaker embedding
     embedding_list = users_db.get_user_speaker_embedding(uid)
@@ -70,7 +87,9 @@ def build_person_embeddings_cache(
         user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
         cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': get_user_name(uid)}
 
-    # Load all people with speaker embeddings
+    if not cache.named_allowed:
+        return cache
+    # Load paid non-owner candidates only after resolving the batch entitlement.
     people = users_db.get_people(uid)
     for person in people or []:
         emb = usable_person_voiceprint(person)
@@ -106,6 +125,11 @@ def identify_speakers_for_segments(
     2. Text-based detection ("I am X") runs independently for all unmatched speakers.
     3. Apply assignments via process_speaker_assigned_segments.
     """
+    named_allowed = getattr(person_embeddings_cache, 'named_allowed', None)
+    if named_allowed is None:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    if not named_allowed:
+        person_embeddings_cache = {k: v for k, v in person_embeddings_cache.items() if k == USER_SELF_PERSON_ID}
     users_db = dependencies.users_db
     speaker_embedding_configured = dependencies.speaker_embedding_configured
     collect_speaker_audio = dependencies.collect_speaker_audio
@@ -274,6 +298,8 @@ def identify_speakers_for_segments(
     # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
     # segments to one person when diarization is inactive).
     for speaker_id, segments in speaker_segments.items():
+        if not named_allowed:
+            break
         if speaker_id in speaker_to_person_map:
             continue
         for seg in segments:
