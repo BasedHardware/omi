@@ -252,7 +252,7 @@ cannot override that safety control. Other target ramps use the same hash shape
 with their target ID. Recovery uses a separate, nested sticky cohort, so a 5%
 re-entry means 5% of sessions eligible under the configured ramp.
 
-### Serving-owned health evidence (cost-v6)
+### Serving-owned health evidence (cost-v7)
 
 `live_outcome.LiveLegOutcome.settle` is the single emission seam. Each managed
 leg owns one outcome. Observing `is_connection_dead` is pure; send only latches
@@ -279,10 +279,18 @@ even if the polling monitor has not claimed it. A previously claimed source
 keeps its cause through cleanup. Connect-time censored
 causes release circuit admission without adding provider failures; local VAD
 failure cannot open a provider circuit at terminal settlement either. Ordinary finish/drain emits
-success if text was observed, otherwise censored no-text; neither reads socket
-liveness to determine blame. PTT/custom/BYOK/multichannel remain outside the
+success if text was observed, otherwise censored no-text; neither a liveness read nor a late raw symptom independently writes health. PTT/custom/BYOK/multichannel remain outside the
 managed cost-evidence population. Their legacy fallback telemetry is not a
 cost-router observation and must not be joined as though it were one.
+
+
+Client eligibility is checked at the first serving claim: explicit disconnect,
+inactive state or shutdown excludes that death without a fallback emission.
+Already claimed connected-client evidence survives later departure. Excluded
+legs retain prior text as success or settle censored no-text; repeated observers
+cannot resurrect them. The bounded ignored-death counter diagnoses that boundary.
+This v7 eligibility correction changes no transport, recovery, circuit or ramp
+behavior relative to the merged serving-owned settlement implementation.
 
 | Terminal decision | Fault domain | Existing fallback reason | Router observation |
 | --- | --- | --- | --- |
@@ -372,7 +380,7 @@ traffic breadth. Read admitted shared votes when diagnosing detection speed.
 ### Fleet state and operational limits
 
 `live_cost_health.py` stores target/global and bounded-language state under
-`omi:live-stt:cost-v6`. v5 mixed discovery/teardown evidence is not reinterpreted.
+`omi:live-stt:cost-v7`. v5/v6 client-departure evidence is not reinterpreted.
 Redis TIME owns windows and cooldowns; CAS preserves counts and stages across
 pods. Connect reads a cached snapshot, with Redis refresh/result work in bounded
 background tasks under the existing 75 ms deadline. Redis failure retains local
