@@ -25,7 +25,6 @@ import json
 import os
 from pathlib import Path
 import sys
-import tempfile
 from typing import Any, Dict, List, Optional, Sequence
 import uuid
 
@@ -129,8 +128,8 @@ def load(sources: Sequence[str]) -> Dict[str, Dict[str, Any]]:
             if not isinstance(item, dict):
                 raise ValueError(f"{source_label} item {idx}: each action item must be an object")
             item_id = item.get("id")
-            if isinstance(item_id, str) and item_id.strip():
-                clean_id = item_id.strip()
+            if item_id is not None and str(item_id).strip():
+                clean_id = str(item_id).strip()
             else:
                 clean_id = f"auto_{uuid.uuid4().hex}"
                 while clean_id in items_by_id:
@@ -156,11 +155,11 @@ def export_csv(
         if status_filter == "completed" and not completed:
             continue
 
-        description = item.get("description") or ""
+        description = item.get("description")
         due_at = format_time(parse_time(item.get("due_at")), offset)
         created_at = format_time(parse_time(item.get("created_at")), offset)
         updated_at = format_time(parse_time(item.get("updated_at")), offset)
-        conversation_id = item.get("conversation_id") or ""
+        conversation_id = item.get("conversation_id")
 
         row = (
             spreadsheet_text(item_id),
@@ -188,10 +187,21 @@ def convert(
     csv_text = export_csv(items, offset=offset, status_filter=status_filter)
     payload = csv_text.encode("utf-8-sig")
 
+    status_norm = status_filter.strip().lower() if status_filter else "all"
+    row_count = sum(
+        1
+        for item in items.values()
+        if (
+            status_norm == "all"
+            or (status_norm == "open" and not is_completed(item.get("completed", False)))
+            or (status_norm == "completed" and is_completed(item.get("completed", False)))
+        )
+    )
+
     if not destination or destination == "-":
         sys.stdout.buffer.write(payload)
         sys.stdout.buffer.flush()
-        return len(items)
+        return row_count
 
     output_path = Path(destination)
     parent_dir = output_path.parent
@@ -199,24 +209,32 @@ def convert(
 
     if not overwrite:
         try:
-            with output_path.open("xb") as output:
-                output.write(payload)
+            output = output_path.open("xb")
         except FileExistsError:
-            raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite to replace)") from None
+            raise FileExistsError(
+                f"Refusing to overwrite existing {output_path} (use --overwrite to replace)"
+            ) from None
+        try:
+            with output:
+                output.write(payload)
+        except OSError:
+            output_path.unlink(missing_ok=True)
+            raise
     else:
-        # Atomic write to temporary file in same directory, then replace destination
-        with tempfile.NamedTemporaryFile("wb", dir=parent_dir, delete=False, prefix=".tmp_tasks_") as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            try:
+        # Atomic write to temporary file in same directory with default permissions, then replace destination
+        tmp_name = f".tmp_tasks_{uuid.uuid4().hex}.csv"
+        tmp_path = parent_dir / tmp_name
+        try:
+            with tmp_path.open("xb") as tmp_file:
                 tmp_file.write(payload)
                 tmp_file.flush()
                 os.fsync(tmp_file.fileno())
-            except BaseException:
-                tmp_path.unlink(missing_ok=True)
-                raise
-        tmp_path.replace(output_path)
+            tmp_path.replace(output_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
-    return len(items)
+    return row_count
 
 
 def main(argv: Optional[List[str]] = None) -> int:

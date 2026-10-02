@@ -139,6 +139,8 @@ class TestActionItemsToCsv(unittest.TestCase):
     def test_parse_offset_validation(self):
         self.assertEqual(ai2csv.parse_offset("+09:00"), timedelta(hours=9))
         self.assertEqual(ai2csv.parse_offset("-05:30"), timedelta(hours=-5, minutes=-30))
+        self.assertEqual(ai2csv.parse_offset("+14:00"), timedelta(hours=14))
+        self.assertEqual(ai2csv.parse_offset("-14:00"), timedelta(hours=-14))
         with self.assertRaises(ValueError):
             ai2csv.parse_offset("invalid")
         with self.assertRaises(ValueError):
@@ -231,9 +233,55 @@ class TestActionItemsToCsv(unittest.TestCase):
         ret = ai2csv.main([str(src), "-o", str(dest), "--status", "open"])
         self.assertEqual(ret, 0)
         self.assertTrue(dest.exists())
-        content = dest.read_bytes().decode("utf-8-sig")
+        raw_bytes = dest.read_bytes()
+        self.assertTrue(raw_bytes.startswith(b"\xef\xbb\xbf"))
+        content = raw_bytes.decode("utf-8-sig")
         rows = list(csv.reader(io.StringIO(content)))
         self.assertEqual(len(rows), 3)  # header + 2 open tasks
+
+    def test_numeric_id_coercion(self):
+        items_raw = [
+            {"id": 42, "description": "Numeric id task", "completed": False},
+            {"id": "str_id", "description": "String id task", "completed": True},
+        ]
+        f = self.tmp / "numeric_ids.json"
+        f.write_text(json.dumps(items_raw), encoding="utf-8")
+        loaded = ai2csv.load([str(f)])
+        self.assertIn("42", loaded)
+        self.assertIn("str_id", loaded)
+        self.assertEqual(loaded["42"]["description"], "Numeric id task")
+
+    def test_falsey_non_null_fields_preserved(self):
+        items_dict = {
+            "item_0": {
+                "id": "item_0",
+                "description": 0,
+                "conversation_id": 0,
+                "completed": False,
+            }
+        }
+        csv_out = ai2csv.export_csv(items_dict)
+        rows = list(csv.reader(io.StringIO(csv_out)))
+        self.assertEqual(rows[1][1], "0")
+        self.assertEqual(rows[1][6], "0")
+
+    def test_convert_filtered_count(self):
+        src = self.tmp / "input_filter.json"
+        dest = self.tmp / "output_filter.csv"
+        src.write_text(json.dumps(self.sample_items), encoding="utf-8")
+
+        count = ai2csv.convert([str(src)], str(dest), status_filter="open")
+        self.assertEqual(count, 2)
+
+    def test_failed_write_cleans_up_destination(self):
+        src = self.tmp / "input_err.json"
+        dest = self.tmp / "output_err.csv"
+        src.write_text(json.dumps(self.sample_items), encoding="utf-8")
+
+        with patch("pathlib.Path.open", side_effect=OSError("Disk full")):
+            with self.assertRaises(OSError):
+                ai2csv.convert([str(src)], str(dest), overwrite=False)
+        self.assertFalse(dest.exists())
 
 
 if __name__ == "__main__":
