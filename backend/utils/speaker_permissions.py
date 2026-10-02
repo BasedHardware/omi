@@ -1,7 +1,7 @@
 """Plan entitlements for speaker labeling, kept light for routes and services."""
 
+from config.plan_catalog import PAID_PLAN_TYPES
 from database import users as users_db
-from utils import subscription
 
 
 def named_speaker_prompts_allowed(uid: str) -> bool:
@@ -10,4 +10,6 @@ def named_speaker_prompts_allowed(uid: str) -> bool:
     "Is this you?" never calls this: the owner check is free for everyone.
     """
     plan = users_db.get_user_valid_subscription(uid, provision=False)
-    return bool(plan and subscription.is_paid_plan(plan.plan))
+    # The plan set comes from the catalog, not utils.subscription: that module pulls the
+    # billing SDK into every importer, and live and sync matching import this one.
+    return bool(plan and plan.plan in PAID_PLAN_TYPES)
