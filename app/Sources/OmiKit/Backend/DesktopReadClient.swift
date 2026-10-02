@@ -280,17 +280,21 @@ func validatePage(
     }
     let window = try requireObject(page["window"], "\(label) window")
     let windowStatus = try requireString(window["status"], "\(label) window status")
-    guard windowStatus == "complete" || windowStatus == "more"
-        || windowStatus == "incomplete"
+    guard
+        windowStatus == "complete" || windowStatus == "more"
+            || windowStatus == "incomplete"
     else {
         throw ReadClientError.malformed("\(label) window status is malformed")
     }
     let complete = try requireBool(window["complete"], "\(label) window complete")
     let hasMore = try requireBool(window["hasMore"], "\(label) window hasMore")
-    guard isNullValue(window["nextCursor"]) || window["nextCursor"]?.stringValue != nil else {
+    guard let cursorValue = window["nextCursor"] else {
         throw ReadClientError.malformed("\(label) window cursor is malformed")
     }
-    let nextCursor = window["nextCursor"]?.stringValue
+    guard cursorValue.isNull || cursorValue.stringValue != nil else {
+        throw ReadClientError.malformed("\(label) window cursor is malformed")
+    }
+    let nextCursor = cursorValue.stringValue
     if (hasMore && (nextCursor == nil || nextCursor!.isEmpty)) || (complete && hasMore) {
         throw ReadClientError.malformed("\(label) window is malformed")
     }
@@ -300,8 +304,9 @@ func validatePage(
     }
     let completenessStatus = try requireString(
         completeness["status"], "\(label) completeness status")
-    guard completenessStatus == "complete" || completenessStatus == "incomplete"
-        || completenessStatus == "degraded" || completenessStatus == "partial"
+    guard
+        completenessStatus == "complete" || completenessStatus == "incomplete"
+            || completenessStatus == "degraded" || completenessStatus == "partial"
     else {
         throw ReadClientError.malformed("\(label) completeness status is malformed")
     }
@@ -310,11 +315,15 @@ func validatePage(
     else {
         throw ReadClientError.malformed("\(label) completeness reasons are malformed")
     }
-    if !isNullValue(page["absence"]) {
-        _ = try requireObject(page["absence"], "\(label) absence")
+    guard let absence = page["absence"] else {
+        throw ReadClientError.malformed("\(label) absence is malformed")
+    }
+    if !absence.isNull { _ = try requireObject(absence, "\(label) absence") }
+    let items = try rawItems.enumerated().map { index, item in
+        try requireObject(item, "\(label) item \(index)")
     }
     return (
-        rawItems.compactMap { $0.isRecord ? $0 : nil },
+        items,
         ReadPageState(
             windowStatus: ReadWindowStatus(rawValue: windowStatus) ?? .unknown,
             complete: complete, hasMore: hasMore, nextCursor: nextCursor,
@@ -459,7 +468,8 @@ private func matchProvenanceList(_ text: String) -> (text: String, provenanceLab
     return nil
 }
 
-private func matchHyphenatedProvenance(_ text: String) -> (text: String, provenanceLabel: String?)? {
+private func matchHyphenatedProvenance(_ text: String) -> (text: String, provenanceLabel: String?)?
+{
     guard let colon = text.firstIndex(of: ":") else { return nil }
     let label = String(text[..<colon])
     var rest = String(text[text.index(after: colon)...])
@@ -470,7 +480,8 @@ private func matchHyphenatedProvenance(_ text: String) -> (text: String, provena
     let hyphens = label.filter { $0 == "-" }.count
     guard hyphens >= 2 else { return nil }
     for group in label.split(separator: "-", omittingEmptySubsequences: false) {
-        let groupOK = !group.isEmpty
+        let groupOK =
+            !group.isEmpty
             && group.unicodeScalars.allSatisfy { scalar in
                 (scalar.value >= 0x30 && scalar.value <= 0x39)
                     || (scalar.value >= 0x61 && scalar.value <= 0x7A)
@@ -547,7 +558,8 @@ public func loadTasks(
     let path = "/v1/tasks" + (cursor == nil ? "" : "?cursor=\(encodeQueryComponent(cursor!))")
     let value = try await read(transport, id: "desktop-tasks-read", path: path)
     let envelope = try requireObject(value, "Tasks response")
-    let accountEpoch = envelope["accountEpoch"] == nil
+    let accountEpoch =
+        envelope["accountEpoch"] == nil
         ? nil : try requireInteger(envelope["accountEpoch"], "Tasks response accountEpoch")
     let validated = try validatePage(value, "Tasks response", "tasks-completeness-v1")
     let items = try validated.items.enumerated().map { index, item -> TaskProjection in

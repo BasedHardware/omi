@@ -135,6 +135,9 @@ func legacyRead(
         if response.status == 401 {
             throw ReadCopyError(desktopBackendUnauthorizedCopy)
         }
+        if response.status == 403 {
+            throw ReadCopyError(desktopBackendForbiddenCopy)
+        }
         throw ReadCopyError(
             response.status >= 500 ? desktopBackendServiceCopy : desktopReadFailureCopy)
     }
