@@ -5,8 +5,9 @@ from typing import Any, Callable
 from config.stt_provider_policy import provider_for_service
 from utils.stt import streaming as st
 from utils.stt.live_rollout import window_selection_kwargs
-from utils.stt.live_failure import MAX_STT_FAILOVERS, live_stt_terminal_reason, note_typed_provider_death
+from utils.stt.live_failure import live_stt_terminal_reason, note_typed_provider_death
 from utils.stt.live_router import note_failed_route
+from utils.stt.recovery_state import RecoveryState
 
 
 def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
@@ -23,6 +24,7 @@ def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
         return
     receiver._stt_rescue_retries.add('soniox')
     receiver._stt_failed_providers.remove('soniox')
+    receiver.recovery.grant_reentry('soniox')
 
 
 def select_live_replacement(
@@ -32,14 +34,15 @@ def select_live_replacement(
     *,
     managed: bool,
 ) -> tuple[Any, Any, Any]:
-    """Bound rebuild attempts separately from provider exclusions before selecting."""
-    failures = note_failed_route(receiver, dead_provider)
+    """Walk the remaining permitted candidates inside the recovery episode."""
+    recovery = receiver.recovery
+    if recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving) or recovery.client_has_left():
+        receiver._settle_pending_live_failover_failure()
+        return None, None, None
+    note_failed_route(receiver, dead_provider)
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
-    if max(failures, receiver._stt_rebuild_attempts) > (3 if managed else MAX_STT_FAILOVERS):
-        receiver._settle_pending_live_failover_failure()
-        return None, None, None
     note_typed_provider_death(receiver.stt_socket, dead_provider)
     allow_healthy_soniox_rescue(receiver, managed=managed)
     service, language, model = select(
@@ -49,7 +52,11 @@ def select_live_replacement(
         exclude=frozenset(receiver._stt_failed_providers),
         **window_selection_kwargs(receiver.host, receiver.host.request.uid),
     )
-    if service is None or provider_for_service(service) in receiver._stt_failed_providers:
+    if (
+        service is None
+        or provider_for_service(service) in receiver._stt_failed_providers
+        or not recovery.admission_open()
+    ):
         receiver._settle_pending_live_failover_failure()
         return None, None, None
     return service, language, model

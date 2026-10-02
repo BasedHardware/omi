@@ -40,7 +40,11 @@ from utils.executors import sync_executor, run_blocking
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
+from config.live_stt_registry import DEFAULT_IDS
+from config.live_stt_replay import ReplayLimits
+from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
+from utils.stt.replay_delivery import RecoveryWriterPace
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
 from utils.stt.provider_resilience import (
@@ -404,12 +408,31 @@ async def connect_stt_socket_with_fallback(
         )
     circuit = _circuit_for_primary(primary_service)
 
+    def legacy_identity(service: STTService) -> str:
+        if service.value == 'parakeet':
+            return (routing_models or {}).get('parakeet') or 'parakeet'
+        return DEFAULT_IDS.get(service.value) or service.value
+
+    recovery = current_recovery.get()
+
     reason = 'circuit_open'
     capacity_subtype: str | None = None
     typed_connect_reason: Optional[str] = None
-    if circuit.allow_request():
+    primary_identity = legacy_identity(primary_service)
+    if recovery is not None and not recovery.can_attempt(primary_identity):
+        primary_permitted = False
+    else:
+        primary_permitted = circuit.allow_request()
+    if primary_permitted:
         try:
-            socket = await connect_primary()
+            if recovery is not None:
+                recovery.reserve(primary_identity, primary_service.value)
+            dial_budget = recovery.dial_budget() if recovery is not None else None
+            if dial_budget is not None:
+                async with asyncio.timeout(dial_budget):
+                    socket = await connect_primary()
+            else:
+                socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
                 circuit.record_failure()
@@ -510,12 +533,20 @@ async def connect_stt_socket_with_fallback(
         # leg dial must not claim the half-open probe slot that belongs to
         # the primary path.
         and _circuit_for_primary(service).account_cooldown_elapsed()
+        and (recovery is None or recovery.can_attempt(legacy_identity(service)))
     ]
 
     from_mode = primary_service.value
     for service, connect in candidates:
         try:
-            fallback_socket = await _connect_serving_fallback(connect, service)
+            if recovery is not None:
+                recovery.reserve(legacy_identity(service), service.value)
+            dial_budget = recovery.dial_budget() if recovery is not None else None
+            if dial_budget is not None:
+                async with asyncio.timeout(dial_budget):
+                    fallback_socket = await _connect_serving_fallback(connect, service)
+            else:
+                fallback_socket = await _connect_serving_fallback(connect, service)
         except ProviderAccountRejection as error:
             service_circuit = _circuit_for_primary(service)
             service_circuit.record_account_rejection()
@@ -1328,6 +1359,7 @@ def modulate_death_reason(err: Any) -> Optional[str]:
 
 class SafeModulateSocket(STTSocket):
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,
@@ -1350,6 +1382,7 @@ class SafeModulateSocket(STTSocket):
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
         self._send_queue: AudioSendQueue[bytes] = AudioSendQueue(maxsize=2000)
+        self._writer_pace: RecoveryWriterPace | None = None
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
@@ -1470,9 +1503,16 @@ class SafeModulateSocket(STTSocket):
                 self._header_sent = True
         return True
 
-    async def wait_send_capacity(self) -> bool:
+    def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
+        """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
         try:
-            await self._send_queue.wait_for_capacity()
+            await self._send_queue.wait_for_capacity(
+                limit=limit if limit is not None else self.replay_limits.queue_packets,
+                timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
+            )
         except TimeoutError:
             self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
         return not (self._dead or self._closed)
@@ -1524,12 +1564,36 @@ class SafeModulateSocket(STTSocket):
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
                 if data == b'':
+                    self._send_queue.discard(data)
                     break
                 if data == _EOS_SENTINEL:
+                    self._send_queue.discard(data)
                     # Docs: send empty text frame ("") to signal end of audio stream
-                    await self._ws.send('')
+                    pace = self._writer_pace
+                    if pace is not None:
+                        async with asyncio.timeout(pace.write_bound()):
+                            await self._ws.send('')
+                    else:
+                        await self._ws.send('')
                     break
-                await self._ws.send(data)
+                pace = self._writer_pace
+                written = False
+                try:
+                    if pace is not None and type(data) is bytes:
+                        await pace.throttle(len(data))
+                        pace.note_write(len(data))
+                    if pace is not None:
+                        async with asyncio.timeout(pace.write_bound()):
+                            await self._ws.send(data)
+                    else:
+                        await self._ws.send(data)
+                    self._send_queue.note_written(data)
+                    written = True
+                    if pace is not None and type(data) is bytes:
+                        pace.complete_write()
+                finally:
+                    if not written:
+                        self._send_queue.discard(data)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}')
         except Exception as e:
@@ -1736,6 +1800,8 @@ class ParakeetStreamingSocket(STTSocket):
     send/finish/finalize plus the is_connection_dead/death_reason properties. The real tail
     drain is async drain_and_close(), which the listen teardown awaits.
     """
+
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,
@@ -1969,6 +2035,8 @@ class ParakeetStreamingSocket(STTSocket):
 
 class ParakeetWebSocketSocket(STTSocket):
     """True streaming via Parakeet /v3/stream WebSocket with server-side VAD + diarization."""
+
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,

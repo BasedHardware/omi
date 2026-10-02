@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import bisect
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterator, cast
 
+from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS
 from utils.stt.live_metrics import REPLAY_SKIPPED
 from utils.stt.socket import release_live_stt_socket
 
@@ -14,8 +17,7 @@ REPLAY_WALL_BUDGET = 25.0
 REPLAY_CONNECT_SECONDS = 5.0
 REPLAY_PREFIX_SECONDS = REPLAY_WALL_BUDGET - REPLAY_CONNECT_SECONDS
 LIVE_TAIL_SECONDS = REPLAY_WALL_BUDGET + 1.0
-# Adapter-owned limits, deliberately not routing configuration. There is no
-# documented accelerated-stream ceiling for these adapters; use real time.
+TAIL_RESIDENCE_SECONDS = 28.0
 REPLAY_RATES = {'soniox': 1.0, 'modulate': 1.0, 'deepgram': 1.0, 'parakeet': 1.0}
 clock = time.monotonic
 sleep = asyncio.sleep
@@ -42,11 +44,125 @@ def family(socket: Any, fallback: str = 'unknown') -> str:
     return fallback if fallback in REPLAY_RATES else 'unknown'
 
 
+def socket_replay_limits(socket: Any, family_name: str = 'unknown') -> ReplayLimits:
+    """Typed endpoint limits: selected target declaration, then adapter, then
+    the safe default. Never a guessed family map."""
+    current = socket
+    seen: set[int] = set()
+    for _ in range(8):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        target = getattr(current, '_routing_target_entry', None) or getattr(current, 'target', None)
+        declared = getattr(target, 'replay', None) if target is not None else None
+        if isinstance(declared, ReplayLimits):
+            return declared
+        declared = getattr(current, 'replay_limits', None)
+        if isinstance(declared, ReplayLimits):
+            return declared
+        current = getattr(current, 'raw', None) or getattr(current, '_conn', None)
+    declared_rate = getattr(socket, 'max_replay_rate', REPLAY_RATES.get(family_name, 1.0))
+    rate = float(declared_rate) if type(declared_rate) in (float, int) and 0 < declared_rate <= 1.0 else 1.0
+    if rate == DEFAULT_REPLAY_LIMITS.rate and REPLAY_PACKET_BYTES == DEFAULT_REPLAY_LIMITS.max_frame_bytes:
+        return DEFAULT_REPLAY_LIMITS
+    return ReplayLimits(rate=rate, max_frame_bytes=REPLAY_PACKET_BYTES)
+
+
 REPLAY_PACKET_BYTES = 16 * 1024
 
+WRITER_SLOT_SECONDS = 2.0
 
-def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int, bytes]]:
+
+class RecoveryWriterPace:
+    """Opt-in per-recovery-leg wire cadence shared with the typed limits.
+
+    Sustained writes stay at <=1x audio time plus the bounded jitter allowance
+    of queued-plus-in-flight bytes. There is no catch-up credit: the next write
+    start is ``max(now, previous_write_start + audio_duration)``, so a blocked
+    write never earns debt that a resumed transport could burst with.
+    """
+
+    def __init__(self, sample_rate: int, rate: float, budget: Callable[[], float | None] = lambda: None) -> None:
+        self.sample_rate = sample_rate
+        self.rate = rate
+        self.budget = budget
+        self.next_write = 0.0
+
+    async def throttle(self, nbytes: int) -> None:
+        """Wait until this frame's earliest write start. The wait is
+        interruptible in <=WRITER_SLOT_SECONDS chunks so an episode deadline
+        or a dead leg can't hold the loop, but the slot itself is never
+        released early."""
+        while True:
+            delay = self.next_write - clock()
+            if delay <= 0:
+                return
+            cap = self.budget()
+            if cap is not None and cap <= 0:
+                raise TimeoutError('recovery writer budget exhausted')
+            await sleep(min(delay, WRITER_SLOT_SECONDS))
+
+    def note_write(self, nbytes: int) -> float:
+        """Record the write start immediately before ws.send."""
+        start = clock()
+        self.next_write = start + nbytes / (2 * self.sample_rate * self.rate)
+        return start
+
+    def complete_write(self) -> None:
+        """Clamp the armed slot to the actual completion — a write that ran
+        long keeps its slot in the future; a fast one keeps start+duration."""
+        self.next_write = max(self.next_write, clock())
+
+    def write_bound(self) -> float:
+        """Per-write transport bound during recovery: 2s or episode left."""
+        cap = self.budget()
+        return WRITER_SLOT_SECONDS if cap is None else max(0.001, min(WRITER_SLOT_SECONDS, cap))
+
+
+def enable_recovery_writer_pace(
+    socket: Any, sample_rate: int, limits: ReplayLimits, budget: Callable[[], float | None]
+) -> None:
+    """Opt a recovery leg's real transport into writer cadence. Managed
+    wrappers and initial ordinary/PTT legs never see this call."""
+    current = socket
+    seen: set[int] = set()
+    for _ in range(8):
+        if current is None or id(current) in seen:
+            return
+        seen.add(id(current))
+        enable = getattr(current, 'enable_writer_pacing', None)
+        if callable(enable):
+            enable(sample_rate, limits.rate, budget)
+            return
+        current = getattr(current, 'raw', None) or getattr(current, '_conn', None)
+
+
+async def await_frozen_writes(socket: Any, deadline: float | None) -> bool:
+    """Wait until the leg's send queue has written every audio frame that was
+    enqueued when this call began — the frozen prefix boundary, not the live
+    queue that keeps extending behind it."""
+    queue = getattr(getattr(socket, 'raw', socket), '_send_queue', None)
+    frozen = getattr(queue, 'enqueued_audio', None) if queue is not None else None
+    if not isinstance(frozen, int):
+        return True
+    while True:
+        written = getattr(queue, 'written_audio', 0)
+        if written >= frozen:
+            return True
+        raw = getattr(socket, 'raw', socket)
+        if getattr(raw, 'is_connection_dead', False):
+            return False
+        if deadline is not None and clock() >= deadline:
+            return False
+        await sleep(0.01)
+
+
+def replay_packets(
+    chunks: tuple[tuple[int, bytes], ...], max_frame_bytes: int | None = None
+) -> Iterator[tuple[int, bytes]]:
     """Coalesce adjacent s16le capture spans; bound copies and preserve gaps."""
+    if max_frame_bytes is None:
+        max_frame_bytes = REPLAY_PACKET_BYTES
     pending = bytearray()
     first = 0
     for start, data in chunks:
@@ -57,10 +173,10 @@ def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int,
         while offset < len(data):
             if not pending:
                 first = start + offset // 2
-            count = min(REPLAY_PACKET_BYTES - len(pending), len(data) - offset)
+            count = min(max_frame_bytes - len(pending), len(data) - offset)
             pending.extend(data[offset : offset + count])
             offset += count
-            if len(pending) == REPLAY_PACKET_BYTES:
+            if len(pending) == max_frame_bytes:
                 yield first, bytes(pending)
                 pending.clear()
     if pending:
@@ -68,11 +184,17 @@ def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int,
 
 
 class ReplayPacer:
-    def __init__(self, sample_rate: int, successor: str, socket: Any = None) -> None:
+    def __init__(
+        self, sample_rate: int, successor: str, socket: Any = None, limits: ReplayLimits | None = None
+    ) -> None:
         self.sample_rate = sample_rate
-        declared = getattr(socket, 'max_replay_rate', REPLAY_RATES.get(successor, 1.0))
-        self.rate = float(declared) if type(declared) in (float, int) and 0 < declared <= 1.0 else 1.0
+        if limits is None:
+            limits = socket_replay_limits(socket, successor)
+        self.limits = limits
+        self.rate = limits.rate
+        self.max_frame_bytes = limits.max_frame_bytes
         self.next_send = clock()
+        self.deadline: float | None = None
 
     async def send(self, socket: Any, data: bytes, start: int, active: Callable[[], bool], *, replay: bool) -> bool:
         # Owner departure and death are checked at each bounded packet interval;
@@ -80,12 +202,21 @@ class ReplayPacer:
         while clock() < self.next_send:
             if not active() or socket.is_connection_dead:
                 return False
+            if replay and self.deadline is not None and clock() >= self.deadline:
+                return False
             await sleep(max(0.000001, self.next_send - clock()))
         if not active() or socket.is_connection_dead:
             return False
         wait = getattr(socket, 'wait_send_capacity', None)
-        if callable(wait) and not await cast(Callable[[], Awaitable[bool]], wait)():
-            return False
+        if callable(wait):
+            try:
+                capacity = await cast(Callable[..., Awaitable[bool]], wait)(
+                    limit=self.limits.queue_packets, timeout=self.limits.queue_wait_seconds
+                )
+            except TypeError:
+                capacity = await cast(Callable[[], Awaitable[bool]], wait)()
+            if not capacity:
+                return False
         if not active() or socket.is_connection_dead:
             return False
         send = getattr(socket, 'replay_send', None) if replay else None
@@ -96,34 +227,157 @@ class ReplayPacer:
 
 
 async def abort_replay_socket(socket: Any) -> None:
-    """Close a rejected replay leg, including its adapter's receive task."""
+    """Close a rejected replay leg, including its adapter's tasks and transport."""
     socket.finish()
     release_live_stt_socket(socket)
     raw = getattr(socket, 'raw', socket)
     if hasattr(raw, '_closed'):
         raw._closed = True
     tasks = [
-        task for name in ('_send_task', '_recv_task') if isinstance((task := getattr(raw, name, None)), asyncio.Task)
+        task
+        for name in ('_send_task', '_recv_task', '_pump_task', '_sender_task', '_receiver_task')
+        if isinstance((task := getattr(raw, name, None)), asyncio.Task)
     ]
     for task in tasks:
         task.cancel()
     if tasks:
-        # Bound cancellation even if a transport suppresses CancelledError.
         _, pending = await asyncio.wait(tasks, timeout=2.0)
         for task in pending:
             task.cancel()
-        transport = getattr(raw, '_ws', None)
-        if transport is not None:
-            try:
-                async with asyncio.timeout(2.0):
-                    await transport.close()
-            except (TimeoutError, OSError):
-                pass
+    transport = getattr(raw, '_ws', None)
+    if transport is not None:
+        try:
+            async with asyncio.timeout(2.0):
+                await transport.close()
+        except (TimeoutError, OSError):
+            pass
+    queued = getattr(raw, '_send_queue', None)
+    if queued is not None:
+        clear = getattr(queued, 'clear', None)
+        if callable(clear):
+            clear()
+        else:
+            while True:
+                try:
+                    queued.get_nowait()
+                except Exception:
+                    break
 
 
-def bounded_snapshot(ring: Any, source: str, successor: str) -> tuple[tuple[int, bytes], ...]:
-    """Keep the newest unanswered AUDIO duration; capture gaps consume no quota."""
-    remaining = int(REPLAY_PREFIX_SECONDS * REPLAY_RATES.get(successor, 1.0) * ring.sample_rate) * 2
+BIRTH_LEDGER_MAX = 8192
+
+
+class BirthLedger:
+    """Bounded (start, end, born) first-admission intervals for live capture.
+
+    A retry must never reset the live-audio residence clock, so each interval
+    stores only its first admission; lookups return the containing interval's
+    stamp. The ledger is pruned at every capture cut and coalesces adjacent
+    intervals (earliest born wins) when it would exceed the entry bound.
+    """
+
+    def __init__(self) -> None:
+        self._iv: list[list[Any]] = []
+        self._starts: list[int] = []
+
+    def __len__(self) -> int:
+        return len(self._iv)
+
+    def note(self, start: int, end: int, born: float | None = None) -> float:
+        born = clock() if born is None else born
+        if end <= start:
+            return born
+        i = bisect.bisect_right(self._starts, start) - 1
+        if i >= 0 and self._iv[i][1] > start:
+            if end > self._iv[i][1]:
+                self._iv[i][1] = end
+                while i + 1 < len(self._iv) and self._iv[i + 1][0] < end:
+                    self._iv[i][1] = max(self._iv[i][1], self._iv[i + 1][1])
+                    self._iv[i][2] = min(self._iv[i][2], self._iv[i + 1][2])
+                    del self._iv[i + 1]
+                    del self._starts[i + 1]
+            return self._iv[i][2]
+        j = i + 1
+        self._iv.insert(j, [start, end, born])
+        self._starts.insert(j, start)
+        if len(self._iv) > BIRTH_LEDGER_MAX:
+            self._coalesce()
+        return born
+
+    def lookup(self, sample: int) -> float | None:
+        i = bisect.bisect_right(self._starts, sample) - 1
+        if i >= 0 and self._iv[i][0] <= sample < self._iv[i][1]:
+            return self._iv[i][2]
+        return None
+
+    def prune_before(self, sample: int) -> None:
+        i = 0
+        while i < len(self._iv) and self._iv[i][1] <= sample:
+            i += 1
+        if i:
+            del self._iv[:i]
+            del self._starts[:i]
+        if self._iv and self._iv[0][0] < sample:
+            self._iv[0][0] = sample
+            self._starts[0] = sample
+
+    def _coalesce(self) -> None:
+        merged: list[list[Any]] = []
+        for start, end, born in self._iv:
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+                merged[-1][2] = min(merged[-1][2], born)
+            else:
+                merged.append([start, end, born])
+        while len(merged) > BIRTH_LEDGER_MAX:
+            best = min(range(len(merged) - 1), key=lambda i: merged[i + 1][0] - merged[i][1])
+            merged[best][1] = merged[best + 1][1]
+            merged[best][2] = min(merged[best][2], merged[best + 1][2])
+            del merged[best + 1]
+        self._iv = merged
+        self._starts = [entry[0] for entry in merged]
+
+
+def bounded_snapshot(
+    ring: Any,
+    source: str,
+    successor: str,
+    *,
+    rate: float | None = None,
+    wall_seconds: float | None = None,
+    birth: BirthLedger | None = None,
+) -> tuple[tuple[int, bytes], ...]:
+    """Keep the newest unanswered AUDIO duration; capture gaps consume no quota.
+
+    Called only after the actual successor is constructed so its declared rate,
+    not the requested family's, sizes the retained audio. Live intervals whose
+    first admission (``birth`` ledger) is already past the residence bound are
+    cut through the same metered policy: everything older than the last expired
+    live span is discarded once and the fresh suffix still ships.
+    """
+    pace = 1.0
+    if isinstance(rate, (int, float)) and not isinstance(rate, bool) and 0 < rate <= 1.0:
+        pace = float(rate)
+    wall = REPLAY_PREFIX_SECONDS if wall_seconds is None else max(0.0, wall_seconds)
+    now = clock()
+    if birth is not None:
+        snapshot = ring.snapshot()
+        if snapshot:
+            birth.prune_before(snapshot[0][0])
+        expired_end = 0
+        for start, data in snapshot:
+            end = start + len(data) // 2
+            born = birth.lookup(start)
+            if born is None and end > start:
+                born = birth.lookup(end - 1)
+            if born is not None and now - born > TAIL_RESIDENCE_SECONDS:
+                expired_end = end
+        if expired_end:
+            dropped = ring.finalize_through(expired_end)
+            if dropped:
+                REPLAY_SKIPPED.labels(source=source, successor=successor).inc(dropped / (2 * ring.sample_rate))
+            birth.prune_before(expired_end)
+    remaining = int(min(REPLAY_PREFIX_SECONDS, wall) * pace * ring.sample_rate) * 2
     kept = []
     total = ring.buffered_bytes
     for start, data in reversed(ring.snapshot()):
@@ -138,21 +392,41 @@ def bounded_snapshot(ring: Any, source: str, successor: str) -> tuple[tuple[int,
     if skipped:
         REPLAY_SKIPPED.labels(source=source, successor=successor).inc(skipped / (2 * ring.sample_rate))
         # Explicit lossy budget cut, distinct from an emitted-text safe trim.
-        ring.finalize_through(kept[0][0])
+        ring.finalize_through(kept[0][0] if kept else ring.capture_bounds[1])
     return tuple(kept)
+
+
+@dataclass
+class TailPacket:
+    """One live-capture packet held for paced delivery behind a replay prefix."""
+
+    start: int
+    data: bytes
+    received: float
 
 
 class ReplayTailSocket:
     """Keep live input ordered and paced after prefix admission, without a lock.
 
     The receiver's supervisor owns the tail task. At real-time input, <=26s
-    PCM is retained here; overload rejects the leg instead of dropping audio.
+    PCM is retained here; overload rejects the leg instead of dropping audio,
+    and no accepted packet may wait past the hard residence bound.
     """
 
     def __init__(
-        self, socket: Any, pacer: ReplayPacer, tail: deque[tuple[int, bytes]], host: Any, *, source: str = 'unknown'
+        self,
+        socket: Any,
+        pacer: ReplayPacer,
+        tail: deque[TailPacket],
+        host: Any,
+        *,
+        source: str = 'unknown',
+        birth: 'BirthLedger | None' = None,
+        retire_interval: Callable[[int], int] | None = None,
     ) -> None:
         self.connection, self.pacer, self.tail, self.host = socket, pacer, tail, host
+        self._birth = birth
+        self._retire_interval = retire_interval
         self._task: asyncio.Task[Any] | None = None
         self._pumping = True
         self._dead = False
@@ -160,6 +434,7 @@ class ReplayTailSocket:
         self._closing = False
         self._finalize_pending = False
         self._draining = False
+        self._tail_bytes = sum(len(packet.data) for packet in tail)
         self.source = source if source in REPLAY_RATES else 'unknown'
 
     def __getattr__(self, name: str) -> Any:
@@ -173,34 +448,101 @@ class ReplayTailSocket:
     def typed_death_reason(self) -> str | None:
         return self._local_reason or self.connection.typed_death_reason
 
+    def mark_capacity_full(self) -> None:
+        self._dead = True
+        self._local_reason = 'capacity_full'
+
+    def _tail_bound_bytes(self) -> float:
+        return LIVE_TAIL_SECONDS * self.pacer.sample_rate * 2
+
+    def _retire_expired(self) -> None:
+        """Retire live intervals past the residence bound through the same
+        metered cut as a prefix budget cut, then continue with the fresh
+        suffix — one expired interval is audio loss, not provider death."""
+        now = clock()
+        while self.tail and now - self.tail[0].received > TAIL_RESIDENCE_SECONDS:
+            expired = self.tail.popleft()
+            self._tail_bytes -= len(expired.data)
+            end = expired.start + len(expired.data) // 2
+            removed = self._retire_interval(end) if self._retire_interval is not None else 0
+            dropped = max(len(expired.data), removed)
+            if dropped:
+                REPLAY_SKIPPED.labels(source=self.source, successor=family(self.connection)).inc(
+                    dropped / (2 * self.pacer.sample_rate)
+                )
+            if self._birth is not None:
+                self._birth.prune_before(end)
+
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         if self._closing or self.is_connection_dead:
             return False
-        if not self._pumping:
-            return self.connection.send(data, start_sample=start_sample)
-        if sum(len(chunk) for _, chunk in self.tail) + len(data) > LIVE_TAIL_SECONDS * self.pacer.sample_rate * 2:
-            self._dead = True
-            self._local_reason = 'capacity_full'
+        if start_sample is None and not self.tail and not self._pumping:
+            return self.connection.send(data)
+        if start_sample is None:
+            start_sample = 0
+        self._retire_expired()
+        if self._tail_bytes + len(data) > self._tail_bound_bytes():
+            self.mark_capacity_full()
             return False
         assert start_sample is not None
-        self.tail.append((start_sample, data))
+        received = self._birth.note(start_sample, start_sample + len(data) // 2) if self._birth is not None else clock()
+        self.tail.append(TailPacket(start_sample, data, received))
+        self._tail_bytes += len(data)
+        if not self._pumping:
+            self._start_pump()
         return True
+
+    def _start_pump(self) -> None:
+        if self._task is not None and self._task.done():
+            self._task = None
+        if self._task is None:
+            self._pumping = True
+            self._task = self.host.spawn(self._pump_tail(), name='stt_replay_live_tail')
 
     def start_tail(self) -> None:
         if self.tail:
-            self._task = self.host.spawn(self._pump_tail(), name='stt_replay_live_tail')
+            self._start_pump()
         else:
             self._pumping = False
 
     async def _pump_tail(self) -> None:
         try:
             while self.tail:
-                start, data = self.tail[0]
-                for position, packet in replay_packets(((start, data),)):
+                self._retire_expired()
+                if not self.tail:
+                    break
+                entry = self.tail[0]
+                expired_mid = False
+                for position, packet in replay_packets(
+                    ((entry.start, entry.data),), max_frame_bytes=self.pacer.max_frame_bytes
+                ):
+                    born = self._birth.lookup(position) if self._birth is not None else None
+                    if clock() - (entry.received if born is None else born) > TAIL_RESIDENCE_SECONDS:
+                        expired_mid = True
+                        break
                     if not await self.pacer.send(self.connection, packet, position, self.active, replay=False):
+                        entry.start = position
                         self._dead = True
                         return
-                self.tail.popleft()
+                    entry.start = position + len(packet) // 2
+                    entry.data = entry.data[len(packet) :]
+                    self._tail_bytes -= len(packet)
+                if expired_mid:
+                    end = entry.start + len(entry.data) // 2
+                    if self.tail and self.tail[0] is entry:
+                        self.tail.popleft()
+                    self._tail_bytes -= len(entry.data)
+                    removed = self._retire_interval(end) if self._retire_interval is not None else 0
+                    dropped = max(len(entry.data), removed)
+                    if dropped:
+                        REPLAY_SKIPPED.labels(source=self.source, successor=family(self.connection)).inc(
+                            dropped / (2 * self.pacer.sample_rate)
+                        )
+                    if self._birth is not None:
+                        self._birth.prune_before(end)
+                    continue
+                if self.tail and self.tail[0] is entry:
+                    self.tail.popleft()
             self._pumping = False
             if self._finalize_pending:
                 self.connection.finalize()
@@ -217,7 +559,7 @@ class ReplayTailSocket:
         )
 
     def finalize(self) -> None:
-        if self._pumping:
+        if self._pumping or self.tail:
             self._finalize_pending = True
         else:
             self.connection.finalize()
@@ -230,9 +572,10 @@ class ReplayTailSocket:
         outcome = getattr(self.connection, 'leg_outcome', None)
         if self.tail and (not self.host.state.active or getattr(outcome, 'owner_closing', False)):
             REPLAY_SKIPPED.labels(source=self.source, successor=family(self.connection)).inc(
-                sum(len(data) for _, data in self.tail) / (2 * self.pacer.sample_rate)
+                self._tail_bytes / (2 * self.pacer.sample_rate)
             )
         self.tail.clear()
+        self._tail_bytes = 0
 
     async def drain_and_close(self) -> None:
         # Accepted tail remains owed after client departure. Drain it before

@@ -33,6 +33,7 @@ from utils.stt.live_router import (
     capacity_refused_at,
 )
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
+from utils.stt.recovery_state import current_recovery
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
 from utils.stt.provider_resilience import (
@@ -85,6 +86,11 @@ class RejectedStream(RuntimeError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+class LiveChainExhausted(RuntimeError):
+    """Every configured candidate was refused inside one dial — terminal for
+    the episode, so the owner latches exhaustion instead of redialing."""
 
 
 class ProviderChainUnavailable(RuntimeError):
@@ -274,6 +280,13 @@ async def connect_configured_chain(
     capacity_blocked = set()
     capacity_resorts = []
 
+    def attempt_identity(service: STTService, target) -> str:
+        if target is not None:
+            return target.id
+        if service.value == 'parakeet':
+            return (routing_models or {}).get('parakeet') or 'parakeet'
+        return DEFAULT_IDS.get(service.value) or service.value
+
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
         attempted = True
@@ -284,9 +297,23 @@ async def connect_configured_chain(
         on_success, on_close = circuit.deferred_result_callbacks()
         socket = None
         try:
+            recovery = current_recovery.get()
+            dial_budget = recovery.dial_budget() if recovery is not None else None
+            if recovery is not None and dial_budget is not None and dial_budget <= 0:
+                on_close()
+                return None
+            if recovery is not None and not recovery.reserve(attempt_identity(service, target), service.value):
+                on_close()
+                return None
             token = connecting_target.set(target)
             try:
-                socket = await connect()
+                if dial_budget is not None:
+                    async with asyncio.timeout(dial_budget):
+                        socket = await connect()
+                        serving = socket is not None and await fallback_socket_is_serving(socket)
+                else:
+                    socket = await connect()
+                    serving = socket is not None and await fallback_socket_is_serving(socket)
             finally:
                 connecting_target.reset(token)
             if socket is None:
@@ -301,7 +328,7 @@ async def connect_configured_chain(
                 )
             ):
                 raise TargetEngineMismatch('Connected engine differs from selected target')
-            if not await fallback_socket_is_serving(socket):
+            if not serving:
                 # The typed death reason (provider_budget_exhausted /
                 # provider_auth_rejected) reaches the connect counter so a 402
                 # labels error_class=budget, not auth; 'auth' stays reserved
@@ -460,6 +487,7 @@ async def connect_configured_chain(
         record_managed_leg_handoff(socket)
         return socket, service
 
+    recovery = current_recovery.get()
     for service, target in routes:
         connect = callbacks.get(service)
         identity = (
@@ -472,6 +500,8 @@ async def connect_configured_chain(
             )
         )
         if connect is None or provider_for_service(service) in failed or identity in failed_targets:
+            continue
+        if recovery is not None and identity is not None and not recovery.can_attempt(identity):
             continue
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
         if (routing_models or {}).get(service.value) == 'parakeet-window':
@@ -518,6 +548,8 @@ async def connect_configured_chain(
             account = fleet_states.get(service.value)
             if account is not None and account.bench == 'account' and account.excluded:
                 continue
+            if recovery is not None and not recovery.can_attempt(attempt_identity(service, target)):
+                continue
             circuit = target_circuit(target, _circuit_for_primary(service))
             connect = callbacks.get(service)
             if connect is None or not circuit.allow_request(max_probes=probes):
@@ -551,6 +583,8 @@ async def connect_configured_chain(
                 or provider_for_service(service) in failed
             ):
                 continue
+            if recovery is not None and not recovery.can_attempt(attempt_identity(service, None)):
+                continue
             state = fleet_states.get(service.value)
             if state is not None and state.bench == 'account' and state.excluded:
                 continue
@@ -570,4 +604,4 @@ async def connect_configured_chain(
         source_outcome=prior_outcome,
     )
     pending.note_failure(None)
-    raise RuntimeError('Configured STT chain exhausted')
+    raise LiveChainExhausted('Configured STT chain exhausted')

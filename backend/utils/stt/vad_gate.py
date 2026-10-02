@@ -20,7 +20,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
 
@@ -756,6 +756,15 @@ class GatedSTTSocket(STTSocket):
     @property
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        wait = getattr(self._conn, 'wait_send_capacity', None)
+        if not callable(wait):
+            return not self.is_connection_dead
+        try:
+            return await cast(Callable[..., Awaitable[bool]], wait)(limit=limit, timeout=timeout)
+        except TypeError:
+            return await cast(Callable[[], Awaitable[bool]], wait)()
 
     @property
     def typed_death_reason(self) -> Optional[str]:

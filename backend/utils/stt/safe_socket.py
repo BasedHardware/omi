@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from config.live_stt_replay import ReplayLimits
 from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class SafeDeepgramSocket(STTSocket):
     This is the SOLE keepalive owner — GatedSTTSocket and orchestrator code
     must NOT call keep_alive() directly.
     """
+
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,

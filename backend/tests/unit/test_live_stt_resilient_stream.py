@@ -1,6 +1,7 @@
 """Bounded Soniox rotation replay and dark-path regressions."""
 
 import asyncio
+from types import SimpleNamespace
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +14,7 @@ from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.live_metrics import WINDOW_REPLAY_SAFE_TRIMS
 from utils.stt.live_failure import live_stt_terminal_reason
-from utils.stt.resilient_stream import ResilientAudio, window_replay_action
+from utils.stt.resilient_stream import ResilientAudio, socket_is_finishing, window_replay_action
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.streaming import STTService
 from utils.stt import streaming as st
@@ -440,11 +441,15 @@ async def test_teardown_does_not_reconnect(monkeypatch):
 @pytest.mark.asyncio
 async def test_soniox_finishing_socket_does_not_start_reconnect_or_fallback(monkeypatch):
     listener = receiver(monkeypatch)
-    listener.stt_socket = Socket(dead=True, reason='soniox_rotation', raw=Socket(finishing=True))
+    socket = Socket(dead=True, reason='soniox_rotation', raw=Socket(finishing=True))
+    assert not socket_is_finishing(socket)
+    socket.leg_outcome = SimpleNamespace(owner_closing=True)
+    listener.stt_socket = socket
     listener._stt_rebuild = (lambda: (None, None, None), 2)
     listener._create_stt_socket = AsyncMock()
     listener._rebuild_stt_socket_locked = AsyncMock(return_value=True)
 
+    assert socket_is_finishing(socket)
     assert not await listener._failover_stt_socket()
 
     listener._create_stt_socket.assert_not_awaited()

@@ -20,13 +20,6 @@ from utils.stt.streaming import SafeModulateSocket
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 
-@pytest.fixture(autouse=True)
-def replay_stress_budget(monkeypatch):
-    # Legacy full-ring stress cases also qualify pacing without the production
-    # cut. The slow-consumer budget test restores the shipped 20-second budget.
-    monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PREFIX_SECONDS', 150.0)
-
-
 class Transport:
     def __init__(self, fail_after=None):
         self.sent = []
@@ -118,7 +111,7 @@ async def test_full_replay_backpressures_small_real_queue_without_drop(kind):
     expected = b''.join(data for _, data in ring.snapshot())
     task = asyncio.create_task(replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None))
     try:
-        await until(lambda: raw._send_queue.full())
+        await until(lambda: raw._send_queue.qsize() + raw._send_queue.inflight >= raw._send_queue.maxsize)
         assert not task.done() and not raw.is_connection_dead
         transport.gate.set()
         assert await task is None
@@ -140,7 +133,7 @@ def fallback_count():
     )
 
 
-async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=False):
+async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=False, source=None):
     if router_on:
         from utils.stt.live_gate import GateState
 
@@ -155,6 +148,9 @@ async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=Fals
     base = receiver()
     base.fallback_before = fallback_count()
     host = base.host
+    if source is not None and source != 'parakeet-window':
+        host.stt_model = source
+        host.stt_service = st.STTService.soniox if source == 'soniox' else st.STTService.modulate
     host.request.sample_rate = 16000
     host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
     host.state.stt_terminal_failure = False
@@ -208,6 +204,11 @@ async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=Fals
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor,router_on', [('soniox', False), ('modulate-velma-2', False), ('soniox', True)])
 async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(monkeypatch, successor, router_on):
+    from utils.stt import recovery_state, replay_delivery
+
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
+    monkeypatch.setattr(replay_delivery, 'TAIL_RESIDENCE_SECONDS', 200.0)
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 200.0)
     order = ['parakeet-window', 'modulate-velma-2', 'soniox'] if router_on else ['parakeet-window', successor]
     actual, base, raws, legs, observations = await setup_receiver(monkeypatch, order, router_on=router_on)
     source = actual.stt_socket
@@ -265,7 +266,11 @@ async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(mo
     ],
 )
 async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, order):
+    from utils.stt import recovery_state, replay_delivery
     from utils.stt.live_metrics import REPLAY_CLOSED
+
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 200.0)
 
     first_family = 'soniox' if order[1] == 'soniox' else 'modulate'
     closed_before = REPLAY_CLOSED.labels(source='parakeet', successor=first_family)._value.get()
@@ -299,6 +304,9 @@ async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, ord
 
 @pytest.mark.asyncio
 async def test_managed_soniox_internal_finish_still_fails_over(monkeypatch):
+    from utils.stt import recovery_state
+
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 300.0)
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', 'soniox', 'modulate-velma-2'])
     actual.stt_socket.raw.fail('first_text_deadline')
     try:
@@ -461,6 +469,10 @@ def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkeypatch):
+    from utils.stt import recovery_state, replay_delivery
+
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 200.0)
     actual, base, raws, legs, _ = await setup_receiver(
         monkeypatch, ['parakeet-window', 'soniox', 'modulate-velma-2'], fail_first=True
     )
@@ -537,7 +549,7 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     try:
         assert await task
         replay_wall = virtual_clock.now
-        assert 19 <= replay_wall <= 20
+        assert 19 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
         expected = original[115 * 32000 :] + b''.join(tail)
         await until(lambda: raws[-1]._ws.byte_count == len(expected))
@@ -556,8 +568,8 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
             assert delivered <= at + 0.512 + 0.001
         live_times = [at for _, at in packets[40:]]  # ceil(640000 / 16384) replay packets
         assert len(live_times) == len(captured)
-        assert max(at - born for at, born in zip(live_times, captured)) <= 20.532
-        assert sum(len(data) for _, data in actual.stt_socket.tail) <= 21 * 32000
+        assert max(at - born for at, born in zip(live_times, captured)) <= 20.532 + 3 * 0.512
+        assert sum(len(packet.data) for packet in actual.stt_socket.tail) <= 21 * 32000
     finally:
         task.cancel()
         ingestion.cancel()

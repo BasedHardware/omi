@@ -21,6 +21,7 @@ from config.stt_provider_policy import (
 from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
+from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile
 
@@ -277,6 +278,7 @@ async def test_multi_channel_sessions_do_not_failover(monkeypatch):
 async def test_failover_is_bounded_so_a_flapping_chain_cannot_loop(monkeypatch):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
     receiver._stt_failed_providers = {f'p{i}' for i in range(MAX_STT_FAILOVERS + 1)}
+    receiver.recovery.attempted_targets = {f't{i}' for i in range(MAX_RECOVERY_TARGETS)}
 
     with patch(
         'routers.listen.receiver.get_stt_service_for_language',

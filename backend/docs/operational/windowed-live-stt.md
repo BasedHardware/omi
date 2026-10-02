@@ -298,18 +298,64 @@ packet represents 1.024s). This is audio delivery delay, not a vendor transcript
 latency guarantee. A nonresponsive transport is rejected: the replay helper
 admits at most two queued packets and waits at most 2s for space; prefix wall
 admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
-queue. The existing three managed rebuild attempts, full-pod exclusion, and
-one healthy Soniox re-entry remain. Setup timeout skips its requested family
-and continues within that attempt budget. Cancelled/unadopted replay legs close
-both adapter tasks and their websocket. An adopted live tail drains before EOS
-even after client departure; cancellation, death, or its bounded drain deadline
-meters any undelivered tail in the skipped-seconds counter.
+queue. Setup timeout skips its requested family and continues within that
+attempt budget. Cancelled/unadopted replay legs close both adapter tasks and
+their websocket. An adopted live tail drains before EOS even after client
+departure; cancellation, death, or its bounded drain deadline meters any
+undelivered tail in the skipped-seconds counter.
+
+Recovery lifecycle is owned by one `LiveRecoveryController` per receiver
+(`utils/stt/recovery_state.py`): `serving → provider_died → recovering →
+replaying → recovered`, terminal `exhausted` and `client_leaving`. A provider
+death opens one **60s episode deadline** that covers every dial, replay prefix,
+and first nonempty successor transcript within that episode; a successor dying
+before proof shares it rather than restarting it. Candidate adoption and
+transcript proof bind to the current candidate token, so a late callback from
+a retired predecessor can never release the deadline. Client departure is a
+monotonic latch taken only from explicit owner/session/websocket evidence —
+never raw socket cleanup flags — and a disconnect/reconnect flap cannot
+resurrect a departed receiver.
+
+Each real dial gets `min(5s, remaining episode)` covering both connect and the
+post-upgrade serving check; there is no outer clip across the chain, so a slow
+target cannot starve its successors. Attempt accounting is by unique target
+identity, capped at 20 (16 registry + up to 4 legacy protocols), reserved at
+the real dial seam only: selector calls, circuit refusals, capacity skips, and
+unavailable routes spend nothing. One transient same-provider Soniox re-entry
+is the sole repeat grant. A typed `LiveChainExhausted` latches exhaustion so
+concurrent send/monitor races cannot redial.
+
+Recovery legs opt into per-leg writer pacing at the transport, not just
+admission: each write starts no earlier than `previous_start + audio_duration`
+(sustained ≤1x, no catch-up credit on a stalled-then-resumed transport), with
+each `ws.send` bounded by `min(2s, episode remaining)`. The observable burst
+allowance is bounded queue+in-flight bytes (at most three 16KiB frames); that
+bound never grows. Prefix delivery — replay enqueues plus the frozen transport
+writes they owed — must complete inside the **20s prefix wall**, not just the
+episode, so `REPLAY_WALL` measures actual prefix delivery. Live audio carries
+first-admission birth time through tail→snapshot→successor; a bounded interval
+`BirthLedger` (8192 entries, adjacent coalescing by earliest birth) prunes at
+the retained ring head, and live intervals older than the 28s residence bound
+are retired and metered once rather than replayed again.
+
+Scoped recovery memory bound (recovery PCM only): ring ≤4,800,000B + prefix
+snapshot ≤640,000B + live tail ≤832,000B + replay queue 32,768B + in-flight
+16,384B + window PCM 1,920,000B ≈ **8,241,152B per session ≈ 125.75 MiB for
+16 sessions**. This excludes Python object overhead, VAD state, POST transients,
+ordinary 2,000-item queues, and general process RSS — it is not a pod memory
+claim. No recovery state is persisted; nothing survives the session.
 
 Metrics use only bounded source/successor families (`parakeet`, `modulate`,
-`soniox`, `deepgram`, `unknown`): `omi_stt_replay_wall_seconds`,
-`omi_stt_replay_audio_seconds_total`, `omi_stt_replay_queue_high_water`,
-`omi_stt_replay_skipped_seconds_total`, `omi_stt_replay_successor_closed_total`.
-The wall histogram covers the prefix pump, including capacity waits, not setup.
+`soniox`, `deepgram`, `unknown`), preinitialized across all combinations so a
+first post-scrape event is visible to `increase()`/`rate()`:
+`omi_stt_replay_wall_seconds`, `omi_stt_replay_audio_seconds_total`,
+`omi_stt_replay_queue_high_water`, `omi_stt_replay_skipped_seconds_total`,
+`omi_stt_replay_successor_closed_total`, plus
+`omi_stt_recovery_attempts_total{source,successor}` on each real recovery dial
+and `omi_live_session_terminal_after_text_total{provider}` once when a session
+delivered text and still terminated on an STT failure. The wall histogram
+covers the prefix pump including capacity waits and frozen-write drain, not
+setup.
 
 A Soniox `send queue full` can arise on ordinary send, finalize, or EOS when a
 sender stalls, independently of replay. #20350 excludes deaths first observed

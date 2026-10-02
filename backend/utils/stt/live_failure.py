@@ -6,6 +6,8 @@ import logging
 import asyncio
 from typing import Any, Awaitable, Callable, Protocol
 
+from starlette.websockets import WebSocketState
+
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
@@ -25,6 +27,7 @@ from utils.observability.fallback import (
     record_fallback,
 )
 from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
+from utils.stt.recovery_state import current_recovery
 from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
@@ -229,7 +232,7 @@ class PendingLiveFailover:
         # A hop still unproven when its owner departs is degraded recovery,
         # not evidence that we terminated an active client's transcription.
         source = self.source_outcome
-        if source is not None and (source.owner_closing or source.client_has_left and source.client_has_left()):
+        if source is not None and source.client_has_left is not None and source.client_has_left():
             continuing = True
         # The hop belongs to the source leg; a successor failure changes the
         # outcome, never the source cause used to reconcile health evidence.
@@ -560,6 +563,18 @@ async def send_live_stt_audio(
             return
         if outcome is not None and outcome.owner_closing:
             return  # Client teardown can win while replacement admission awaits.
+        shutdown = getattr(session, 'shutdown_event', None)
+        if not session.active or shutdown is not None and shutdown.is_set() is True:
+            return
+        receiver = getattr(session, 'receiver', None)
+        controller = getattr(receiver, 'recovery', None) or current_recovery.get()
+        if controller is not None and controller.client_has_left() is True:
+            return  # The episode controller latched a departed client.
+        if (
+            getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
+            or getattr(websocket, 'application_state', None) == WebSocketState.DISCONNECTED
+        ):
+            return
         if session.active and not session.stt_terminal_failure:
             settle_terminal_socket(stt_socket, provider, reason)
         await terminate_live_stt_session(

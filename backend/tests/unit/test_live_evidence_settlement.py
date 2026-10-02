@@ -424,15 +424,17 @@ async def test_teardown_winning_during_recovery_cannot_terminate_or_bench(monkey
 
 @pytest.mark.asyncio
 async def test_cancelled_retry_settles_the_already_rejected_replacement(monkeypatch):
-    from utils.stt.resilient_stream import retry_failed_replacement
-
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
     raw = managed_leg(receiver, ServingSocket(), family='soniox')
     raw.raw.die('provider_5xx')
-    receiver._rebuild_stt_socket_locked = AsyncMock(side_effect=asyncio.CancelledError())
     before = observed('soniox', 'provider_failure', 'provider_5xx')
+
+    async def cancelled(socket):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr('routers.listen.receiver.abort_replay_socket', cancelled)
     with pytest.raises(asyncio.CancelledError):
-        await retry_failed_replacement(receiver, raw, None, None, None)
+        await receiver._reject_candidate(raw, None, None, None)
     assert raw.leg_outcome.settled
     assert observed('soniox', 'provider_failure', 'provider_5xx') == before + 1
 

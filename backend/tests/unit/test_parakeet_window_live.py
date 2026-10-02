@@ -1448,6 +1448,7 @@ async def test_blip_followed_by_fast_capture_silence_flushes_below_post_pace(mon
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['replay_ring_cap', 'first_text_deadline'])
 async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch, failure):
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
     client = RacingTextClient()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -1894,6 +1895,8 @@ class LagScenarioClient(ProgressThenHoldClient):
 async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow(monkeypatch, caplog, scenario):
     # Run the real window jobs at deterministic capture steps; no synthetic
     # speech predicate, no real audio/content and no wall-clock waiting.
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
+
     async def parked_pump(_self):
         await asyncio.Future()
 
@@ -2055,6 +2058,7 @@ async def test_no_first_text_cut_is_noop_but_startup_deadline_still_protects_noi
 
 @pytest.mark.asyncio
 async def test_pacing_wait_with_capture_burst_reports_deferred_cut_and_exact_replay(monkeypatch):
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
     client = ProgressThenHoldClient()
     actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
     raw = previous.raw

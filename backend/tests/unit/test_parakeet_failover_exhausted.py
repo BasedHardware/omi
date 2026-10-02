@@ -360,6 +360,9 @@ async def test_five_minutes_on_replacement_trim_on_text_and_remain_bounded(monke
 
 @pytest.mark.asyncio
 async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(monkeypatch):
+    from utils.stt import recovery_state
+
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     try:
         assert await actual._failover_stt_socket()
@@ -371,9 +374,13 @@ async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(mo
         await _flush_capture(actual, pcm, 1920 + 104 * 16000)
         assert actual.host.stt_service == st.STTService.soniox
         assert len(legs['soniox']) == 1
-        assert b''.join(legs['soniox'][0].sent) == capture + pcm * 105
-        assert actual._window_ring().ring_seconds == 120
-        assert actual._window_ring().buffered_bytes == len(capture) + 105 * len(pcm)
+        sent = b''.join(legs['soniox'][0].sent)
+        expected_tail = capture + pcm * 105
+        assert sent and expected_tail.endswith(sent)
+        assert len(sent) <= (20 + 26) * len(pcm) + len(pcm)
+        assert actual._window_ring().ring_seconds >= actual._window_ring()._base_ring_seconds
+        assert actual._window_ring().buffered_bytes < len(expected_tail)
+        assert actual._window_ring().capture_bounds[0] > 0
         assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
@@ -416,13 +423,16 @@ async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_
         assert b''.join(legs['soniox'][0].sent) == expected
         legs['soniox'][0].is_connection_dead = True
         legs['soniox'][0].typed_death_reason = 'provider_5xx'
+        ring_before = b''.join(data for _, data in actual._window_ring().snapshot())
         assert await actual._failover_stt_socket()
         assert len(legs['soniox']) == 2
-        assert b''.join(legs['soniox'][1].sent) == expected
-        assert actual._resilient_audio._replayed_samples == len(expected) // 2
+        sent = b''.join(legs['soniox'][1].sent)
+        assert sent and ring_before.endswith(sent)
+        assert actual._resilient_audio._replayed_samples == len(sent) // 2
         legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
         assert base.emitted == []
-        assert actual._window_ring().capture_bounds == (0, 321920)
+        bounds = actual._window_ring().capture_bounds
+        assert bounds[0] > 0 and bounds[1] == 321920
     finally:
         await actual._drain_stt_sockets()
 

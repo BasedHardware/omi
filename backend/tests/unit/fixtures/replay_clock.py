@@ -39,10 +39,11 @@ class VirtualClock:
 
 @pytest.fixture(autouse=True)
 def virtual_clock(monkeypatch):
-    from utils.stt import replay_delivery, resilient_stream
+    from utils.stt import recovery_state, replay_delivery, resilient_stream
 
     timer = VirtualClock()
     monkeypatch.setattr(replay_delivery, 'clock', lambda: timer.now)
     monkeypatch.setattr(replay_delivery, 'sleep', timer.sleep)
     monkeypatch.setattr(resilient_stream, 'clock', lambda: timer.now)
+    monkeypatch.setattr(recovery_state, 'clock', lambda: timer.now)
     return timer

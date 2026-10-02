@@ -157,7 +157,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
 @pytest.mark.asyncio
 async def test_failed_rebuild_is_latched_across_35_send_monitor_races(monkeypatch):
     actual = dead_receiver()
-    actual._create_stt_socket = AsyncMock(side_effect=RuntimeError('Configured STT chain exhausted'))
+    actual._create_stt_socket = AsyncMock(side_effect=live_chain.LiveChainExhausted('Configured STT chain exhausted'))
     assert await asyncio.gather(*(actual._failover_stt_socket() for _ in range(35))) == [False] * 35
     actual._create_stt_socket.assert_awaited_once()
     assert actual._stt_failed_providers == {'modulate'}
@@ -241,7 +241,7 @@ async def test_unrecoverable_ring_pressure_terminates_once_without_rebuild_loop(
         before = CHAIN_EXHAUSTED._value.get()
         await _flush_capture(actual, b'\x01\x00' * 640, len(capture) // 2)
         assert actual.host.state.stt_terminal_failure
-        assert actual._stt_recovery_exhausted
+        assert actual.recovery.exhausted
         assert CHAIN_EXHAUSTED._value.get() - before == 1
         assert await asyncio.gather(*(actual._failover_stt_socket() for _ in range(35))) == [False] * 35
         assert CHAIN_EXHAUSTED._value.get() - before == 1
@@ -299,7 +299,7 @@ async def test_previously_used_soniox_transport_loss_gets_one_healthy_rescue(mon
     replacements[0].is_connection_dead = True
     replacements[0].typed_death_reason = 'connection_lost'
     assert not await actual._failover_stt_socket()
-    assert actual._stt_recovery_exhausted
+    assert actual.recovery.exhausted
     assert len(replacements) == 1
     assert not await actual._failover_stt_socket()
     assert actual._stt_rebuild_attempts == 2

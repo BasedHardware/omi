@@ -19,7 +19,9 @@ import websockets
 from config.stt_provider_policy import normalized_stt_language, soniox_accepts_language_hint
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
+from config.live_stt_replay import ReplayLimits
 from utils.stt.socket import STTSocket
+from utils.stt.replay_delivery import RecoveryWriterPace
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
@@ -167,6 +169,7 @@ class SafeSonioxSocket(STTSocket):
     """
 
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,
@@ -189,6 +192,7 @@ class SafeSonioxSocket(STTSocket):
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
         self._send_queue: AudioSendQueue[bytes | str] = AudioSendQueue(maxsize=2000)
+        self._writer_pace: RecoveryWriterPace | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
@@ -248,9 +252,16 @@ class SafeSonioxSocket(STTSocket):
             return False
         return True
 
-    async def wait_send_capacity(self) -> bool:
+    def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
+        """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
         try:
-            await self._send_queue.wait_for_capacity()
+            await self._send_queue.wait_for_capacity(
+                limit=limit if limit is not None else self.replay_limits.queue_packets,
+                timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
+            )
         except TimeoutError:
             self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
         return not (self._dead or self._closed or self._finishing)
@@ -334,11 +345,34 @@ class SafeSonioxSocket(STTSocket):
                     await self._ws.send(json.dumps({'type': 'keepalive'}))
                     continue
                 if data == b'':
+                    self._send_queue.discard(data)
                     # Documented end-of-audio signal: an empty text frame.
                     if self._audio_sent:
-                        await self._ws.send('')
+                        pace = self._writer_pace
+                        if pace is not None:
+                            async with asyncio.timeout(pace.write_bound()):
+                                await self._ws.send('')
+                        else:
+                            await self._ws.send('')
                     break
-                await self._ws.send(data)
+                pace = self._writer_pace
+                written = False
+                try:
+                    if pace is not None and isinstance(data, bytes):
+                        await pace.throttle(len(data))
+                        pace.note_write(len(data))
+                    if pace is not None:
+                        async with asyncio.timeout(pace.write_bound()):
+                            await self._ws.send(data)
+                    else:
+                        await self._ws.send(data)
+                    self._send_queue.note_written(data)
+                    written = True
+                    if pace is not None and isinstance(data, bytes):
+                        pace.complete_write()
+                finally:
+                    if not written:
+                        self._send_queue.discard(data)
                 if isinstance(data, bytes):
                     self._audio_sent = True
         except websockets.exceptions.ConnectionClosed as e:

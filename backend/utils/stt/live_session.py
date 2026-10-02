@@ -17,12 +17,15 @@ from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt import replay_delivery
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.live_stt_replay import ReplayLimits
+from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
@@ -336,9 +339,24 @@ class LiveChainSession:
                     target = self._routing_target_entry if routing_on(uid) else None
                 except ValueError:
                     target = None
+                recovery = current_recovery.get()
+                if recovery is not None:
+                    if target is not None:
+                        identity = target.id
+                    elif host.stt_service.value == 'parakeet':
+                        identity = engine_models.get('parakeet') or 'parakeet'
+                    else:
+                        identity = DEFAULT_IDS.get(host.stt_service.value) or host.stt_service.value
+                    if not recovery.reserve(identity, host.stt_service.value):
+                        raise st.ParakeetConnectionError('config_incomplete')
                 token = connecting_target.set(target)
                 try:
-                    socket, actual = await primary(), host.stt_service
+                    dial_budget = recovery.dial_budget() if recovery is not None else None
+                    if dial_budget is not None:
+                        async with asyncio.timeout(dial_budget):
+                            socket, actual = await primary(), host.stt_service
+                    else:
+                        socket, actual = await primary(), host.stt_service
                     record_managed_leg_handoff(socket)
                 finally:
                     connecting_target.reset(token)
@@ -820,9 +838,26 @@ class LiveLegSocket(STTSocket):
             )
         return True
 
-    async def wait_send_capacity(self) -> bool:
+    @property
+    def replay_limits(self) -> Any:
+        """Typed endpoint limits: the selected target's declaration first."""
+        target = self._routing_target_entry
+        declared = getattr(target, 'replay', None) if target is not None else None
+        if isinstance(declared, ReplayLimits):
+            return declared
+        declared = getattr(self.raw, 'replay_limits', None)
+        if isinstance(declared, ReplayLimits):
+            return declared
+        return ReplayLimits(max_frame_bytes=replay_delivery.REPLAY_PACKET_BYTES)
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
         wait = getattr(self.raw, 'wait_send_capacity', None)
-        return await cast(Callable[[], Awaitable[bool]], wait)() if callable(wait) else not self.is_connection_dead
+        if not callable(wait):
+            return not self.is_connection_dead
+        try:
+            return await cast(Callable[..., Awaitable[bool]], wait)(limit=limit, timeout=timeout)
+        except TypeError:
+            return await cast(Callable[[], Awaitable[bool]], wait)()
 
     def replay_send(self, data: bytes, start_sample: int) -> bool:
         ring = getattr(self.session.receiver, '_window_ring', None)
@@ -868,6 +903,9 @@ class LiveLegSocket(STTSocket):
             self._release_open_gauge()
 
     def _client_has_left(self) -> bool:
+        controller = getattr(self.session.receiver, 'recovery', None)
+        if controller is not None:
+            return controller.client_has_left()
         host = self.session.receiver.host
         state = getattr(host, 'state', None)
         if getattr(state, 'active', None) is False:

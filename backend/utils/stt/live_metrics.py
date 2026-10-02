@@ -21,6 +21,16 @@ REPLAY_SKIPPED = Counter(
 REPLAY_CLOSED = Counter(
     'omi_stt_replay_successor_closed_total', 'Successor deaths during replay', ['source', 'successor']
 )
+RECOVERY_ATTEMPTS = Counter(
+    'omi_stt_recovery_attempts_total',
+    'Actual live recovery dials by dead provider family and attempted successor family',
+    ['source', 'successor'],
+)
+LIVE_SESSION_TERMINAL_AFTER_TEXT = Counter(
+    'omi_live_session_terminal_after_text_total',
+    'Live sessions closed with a terminal STT failure after a transcript was already delivered',
+    ['provider'],
+)
 
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
 WINDOW_CAP = Gauge('omi_stt_window_sessions_capacity', 'Process windowed TDT session cap')
@@ -194,3 +204,25 @@ COST_SHADOW = Counter(
     ['agreement', 'static_primary', 'proposed_primary'],
 )
 COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])
+
+PROVIDER_FAMILIES = ('parakeet', 'modulate', 'soniox', 'deepgram', 'unknown')
+
+
+def provider_family(name: object) -> str:
+    text = str(name or '').lower()
+    for fam in PROVIDER_FAMILIES[:-1]:
+        if fam in text:
+            return fam
+    return 'unknown'
+
+
+for _source in PROVIDER_FAMILIES:
+    for _successor in PROVIDER_FAMILIES:
+        REPLAY_WALL.labels(source=_source, successor=_successor)
+        REPLAY_AUDIO.labels(source=_source, successor=_successor)
+        REPLAY_QUEUE_HIGH_WATER.labels(source=_source, successor=_successor)
+        REPLAY_SKIPPED.labels(source=_source, successor=_successor)
+        REPLAY_CLOSED.labels(source=_source, successor=_successor)
+        RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
+for _provider in PROVIDER_FAMILIES:
+    LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
