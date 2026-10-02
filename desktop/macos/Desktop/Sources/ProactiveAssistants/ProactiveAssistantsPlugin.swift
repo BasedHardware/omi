@@ -1270,7 +1270,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Bind before the capture suspension; a later account/privacy transition cannot rebind pixels.
-    let taskBinding = appName.flatMap { ScreenTaskFrameBinding.capture(app: $0, title: currentWindowTitle) }
+    var taskBinding = appName.flatMap { ScreenTaskFrameBinding.capture(app: $0, title: currentWindowTitle) }
     if let appName, ScreenTaskPrivacy.isPrivateWindow(app: appName, title: currentWindowTitle) { return }
 
     // Always capture frames (other features may need them)
@@ -1285,15 +1285,16 @@ public class ProactiveAssistantsPlugin: NSObject {
         // The target disappeared or ScreenCaptureKit does not expose it. Retry
         // once after a fresh resolution, then treat a second unavailable target
         // as a normal paused tick rather than an engine failure.
-        captureResult = await screenCaptureService.captureActiveWindowCGImage()
-        // Privacy: re-resolve app name since captureActiveWindowCGImage captures
-        // whatever is currently active, which may differ from the earlier resolution.
-        let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-        if let fallbackApp = fallbackApp {
-          appName = fallbackApp
-          currentWindowTitle = fallbackTitle
-          isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
-        }
+        let (fallbackApp, fallbackTitle, fallbackWindow) = await WindowMonitor.getActiveWindowInfoAsync()
+        guard
+          let resolved = ScreenTaskCaptureResolution.resolve(
+            app: fallbackApp, title: fallbackTitle, window: fallbackWindow)
+        else { return }
+        appName = resolved.app
+        currentWindowTitle = resolved.title
+        isRewindExcluded = RewindSettings.shared.isAppExcluded(resolved.app)
+        taskBinding = resolved.binding
+        captureResult = await screenCaptureService.captureWindowCGImage(windowID: resolved.window)
       }
       switch captureResult {
       case .success(let image):
@@ -1328,6 +1329,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
+        let capturedUptime = ProcessInfo.processInfo.systemUptime
         // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
         // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
         // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
@@ -1351,6 +1353,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             windowTitle: currentWindowTitle,
             frameNumber: frameCount,
             captureTime: captureTime,
+            capturedUptime: capturedUptime,
             taskBinding: taskBinding
           )
           AssistantCoordinator.shared.trackFrame(frame)
@@ -1402,6 +1405,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         currentWindowTitle = freshTitle
         isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
       }
+      // The old JPEG API does not identify its captured window. Keep task admission
+      // only when fresh resolution matches the original capture binding.
+      guard !ScreenTaskPrivacy.isPrivateWindow(app: resolvedApp, title: currentWindowTitle) else { return }
 
       let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
       if !lastCaptureSucceeded {

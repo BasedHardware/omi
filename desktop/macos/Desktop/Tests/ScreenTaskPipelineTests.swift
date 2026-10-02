@@ -131,7 +131,7 @@ final class ScreenTaskPipelineTests: XCTestCase {
   private func response(relation: String, id: String, capture: String = "direct_request") throws -> ScreenTaskResponse {
     let item: [String: Any] = [
       "title": "Send Alex the updated project budget document", "description": "context", "deadline": "2026-10-05",
-      "priority": "medium", "confidence": 0.9, "relation": relation, "related_id": id, "evidence": "visible ask",
+      "priority": "medium", "confidence": 0.9, "relation": relation, "related_id": id, "evidence": "",
       "capture_kind": capture, "owner": "user", "concrete_deliverable": true, "public_broadcast": false,
       "direct_mention": true, "ownership_confidence": 0.8, "tags": ["work"], "source_category": "direct_request",
       "source_subcategory": "message",
@@ -228,7 +228,44 @@ final class ScreenTaskPipelineTests: XCTestCase {
     let items = try XCTUnwrap(tasks["items"] as? [String: Any])
     let fields = try XCTUnwrap(items["properties"] as? [String: [String: Any]])
     for field in fields.values where field["type"] as? String == "string" { XCTAssertNotNil(field["maxLength"]) }
+    let tags = try XCTUnwrap(fields["tags"])
+    XCTAssertEqual(tags["maxItems"] as? Int, 3)
+    XCTAssertEqual((tags["items"] as? [String: Any])?["maxLength"] as? Int, 16)
     XCTAssertEqual(config["maxOutputTokens"] as? Int, 2048)
+  }
+
+  func testDecoderEnforcesStringAndTagBoundsWithoutDroppingValidSibling() throws {
+    let item = try response(relation: "new", id: "").tasks[0]
+    let data = try JSONEncoder().encode(item)
+    let valid = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    for (field, limit) in [("title", 96), ("description", 64), ("deadline", 10), ("related_id", 128), ("evidence", 0)] {
+      var invalid = valid
+      invalid[field] = String(repeating: "x", count: limit + 1)
+      let root: [String: Any] = [
+        "screen_kind": "other", "context_summary": "", "current_activity": "", "tasks": [valid, invalid],
+      ]
+      let decoded = try JSONDecoder().decode(
+        ScreenTaskResponse.self, from: JSONSerialization.data(withJSONObject: root))
+      XCTAssertEqual(try decoded.results(app: "Messages", context: [], today: "2026-10-02").count, 1, field)
+    }
+    var tagged = valid
+    tagged["tags"] = ["work", "document", "project"]
+    let root: [String: Any] = [
+      "screen_kind": "other", "context_summary": "", "current_activity": "", "tasks": [tagged],
+    ]
+    let decoded = try JSONDecoder().decode(ScreenTaskResponse.self, from: JSONSerialization.data(withJSONObject: root))
+    XCTAssertEqual(try decoded.results(app: "Messages", context: [], today: "2026-10-02").first?.task?.tags.count, 3)
+  }
+
+  func testZeroLegacyAttemptBudgetRejectsBeforeAnyManagedAdmissionOrDispatch() async throws {
+    let client = try GeminiClient(model: "gemini-2.5-flash", workload: .extraction)
+    do {
+      _ = try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [], maximumAttempts: 0)
+      XCTFail("zero request budget dispatched")
+    } catch GeminiClient.GeminiClientError.invalidResponse {
+    } catch {
+      XCTFail("zero budget reached a later admission: \(error)")
+    }
   }
 
   func testLegacyRetryHeadersRemainUnchangedAndRetirementStaysTerminal() throws {

@@ -48,7 +48,7 @@ struct ScreenTaskResponse: Decodable {
 
   func results(app: String, context: [TaskSearchResult], today: String) throws -> [TaskExtractionResult] {
     guard ["open_conversation", "open_email_or_document", "list_or_overview", "other"].contains(screen_kind),
-      tasks.count <= 8
+      tasks.count <= 8, context_summary.count <= 96, current_activity.count <= 96
     else { throw ScreenTaskFailure.invalidResponse }
     let ids = Set(context.filter { $0.status == "active" }.compactMap(\.taskID))
     if tasks.isEmpty {
@@ -61,6 +61,9 @@ struct ScreenTaskResponse: Decodable {
       let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
       let count = title.split(whereSeparator: \.isWhitespace).count
       guard (6...15).contains(count), item.confidence.isFinite, (0...1).contains(item.confidence),
+        title.count <= 96, item.description.count <= 64, item.deadline.count <= 10,
+        item.related_id.count <= 128, item.evidence.isEmpty,
+        item.tags.count <= 3, item.tags.allSatisfy({ $0.count <= 16 }),
         item.ownership_confidence.isFinite, (0...1).contains(item.ownership_confidence),
         ["new", "duplicate", "refines", "completes"].contains(item.relation),
         ["explicit_command", "clear_commitment", "direct_request", "inferred_next_step", "already_done"].contains(

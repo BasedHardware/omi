@@ -246,7 +246,7 @@ class PostHogManager {
   /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
   /// return cached values on quota/failure, so they cannot renew an upload lease.
   func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard isInitialized, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
       let url = URL(string: host + "/flags/?v=2")
     else { throw ScreenTaskFailure.stopped }
     var request = URLRequest(url: url)
@@ -262,8 +262,10 @@ class PostHogManager {
         "update_channel": AppBuild.currentUpdateChannel,
       ],
     ])
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
     let (data, response) = try await URLSession.shared.data(for: request)
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
     guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
       throw ScreenTaskFailure.stopped

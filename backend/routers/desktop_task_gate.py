@@ -42,14 +42,6 @@ async def screen_task_gate(
         raise HTTPException(
             status_code=409, detail={'error': 'screen_task_stopped'}, headers={'X-Omi-Retryable': 'false'}
         )
-    decision = await run_blocking(db_executor, authorize_managed_compute, uid, 'screen_frame_judge', 'omi')
-    if not decision.allowed:
-        SCREEN_TASK_GATE_FRAMES_TOTAL.labels(outcome='plan_denied').inc()
-        raise HTTPException(
-            status_code=503 if decision.reason == 'authorization_unavailable' else 402,
-            detail={'error': 'plan_gated', 'reason': decision.reason},
-            headers={'X-Omi-Retryable': 'false'},
-        )
     # Separate burst and daily budgets, fail closed when Redis admission is unavailable.
     try:
         await run_blocking(db_executor, check_screen_task_limit, uid, 'screen_task:gate')
@@ -63,6 +55,14 @@ async def screen_task_gate(
             detail={'error': 'gate_admission_denied'},
             headers={**(error.headers or {}), 'X-Omi-Retryable': 'false'},
         ) from error
+    decision = await run_blocking(db_executor, authorize_managed_compute, uid, 'screen_frame_judge', 'omi')
+    if not decision.allowed:
+        SCREEN_TASK_GATE_FRAMES_TOTAL.labels(outcome='plan_denied').inc()
+        raise HTTPException(
+            status_code=503 if decision.reason == 'authorization_unavailable' else 402,
+            detail={'error': 'plan_gated', 'reason': decision.reason},
+            headers={'X-Omi-Retryable': 'false'},
+        )
     if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
         SCREEN_TASK_GATE_FRAMES_TOTAL.labels(outcome='trial_expired').inc()
         raise HTTPException(status_code=402, detail='trial_expired', headers={'X-Omi-Retryable': 'false'})

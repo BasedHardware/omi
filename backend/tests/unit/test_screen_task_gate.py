@@ -128,6 +128,9 @@ async def test_gate_has_separate_burst_and_daily_budgets_and_typed_quota(monkeyp
             raise HTTPException(429, headers={'Retry-After': '70'})
 
     monkeypatch.setattr(route, 'check_screen_task_limit', limit)
+    monkeypatch.setattr(
+        route, 'authorize_managed_compute', lambda *a: pytest.fail('quota request resolved subscription')
+    )
     monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('quota request spent provider work'))
     app = FastAPI()
     app.include_router(route.router)

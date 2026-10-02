@@ -382,11 +382,34 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
 
   func testPrivateBrowserTitlesCannotPassAllowedKeywordAdmission() {
     for app in TaskAssistantSettings.browserApps {
-      for marker in ["Incognito", "Private Browsing", "InPrivate", "Private Window", "Private Tab", "(Private)"] {
+      for marker in [
+        "Incognito", "Private Browsing", "InPrivate", "Private Window", "Private Tab", "(Private)",
+        "navigation privée", "navegación privada", "privates fenster", "ẩn danh", "инкогнито", "无痕", "シークレット", "비공개",
+      ] {
         XCTAssertTrue(ScreenTaskPrivacy.isPrivateWindow(app: app, title: "Gmail \(marker)"))
       }
       XCTAssertFalse(ScreenTaskPrivacy.isPrivateWindow(app: app, title: "Gmail Inbox"))
     }
+  }
+
+  func testFallbackResolutionRejectsPrivateWindowAndBindsResolvedAppBeforeCapture() throws {
+    var boundApps: [String] = []
+    XCTAssertNil(
+      ScreenTaskCaptureResolution.resolve(app: "Safari", title: "Gmail Private Browsing", window: 42) { app, _ in
+        boundApps.append(app)
+        return nil
+      })
+    XCTAssertTrue(boundApps.isEmpty)
+    let resolved = try XCTUnwrap(
+      ScreenTaskCaptureResolution.resolve(app: "Messages", title: "synthetic chat", window: 43) { app, _ in
+        boundApps.append(app)
+        return nil
+      })
+    XCTAssertEqual(resolved.app, "Messages")
+    XCTAssertEqual(resolved.window, 43)
+    XCTAssertEqual(boundApps, ["Messages"])
+    let captured = CapturedFrame(jpegData: Data(), appName: resolved.app, frameNumber: 1, capturedUptime: 123)
+    XCTAssertEqual(captured.capturedUptime, 123)
   }
 
   func testOwnerSwapAtHandlerAndDeliverySuspensionsIncludingSameUIDRejectsMutation() async throws {

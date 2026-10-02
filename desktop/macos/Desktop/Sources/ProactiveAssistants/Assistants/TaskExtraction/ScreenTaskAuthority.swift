@@ -27,8 +27,28 @@ enum ScreenTaskPrivacy {
       "incognito", "private browsing", "inprivate", "private window", "private tab", "guest window", "(private)",
       "[private]", "- private", "— private",
       "navigation privée", "navegación privada", "privates fenster", "ẩn danh",
+      "inkognito", "инкогнито", "privat vindu", "privat fönster", "janela privada", "finestra privata",
+      "无痕", "無痕", "隐私浏览", "隱私瀏覽", "シークレット", "プライベート", "비공개", "시크릿",
     ]
     return markers.contains { title.localizedStandardContains($0) }
+  }
+}
+
+/// Resolve fallback identity before capture, never label new pixels with the vanished window's authority.
+struct ScreenTaskCaptureResolution {
+  let app: String
+  let title: String?
+  let window: UInt32
+  let binding: ScreenTaskFrameBinding?
+
+  static func resolve(
+    app: String?, title: String?, window: UInt32?,
+    captureBinding: (String, String?) -> ScreenTaskFrameBinding? = {
+      ScreenTaskFrameBinding.capture(app: $0, title: $1)
+    }
+  ) -> Self? {
+    guard let app, let window, !ScreenTaskPrivacy.isPrivateWindow(app: app, title: title) else { return nil }
+    return Self(app: app, title: title, window: window, binding: captureBinding(app, title))
   }
 }
 

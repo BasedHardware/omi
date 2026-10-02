@@ -41,7 +41,10 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
         _ = try await StagedTaskStorage.shared.insertLocalStagedTask(
           StagedTaskRecord(description: "synthetic old-owner task"), authorization: authorization)
         XCTFail("revoked transaction committed")
-      } catch {}
+      } catch LocalMutationAuthorizationError.revoked {
+      } catch {
+        XCTFail("Unexpected storage failure: \(error)")
+      }
       let queue = await RewindDatabase.shared.getDatabaseQueue()
       let db = try XCTUnwrap(queue)
       let count = try await db.read { database in
@@ -60,11 +63,17 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
       try await StagedTaskStorage.shared.markCanonicalReceipt(
         id: id, candidateID: "synthetic-candidate", status: "pending", taskID: nil, authorization: revoked)
       XCTFail("revoked receipt update succeeded")
-    } catch {}
+    } catch LocalMutationAuthorizationError.revoked {
+    } catch {
+      XCTFail("Unexpected storage failure: \(error)")
+    }
     do {
       try await StagedTaskStorage.shared.discardCanonicalOutbox(id: id, authorization: revoked)
       XCTFail("revoked discard succeeded")
-    } catch {}
+    } catch LocalMutationAuthorizationError.revoked {
+    } catch {
+      XCTFail("Unexpected storage failure: \(error)")
+    }
     let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
     XCTAssertNil(receipt)
     let outbox = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()

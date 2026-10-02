@@ -140,7 +140,7 @@ enum ScreenTaskPrompt {
                   "type": "string",
                   "maxLength": 16
                 },
-                "maxItems": 2
+                "maxItems": 3
               },
               "source_category": {
                 "type": "string",

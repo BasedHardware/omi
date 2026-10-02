@@ -16,7 +16,8 @@ current authorization for that owner's existing database rows.
 
 Known browser apps reject private-window title markers (Incognito, Private
 Browsing, InPrivate, Private Window/Tab and the listed localized equivalents)
-before task capture and again before upload. Title rules cannot detect a private
+before assistant/Rewind distribution and again before upload. A vanished window is
+re-resolved, privacy-checked and bound before the replacement window is captured. Title rules cannot detect a private
 window that exposes no private marker. Excluding or re-including an app advances
 its exclusion generation, purges matching pending task pixels, and invalidates
 already running frame work. Data already transmitted cannot be recalled.
@@ -142,7 +143,7 @@ At each consented ramp stage read these signals:
 
 | Signal | Event/fields or metric |
 | --- | --- |
-| Gate pass rate | Terminal events, `feature_enabled_at_start=true`, `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls |
+| Gate pass rate | Within terminal events filtered to `feature_enabled_at_start=true`, count `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls |
 | Audited-reject misses | `gate_outcome=rejected`, `audit_sample=true`, `extractor=gemini_3_8`, sum `pending_delivered`; show audited frame count and human labels separately |
 | Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` over processed feature frames; distinguish gate bypass from extractor recovery |
 | Delivered suggestions/user-day | Sum terminal `pending_delivered` by analytics user/day and actual extractor; compare a contemporaneous legacy baseline and active-user exposure |

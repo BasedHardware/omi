@@ -1086,6 +1086,7 @@ extension GeminiClient {
     authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
     maximumAttempts: Int? = nil
   ) async throws -> ToolChatResult {
+    if let maximumAttempts, maximumAttempts <= 0 { throw GeminiClientError.invalidResponse }
     if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
     if maximumAttempts != nil, let authorization, ScreenTaskBackpressure.shared.isBlocked(authorization) {
       throw ScreenTaskFailure.backpressure

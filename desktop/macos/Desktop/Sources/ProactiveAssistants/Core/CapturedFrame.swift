@@ -21,6 +21,7 @@ struct CapturedFrame: @unchecked Sendable {
     windowTitle: String? = nil,
     frameNumber: Int,
     captureTime: Date = Date(),
+    capturedUptime: TimeInterval = ProcessInfo.processInfo.systemUptime,
     screenshotId: Int64? = nil,
     taskBinding: ScreenTaskFrameBinding? = nil
   ) {
@@ -29,7 +30,7 @@ struct CapturedFrame: @unchecked Sendable {
     self.windowTitle = windowTitle
     self.frameNumber = frameNumber
     self.captureTime = captureTime
-    self.capturedUptime = ProcessInfo.processInfo.systemUptime
+    self.capturedUptime = capturedUptime
     self.screenshotId = screenshotId
     self.taskBinding = taskBinding
   }
@@ -41,6 +42,7 @@ struct CapturedFrame: @unchecked Sendable {
     windowTitle: String? = nil,
     frameNumber: Int,
     captureTime: Date = Date(),
+    capturedUptime: TimeInterval = ProcessInfo.processInfo.systemUptime,
     screenshotId: Int64? = nil,
     taskBinding: ScreenTaskFrameBinding? = nil
   ) {
@@ -49,7 +51,7 @@ struct CapturedFrame: @unchecked Sendable {
     self.windowTitle = windowTitle
     self.frameNumber = frameNumber
     self.captureTime = captureTime
-    self.capturedUptime = ProcessInfo.processInfo.systemUptime
+    self.capturedUptime = capturedUptime
     self.screenshotId = screenshotId
     self.taskBinding = taskBinding
   }
