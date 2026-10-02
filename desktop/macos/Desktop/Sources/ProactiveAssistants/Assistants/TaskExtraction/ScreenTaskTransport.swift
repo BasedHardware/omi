@@ -70,7 +70,11 @@ extension APIClient {
     for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
     try validateExpectedOwner(policy)
     let (data, urlResponse) = try await session.data(for: request)
-    try validateExpectedOwner(policy)
+    // A terminal denial wins over a concurrent feature stop. It must not become
+    // rollback through the response-side feature validator. Original ownership
+    // still gates every response; successful data also needs the full work lease.
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    try Task.checkCancellation()
     guard let response = urlResponse as? HTTPURLResponse else { throw APIError.invalidResponse }
     guard (200...299).contains(response.statusCode) else {
       let failure = ScreenTaskHTTPFailure(response: response, data: data)
@@ -78,6 +82,7 @@ extension APIClient {
       ScreenTaskBackpressure.shared.record(failure, owner: authorization)
       throw failure
     }
+    try validateExpectedOwner(policy)
     return try JSONDecoder().decode(T.self, from: data)
   }
 }
