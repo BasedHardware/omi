@@ -39,6 +39,11 @@ class CompositeTranscriptionSocket implements IPureSocket {
   int _secondaryRetryAttempts = 0;
   bool _secondaryRetryInFlight = false;
 
+  /// Bumped whenever degraded state is cleared (connect, stop, disconnect,
+  /// primary teardown, restore). A background retry that started in an older
+  /// epoch must not act on the current one when its connect finally returns.
+  int _degradedEpoch = 0;
+
   /// True while the composite is connected on the primary only (see
   /// [keepPrimaryWhenSecondaryFails]).
   bool get secondaryDegraded => _secondaryDegraded;
@@ -170,6 +175,8 @@ class CompositeTranscriptionSocket implements IPureSocket {
   }
 
   void _clearDegraded() {
+    _degradedEpoch++;
+    _secondaryRetryInFlight = false;
     _secondaryRetryTimer?.cancel();
     _secondaryRetryTimer = null;
     _secondaryDegraded = false;
@@ -187,6 +194,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   Future<void> _retrySecondary() async {
     if (_status != PureSocketStatus.connected || !_secondaryDegraded || _secondaryRetryInFlight) return;
+    final epoch = _degradedEpoch;
     _secondaryRetryInFlight = true;
     _secondaryRetryAttempts++;
     bool ok = false;
@@ -195,16 +203,21 @@ class CompositeTranscriptionSocket implements IPureSocket {
     } catch (e) {
       CustomSttLogService.instance.warning('Composite', 'Omi socket retry error: $e');
     } finally {
-      _secondaryRetryInFlight = false;
+      if (epoch == _degradedEpoch) _secondaryRetryInFlight = false;
     }
 
-    // The composite may have been stopped while the retry was in flight.
-    if (_status != PureSocketStatus.connected || !_secondaryDegraded) {
-      if (ok) await secondarySocket.disconnect();
+    if (epoch != _degradedEpoch) {
+      // The composite was stopped, restarted or torn down while this retry was
+      // pending. A newer session owns the secondary now; only clean up a
+      // connection nobody will use.
+      final idle = _status != PureSocketStatus.connected && _status != PureSocketStatus.connecting;
+      if (ok && idle) await secondarySocket.disconnect();
       return;
     }
 
-    if (ok && secondarySocket.status == PureSocketStatus.connected) {
+    // A connect that raced with another attempt can report false while the
+    // socket is in fact connected; trust the socket's own status.
+    if (secondarySocket.status == PureSocketStatus.connected) {
       CustomSttLogService.instance.info('Composite', 'Omi socket restored after $_secondaryRetryAttempts attempt(s)');
       DebugLogManager.logEvent('composite_secondary_restored', {'attempts': _secondaryRetryAttempts});
       _clearDegraded();

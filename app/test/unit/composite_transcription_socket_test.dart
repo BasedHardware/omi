@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -363,6 +364,42 @@ void main() {
       await socket.stop();
     });
 
+    test('a retry still pending across stop and reconnect cannot disturb the new session', () async {
+      final primary = _ScriptedSocket();
+      final gate = Completer<bool>();
+      // 1st connect fails (initial), 2nd hangs on [gate] (background retry), later calls succeed.
+      final secondary = _GatedSocket([Future.value(false), gate.future]);
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        keepPrimaryWhenSecondaryFails: true,
+        secondaryRetryInitialDelay: const Duration(milliseconds: 10),
+        secondaryRetryMaxDelay: const Duration(milliseconds: 20),
+      );
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(secondary.connectCalls, 2, reason: 'background retry is in flight');
+
+      await socket.stop();
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isFalse, reason: 'the new session connected the secondary itself');
+
+      gate.complete(true); // the stale retry's connect returns after the new session started
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(secondary.disconnectCalls, 1, reason: 'only the stop() disconnect; the stale retry must not tear down');
+      expect(secondary.connectCalls, 3, reason: 'no retry timer was rescheduled by the stale attempt');
+      expect(secondary.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isFalse);
+
+      final audio = Uint8List.fromList([2]);
+      socket.send(audio);
+      expect(secondary.sent, [same(audio)]);
+      await socket.stop();
+    });
+
     test('live custom STT turns degraded mode on and reports delivery to Omi', () async {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
@@ -449,6 +486,66 @@ class _ScriptedSocket implements IPureSocket {
     _status = PureSocketStatus.disconnected;
     _listener?.onClosed(code);
   }
+}
+
+/// Fake socket whose connect() results come from [_results] in order (true
+/// once exhausted). Like PureSocket it refuses connect() while connecting or
+/// connected, and a disconnect retires any pending attempt (it returns false
+/// without touching the status).
+class _GatedSocket implements IPureSocket {
+  _GatedSocket(List<Future<bool>> results) : _results = [...results];
+
+  final List<Future<bool>> _results;
+  final List<dynamic> sent = [];
+  int connectCalls = 0;
+  int disconnectCalls = 0;
+  int _generation = 0;
+  IPureSocketListener? _listener;
+  PureSocketStatus _status = PureSocketStatus.notConnected;
+
+  @override
+  PureSocketStatus get status => _status;
+
+  @override
+  Future<bool> connect() async {
+    connectCalls++;
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) return false;
+    final generation = ++_generation;
+    _status = PureSocketStatus.connecting;
+    final ok = await (_results.isEmpty ? Future.value(true) : _results.removeAt(0));
+    if (generation != _generation) return false;
+    _status = ok ? PureSocketStatus.connected : PureSocketStatus.notConnected;
+    if (ok) _listener?.onConnected();
+    return ok;
+  }
+
+  @override
+  Future<void> disconnect() async {
+    disconnectCalls++;
+    _generation++;
+    _status = PureSocketStatus.disconnected;
+  }
+
+  @override
+  Future<void> stop() => disconnect();
+
+  @override
+  void send(dynamic message) => sent.add(message);
+
+  @override
+  void setListener(IPureSocketListener listener) => _listener = listener;
+
+  @override
+  void onClosed() => _listener?.onClosed();
+
+  @override
+  void onConnected() => _listener?.onConnected();
+
+  @override
+  void onError(Object err, StackTrace trace) => _listener?.onError(err, trace);
+
+  @override
+  void onMessage(dynamic message) => _listener?.onMessage(message);
 }
 
 class _TestEnvFields implements EnvFields {
