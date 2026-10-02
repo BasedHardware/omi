@@ -1,11 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
 
 import '../../support/capture/virtual_capture_time.dart';
 
 void main() {
+  test('owned Listenable stops delivering during close and cannot attach after close', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final source = ChangeNotifier();
+    var calls = 0;
+    bag.listenTo(source, () => calls++);
+    source.notifyListeners();
+    expect(calls, 1);
+    await bag.close();
+    source.notifyListeners();
+    bag.listenTo(source, () => calls++);
+    source.notifyListeners();
+    expect(calls, 1);
+    source.dispose();
+  });
+
   test('close does not cancel timers the bag did not register', () async {
     final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
     final events = <String>[];

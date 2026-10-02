@@ -12031,4 +12031,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get showOnLockScreen => '잠금 화면에 표시';
 }

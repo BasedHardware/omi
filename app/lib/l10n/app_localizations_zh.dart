@@ -12006,4 +12006,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get showOnLockScreen => '在锁定屏幕上显示';
 }

@@ -12222,4 +12222,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get showOnLockScreen => 'نمایش در صفحهٔ قفل';
 }

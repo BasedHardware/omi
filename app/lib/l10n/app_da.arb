@@ -3824,5 +3824,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi genkender {name} næste gang.} pending{Det tager et par sekunder.} disabled{Slå lagring af stemmer til i Indstillinger, så Omi kan genkende {name}.} other{Omi har brug for mere tydelig tale fra {name} og bliver ved med at prøve.}}",
     "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemme: {count}",
     "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
-    "speakerLabelTalkTime": "{duration} af denne stemme"
+    "speakerLabelTalkTime": "{duration} af denne stemme",
+    "showOnLockScreen": "Vis på låseskærmen"
 }

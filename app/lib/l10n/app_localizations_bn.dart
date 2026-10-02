@@ -12222,4 +12222,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get showOnLockScreen => 'লক স্ক্রিনে দেখান';
 }

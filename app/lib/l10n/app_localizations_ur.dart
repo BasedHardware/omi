@@ -12234,4 +12234,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
 }

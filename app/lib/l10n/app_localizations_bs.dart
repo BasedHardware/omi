@@ -12254,4 +12254,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
 }

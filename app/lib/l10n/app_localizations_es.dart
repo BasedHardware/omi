@@ -12259,4 +12259,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de esta voz';
   }
+
+  @override
+  String get showOnLockScreen => 'Mostrar en la pantalla de bloqueo';
 }

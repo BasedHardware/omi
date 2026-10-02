@@ -12155,4 +12155,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
+
+  @override
+  String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
 }

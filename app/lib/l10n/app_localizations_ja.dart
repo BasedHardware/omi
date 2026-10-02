@@ -12027,4 +12027,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get showOnLockScreen => 'ロック画面に表示';
 }

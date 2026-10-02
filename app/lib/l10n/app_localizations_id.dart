@@ -12235,4 +12235,7 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get showOnLockScreen => 'Tampilkan di layar kunci';
 }

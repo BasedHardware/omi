@@ -12241,4 +12241,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration desta voz';
   }
+
+  @override
+  String get showOnLockScreen => 'Mostrar na tela de bloqueio';
 }

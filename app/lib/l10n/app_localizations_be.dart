@@ -12255,4 +12255,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
+
+  @override
+  String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
 }

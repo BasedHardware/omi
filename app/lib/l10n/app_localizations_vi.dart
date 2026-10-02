@@ -12216,4 +12216,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
 }

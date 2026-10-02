@@ -12216,4 +12216,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
 }

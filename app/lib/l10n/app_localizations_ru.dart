@@ -12263,4 +12263,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get showOnLockScreen => 'Показывать на экране блокировки';
 }

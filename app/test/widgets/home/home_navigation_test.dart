@@ -55,6 +55,10 @@ void main() {
     test('selects the parent tab before the page', () {
       // Two pages now: conversations, memories and search open over Home; tasks over Tasks.
       expect(HomeDeepLink.parse('/conversations')!.tabIndex, HomeProvider.homeTab);
+      // Live Activity links open over Home; index 1 is now Tasks.
+      final capture = HomeDeepLink.parse('/capture?recording=active-session')!;
+      expect(capture.tabIndex, HomeProvider.homeTab);
+      expect(capture.query['recording'], 'active-session');
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, HomeProvider.tasksTab);
       expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, isNull, reason: 'the app catalog is not a tab any more');
       expect(HomeDeepLink.parse('/memories')!.tabIndex, HomeProvider.homeTab);
