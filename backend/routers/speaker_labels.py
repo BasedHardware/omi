@@ -9,7 +9,6 @@ from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
-from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_voice_matches import find_person_voice_matches
 
 router = APIRouter()
@@ -27,8 +26,6 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if data.kind == 'not_person' and not named_speaker_prompts_allowed(uid):
-        raise HTTPException(status_code=403, detail='Naming other people needs a paid plan')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
             uid,
