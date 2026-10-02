@@ -113,17 +113,4 @@ void main() {
     expect(provider.isSelectionMode, isTrue);
     expect(provider.isItemSelected('child'), isTrue);
   });
-
-  testWidgets('long-press offers Export for one task and points to Connect when no app is linked', (tester) async {
-    await pumpPage(tester);
-
-    await tester.longPress(find.text('Book the venue'));
-    await tester.pumpAndSettle();
-    expect(find.text('Export'), findsOneWidget);
-
-    await tester.tap(find.text('Export'));
-    await tester.pump();
-    expect(find.text('Connect a task app in Settings to export'), findsOneWidget);
-    await tester.pumpAndSettle(const Duration(seconds: 5));
-  });
 }

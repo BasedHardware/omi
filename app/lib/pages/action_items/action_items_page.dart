@@ -9,7 +9,6 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -1086,7 +1085,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   /// Long-press menu: the conversation page's anchored menu, under the row that was held. Open
-  /// and completion first, then the editing entries, Delete last.
+  /// and completion first, then the editing entries, Delete last. Exporting is not per task: Task
+  /// Integrations (the ⋯ menu) decides where tasks go.
   void _showTaskMenu(
     ActionItemWithMetadata item,
     List<ActionItemWithMetadata> categoryItems, {
@@ -1112,8 +1112,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           onTap: () => _toggleCompleted(provider, item),
         ),
         const PullDownMenuDivider.large(),
-        if (!item.exported)
-          PullDownMenuItem(title: l10n.exportButton, icon: Icons.ios_share_rounded, onTap: () => _exportTask(item)),
         if (!item.completed && item.indentLevel < maxIndent)
           PullDownMenuItem(
             title: l10n.indentTask,
@@ -1143,23 +1141,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ],
     );
-  }
-
-  /// One task to the connected task app, the way the selection bar exports several.
-  Future<void> _exportTask(ActionItemWithMetadata item) async {
-    OmiHaptics.light();
-    final integrations = Provider.of<TaskIntegrationProvider>(context, listen: false);
-    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
-    if (connected.isEmpty) {
-      OmiFeedback.error(
-        context,
-        context.l10n.connectTaskAppToExport,
-        actionLabel: context.l10n.connectAction,
-        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
-      );
-      return;
-    }
-    await Provider.of<ActionItemsProvider>(context, listen: false).exportItems(context, [item], connected.first);
   }
 
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) => categoryForItem(item, false);
