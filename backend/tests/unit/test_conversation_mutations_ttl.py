@@ -64,6 +64,8 @@ class _MockQuery:
         return new_q
 
     def stream(self):
+        if getattr(self.database, 'fail_queries', False):
+            raise RuntimeError('Firestore index unavailable')
         results = []
         for path, data in list(self.database.rows.items()):
             if path[: len(self.base_path)] != self.base_path or len(path) != len(self.base_path) + 1:
@@ -166,6 +168,20 @@ class _Transaction:
         self.write_paths.append(document.path)
 
 
+class _MockBatch:
+    def __init__(self, database: _MockFirestore):
+        self.database = database
+        self._deletes: list[tuple[str, ...]] = []
+
+    def delete(self, ref: Any, precondition: Any = None):
+        self._deletes.append(ref.path)
+
+    def commit(self):
+        for path in self._deletes:
+            self.database.rows.pop(path, None)
+            self.database.update_times.pop(path, None)
+
+
 class _MockFirestore:
     def __init__(self, conversation: dict[str, Any], *, revision: datetime | None = BASE_REVISION):
         self.conversation_path: tuple[str, ...] = ('users', 'user-1', 'conversations', 'conversation-1')
@@ -181,6 +197,9 @@ class _MockFirestore:
         transaction = _Transaction(self)
         self.transactions.append(transaction)
         return transaction
+
+    def batch(self):
+        return _MockBatch(self)
 
 
 def _conversation(**overrides: Any) -> dict[str, Any]:
@@ -391,3 +410,92 @@ def test_prune_expired_mutation_receipts():
     assert (*conv_base, 'mutation_receipts', 'r1') not in database.rows
     assert (*conv_base, 'mutation_receipts', 'r2') not in database.rows
     assert (*conv_base, 'mutation_receipts', 'r3') in database.rows
+
+
+def test_ttl_must_be_strictly_positive():
+    database = _MockFirestore(_conversation())
+
+    with pytest.raises(ValueError, match='mutation receipt ttl must be positive'):
+        mutations_db.apply_conversation_sync_mutation(
+            'user-1',
+            'conversation-1',
+            client_mutation_id='m-zero-ttl',
+            base_revision=BASE_REVISION,
+            operation={'type': 'set_title', 'title': 'Title'},
+            ttl=timedelta(0),
+            firestore_client=database,
+        )
+
+    with pytest.raises(ValueError, match='mutation receipt ttl must be positive'):
+        mutations_db.apply_conversation_sync_mutation(
+            'user-1',
+            'conversation-1',
+            client_mutation_id='m-neg-ttl',
+            base_revision=BASE_REVISION,
+            operation={'type': 'set_title', 'title': 'Title'},
+            ttl=timedelta(seconds=-1),
+            firestore_client=database,
+        )
+
+
+def test_same_id_with_different_fingerprint_after_expiry_applies_as_new_mutation():
+    """Pin the semantic: while unexpired, same mutation_id + different fingerprint raises conflict.
+    Once expired, the receipt falls through and the same id cleanly applies a new mutation.
+    """
+    database = _MockFirestore(_conversation())
+    uid = 'user-1'
+    cid = 'conversation-1'
+    mid = 'm-reused-after-expiry'
+
+    # 1. First mutation applies successfully
+    res1, replayed1 = mutations_db.apply_conversation_sync_mutation(
+        uid,
+        cid,
+        client_mutation_id=mid,
+        base_revision=BASE_REVISION,
+        operation={'type': 'set_title', 'title': 'Title A'},
+        firestore_client=database,
+    )
+    assert replayed1 is False
+    assert res1['status'] == 'ok'
+
+    # 2. While unexpired, re-using mid with different fingerprint raises mutation_id_reused conflict
+    with pytest.raises(mutations_db.ConversationMutationConflictError) as conflict:
+        mutations_db.apply_conversation_sync_mutation(
+            uid,
+            cid,
+            client_mutation_id=mid,
+            base_revision=BASE_REVISION,
+            operation={'type': 'set_starred', 'starred': True},
+            firestore_client=database,
+        )
+    assert conflict.value.response['code'] == 'mutation_id_reused'
+
+    # 3. Simulate receipt expiration beyond the outbox retry horizon
+    receipt_paths = [p for p in database.rows if p[-2:-1] == ('mutation_receipts',)]
+    receipt_path = receipt_paths[0]
+    database.rows[receipt_path]['expire_at'] = datetime.now(timezone.utc) - timedelta(days=1)
+
+    # 4. After expiry, mid can apply a different mutation against updated state
+    res2, replayed2 = mutations_db.apply_conversation_sync_mutation(
+        uid,
+        cid,
+        client_mutation_id=mid,
+        base_revision=COMMIT_REVISION,
+        operation={'type': 'set_starred', 'starred': True},
+        firestore_client=database,
+    )
+    assert replayed2 is False
+    assert res2['status'] == 'ok'
+    assert database.rows[database.conversation_path]['starred'] is True
+    assert database.rows[receipt_path]['expire_at'] > datetime.now(timezone.utc)
+
+
+def test_prune_expired_mutation_receipts_propagates_failure():
+    database = _MockFirestore(_conversation())
+    uid = 'user-1'
+    cid = 'conversation-1'
+    database.fail_queries = True
+
+    with pytest.raises(RuntimeError, match='Firestore index unavailable'):
+        mutations_db.prune_expired_mutation_receipts(uid, cid, firestore_client=database)

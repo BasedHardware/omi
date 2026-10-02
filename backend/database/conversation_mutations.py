@@ -3,9 +3,12 @@
 import copy
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 from google.cloud import firestore
 
@@ -128,6 +131,9 @@ def apply_conversation_sync_mutation(
     stores the conversation's existing revision because Firestore may preserve
     a document's old ``update_time`` when an update changes no values.
     """
+    if ttl <= timedelta(0):
+        raise ValueError(f'mutation receipt ttl must be positive, got {ttl}')
+
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = (
         client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
@@ -167,6 +173,13 @@ def apply_conversation_sync_mutation(
                     )
                 replayed = True
                 return
+
+            # Semantic Note: Once a receipt expires beyond its TTL (the client outbox retry horizon),
+            # it is treated as expired and eligible for re-application. This allows legitimate retries
+            # that outlived the cache window to re-apply rather than fail permanently, but converts
+            # the hard 'mutation_id_reused' conflict guard into a time-bounded guarantee.
+            # Same-id retries with differing fingerprints after expiration will re-apply cleanly
+            # against current state rather than throwing a permanent conflict.
 
         def _write_receipt(resp: Dict[str, Any], rev_source: Optional[str] = None) -> None:
             receipt_payload: Dict[str, Any] = {
@@ -322,13 +335,34 @@ def prune_expired_mutation_receipts(
     try:
         query = receipts_ref.where('expire_at', '<=', now_utc).limit(batch_size)
         docs = list(query.stream() if hasattr(query, 'stream') else query.get())
-        for doc in docs:
-            ref = getattr(doc, 'reference', None)
-            if ref is not None and hasattr(ref, 'delete'):
-                ref.delete()
-            elif hasattr(doc, 'delete'):
-                doc.delete()
-            deleted_count += 1
-    except Exception:
-        pass
+        if not docs:
+            return 0
+
+        if hasattr(client, 'batch'):
+            batch = client.batch()
+            for doc in docs:
+                ref = getattr(doc, 'reference', None)
+                if ref is not None:
+                    batch.delete(ref)
+                elif hasattr(doc, 'delete'):
+                    doc.delete()
+                deleted_count += 1
+            if hasattr(batch, 'commit'):
+                batch.commit()
+        else:
+            for doc in docs:
+                ref = getattr(doc, 'reference', None)
+                if ref is not None and hasattr(ref, 'delete'):
+                    ref.delete()
+                elif hasattr(doc, 'delete'):
+                    doc.delete()
+                deleted_count += 1
+    except Exception as e:
+        logger.exception(
+            'Failed during mutation receipt pruning for user %s, conversation %s: %s',
+            uid,
+            conversation_id,
+            e,
+        )
+        raise
     return deleted_count
