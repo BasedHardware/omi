@@ -869,7 +869,26 @@ def test_browse_scan_cap_and_budget_truncation_both_report_more():
         budget=truncated_budget,
     )
     assert truncated_budget.truncated
-    assert result['total_pages'] == 2
+    # Truncated with nothing to show: another page would repeat the same scan
+    # and be empty again, so none is advertised.
+    assert result['items'] == []
+    assert result['total_pages'] == 1
+
+    matching = [_stored(f'm{i}', i, transcript_segments=_segments('p1')) for i in range(50)]
+    matching_budget = _budget(max_documents=10)
+    result = browse_conversations_by_speaker(
+        iter_conversations(
+            UID, limit=50, batch=50, budget=matching_budget, firestore_client=_StrictClient(UID, matching)
+        ),
+        'p1',
+        page=1,
+        per_page=10,
+        scan_cap=50,
+        budget=matching_budget,
+    )
+    assert matching_budget.truncated
+    assert len(result['items']) == 10
+    assert result['total_pages'] == 2  # truncated with rows shown: more may exist
 
 
 # ---------------------------------------------------------------------------

@@ -399,4 +399,4 @@ def finish_list_budget(response: Any, budget: ListReadBudget) -> None:
     """Stamp the truncation header on the response (when one exists) and record the outcome."""
     if response is not None:
         apply_truncation_header(response.headers, budget)
-    budget.observe('truncated' if budget.truncated else 'ok')
+    budget.observe('truncated' if budget.truncated else 'complete')

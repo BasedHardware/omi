@@ -292,10 +292,14 @@ def browse_conversations_by_speaker(
             close()
     start = (page - 1) * per_page
     items = matches[start : start + per_page]
+    # A budget cut advertises another page only when this one returned rows. The
+    # next page re-runs the same scan under the same budget, so after an empty
+    # truncated page it could only be empty again, and a client that pages on
+    # total_pages would repeat a full-budget scan on every scroll.
     has_more = (
         len(matches) > wanted
         or (not exhausted and scanned >= scan_cap)
-        or bool(budget is not None and budget.truncated)
+        or bool(budget is not None and budget.truncated and items)
     )
     return {
         'items': items,
