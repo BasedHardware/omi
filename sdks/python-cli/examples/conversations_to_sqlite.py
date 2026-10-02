@@ -15,7 +15,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 SCHEMA: str = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -32,11 +32,13 @@ CREATE TABLE IF NOT EXISTS conversations (
 """
 
 
-def utc_stamp(value: Optional[str]) -> Optional[str]:
+def utc_stamp(value: Any) -> Optional[str]:
     """Normalise an ISO-8601 timestamp to UTC 'YYYY-MM-DD HH:MM:SS' text.
 
     Returns None for None/empty so SQLite NULL is used instead of a string,
     keeping date functions (strftime, julianday) working without coercion.
+    A non-string or unparseable value is stored as text rather than dropped, so
+    the original value stays queryable.
     """
     if not value:
         return None
@@ -45,8 +47,35 @@ def utc_stamp(value: Optional[str]) -> Optional[str]:
         if dt.tzinfo is not None:
             dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, AttributeError):
-        return value
+    except (ValueError, AttributeError, TypeError):
+        return text(value)
+
+
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    both sqlite3 and file writes raise UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the row import.
+    """
+    return value.encode("utf-8", "replace").decode("utf-8")
+
+
+def text(value: Optional[Any]) -> Optional[str]:
+    """Coerce a loosely typed API field to storable text.
+
+    The dev API is loosely typed, so title/category/source/transcript can arrive as
+    a dict or list. sqlite3 refuses to bind those ("type 'dict' is not supported"),
+    which would abort the whole import over one bad field, so anything non-null is
+    coerced rather than rejected. Returns None for None so SQLite NULL is used.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        value = json.dumps(value, ensure_ascii=False)
+    elif not isinstance(value, str):
+        value = str(value)
+    return strip_surrogates(value)
 
 
 def rows_from(pages: Sequence[str]) -> List[Tuple]:
@@ -71,18 +100,24 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
             conv_id = item.get("id")
             if not conv_id:
                 raise ValueError(f"{path}: conversation missing required 'id' field")
-            structured: Dict[str, Any] = item.get("structured") or {}
+            structured = item.get("structured")
+            if not isinstance(structured, dict):
+                # The summary is produced upstream and is not schema-validated, so
+                # 'structured' can arrive as a list, string or number. Subscript it
+                # as a dict only when it really is one; one odd record must not
+                # abort the entire import with AttributeError.
+                structured = {}
             rows.append(
                 (
                     str(conv_id),
-                    structured.get("title"),
-                    structured.get("category"),
-                    item.get("source"),
+                    text(structured.get("title")),
+                    text(structured.get("category")),
+                    text(item.get("source")),
                     utc_stamp(item.get("started_at")),
                     utc_stamp(item.get("created_at")),
                     utc_stamp(item.get("updated_at")),
-                    item.get("transcript"),
-                    json.dumps(item, ensure_ascii=False),
+                    text(item.get("transcript")),
+                    strip_surrogates(json.dumps(item, ensure_ascii=False)),
                 )
             )
     return rows

@@ -22,6 +22,7 @@ c2s = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(c2s)
 
 load = c2s.load
+text = c2s.text
 utc_stamp = c2s.utc_stamp
 
 
@@ -215,6 +216,153 @@ class TestConversationsToSqlite(unittest.TestCase):
             self.assertEqual(loaded, 0)
             self.assertEqual(added, 0)
             self.assertEqual(total, 0)
+
+    def test_non_dict_structured_does_not_abort_import(self):
+        """A 'structured' summary that is not an object must not raise AttributeError.
+
+        The summary is produced upstream and is not schema-validated, so it can arrive
+        as a list, string or number. One such record must import with NULL title and
+        category rather than aborting the whole page.
+        """
+        for value, label in (([1, 2, 3], "list"), ("not an object", "string"), (7, "number"), (None, "null")):
+            with self.subTest(structured=label):
+                db_path = self.dir_path / f"structured_{label}.sqlite"
+                json_file = self.dir_path / f"structured_{label}.json"
+                json_file.write_text(
+                    json.dumps([{"id": f"conv_{label}", "structured": value}]),
+                    encoding="utf-8",
+                )
+
+                loaded, added, total = load(str(db_path), [str(json_file)])
+                self.assertEqual(loaded, 1)
+                self.assertEqual(total, 1)
+
+                conn = sqlite3.connect(str(db_path))
+                try:
+                    row = conn.execute("SELECT title, category FROM conversations").fetchone()
+                finally:
+                    conn.close()
+                self.assertEqual(row, (None, None))
+
+    def test_bad_structured_does_not_block_good_records(self):
+        """A malformed 'structured' value must not drop the valid records beside it."""
+        records = [
+            {"id": "good_before", "structured": {"title": "Valid", "category": "work"}},
+            {"id": "bad", "structured": ["not", "an", "object"]},
+            {"id": "good_after", "structured": {"title": "Also valid", "category": "personal"}},
+        ]
+        json_file = self.dir_path / "mixed.json"
+        json_file.write_text(json.dumps(records), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual(loaded, 3)
+        self.assertEqual(total, 3)
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            titles = dict(conn.execute("SELECT id, title FROM conversations").fetchall())
+        finally:
+            conn.close()
+        self.assertEqual(titles["good_before"], "Valid")
+        self.assertEqual(titles["good_after"], "Also valid")
+        self.assertIsNone(titles["bad"])
+
+    def test_non_string_fields_are_coerced_to_text(self):
+        """dict/list/str fields are coerced to text so sqlite3 can bind them.
+
+        sqlite3 raises "type 'dict' is not supported" for non-text parameters, which
+        would abort the import over a single loosely typed field.
+        """
+        record = {
+            "id": "conv_loose",
+            "structured": {"title": {"nested": "dict"}, "category": ["work", "urgent"]},
+            "source": {"kind": "phone"},
+            "transcript": {"segments": [{"text": "hi"}]},
+        }
+        json_file = self.dir_path / "loose.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        loaded, _, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(total, 1)
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT title, category, source, transcript FROM conversations").fetchone()
+        finally:
+            conn.close()
+        for value in row:
+            self.assertIsInstance(value, str)
+        self.assertIn("nested", row[0])
+        self.assertIn("urgent", row[1])
+
+    def test_lone_surrogate_does_not_abort_import(self):
+        """Lone surrogates from a malformed export must not raise UnicodeEncodeError.
+
+        json.loads accepts "\\ud800", but neither sqlite3 nor a UTF-8 write can encode it.
+        """
+        record = {"id": "conv_surrogate", "structured": {"title": "bad \ud800 title", "category": "work"}}
+        json_file = self.dir_path / "surrogate.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        loaded, _, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(total, 1)
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT title, raw_json FROM conversations").fetchone()
+        finally:
+            conn.close()
+        # The surrogate is dropped, the surrounding text survives.
+        self.assertIn("bad", row[0])
+        self.assertIn("title", row[1])
+        # The stored raw_json must be valid UTF-8 encodable.
+        row[1].encode("utf-8")
+
+    def test_non_string_timestamps_are_coerced(self):
+        """A non-string timestamp is stored as text instead of raising."""
+        record = {"id": "conv_ts", "started_at": 12345, "created_at": ["2026"], "structured": {"title": "t"}}
+        json_file = self.dir_path / "timestamps.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        loaded, _, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(total, 1)
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT started_at, created_at FROM conversations").fetchone()
+        finally:
+            conn.close()
+        # A list is rendered with str(), matching the scalar coercion path.
+        self.assertEqual(row, ("12345", "['2026']"))
+
+    def test_text_helper_coercion(self):
+        """text() coerces loosely typed values and passes None through as NULL."""
+        self.assertIsNone(text(None))
+        self.assertEqual(text("plain"), "plain")
+        self.assertEqual(text({"a": 1}), '{"a": 1}')
+        self.assertEqual(text([1, 2]), "[1, 2]")
+        self.assertEqual(text(12345), "12345")
+        self.assertEqual(text(True), "True")
+
+    def test_half_hour_offset_is_normalised_to_utc(self):
+        """A +05:30 offset is accepted and normalised to UTC rather than dropped."""
+        record = {"id": "conv_tz", "started_at": "2026-01-01T00:00:00+05:30", "structured": {"title": "t"}}
+        json_file = self.dir_path / "tz.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        load(str(self.db_path), [str(json_file)])
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            # 00:00 at +05:30 is 18:30 UTC on the previous day.
+            self.assertEqual(
+                conn.execute("SELECT started_at FROM conversations").fetchone()[0],
+                "2025-12-31 18:30:00",
+            )
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":
