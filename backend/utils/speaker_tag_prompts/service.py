@@ -56,7 +56,6 @@ from utils.executors import (
     db_executor,
     run_blocking,
     speaker_tag_verify_executor,
-    storage_executor,
     submit_with_context,
     sync_executor,
 )
@@ -765,7 +764,9 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
             outcome = 'clip_not_clean'
             return outcome
         start, end, text = window
-        pcm = await run_blocking(storage_executor, conversation_clip_pcm, uid, conversation, start, end)
+        pcm = await run_blocking(
+            sync_executor, conversation_clip_pcm, uid, conversation, start, end, caller='owner_confirmation'
+        )
         if not pcm:
             outcome = 'no_audio'
             return outcome

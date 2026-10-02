@@ -19,6 +19,7 @@ from utils.stt.live_metrics import (
     COST_SNAPSHOT_AT,
     COST_STATE_KNOWN,
     COST_OBSERVATIONS,
+    COST_IGNORED_DEATHS,
     COST_SETTLEMENTS,
     COST_VOTES,
     COST_ALL_DEGRADED,
@@ -37,7 +38,7 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v6'
+PREFIX = 'omi:live-stt:cost-v7'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -105,6 +106,8 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
+                for boundary in ('client_gone', 'owner_teardown'):
+                    COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
                 for path in ('close', 'failover', 'connect'):
                     COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
 
