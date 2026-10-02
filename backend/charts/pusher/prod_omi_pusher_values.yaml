@@ -115,6 +115,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
