@@ -31070,6 +31070,17 @@
             "title": "Conversations",
             "type": "array"
           },
+          "export_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Complete"
+          },
           "frame_requests": {
             "items": {
               "additionalProperties": true,
@@ -63631,9 +63642,21 @@
     },
     "/v1/users/export": {
       "get": {
-        "description": "Export all user data for GDPR/CCPA compliance from a disk-backed spool.",
+        "description": "Export all user data for GDPR/CCPA compliance.",
         "operationId": "export_all_user_data_v1_users_export_get",
         "parameters": [
+          {
+            "description": "Stream the export lazily instead of spooling it server-side before headers. When true, clients MUST verify the body ends with the \"export_complete\": true completion suffix; a truncated body is a failed export even after HTTP 200.",
+            "in": "query",
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Stream the export lazily instead of spooling it server-side before headers. When true, clients MUST verify the body ends with the \"export_complete\": true completion suffix; a truncated body is a failed export even after HTTP 200.",
+              "title": "Stream",
+              "type": "boolean"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

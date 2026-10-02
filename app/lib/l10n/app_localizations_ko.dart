@@ -11919,17 +11919,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '화자 $count명',
-      one: '화자 1명',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return '단축어 → Siri에서 Omi를 켜세요. “$askPhrase” 또는 “$questionPhrase”라고 말한 다음 질문하세요.';
   }
@@ -11950,6 +11939,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get updateRequiredMessage => '이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.';
+
+  @override
+  String get exportingAllData => '데이터를 보내는 중… Omi를 열어 두세요. 데이터가 많은 계정은 몇 분 정도 걸릴 수 있습니다.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '화자 $count명',
+      one: '화자 1명',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => '동기화된 사본 자동 삭제';

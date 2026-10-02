@@ -12191,17 +12191,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பேச்சாளர்கள்',
-      one: '1 பேச்சாளர்',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “$askPhrase” அல்லது “$questionPhrase” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.';
   }
@@ -12223,6 +12212,21 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.';
+
+  @override
+  String get exportingAllData =>
+      'உங்கள் தரவு ஏற்றுமதி செய்யப்படுகிறது… Omi-ஐ திறந்தே வைக்கவும்; பெரிய கணக்குகளுக்கு பல நிமிடங்கள் ஆகலாம்.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பேச்சாளர்கள்',
+      one: '1 பேச்சாளர்',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று';
