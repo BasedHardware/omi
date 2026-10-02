@@ -23,6 +23,9 @@ from utils.stt.live_metrics import (
     COST_VOTES,
     COST_ALL_DEGRADED,
     FLEET_HEALTH_WRITE_DROPPED,
+    MANAGED_LEGS_OPENED,
+    MANAGED_LEGS_SETTLED,
+    MANAGED_LEGS_OPEN,
 )
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
@@ -39,6 +42,7 @@ CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
+if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end
 return 1
 """
 
@@ -87,6 +91,9 @@ class CostHealthMixin(ABC):
             if target.id in self._cost_metrics_targets:
                 continue
             self._cost_metrics_targets.add(target.id)
+            MANAGED_LEGS_OPENED.labels(target=target.id)
+            MANAGED_LEGS_SETTLED.labels(target=target.id)
+            MANAGED_LEGS_OPEN.labels(target=target.id)
             COST_ALL_DEGRADED.labels(target=target.id)
             for scope in ('global', 'language'):
                 for result in ('applied', 'user_cap', 'window_full', 'generation', 'stage'):
@@ -239,7 +246,13 @@ class CostHealthMixin(ABC):
     def quarantine_target(self, target: str, seconds: float) -> None:
         def update(state: GateState) -> GateState:
             return replace(
-                state, stage=0, until=max(state.until, self._fleet_now() + seconds), generation=state.generation + 1
+                state,
+                stage=0,
+                until=max(state.until, self._fleet_now() + seconds),
+                generation=state.generation + 1,
+                healthy_users=(),
+                healthy_window=-1,
+                overflow_failures=(),
             )
 
         with self._lock:
@@ -310,7 +323,10 @@ class CostHealthMixin(ABC):
             if new == old:
                 return old
             encoded = json.dumps(new.encode(), separators=(',', ':'))
-            if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded):
+            # Healthy fairness data expires after three idle windows. Benches
+            # and recovery trials have no healthy_users and must not expire
+            # into a fresh stage-100 state (especially unprobed expensive legs).
+            if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0):
                 self._cost_event(key[0], key[1], old, new, failed)
                 with self._lock:
                     self._cost_cached[key] = new
@@ -341,7 +357,7 @@ class CostHealthMixin(ABC):
                         result = 'generation'
                         return state
                     updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
-                    if updated == state:
+                    if updated.stage == state.stage and updated.n == state.n and updated.failures == state.failures:
                         result = (
                             'stage'
                             if state.stage == 0

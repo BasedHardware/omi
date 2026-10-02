@@ -403,7 +403,7 @@ async def test_soniox_korean_no_frame_disconnect_reconnect_loop_is_censored(monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('serving_decision', [False, True])
-async def test_only_serving_decision_before_client_disconnect_counts_death(monkeypatch, serving_decision):
+async def test_latched_death_before_client_disconnect_counts_without_monitor_claim(monkeypatch, serving_decision):
     raw = _ReceiverRawSocket()
     observed_while_connected = []
 
@@ -422,4 +422,4 @@ async def test_only_serving_decision_before_client_disconnect_counts_death(monke
     before = observed('soniox', 'provider_failure', 'connection_lost')
     await receiver.receive_data()
     assert observed_while_connected == [True]
-    assert observed('soniox', 'provider_failure', 'connection_lost') == before + int(serving_decision)
+    assert observed('soniox', 'provider_failure', 'connection_lost') == before + 1

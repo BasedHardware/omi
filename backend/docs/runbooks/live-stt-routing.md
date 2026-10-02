@@ -13,12 +13,19 @@ artificial diversification or expensive-provider probes.
 `LiveLegOutcome.settle` emits a serving decision's fallback and router observation
 once, synchronously. The source cause survives successor rejection and cleanup.
 Liveness reads emit neither. Normal client/owner close is success if text was
-seen, otherwise censored. A provider death is counted without a speech minimum
+seen, otherwise censored. Teardown snapshots the published death latch before
+closing: an already-dead provider counts even if the monitor has not claimed it;
+transport errors that begin after this fence remain censored. A provider death is counted without a speech minimum
 when the serving owner replaces/rejects it or exhausts recovery. A pending hop
 without successor text settles as degraded after 30 seconds, with no socket or
 audio change. Established fallback reasons stay stable, including quota/auth;
 health retains the corresponding typed account reasons. Soniox 408 uses censored `soniox_request_timeout`; 400 no-audio uses
 `soniox_idle_timeout`. Neither opens a provider circuit for all users, including connect rejection.
+Repeated Soniox 408 connect rejections deliberately do not create a cross-session
+bench: this cause cannot distinguish a provider outage from client/input timing.
+Each connection still falls through to the next provider. Accept that repeated
+connect cost/latency risk; inspect its reason counter and transcript/latency SLIs
+and withdraw the endpoint manually if the aggregate shows an outage.
 Local VAD and other explicitly censored input/configuration failures also release
 circuit admission without accumulating provider failures.
 
@@ -28,16 +35,25 @@ sum over path must equal `omi_stt_cost_routing_observations_total` by
 instance/target/outcome/reason. This comparison covers exactly the managed
 router population; legacy/PTT fallback events are not extra router samples.
 A direct acknowledgement from the observation writer feeds the single
-`omi_stt_cost_routing_reconciliation_errors_total` counter; exceptions or missing
-acknowledgements increment it. It proves emission, not persistence. Redis drop counters and
+`omi_stt_cost_routing_emission_ack_errors_total` counter; exceptions or missing
+acknowledgements increment it. This checks acknowledgement only: neither this
+counter nor the paired emissions detects omitted terminal paths or consistently
+wrong classification, and neither proves Redis persistence. Redis drop counters and
 `omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
 State uses `omi:live-stt:cost-v6:<target>:<bounded-language>` and `all`. Do not
 reuse v5 evidence. At stage 100, one hashed user contributes at most three
 success/failure outcomes in a five-minute Redis-time window. Windows hold at
-most 512 fingerprints and reject new identities on saturation rather than
-restore old budgets by eviction. Raw observation counts remain uncapped for
+most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),
+plus an eight-fingerprint outage reserve. At saturation, eight distinct new
+users failing without an intervening classified success bench the target. Every
+success resets this reserve, even if its normal vote is capped; one repeated
+caller cannot fill it, and it cannot fill without benching. This reserve does
+not feed failure-only samples into CUSUM or refill existing user budgets. Any
+`window_full` remains a rollout stop because normal brownout evidence is sampled. Healthy
+state keys expire after 900 idle seconds; benched/trial state persists to prevent
+expiry bypassing staged recovery and holds no healthy-window fingerprint list. Raw observation counts remain uncapped for
 reconciliation. Trials retain their separate user votes, generation fences,
 5→25→100 shares, and exponentially increasing cooldown. Redis CAS enforces all
 of this fleet-wide. Shared snapshots refresh off connect, normally every five
@@ -61,7 +77,8 @@ minutes plus the following positive coverage; elapsed time alone never passes:
 1. At least 500 proposals, 100 settled classified Parakeet legs, and 100 Soniox
    legs. Inspect every observed language group and all provider-failure reasons.
    The new seam's real-parser/receiver tests must be green on the deployed SHA.
-2. Exactly zero reconciliation mismatch, evidence exceptions, unavailable
+2. No persistent opened-minus-settled-minus-open lifecycle gap; exactly zero
+   emission acknowledgement errors, evidence exceptions, unavailable
    proposals and all-degraded selections. No Redis result drops, saturated
    evidence windows, router/cache errors or unknown/stale snapshots.
 3. Parakeet and Soniox global stage 100 on every fresh pod, with no unexplained
@@ -87,8 +104,8 @@ its evidence must never reuse the old endpoint's identity or state.
 ## Exact PromQL
 
 Use `job="backend-listen-metrics"`, and a window containing only the new image.
-The **one-number reconciliation check** is the emission acknowledgement counter
-below and must be zero. Missing metrics are failure of coverage, not zero.
+The **emission acknowledgement check** below must be zero; it is not an
+independent correctness oracle. Missing metrics are failure of coverage, not zero.
 The paired-counter difference is also useful by instance/target/reason, but a
 scrape reads separate collectors at slightly different instants: a transient
 difference during active settlement can be a scrape race. Require that the
@@ -97,7 +114,7 @@ mismatch; do not mistake `increase()` extrapolation or a first scrape for lost
 evidence.
 
 ```promql
-sum(omi_stt_cost_routing_reconciliation_errors_total{job="backend-listen-metrics"})
+sum(omi_stt_cost_routing_emission_ack_errors_total{job="backend-listen-metrics"})
 min_over_time((sum(abs(
   sum by (instance, target, outcome, reason) (omi_stt_cost_routing_settlements_total{job="backend-listen-metrics"})
   -
@@ -112,6 +129,28 @@ The last query includes legacy/PTT traffic and uses provider-family labels;
 endpoint-specific equality is checked by the paired-counter difference. For managed failure
 settlements, account labels map budget→quota and rejected-auth→auth. Connect
 settlements belong to `stt_selection`, terminal deaths to `stt_live_session`.
+
+Independent lifecycle oracle: the chain counts `opened` when handing off a
+connected managed leg (including same-provider replacement), transport release
+decrements `open`, and terminal settlement separately counts `settled`. Rejected
+connects that never hand off are excluded from all three. The per-pod/target
+difference must return to zero; allow the existing 30-second deferred hop
+settlement and scrape races, but **no nonzero gap persisting two minutes**. A
+missing settlement after transport release grows this gap even if acknowledgement
+errors stay zero. This detects lifecycle coverage, not wrong reason attribution;
+retain real-object tests and provider-reason/session-SLI inspection for that.
+
+```promql
+sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+- sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+- sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+
+min_over_time((abs(
+  sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+  - sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+  - sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+))[2m:15s]) > 0
+```
 
 Coverage, admitted votes and health evidence:
 
@@ -191,7 +230,7 @@ sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-li
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 
-Abort to shadow/zero for any nonzero reconciliation or evidence exception; any
+Abort to shadow/zero for a persistent lifecycle gap, any emission acknowledgement error or evidence exception; any
 unavailable/all-degraded proposal; sustained Redis/write/cap errors; or a
 Parakeet/Soniox bench unexplained by actual provider failures. Abort for a >2
 percentage-point drop in transcript success from the pre-ramp baseline over

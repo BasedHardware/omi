@@ -11,8 +11,15 @@ import logging
 import os
 from typing import Callable, Any
 
-from config.live_stt_registry import registry
-from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_RECONCILIATION_ERRORS
+from config.live_stt_registry import registry, DEFAULT_TARGETS
+from utils.stt.live_metrics import (
+    COST_SETTLEMENTS,
+    COST_EVIDENCE_ERRORS,
+    COST_EMISSION_ACK_ERRORS,
+    MANAGED_LEGS_OPENED,
+    MANAGED_LEGS_SETTLED,
+    MANAGED_LEGS_OPEN,
+)
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
 
@@ -36,6 +43,8 @@ class LiveLegOutcome:
         self.path = 'close'
         self.owner_closing = False
         self.pending: Any = None
+        self.handed_off = False
+        self.transport_released = False
 
     def claim(self, reason: str, *, connect: bool = False) -> str:
         """Transfer settlement to the serving decision before closing transport."""
@@ -53,6 +62,8 @@ class LiveLegOutcome:
         if self.settled:
             return False
         self.settled = True
+        if self.handed_off:
+            MANAGED_LEGS_SETTLED.labels(target=self.target).inc()
         outcome = (
             ('connect_failure' if self.path == 'connect' else 'failover')
             if self.claimed
@@ -74,13 +85,32 @@ class LiveLegOutcome:
             COST_SETTLEMENTS.labels(target=self.target, outcome=classification, reason=reason, path=self.path).inc()
             acknowledged = self.record(self.target, self.language, outcome, self.generations, self.uid, reason)
             if acknowledged is not True:
-                COST_RECONCILIATION_ERRORS.inc()
+                COST_EMISSION_ACK_ERRORS.inc()
         except Exception:
             COST_EVIDENCE_ERRORS.inc()
-            COST_RECONCILIATION_ERRORS.inc()
+            COST_EMISSION_ACK_ERRORS.inc()
             logger.warning('Live STT settlement evidence unavailable')
         return True
 
     def close(self, text_seen: bool) -> None:
         if not self.claimed:
             self.settle(text_seen=text_seen)
+
+
+def record_managed_leg_handoff(socket: Any) -> None:
+    """Called by the connector, independently of the terminal settlement path."""
+    outcome = getattr(socket, 'leg_outcome', None)
+    if not isinstance(outcome, LiveLegOutcome) or outcome.handed_off:
+        return
+    try:
+        targets = registry()
+    except (ValueError, TypeError):
+        targets = DEFAULT_TARGETS  # Telemetry must preserve configured-order fail-open.
+    if not any(entry.id == outcome.target for entry in targets):
+        return
+    outcome.handed_off = True
+    MANAGED_LEGS_OPENED.labels(target=outcome.target).inc()
+    if getattr(socket, '_open_gauge_released', False):
+        outcome.transport_released = True
+    else:
+        MANAGED_LEGS_OPEN.labels(target=outcome.target).inc()

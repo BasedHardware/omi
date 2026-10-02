@@ -14,14 +14,14 @@ from tests.unit.test_stt_session_failover import _receiver_with_dead_socket, Fak
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_chain, live_failure, live_health, live_session, streaming as st
 from utils.stt.live_cost_health import PREFIX
-from utils.stt.live_gate import GateState, transition
-from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_RECONCILIATION_ERRORS
+from utils.stt.live_gate import GateState, transition, HEALTHY_USERS, FAILURE_RESERVE
+from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_EMISSION_ACK_ERRORS
 from utils.stt.soniox import SafeSonioxSocket
 
 
 @pytest.mark.parametrize('dead_before_close', [False, True])
 @pytest.mark.parametrize('text', [False, True])
-def test_46_soniox_reconnect_teardowns_never_vote_failure(dead_before_close, text):
+def test_pre_teardown_death_counts_but_post_teardown_death_does_not(dead_before_close, text):
     before = observed('soniox', 'provider_failure', 'connection_lost')
     for _ in range(46):
         leg = serving_leg(family='soniox')
@@ -34,9 +34,11 @@ def test_46_soniox_reconnect_teardowns_never_vote_failure(dead_before_close, tex
         leg.raw.die(raw='ws send closed after our finish')
         assert leg.is_connection_dead
         leg.finish()
-    assert observed('soniox', 'provider_failure', 'connection_lost') == before
+    assert observed('soniox', 'provider_failure', 'connection_lost') == before + (46 if dead_before_close else 0)
     states = live_chain.health._cost_local.values()
-    assert all(state.stage == 100 and state.failures == 0 and state.n <= 3 for state in states)
+    assert all(
+        state.stage == 100 and state.failures == (3 if dead_before_close else 0) and state.n <= 3 for state in states
+    )
 
 
 @pytest.mark.asyncio
@@ -212,17 +214,38 @@ async def test_concurrent_cas_cannot_spend_a_user_budget_twice():
     assert state.n == state.failures == 3
 
 
+def test_saturated_fairness_window_still_benches_eight_new_failures():
+    users = tuple((f'{i:016x}', 3) for i in range(HEALTHY_USERS))
+    state = GateState(n=512, healthy_window=3, healthy_users=users)
+    assert transition(state, False, 1000, witness='f' * 16) == state
+    assert transition(state, True, 1000, witness=users[0][0]) == state  # No budget refill.
+    for i in range(8):
+        state = transition(state, True, 1000, witness=f'{HEALTHY_USERS + i:016x}')
+        assert len(state.healthy_users) <= HEALTHY_USERS
+        assert len(state.overflow_failures) <= FAILURE_RESERVE
+        assert GateState.decode(state.encode()) == state
+    assert state.stage == 0 and state.failures == 8
+
+
 def test_healthy_user_budget_is_bounded_without_eviction_or_raw_uid():
-    state = GateState()
-    for i in range(512):
-        state = transition(state, False, 1000, witness=f'{i:016x}')
-    for i in range(512, 560):
-        assert transition(state, True, 1000, witness=f'{i:016x}') == state
-    assert len(state.healthy_users) == 512
-    decoded = GateState.decode(state.encode())
-    assert decoded == state
+    users = tuple((f'{i:016x}', 1) for i in range(HEALTHY_USERS))
+    state = GateState(n=512, healthy_window=3, healthy_users=users)
+    assert transition(state, False, 1000, witness='f' * 16) == state
+    assert GateState.decode(state.encode()) == state
     fresh = transition(state, True, 1300, witness='f' * 16)
-    assert fresh.n == 513 and fresh.healthy_users == (('f' * 16, 1),)
+    assert fresh.healthy_users == (('f' * 16, 1),)
+
+
+@pytest.mark.asyncio
+async def test_healthy_fairness_keys_expire_but_bench_and_trial_do_not():
+    redis = MemoryRedis()
+    pod = live_health.FleetHealth(redis_client=redis)
+    key = ('soniox', 'all')
+    await pod._cost_update(key, lambda _: GateState(n=1))
+    assert redis.ttls[f'{PREFIX}:soniox:all'] == 900
+    for stage in (0, 5, 25):
+        await pod._cost_update(key, lambda _, stage=stage: GateState(stage=stage, generation=1))
+        assert redis.ttls[f'{PREFIX}:soniox:all'] == 0  # Never silently reset a bench to 100%.
 
 
 @pytest.mark.asyncio
@@ -315,10 +338,10 @@ async def test_monitor_stops_before_observing_teardown_transport(monkeypatch):
 def test_missing_observation_ack_is_a_reconciliation_error(monkeypatch):
     monkeypatch.setattr(live_session.health, 'record_session', lambda *args: False)
     leg = serving_leg()
-    before = COST_RECONCILIATION_ERRORS._value.get()
+    before = COST_EMISSION_ACK_ERRORS._value.get()
     leg.finish()
     leg.finish()
-    assert COST_RECONCILIATION_ERRORS._value.get() == before + 1
+    assert COST_EMISSION_ACK_ERRORS._value.get() == before + 1
 
 
 def test_out_of_order_writer_cannot_rewind_the_healthy_user_budget():
@@ -484,3 +507,89 @@ async def test_engine_mismatch_cannot_abandon_an_earlier_rejected_leg(monkeypatc
     assert service == st.STTService.soniox
     assert source.leg_outcome.settled
     assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('missing_settlement', [False, True])
+async def test_chain_handoff_oracle_detects_a_missing_settlement(monkeypatch, missing_settlement):
+    from utils.stt.live_metrics import MANAGED_LEGS_OPENED, MANAGED_LEGS_SETTLED, MANAGED_LEGS_OPEN
+
+    leg = serving_leg(family='soniox')
+    metrics = [
+        metric.labels(target='soniox') for metric in (MANAGED_LEGS_OPENED, MANAGED_LEGS_SETTLED, MANAGED_LEGS_OPEN)
+    ]
+    before = [metric._value.get() for metric in metrics]
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
+    socket, _ = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=AsyncMock(return_value=leg),
+        callbacks={},
+        failed=set(),
+        models=['soniox'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    assert socket is leg
+    assert [metric._value.get() - base for metric, base in zip(metrics, before)] == [1, 0, 1]
+    ack_before = COST_EMISSION_ACK_ERRORS._value.get()
+    if missing_settlement:
+        monkeypatch.setattr(leg.leg_outcome, 'close', lambda _text: None)
+    leg.finish()
+    opened, settled, current = [metric._value.get() - base for metric, base in zip(metrics, before)]
+    assert COST_EMISSION_ACK_ERRORS._value.get() == ack_before
+    assert opened - settled - current == int(missing_settlement)
+    assert current == 0
+    leg.finish()
+    assert metrics[2]._value.get() == before[2]
+
+
+@pytest.mark.asyncio
+async def test_connected_provider_death_still_invokes_failover():
+    leg = serving_leg()
+    leg.raw.die('modulate_serve_error')
+    recover = AsyncMock(return_value=True)
+    assert not leg.leg_outcome.owner_closing
+    await live_failure.send_live_stt_audio(
+        SimpleNamespace(send_json=AsyncMock(), close=AsyncMock()),
+        SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1000),
+        stt_socket=leg,
+        audio=b'\x00\x00',
+        provider='modulate',
+        platform='ios',
+        attempt_failover=recover,
+    )
+    recover.assert_awaited_once()
+    leg.finish()
+
+
+def test_saturated_outage_reserve_resets_on_success_and_cannot_be_filled_by_one_user():
+    users = tuple((f'{i:016x}', 3) for i in range(HEALTHY_USERS))
+    state = GateState(n=512, healthy_window=3, healthy_users=users)
+    for i in range(46):
+        state = transition(state, True, 1000, witness='f' * 16)
+    assert state.stage == 100 and state.overflow_failures == ('f' * 16,)
+    for burst in range(10):
+        state = transition(state, False, 1000, witness='e' * 16)
+        assert not state.overflow_failures
+        for i in range(7):
+            state = transition(state, True, 1000, witness=f'{HEALTHY_USERS + burst * 7 + i:016x}')
+        assert state.stage == 100
+    # Even after many overflow witnesses, a hard outage cannot exhaust reserve.
+    state = transition(state, False, 1000, witness='e' * 16)
+    for i in range(8):
+        state = transition(state, True, 1000, witness=f'{10000 + i:016x}')
+    assert state.stage == 0 and state.failures == 8
+
+
+@pytest.mark.asyncio
+async def test_saturated_fleet_window_benches_across_pods_and_preserves_bench_without_ttl():
+    redis = MemoryRedis()
+    pods = [live_health.FleetHealth(redis_client=redis) for _ in range(2)]
+    users = tuple((f'{i:016x}', 3) for i in range(HEALTHY_USERS))
+    await pods[0]._cost_update(('soniox', 'all'), lambda _: GateState(n=512, healthy_window=3, healthy_users=users))
+    for i in range(8):
+        await pods[i % 2]._write_cost_result('soniox', 'en', True, None, f'{HEALTHY_USERS + i:016x}')
+    state = GateState.decode(json.loads(redis.data[f'{PREFIX}:soniox:all']))
+    assert state.stage == 0 and state.failures == 8
+    assert not state.healthy_users and not state.overflow_failures
+    assert redis.ttls[f'{PREFIX}:soniox:all'] == 0

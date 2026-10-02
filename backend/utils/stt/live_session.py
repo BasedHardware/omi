@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
-from utils.stt.live_failure import PendingLiveFailover
-from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
+from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
+from utils.stt.live_metrics import MANAGED_LEGS_OPEN
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
@@ -331,6 +332,7 @@ class LiveChainSession:
             token = connecting_target.set(target)
             try:
                 socket, actual = await primary(), host.stt_service
+                record_managed_leg_handoff(socket)
             finally:
                 connecting_target.reset(token)
         else:
@@ -557,6 +559,9 @@ class LiveLegSocket(STTSocket):
         if not self._open_gauge_released:
             self._open_gauge_released = True
             record_live_stt_socket_closed(self.service.value)
+            if self.leg_outcome.handed_off and not self.leg_outcome.transport_released:
+                self.leg_outcome.transport_released = True
+                MANAGED_LEGS_OPEN.labels(target=self.routing_target).dec()
 
     @property
     def death_reason(self) -> str | None:
@@ -835,11 +840,20 @@ class LiveLegSocket(STTSocket):
                 self._health_close()
             self._release_open_gauge()
 
+    def mark_owner_teardown(self) -> None:
+        if self.leg_outcome.owner_closing:
+            return
+        # Snapshot the already-published death latch before the owner fence or
+        # any close/await. Provider callbacks run on this same serving loop.
+        # A pre-existing death stays evidence even if the 1s monitor lost the race.
+        if not self.leg_outcome.claimed and self.is_connection_dead:
+            self._latch_failure()
+            settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
+        self.leg_outcome.owner_closing = True
+
     def finish(self) -> None:
-        # Owner close is never a provider failure, even if the raw transport
-        # died before the owner noticed. A claimed hop owns its own settlement.
         if not self.leg_outcome.claimed:
-            self.leg_outcome.owner_closing = True
+            self.mark_owner_teardown()
         try:
             self._finish_transport()
         finally:
@@ -849,7 +863,7 @@ class LiveLegSocket(STTSocket):
 
     async def drain_and_close(self) -> None:
         if not self.leg_outcome.claimed:
-            self.leg_outcome.owner_closing = True
+            self.mark_owner_teardown()
         self._closing_for_health = True
         try:
             await st.drain_stt_socket(self.raw)

@@ -145,9 +145,18 @@ COST_SETTLEMENTS = Counter(
 COST_EVIDENCE_ERRORS = Counter(
     'omi_stt_cost_routing_evidence_errors_total', 'Serving settlements whose health emission failed'
 )
-COST_RECONCILIATION_ERRORS = Counter(
-    'omi_stt_cost_routing_reconciliation_errors_total',
-    'Settlements whose paired fallback/observation emission raised or was not acknowledged',
+COST_EMISSION_ACK_ERRORS = Counter(
+    'omi_stt_cost_routing_emission_ack_errors_total',
+    'Emission acknowledgement errors only; does not validate classification, lifecycle coverage or Redis persistence',
+)
+MANAGED_LEGS_OPENED = Counter(
+    'omi_stt_managed_legs_opened_total', 'Managed connected legs handed off by the chain', ['target']
+)
+MANAGED_LEGS_SETTLED = Counter(
+    'omi_stt_managed_legs_settled_total', 'Handed-off managed legs reaching terminal settlement', ['target']
+)
+MANAGED_LEGS_OPEN = Gauge(
+    'omi_stt_managed_legs_open', 'Handed-off managed transports not yet released, independent of settlement', ['target']
 )
 COST_VOTES = Counter(
     'omi_stt_cost_routing_votes_total',

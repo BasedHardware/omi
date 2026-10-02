@@ -139,6 +139,7 @@ class MemoryRedis:
     def __init__(self, clock=None):
         self.data = {}
         self.leases = []
+        self.ttls = {}
         self.clock = clock or (lambda: 1000)
 
     async def time(self):
@@ -157,10 +158,11 @@ class MemoryRedis:
         self.leases.append(key)
         return True
 
-    async def eval(self, _script, _numkeys, key, expected, new):
+    async def eval(self, _script, _numkeys, key, expected, new, ttl):
         if self.data.get(key, '') != expected:
             return 0
         self.data[key] = new
+        self.ttls[key] = ttl
         return 1
 
 

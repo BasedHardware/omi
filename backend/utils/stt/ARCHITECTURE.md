@@ -271,8 +271,9 @@ source twice. Actual text counts without a VAD minimum, as do accepted provider
 deaths before the first audio byte.
 
 Owner teardown is marked before receiver tail sends and before drain. It cannot
-claim a provider failure from a transport symptom. A source already claimed by
-a serving decision keeps its cause through cleanup. Connect-time censored
+claim a provider failure from a transport symptom. A death already latched before teardown is settled before the owner fence,
+even if the polling monitor has not claimed it. A previously claimed source
+keeps its cause through cleanup. Connect-time censored
 causes release circuit admission without adding provider failures; local VAD
 failure cannot open a provider circuit at terminal settlement either. Ordinary finish/drain emits
 success if text was observed, otherwise censored no-text; neither reads socket
@@ -311,10 +312,14 @@ an anytime-valid probability guarantee. Correcting attribution removes the
 
 Healthy-stage evidence admits at most **three classified outcomes per UID
 fingerprint per target/scope per five-minute Redis-time window**, symmetrically
-for success and failure. At most 512 domain-separated SHA-256 prefixes and small counters
-are stored per state. A full window rejects unseen users until the next window;
-it never evicts identities and thereby restores their budget. At the measured
-~62 sessions/5 minutes this is ample headroom; `votes_total{result="window_full"}`
+for success and failure. At most 2,048 ordinary domain-separated SHA-256 prefixes plus eight outage
+witnesses are stored per state. Ordinary capacity exceeds the 1,500
+identities/window at 10x 1,800 sessions/hour. At saturation, eight distinct new users failing without an intervening
+classified success bench the target. Any success (even capped) resets the
+reserve, preventing low-rate failures from accumulating as failure-only CUSUM
+samples. One caller cannot fill it; eight witnesses cannot exhaust it without
+benching. Existing identities retain their three-vote cap; no eviction restores
+a budget. Normal brownout evidence is sampled above capacity, so `votes_total{result="window_full"}`
 must remain zero. CAS applies the cap across pods. Raw observations still count
 every settled leg for reconciliation; the separate votes metric explains which
 observations reached the gate. No raw UID is stored in Redis.
@@ -371,8 +376,15 @@ background tasks under the existing 75 ms deadline. Redis failure retains local
 evidence and known benches; no pod privately restarts a trial. Local benches
 reconcile before staged recovery, and generation fences reject stale completions.
 Connect rejection captures the generation at rejection, not before its handshake.
-A raw settlement counter proves synchronous emission, not Redis durability;
-write drops and admitted-vote counters are separate rollout gates.
+Healthy keys expire after 900 idle seconds (three windows). Bench and trial
+states have no healthy-window fingerprints and deliberately persist: expiration
+must not silently turn an unprobed expensive bench into a fresh stage-100 target.
+The emission acknowledgement and paired settlement/observation counters check
+only emission, not omitted terminal paths, classification correctness or Redis
+durability. Separate chain-handoff, physical-open and terminal-settled counters
+provide a lifecycle coverage oracle; a gap persisting over two minutes is a
+rollout stop. Write drops and admitted votes check the asynchronous persistence
+path. Exact PromQL is in the live routing runbook.
 
 Health stages may demote but cannot empty an otherwise eligible chain. Explicit
 ramp/capability/account exclusions stay hard in the active chain: a withdrawn
@@ -440,7 +452,7 @@ count actual overflow. Unused backup legs do not inflate failover counters.
 selection, and `omi_stt_cost_routing_observations_total{target,outcome,reason}` separates
 `success|provider_failure|censored`. The paired
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` records the
-serving seam's expected evidence; `omi_stt_cost_routing_reconciliation_errors_total`
+serving seam's expected evidence; `omi_stt_cost_routing_emission_ack_errors_total`
 counts missing acknowledgements or exceptions, and
 `omi_stt_cost_routing_votes_total{target,scope,result}` explains gate admission.
 `omi_stt_cost_routing_canary_outcome_total{arm,outcome}` captures the actual router

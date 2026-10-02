@@ -1739,9 +1739,9 @@ class ListenReceiver(ReplayFilterMixin):
             # Teardown owns subsequent tail-send/transport symptoms. Mark the
             # outcome before any await; drain may still deliver valid text.
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
-                outcome = getattr(socket, 'leg_outcome', None)
-                if outcome is not None:
-                    outcome.owner_closing = True
+                mark_teardown = getattr(socket, 'mark_owner_teardown', None)
+                if callable(mark_teardown):
+                    mark_teardown()
             if decoded_audio_bytes:
                 self._emit_realtime_demand(request, decoded_audio_bytes)
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))

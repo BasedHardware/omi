@@ -17,7 +17,7 @@ from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_to
 from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
-from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
@@ -434,6 +434,7 @@ async def connect_configured_chain(
                 attach_outcome(pending)
             else:
                 pending.note_transcript()
+        record_managed_leg_handoff(socket)
         return socket, service
 
     for service, target in routes:

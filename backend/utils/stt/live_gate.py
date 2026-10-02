@@ -8,6 +8,10 @@ from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from typing import Any
 
+# 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
+HEALTHY_USERS = 2048
+FAILURE_RESERVE = 8
+
 
 @dataclass(frozen=True)
 class GateState:
@@ -24,6 +28,7 @@ class GateState:
     trial_users: tuple[tuple[str, int, int], ...] = ()
     healthy_window: int = -1
     healthy_users: tuple[tuple[str, int], ...] = ()
+    overflow_failures: tuple[str, ...] = ()
 
     @classmethod
     def decode(cls, raw: dict[str, Any]) -> GateState:
@@ -54,7 +59,7 @@ class GateState:
             type(raw.get('healthy_window', -1)) is not int
             or raw.get('healthy_window', -1) < -1
             or not isinstance(healthy, (list, tuple))
-            or len(healthy) > 512
+            or len(healthy) > HEALTHY_USERS
         ):
             raise ValueError('invalid healthy evidence window')
         for user in healthy:
@@ -70,7 +75,7 @@ class GateState:
         if len({user[0] for user in healthy}) != len(healthy):
             raise ValueError('duplicate healthy user')
         raw['healthy_users'] = tuple(tuple(user) for user in healthy)
-        for field in ('witnesses', 'recent_failures'):
+        for field in ('witnesses', 'recent_failures', 'overflow_failures'):
             values: list[Any] = list(raw.get(field, ()))
             if any(
                 not isinstance(value, str) or (len(value) != 16 and not (field == 'recent_failures' and value == ''))
@@ -92,6 +97,8 @@ class GateState:
             or not 0 <= state.strikes <= 10
             or len(state.witnesses) > 4
             or len(set(state.witnesses)) != len(state.witnesses)
+            or len(state.overflow_failures) > FAILURE_RESERVE
+            or len(set(state.overflow_failures)) != len(state.overflow_failures)
             or len(state.recent_failures) > 32
         ):
             raise ValueError('invalid cost gate state')
@@ -133,6 +140,7 @@ def transition(
             trial_users=(),
             healthy_users=(),
             healthy_window=-1,
+            overflow_failures=(),
             generation=state.generation + 1,
         )
     if state.stage == 0:
@@ -143,10 +151,32 @@ def transition(
         window = max(state.healthy_window, int(now // 300))
         users = dict(state.healthy_users) if window == state.healthy_window else {}
         count = users.get(witness, 0)
-        # Drop evidence symmetrically: reconnects cannot supply either failures
-        # or passing votes. Do not evict users on saturation (that would let a
-        # churned identity regain a budget). Redis TIME and CAS own this cap.
-        if count >= 3 or (not count and len(users) >= 512):
+        # A bounded, success-reset outage witness run remains available even
+        # after ordinary admission fills. It never feeds failure-only samples
+        # into CUSUM, never evicts/refills user budgets, and cannot fill up without
+        # benching: eight distinct new users failing with no intervening success.
+        overflow = state.overflow_failures if window == state.healthy_window else ()
+        if not failed:
+            overflow = ()
+        if overflow != state.overflow_failures:
+            state = replace(state, overflow_failures=overflow)
+        if not count and len(users) >= HEALTHY_USERS and failed:
+            if witness not in overflow:
+                overflow = (*overflow, witness)
+            state = replace(state, overflow_failures=overflow)
+            if len(overflow) == FAILURE_RESERVE:
+                strikes = min(state.strikes + 1, 10)
+                return GateState(
+                    threshold=gate,
+                    stage=0,
+                    n=min(1_000_000, state.n + FAILURE_RESERVE),
+                    failures=min(1_000_000, state.failures + FAILURE_RESERVE),
+                    recent_failures=overflow,
+                    until=now + min(14400, 300 * 2 ** (strikes - 1)),
+                    strikes=strikes,
+                    generation=state.generation + 1,
+                )
+        if count >= 3 or (not count and len(users) >= HEALTHY_USERS):
             return state
         users[witness] = count + 1
         state = replace(state, healthy_window=window, healthy_users=tuple(users.items()))
