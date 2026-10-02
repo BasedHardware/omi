@@ -588,6 +588,13 @@ class CaptureController extends ChangeNotifier
   /// coordinated transfer wake cannot run before the durable stamp is ready.
   Future<void>? _pendingFinalizeAndStamp;
 
+  /// When each live segment of the open conversation last arrived, in phone seconds. The saved
+  /// transcript counts from the server's start, so these anchor it to the phone's own clock.
+  final Map<String, int> _segmentArrivals = {};
+
+  /// [_segmentArrivals] of the conversation whose processing started, consumed on ConversationEvent.
+  Map<String, int> _pendingSegmentArrivals = const {};
+
   /// Set in onClosed() when the socket drops during active device recording.
   /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
   /// on the device connection (e.g. Limitless re-sends enable-data-stream).
@@ -866,6 +873,7 @@ class CaptureController extends ChangeNotifier
   Future _resetStateVariables() async {
     _stopInProgressConversationRefresh();
     segments = [];
+    _segmentArrivals.clear();
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
@@ -3139,6 +3147,7 @@ class CaptureController extends ChangeNotifier
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
+      _pendingSegmentArrivals = Map.of(_segmentArrivals);
       _pendingAutoSyncConversationId = event.memory.id;
       _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
       _sessionTransportInterrupted = false;
@@ -3173,11 +3182,13 @@ class CaptureController extends ChangeNotifier
       if (_pendingAutoSyncSessionStart > 0) {
         final sessionStart = _pendingAutoSyncSessionStart;
         final needsRepair = _pendingAutoSyncNeedsRepair;
+        final segmentArrivals = _pendingSegmentArrivals;
+        _pendingSegmentArrivals = const {};
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
         _pendingAutoSyncNeedsRepair = false;
         if (event.memory.transcriptSegments.isNotEmpty && !needsRepair) {
-          unawaited(_confirmSessionTranscript(sessionStart, event.memory));
+          unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals));
         } else {
           _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
         }
@@ -3330,15 +3341,24 @@ class CaptureController extends ChangeNotifier
 
   /// Releases the safety copy of the audio [conversation]'s saved transcript covers, and uploads the
   /// rest so the server can transcribe what it lost.
-  Future<void> _confirmSessionTranscript(int sessionStartSeconds, ServerConversation conversation) async {
+  Future<void> _confirmSessionTranscript(
+    int sessionStartSeconds,
+    ServerConversation conversation,
+    Map<String, int> segmentArrivals,
+  ) async {
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
     }
-    // Live segment times are seconds from the conversation's start. The server sets it on every
-    // conversation it creates; without it, this session's start is the closest origin.
+    // Live segment times are seconds from the conversation's start on the server's clock, while the
+    // copies carry the phone's. Anchor that start to the phone through the moments the live segments
+    // arrived; without any, use the server's start, or this session's when the row has none.
     final startedAt = conversation.startedAt;
-    final origin = startedAt == null ? sessionStartSeconds : startedAt.millisecondsSinceEpoch ~/ 1000;
+    final origin = transcriptStartOnDevice(
+          [for (final segment in conversation.transcriptSegments) (segment.id, segment.end)],
+          segmentArrivals,
+        ) ??
+        (startedAt == null ? sessionStartSeconds : startedAt.millisecondsSinceEpoch ~/ 1000);
     final spans = [
       for (final segment in conversation.transcriptSegments)
         (origin + segment.start.floor(), origin + segment.end.ceil()),
@@ -3536,6 +3556,10 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
+    final arrivedAt = _nowSeconds;
+    for (final segment in newSegments) {
+      _segmentArrivals[segment.id] = arrivedAt;
+    }
     _recordingTelemetry.observeTranscript();
     final deviceId = _recordingDevice?.id;
     if (deviceId != null) _wedgeMonitor.onTranscriptObserved(deviceId);

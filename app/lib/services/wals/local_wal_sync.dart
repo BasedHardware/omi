@@ -165,6 +165,17 @@ bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conve
   );
 }
 
+/// Where a saved transcript starts on the phone's clock, from when its live segments last arrived:
+/// each arrives a moment after the segment's end, so arrival minus end is that start plus the
+/// transcription delay. The median ignores stray matches. Null when no segment arrived live.
+int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String, int> lastArrivals) {
+  final estimates = [
+    for (final (id, end) in segmentEnds)
+      if (lastArrivals[id] case final arrived?) arrived - end.ceil(),
+  ]..sort();
+  return estimates.isEmpty ? null : estimates[estimates.length ~/ 2];
+}
+
 const _kDefinitiveUploadRefusalStatusCodes = {400, 403, 413};
 
 @visibleForTesting

@@ -51,6 +51,17 @@ void main() {
     }
   }
 
+  TranscriptSegment segment(String conversationId, int index, (double, double) span) => TranscriptSegment(
+        id: '$conversationId-s$index',
+        text: 'words',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: span.$1,
+        end: span.$2,
+        translations: [],
+      );
+
   /// A conversation whose saved transcript has one segment per [spans] entry, in seconds from [startedAt].
   ServerConversation conversation(String id, DateTime startedAt, List<(double, double)> spans,
           {DateTime? createdAt, bool hasStart = true}) =>
@@ -59,20 +70,24 @@ void main() {
         createdAt: createdAt ?? startedAt,
         startedAt: hasStart ? startedAt : null,
         structured: Structured('fixture', 'fixture'),
-        transcriptSegments: [
-          for (final (i, span) in spans.indexed)
-            TranscriptSegment(
-              id: '$id-s$i',
-              text: 'words',
-              speaker: 'SPEAKER_00',
-              isUser: false,
-              personId: null,
-              start: span.$1,
-              end: span.$2,
-              translations: [],
-            ),
-        ],
+        transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
       );
+
+  /// Streams the pendant for [seconds] while the server sends [spans] as live segments of conversation
+  /// [id], each two seconds after it ends, as transcription does.
+  Future<void> streamWithLiveSegments(
+    ScriptedDeviceConnection link,
+    int seconds,
+    String id,
+    List<(double, double)> spans,
+  ) async {
+    for (var s = 1; s <= seconds; s++) {
+      await streamPendant(link, 1);
+      for (final (i, span) in spans.indexed) {
+        if (span.$2.ceil() + 2 == s) world.controller.onSegmentReceived([segment(id, i, span)]);
+      }
+    }
+  }
 
   /// Finalize, stamp and confirm write real files outside the virtual scheduler, so let real time
   /// pass until the WAL index stops changing.
@@ -190,6 +205,7 @@ void main() {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 200);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 190; t += 20) (t, t + 15)]));
     await walsReach('every copy released', (wals) => wals.isEmpty);
@@ -207,6 +223,7 @@ void main() {
     await streamPendant(link, 300);
     final talkStart = origin.add(const Duration(seconds: 300));
     await streamPendant(link, 140);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     await serverCloses(conversation('c1', talkStart, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
     await walsReach('every copy released', (wals) => wals.isEmpty);
@@ -226,6 +243,7 @@ void main() {
       link.emitAudio();
     }
     await streamPendant(link, 140);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
     await walsReach('every copy released', (wals) => wals.isEmpty);
@@ -240,6 +258,7 @@ void main() {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 140);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     // An old row without started_at, created ten minutes before this audio.
     final memory = conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)],
@@ -248,6 +267,36 @@ void main() {
     await walsReach('every copy released', (wals) => wals.isEmpty);
     printOnFailure(await describeWals(origin));
     expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+
+    await recoveryPass();
+    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
+  });
+
+  test('pendant: a server clock ahead of the phone does not release audio the transcript missed', () async {
+    final origin = world.clock.now();
+    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
+    final link = await connectPendant();
+    await streamWithLiveSegments(link, 200, 'c1', const [(1, 20)]);
+
+    // The server's clock runs five minutes ahead, so its start lands 300 s after the phone's.
+    await serverCloses(conversation('c1', origin.add(const Duration(minutes: 5)), const [(1, 20)]));
+    await walsReach('only audio after the first minute kept',
+        (wals) => wals.isNotEmpty && wals.every((wal) => wal.timerStart - originSeconds >= 60));
+
+    expect(await recoverableSecondsAfter(origin, 60), greaterThanOrEqualTo(120),
+        reason: 'the live segments anchor the transcript to the phone, so its end still bounds the release');
+  });
+
+  test('pendant: a server clock behind the phone still releases what the transcript covers', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    final spans = [for (var t = 1.0; t < 190; t += 20) (t, t + 15)];
+    await streamWithLiveSegments(link, 200, 'c1', spans);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
+
+    // The server's clock runs five minutes behind.
+    await serverCloses(conversation('c1', origin.subtract(const Duration(minutes: 5)), spans));
+    await walsReach('every copy released', (wals) => wals.isEmpty);
 
     await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');

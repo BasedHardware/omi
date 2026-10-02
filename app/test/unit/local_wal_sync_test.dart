@@ -991,6 +991,24 @@ void main() {
     });
   });
 
+  group('transcriptStartOnDevice', () {
+    test('is when the live segments arrived, less their end', () {
+      // Segments ending 20 s and 40 s into the conversation arrived at phone seconds 1022 and 1042.
+      expect(transcriptStartOnDevice([('a', 19.5), ('b', 40)], {'a': 1022, 'b': 1042}), 1002);
+    });
+
+    test('takes the median, so one stray arrival does not move it', () {
+      final ends = [('a', 10.0), ('b', 20.0), ('c', 30.0)];
+      expect(transcriptStartOnDevice(ends, {'a': 1012, 'b': 1022, 'c': 1900}), 1002);
+    });
+
+    test('ignores segments that never arrived live, and is null when none did', () {
+      expect(transcriptStartOnDevice([('a', 10), ('b', 20)], {'b': 1023}), 1003);
+      expect(transcriptStartOnDevice([('a', 10)], {'other': 1023}), isNull);
+      expect(transcriptStartOnDevice(const [], const {}), isNull);
+    });
+  });
+
   group('syncWal — orphan WAL guard', () {
     // A WAL the user taps "sync" on may already be gone from `_wals` (a
     // concurrent delete/reload). Previously `.first` on the empty match list
