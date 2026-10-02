@@ -325,9 +325,6 @@ class AppSearchResponse(PydanticBaseModel):
     filters: AppSearchFilters
 
 
-
-
-
 class PersonaMutationResponse(AppMutationResponse):
     app_id: str
     username: str

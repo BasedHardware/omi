@@ -125,8 +125,8 @@ class TestAppReviewResilientDeserialization(unittest.TestCase):
         self.assertEqual([r.uid for r in parsed], ['user_123', 'user_5'])
         self.assertEqual(len(skipped), 2)
 
-    def test_app_reviews_routing_contract_filters_malformed_cached_data(self):
-        """Simulate app_reviews endpoint logic: ensure malformed cache payload returns only valid reviews."""
+    def test_deserialize_many_safe_filters_malformed_cached_reviews_payload(self):
+        """Deserializer-level check; route coverage lives in test_app_reviews_api_keys_routes.py."""
         malformed_cache = {
             'u1': self.valid_review_dict,
             'u2': {'uid': 'u2', 'score': 'invalid', 'review': 'Broken score'},
@@ -210,8 +210,8 @@ class TestAppApiKeyResilientDeserialization(unittest.TestCase):
             self.assertEqual(result[1]['id'], 'explicit_id_2')
             self.assertNotIn('hashed', result[1])
 
-    def test_list_api_keys_endpoint_contract_tolerates_corrupted_key_documents(self):
-        """Simulate list_api_keys endpoint contract: ensure malformed keys from DB are dropped safely."""
+    def test_deserialize_many_safe_drops_corrupted_key_documents(self):
+        """Deserializer-level check; route coverage lives in test_app_reviews_api_keys_routes.py."""
         raw_keys = [
             {'id': 'k1', 'label': 'Valid Key'},
             {'invalid': 'Missing ID entirely'},

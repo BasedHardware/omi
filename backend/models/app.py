@@ -98,9 +98,10 @@ class AppReview(BaseModel):
                 if on_error is not None:
                     on_error(record, exc)
                 else:
-                    logger.warning('Skipping malformed review doc for %s: %s', record.get('uid'), exc)
+                    # str(ValidationError) embeds input_value (review text, username, response),
+                    # so log only the uid and the exception type, never the raw user content.
+                    logger.warning('Skipping malformed review doc for %s: %s', record.get('uid'), type(exc).__name__)
         return parsed
-
 
 
 class AuthStep(BaseModel):
