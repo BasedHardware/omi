@@ -308,6 +308,7 @@ and an explicit empty literal renders as `''`.
 | `RECORDING_SESSION_MODE` | Select recording session migration mode | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SCREEN_TASK_JEV_AUDIT_RATE` | Screen gate reject audit fraction, default 0.01 | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `SCREEN_TASK_JEV_THRESHOLD` | Screen gate threshold, default 0.5 | backend | env | open | — | — | — | — | keep | — | dazheng |
+| `SCREEN_TASK_MIN_MACOS_BUILD` | Minimum identified macOS build admitted to the screen-task gate, admission, and flagged extraction; default 12435; invalid values use the default | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `SONIOX_ESTIMATED_USD_PER_HOUR` | Metered-audio fallback price for Soniox runway | backend | env | closed | 0.07537 | 0.07537 (backend-listen (chart), gke/backend-listen) | 0.07537 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_NO_TEXT_SECONDS` | Deadline from VAD-confirmed speech to first provider text | backend | env | closed | 30 | 30 (backend-listen (chart), gke/backend-listen) | 30 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_ROUTING_DISRUPTION_GATE` | Maximum acceptable speech-session disruption rate | backend | env | closed | 0.08 | 0.08 (backend-listen (chart), gke/backend-listen) | 0.08 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
@@ -361,6 +362,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)
+- `SCREEN_TASK_MIN_MACOS_BUILD` — Minimum identified macOS build admitted to the screen-task gate, admission, and flagged extraction; default 12435; invalid values use the default (fail: closed)
 - `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)

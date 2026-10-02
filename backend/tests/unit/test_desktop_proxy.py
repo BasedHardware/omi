@@ -10,6 +10,7 @@ import httpx
 import pytest
 from config.vertex_reservations import State
 from fastapi import HTTPException
+from fastapi.responses import Response
 from starlette.requests import Request
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -2401,6 +2402,89 @@ def test_gateway_hop_gates_by_action_and_model(monkeypatch):
     # batch embeddings stay on AI Studio: Vertex's batch wire shape differs.
     assert desktop_proxy._company_paid_via_gateway("gemini-embedding-001", "batchEmbedContents") is False
     assert desktop_proxy._company_paid_via_gateway("gemini-2.5-pro", "generateContent") is True
+
+
+def _identify(request, user_agent=None, **extra):
+    if user_agent is not None:
+        request.scope['headers'].append((b'user-agent', user_agent.encode()))
+    for name, value in extra.items():
+        request.scope['headers'].append((name.encode(), value.encode()))
+    return request
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gate', ['passed', 'rejected', 'fail_open'])
+@pytest.mark.parametrize(
+    'user_agent',
+    [
+        'Omi/12433 CFNetwork/1.0 Darwin/1.0',
+        'Omi/12434 CFNetwork/1.0 Darwin/1.0',
+        'Omi%20Beta/12433 CFNetwork/1.0 Darwin/1.0',
+        'Omi%20Beta/12434 CFNetwork/1.0 Darwin/1.0',
+    ],
+)
+async def test_build_floor_refuses_flagged_screenshot_before_provider(monkeypatch, gate, user_agent):
+    monkeypatch.delenv('SCREEN_TASK_STOP', raising=False)
+    monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
+    request = _identify(make_request(), user_agent, **{'x-omi-screen-task-gate': gate})
+
+    async def forbidden(*args):
+        pytest.fail('below-floor frame called the provider')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy', forbidden)
+    monkeypatch.setattr(desktop_proxy, '_enforce_managed_plan_gate', forbidden)
+    with pytest.raises(HTTPException) as caught:
+        await desktop_proxy.gemini_proxy(request, 'models/gemini-3.8-flash:generateContent', 'synthetic-user')
+    assert caught.value.status_code == 409
+    assert caught.value.detail == {'error': 'screen_task_build_below_floor'}
+    assert caught.value.headers['X-Omi-Retryable'] == 'false'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'user_agent',
+    ['Omi/12435 CFNetwork/1.0 Darwin/1.0', 'Omi%20Beta/12436 CFNetwork/1.0 Darwin/1.0'],
+)
+async def test_build_floor_serves_flagged_screenshot_at_or_above_floor(monkeypatch, user_agent):
+    monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
+    request = _identify(make_request(), user_agent, **{'x-omi-screen-task-gate': 'passed'})
+
+    async def allow(*args):
+        return None
+
+    async def proxied(*args):
+        return Response(status_code=204)
+
+    monkeypatch.setattr(desktop_proxy, '_enforce_managed_plan_gate', allow)
+    monkeypatch.setattr(desktop_proxy, '_proxy', proxied)
+    response = await desktop_proxy.gemini_proxy(request, 'models/gemini-3.8-flash:generateContent', 'synthetic-user')
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'user_agent',
+    [
+        'Omi/12433 CFNetwork/1.0 Darwin/1.0',
+        'Omi%20Beta/12434 CFNetwork/1.0 Darwin/1.0',
+        'Omi-windows/12433',
+        'Mozilla/5.0',
+    ],
+)
+async def test_unflagged_proxy_from_old_builds_is_unchanged(monkeypatch, user_agent):
+    monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
+    request = _identify(make_request(), user_agent)
+
+    async def allow(*args):
+        return None
+
+    async def proxied(*args):
+        return Response(status_code=204)
+
+    monkeypatch.setattr(desktop_proxy, '_enforce_managed_plan_gate', allow)
+    monkeypatch.setattr(desktop_proxy, '_proxy', proxied)
+    response = await desktop_proxy.gemini_proxy(request, 'models/gemini-2.5-flash:generateContent', 'synthetic-user')
+    assert response.status_code == 204
 
 
 @pytest.mark.asyncio
