@@ -80,7 +80,7 @@ async def test_delayed_modulate_death_replays_window_capture_on_soniox(monkeypat
         assert not actual.host.state.stt_terminal_failure
         assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
             'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
-            'reason=other outcome=degraded subtype=modulate_serve_error'
+            'reason=first_text_deadline outcome=degraded'
         ]
     finally:
         await actual._drain_stt_sockets()
@@ -163,11 +163,11 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
         assert events[0].args[0]['status'] == 'stt_failed'
         assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
             'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
-            'reason=other outcome=degraded subtype=connection_lost',
+            'reason=first_text_deadline outcome=degraded',
             'omi_fallback_event component=stt_live_session from=modulate to=soniox '
-            'reason=other outcome=degraded subtype=connection_lost',
+            'reason=connection_lost outcome=degraded',
             'omi_fallback_event component=stt_live_session from=soniox to=deepgram '
-            'reason=other outcome=exhausted subtype=connection_lost',
+            'reason=connection_lost outcome=exhausted',
         ]
         # An additional recovery attempt cannot loop or settle either hop again.
         assert not await actual._failover_stt_socket()

@@ -309,7 +309,7 @@ existing bench. A hard outage's wall time depends on completed speech-session
 volume: eight failures at 62 sessions/5 minutes take about 39 seconds at full
 traffic or 155 seconds at 25%, plus outcome and cache delays.
 
-The v4 gate measures provider-path availability, separate from transcript/audio
+The v5 gate measures provider-path availability, separate from transcript/audio
 quality. `live_signal.provider_observation` classifies one outcome per leg:
 
 - Completed text after at least one second of VAD speech is a non-failure.
@@ -325,6 +325,17 @@ quality. `live_signal.provider_observation` classifies one outcome per leg:
   nor denominator, and they cannot advance a trial. Existing leg no-text and
   conversation transcript counters remain diagnostic and unchanged in shadow.
 
+`live_reason.normalize_live_stt_reason` owns the closed 27-token vocabulary
+used by both cost observations and source-leg fallback metrics. The serving leg
+latches the first bounded cause: socket-owned typed reason, bounded raw socket
+reason, then the send/monitor symptom. Unknown/free-text transport death is
+`connection_lost` (or `send_failed` for a direct send failure), deliberately
+provider evidence; explicit window/session/account causes are censored.
+Provider and window sockets publish cause metadata before their death latch.
+A failed hop keeps its source reason even when its successor rejects the
+connection; that rejection determines settlement outcome, not source attribution.
+Observation labels are target/outcome/reason, never raw diagnostic messages.
+
 No-text deadlines no longer seal health evidence early. Completed text waits
 until close; later attributable death therefore wins, once. Intentional client
 teardown is censored. A deadline-only window failover is not a hard failure,
@@ -336,7 +347,7 @@ The prior 5–7% VAD/no-word floor must not become provider-error evidence.
 
 At independent 5%, 7% and 10% no-text floors with zero provider errors, each of
 20 seeded 20,000-session replays observed **0 false benches / 400,000 sessions**.
-For this clean v4 state and correctly classified zero-error condition, the
+For this clean v5 state and correctly classified zero-error condition, the
 false-bench probability is exactly zero: censored outcomes do nothing and
 successful outcomes cannot increase a CUSUM score. This is a conditional
 classification guarantee, not a lifetime guarantee when real errors exist.
@@ -414,14 +425,14 @@ Local breakers are omitted from the replay, so their additional protection
 is not credited. Other providers' failures are outside this trial budget.
 
 `live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v4` Redis namespace. Compare-and-set updates preserve shared
+`omi:live-stt:cost-v5` Redis namespace. Compare-and-set updates preserve shared
 counts and transitions across pods; leases serialize trial starts. Fleet
 bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
 Redis-down local deadlines use the last known server offset and translate once
 on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
 skews and a ten-minute Redis outage with sixty successful connection decisions.
-The v4 namespace prevents v3 audio/no-text evidence from being reinterpreted
-as provider errors. It starts fresh shadow history; warm it before raising on-percent.
+The v5 namespace prevents v3 audio/no-text and misclassified v4 evidence from
+being reinterpreted as provider errors. It starts fresh shadow history; warm it before raising on-percent.
 A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
 configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
@@ -515,12 +526,13 @@ Stage/bench gauges are **pod views of global target state**, not a central
 fleet gauge. The old code published on selection/events only and refreshed
 only traffic-interest keys: an idle or Parakeet-ineligible pod could retain
 100 despite a remote trial. v3 already selected the global state, so the code
-provides no evidence of language-state leakage into that gauge. Every v4
+provides no evidence of language-state leakage into that gauge. Every v5
 background refresh watches all registry global keys and republishes gauges,
 even without eligible sessions. Unknown health is NaN, with
 `omi_stt_cost_routing_state_known{target}=0`, not a claimed healthy 100.
 `omi_stt_cost_routing_snapshot_timestamp_seconds` uses Redis time for the
-last complete snapshot. Require freshness/known state and convergence before
+last complete snapshot; NaN denotes never refreshed, finite old time denotes
+stale. Require freshness/known state and convergence before
 interpreting pod min/max; Redis faults can retain a local fallback view.
 Shadow pair labels are validated registry IDs (maximum 16), plus fixed
 `unregistered`/`unavailable` sentinels. Metrics schema changes require draining

@@ -23,6 +23,7 @@ from utils.stt.live_metrics import (
     FLEET_HEALTH_WRITE_DROPPED,
 )
 from utils.stt.live_signal import provider_observation
+from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v4'
+PREFIX = 'omi:live-stt:cost-v5'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -65,6 +66,7 @@ class CostHealthMixin(ABC):
         raise NotImplementedError
 
     def init_cost_health(self) -> None:
+        self._cost_metrics_targets: set[str] = set()
         self._cost_local = {}
         self._cost_cached = {}
         self._cost_interests = {}
@@ -78,15 +80,19 @@ class CostHealthMixin(ABC):
             targets = DEFAULT_TARGETS
         self._init_cost_metrics(targets)
 
-    @staticmethod
-    def _init_cost_metrics(targets) -> None:
+    def _init_cost_metrics(self, targets) -> None:
         for target in targets:
+            if target.id in self._cost_metrics_targets:
+                continue
+            self._cost_metrics_targets.add(target.id)
             COST_ALL_DEGRADED.labels(target=target.id)
             for event in ('bench', 'stage', 'unbench'):
                 for scope in ('global', 'language'):
                     COST_EVENTS.labels(target=target.id, event=event, scope=scope)
-            for outcome in ('success', 'provider_failure', 'censored'):
-                COST_OBSERVATIONS.labels(target=target.id, outcome=outcome)
+            for reason in LIVE_STT_REASONS:
+                failed = provider_observation('text' if reason == 'text' else 'failover', reason)
+                outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
+                COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
 
     @staticmethod
     def _publish_cost_state(target: str, state: GateState) -> None:
@@ -185,9 +191,17 @@ class CostHealthMixin(ABC):
         if entry is None:
             return
         self._init_cost_metrics([entry])
+        reason = normalize_live_stt_reason(
+            reason,
+            default=(
+                outcome if outcome in {'text', 'no_text'} else 'connection_lost' if outcome == 'failover' else 'other'
+            ),
+        )
         failed = provider_observation(outcome, reason)
         COST_OBSERVATIONS.labels(
-            target=target, outcome='censored' if failed is None else 'provider_failure' if failed else 'success'
+            target=target,
+            outcome='censored' if failed is None else 'provider_failure' if failed else 'success',
+            reason=reason,
         ).inc()
         if failed is None:
             return

@@ -644,11 +644,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self._dead:
             return
-        self._dead, self._dead_reason = True, reason
+        self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
         if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
             self._typed_death_reason = reason
+        # Observers must see the root cause before they see the dead latch.
+        self._dead = True
         self.finish()
 
     def _shed_capacity(self) -> None:

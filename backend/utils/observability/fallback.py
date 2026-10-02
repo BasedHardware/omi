@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = frozenset(
+ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
         'timeout',
         'provider_5xx',

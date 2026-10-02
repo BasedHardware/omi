@@ -115,6 +115,8 @@ COST_STAGE = Gauge(
 COST_SNAPSHOT_AT = Gauge(
     'omi_stt_cost_routing_snapshot_timestamp_seconds', 'Last complete Redis cost snapshot on this pod'
 )
+# A never-refreshed pod is unknown, not a Unix-epoch/stale snapshot.
+COST_SNAPSHOT_AT.set(float('nan'))
 COST_STATE_KNOWN = Gauge(
     'omi_stt_cost_routing_state_known', 'Whether this pod has evidence about global target health', ['target']
 )
@@ -125,7 +127,7 @@ COST_ALL_DEGRADED = Counter(
     'omi_stt_cost_routing_all_degraded_total', 'Selections with every eligible target unhealthy', ['target']
 )
 COST_OBSERVATIONS = Counter(
-    'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome']
+    'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome', 'reason']
 )
 COST_SHADOW = Counter(
     'omi_stt_cost_routing_shadow_total',
