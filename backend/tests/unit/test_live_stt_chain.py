@@ -9,7 +9,14 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
-from utils.stt import connect_metrics, live_chain, live_health, provider_resilience as resilience, streaming as st
+from utils.stt import (
+    live_failure,
+    connect_metrics,
+    live_chain,
+    live_health,
+    provider_resilience as resilience,
+    streaming as st,
+)
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
@@ -406,7 +413,7 @@ async def test_configured_chain_emits_exhausted_only_when_terminal(monkeypatch):
 
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     events = []
-    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: events.append(kw))
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **kw: events.append(kw))
     with pytest.raises(RuntimeError, match='exhausted'):
         await st.connect_stt_socket_with_fallback(
             primary_service=st.STTService.modulate,
@@ -459,7 +466,7 @@ async def test_account_refusal_has_long_cooldown_and_auth_reason(monkeypatch, st
     from utils.stt import live_chain
 
     events = []
-    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: events.append(kw))
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **kw: events.append(kw))
     await st.connect_stt_socket_with_fallback(
         primary_service=st.STTService.deepgram,
         connect_primary=AsyncMock(side_effect=st.DeepgramConnectionRejection('account', status)),
@@ -575,7 +582,7 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2'])
     connects, fallbacks = [], []
     monkeypatch.setattr(live_chain, 'record_stt_provider_connect', lambda **kw: connects.append(kw))
-    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **kw: fallbacks.append(kw))
     dead = SimpleNamespace(is_connection_dead=True, typed_death_reason=typed_reason, finish=lambda: None)
     _, service = await st.connect_stt_socket_with_fallback(
         primary_service=st.STTService.soniox,

@@ -2531,9 +2531,9 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
     client.data = {'text': 'hello'}
     client.status = 503 if dies_before_transcript else 200
     assert leg.send(pcm)
-    await leg.drain_and_close()
+    await actual._drain_stt_sockets()
     if dies_before_transcript:
-        assert not await actual._failover_stt_socket()
+        assert actual._pending_live_failover is None
         assert not any(e['outcome'] == 'recovered' for e in events)
         exhausted = [e for e in events if e['outcome'] == 'exhausted']
         assert {'stt_selection', 'stt_live_session'} <= {e['component'] for e in exhausted}

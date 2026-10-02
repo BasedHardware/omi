@@ -11,8 +11,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
@@ -29,12 +29,14 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Dev and prod declare the same
-`parakeet-window,modulate-velma-2,soniox,dg-nova-3` order. The first token uses
-windowed TDT only for the allocated UID bucket; everyone else retains the
-Modulate → Soniox → Deepgram order. Streaming RNNT is outside this chain. Dev configuration parity
-is a prerequisite, but a live dev read must confirm the running order before
-any prod rollout.
+circuit env lookup remain unchanged. Production's configured order is
+`parakeet-window,soniox,modulate-velma-2,dg-nova-3`: healthy Soniox is the first
+static fallback during router shadow and rollback. Dev retains its separately
+configured order; never use dev to mutate health state (it shares production
+Redis). The first token uses windowed TDT only for the allocated UID bucket;
+everyone else retains the configured vendor tail. Streaming RNNT is outside
+this chain. The cost-router evidence and independent on ramp are documented in
+[live STT routing](../runbooks/live-stt-routing.md).
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical

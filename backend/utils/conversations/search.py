@@ -246,12 +246,21 @@ def browse_conversations_by_speaker(
     per_page: int,
     scan_cap: int = SPEAKER_BROWSE_SCAN_CAP,
     batch: int = SPEAKER_BROWSE_BATCH,
+    include_discarded: bool = False,
 ) -> Dict[str, Any]:
     """Return one page of the newest conversations that contain ``speaker_id``.
 
     ``fetch_page(limit, offset)`` yields conversations newest-first. Filtering the first ``per_page``
     rows of that stream (what the Typesense browse did) only finds a speaker who appears in the very
     latest conversations; this keeps reading until the requested page is full or ``scan_cap`` is hit.
+
+    ``fetch_page`` must be a **scan-and-fill** reader (the Firestore branch with
+    ``include_discarded=True``). Only such a reader guarantees a full page, so a short page
+    really means the data ended. A server-side ``limit().offset()`` reader drops invisible rows
+    in Python without padding, and there a short page only means "some rows in this window were
+    filtered out" — which silently ended this scan early (#19908). Discarded rows are filtered
+    here rather than by the reader: they still count against ``scanned`` so the offset stays
+    aligned, and the caller still gets exactly what its ``include_discarded`` asked for.
     """
     wanted = page * per_page
     matches: List[Dict[str, Any]] = []
@@ -263,6 +272,8 @@ def browse_conversations_by_speaker(
         scanned += len(rows)
         for row in rows:
             if row.get('is_locked'):
+                continue
+            if row.get('discarded') and not include_discarded:
                 continue
             if conversation_matches_speaker(row, speaker_id):
                 matches.append(row)

@@ -28,6 +28,11 @@ def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str,
     for conversation in conversations:
         if conversation.get('is_locked'):
             continue
+        if conversation.get('discarded'):
+            # Discarded rows never reached here before: the server-side query
+            # dropped them. The scan now reads them (otherwise the page cannot
+            # fill up and the pagination lies), so exclude them here instead.
+            continue
         segments = conversation.get('transcript_segments') or []
         if not isinstance(segments, list):
             continue
@@ -75,7 +80,18 @@ def collect_people_stats(
     scan_cap: int = PEOPLE_STATS_SCAN_CAP,
     batch: int = PEOPLE_STATS_BATCH,
 ) -> Dict[str, Dict[str, Any]]:
-    """Aggregate stats over up to ``scan_cap`` newest conversations; ``fetch_page(limit, offset)``."""
+    """Aggregate stats over up to ``scan_cap`` newest conversations; ``fetch_page(limit, offset)``.
+
+    ``fetch_page`` must be a **scan-and-fill** reader (Firestore's
+    ``include_discarded=True`` branch): it keeps scanning until it has filled
+    the requested page, so a short page really is the end of the data. A
+    server-side ``limit().offset()`` reader drops invisible rows in Python
+    without padding, and there a short page only means "some rows in this
+    window were filtered out" — treating it as exhaustion truncates the scan
+    (#19908). Rows the reader returns but stats must not count (discarded,
+    locked) are kept in ``rows`` so the offset stays aligned, and dropped
+    during aggregation.
+    """
     rows: List[Dict[str, Any]] = []
     while len(rows) < scan_cap:
         request_size = min(batch, scan_cap - len(rows))
