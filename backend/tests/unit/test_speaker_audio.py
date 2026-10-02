@@ -215,7 +215,7 @@ def test_real_live_uploader_batches_remain_readable(memory_bucket, protection):
 def test_16khz_boundary_aligned_rounded_filename(memory_bucket, enhanced, span, fraction):
     start = ORIGIN + fraction
     data = memory_bucket.add(start, 10, enhanced=enhanced, span=span)
-    result = speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', start, start + 10)
+    result = speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', start, start + 10, timestamps=[start])
     # Historical timestamp-only windows may lose <= 0.5ms at a boundary, never gain silence.
     assert result is not None
     assert len(data) - 16 <= len(result) <= len(data)
