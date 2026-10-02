@@ -339,36 +339,64 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> A
     return snapshot
 
 
-def budgeted_stream_iter(query: Any, budget: Optional[ListReadBudget]) -> Iterable[Any]:
+_STREAM_RETRY_UNSET = object()
+
+
+def budgeted_stream_iter(
+    query: Any, budget: Optional[ListReadBudget], *, retry: Any = _STREAM_RETRY_UNSET
+) -> Iterable[Any]:
     """Iterate ``query.stream()`` lazily under the budget, charging per row.
 
     Unlike :func:`budgeted_stream_list` the rows fetched before exhaustion are
     still yielded to the caller, so a page cut mid-stream can keep its honest
     prefix. Deadline exceptions from the budget-derived RPC timeout become the
     typed exhaustion after the partial rows have been produced.
+
+    ``retry`` is forwarded to ``query.stream`` only when given — callers with a
+    bounded scan pass ``retry=None`` so the derived timeout applies to the
+    whole stream instead of restarting per retry attempt.
     """
     if budget is None:
         yield from query.stream()
         return
     timeout = budget.rpc_timeout()
+    stream_kwargs = {'timeout': timeout}
+    if retry is not _STREAM_RETRY_UNSET:
+        stream_kwargs['retry'] = retry
     try:
-        iterator = query.stream(timeout=timeout)
+        iterator = query.stream(**stream_kwargs)
     except TypeError:
-        # Test fakes predating the budget seam do not accept a timeout kwarg.
-        iterator = query.stream()
-    while True:
         try:
-            doc = next(iterator)
-        except StopIteration:
-            return
-        except _FirestoreDeadlineExceeded as exc:
-            budget.mark_exhausted('deadline')
-            raise ListReadBudgetExhausted('deadline') from exc
-        budget.charge(1)
-        yield doc
+            # Test fakes predating the retry seam accept timeout only.
+            iterator = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam do not accept a timeout kwarg.
+            iterator = query.stream()
+    try:
+        while True:
+            try:
+                doc = next(iterator)
+            except StopIteration:
+                return
+            except _FirestoreDeadlineExceeded as exc:
+                budget.mark_exhausted('deadline')
+                raise ListReadBudgetExhausted('deadline') from exc
+            budget.charge(1)
+            yield doc
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()
 
 
 def apply_truncation_header(headers: Any, budget: Optional[ListReadBudget]) -> None:
     """Set the documented truncation header on a mutable header mapping."""
     if budget is not None and budget.truncated:
         headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+
+
+def finish_list_budget(response: Any, budget: ListReadBudget) -> None:
+    """Stamp the truncation header on the response (when one exists) and record the outcome."""
+    if response is not None:
+        apply_truncation_header(response.headers, budget)
+    budget.observe('truncated' if budget.truncated else 'ok')

@@ -2189,6 +2189,22 @@ accepted update covers that segment. The 30-second cache refresh alone does not
 force a historical segment to be delivered again. The transactional merge remains protected
 through that interval; the stale cache never authorizes changing labeled spans.
 
+People statistics and speaker-id browse (`/v1/users/people?include_stats` and the
+`speaker_id` branch of `/v1/conversations/search`) read conversations through
+`database/conversation_scan.py`: one newest-first pass paginated by
+`start_after(snapshot)` cursors — never `offset`, which previously restarted
+each page at the newest row — with a server-side `limit` on every query. Each
+request scans under a `ListReadBudget` of at most 12 seconds and 2,000 raw
+documents (env may only tighten it), so an exhausted scan returns its honest
+prefix plus `X-Omi-List-Truncated: true` instead of timing out. The stats path
+projects only the fields it needs (visibility flags, lock, timestamps,
+transcript, protection level, and the manual speaker-assignment receipt); the
+receipt is decoded and applied at read time, so manual labels win over
+stored `person_id` exactly as in the full read, and locked, discarded, and
+deleted rows never enter aggregates. Speaker browse reads full documents under
+the same cursor and ceilings, honoring the caller's `include_discarded` flag
+and inclusive `created_at` window.
+
 ### S1 capture evidence dark write (exploratory)
 
 `CAPTURE_EVIDENCE_V1_DARK_WRITE` defaults off on backend, mobile and macOS. When

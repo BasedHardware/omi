@@ -2,12 +2,15 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, cast
+from itertools import islice
+from typing import Any, Dict, Iterable, List, Optional, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
 import typesense
 
+from database.conversation_scan import SPEAKER_BROWSE_BATCH, SPEAKER_BROWSE_SCAN_CAP
+from utils.other.list_budget import ListReadBudget
 from utils.share_links import accepted_share_hosts, share_base_url
 
 logger = logging.getLogger(__name__)
@@ -233,13 +236,12 @@ def conversation_matches_speaker(conversation: Dict[str, Any], speaker_id: Optio
 
 # Speaker-filtered browsing cannot be answered by Typesense (the index carries no transcript_segments),
 # so it walks the newest Firestore conversations instead. The walk is bounded: one request never reads
-# more than this many conversations, and reports has_more when it stopped early.
-SPEAKER_BROWSE_SCAN_CAP = 1000
-SPEAKER_BROWSE_BATCH = 50
+# more than this many conversations, and reports has_more when it stopped early. The constants live
+# with the reader in database.conversation_scan.
 
 
 def browse_conversations_by_speaker(
-    fetch_page: Callable[[int, int], List[Dict[str, Any]]],
+    conversations: Iterable[Dict[str, Any]],
     speaker_id: str,
     *,
     page: int,
@@ -247,41 +249,54 @@ def browse_conversations_by_speaker(
     scan_cap: int = SPEAKER_BROWSE_SCAN_CAP,
     batch: int = SPEAKER_BROWSE_BATCH,
     include_discarded: bool = False,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
     """Return one page of the newest conversations that contain ``speaker_id``.
 
-    ``fetch_page(limit, offset)`` yields conversations newest-first. Filtering the first ``per_page``
-    rows of that stream (what the Typesense browse did) only finds a speaker who appears in the very
-    latest conversations; this keeps reading until the requested page is full or ``scan_cap`` is hit.
+    ``conversations`` is one newest-first iterator — production wires
+    ``database.conversation_scan.iter_conversations``, which pages by snapshot
+    cursor under a ``ListReadBudget`` (never ``offset``), so invisible rows
+    advance the cursor and cannot end the scan early (#19908). Filtering the
+    first ``per_page`` rows (what the Typesense browse did) only finds a
+    speaker who appears in the very latest conversations; this keeps reading
+    until the requested page is full, ``scan_cap`` is hit, or the reader's
+    budget truncates the stream.
 
-    A short page ends the scan. That is exact for a reader that fills its pages. Firestore's
-    server-side ``limit().offset()`` branch drops invisible rows in Python without padding, so a
-    tombstone inside the window can end the scan early (#19908). Do not fix that by forcing
-    ``include_discarded=True`` on the reader: that branch re-reads from the newest row on every
-    page, which made a deep browse run for minutes. Discarded rows a reader does return are
-    filtered here unless the caller asked for them.
+    The iterator ends the scan when it runs out — a short pull is real
+    exhaustion. Locked and discarded rows the reader still yields are dropped
+    here unless the caller asked for them.
     """
     wanted = page * per_page
     matches: List[Dict[str, Any]] = []
     scanned = 0
     exhausted = False
-    while scanned < scan_cap and len(matches) <= wanted:
-        request_size = min(batch, scan_cap - scanned)
-        rows = fetch_page(request_size, scanned)
-        scanned += len(rows)
-        for row in rows:
-            if row.get('is_locked'):
-                continue
-            if row.get('discarded') and not include_discarded:
-                continue
-            if conversation_matches_speaker(row, speaker_id):
-                matches.append(row)
-        if len(rows) < request_size:
-            exhausted = True
-            break
+    iterator = iter(conversations)
+    try:
+        while scanned < scan_cap and len(matches) <= wanted:
+            request_size = min(batch, scan_cap - scanned)
+            rows = list(islice(iterator, request_size))
+            scanned += len(rows)
+            for row in rows:
+                if row.get('is_locked'):
+                    continue
+                if row.get('discarded') and not include_discarded:
+                    continue
+                if conversation_matches_speaker(row, speaker_id):
+                    matches.append(row)
+            if len(rows) < request_size:
+                exhausted = True
+                break
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()
     start = (page - 1) * per_page
     items = matches[start : start + per_page]
-    has_more = len(matches) > wanted or (not exhausted and scanned >= scan_cap)
+    has_more = (
+        len(matches) > wanted
+        or (not exhausted and scanned >= scan_cap)
+        or bool(budget is not None and budget.truncated)
+    )
     return {
         'items': items,
         'total_pages': page + 1 if has_more else page,
