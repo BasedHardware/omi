@@ -98,7 +98,7 @@ jobs:
 
           changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
           printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
-          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack|firestore-readiness)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             {
               echo "### Backend development deploy scope"
@@ -222,65 +222,25 @@ jobs:
         with:
           ref: ${{ steps.admitted_source.outputs.admitted_sha }}
 
-      - name: Google Auth for read-only Firestore inventory
-        uses: 'google-github-actions/auth@v3'
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
         with:
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Verify read-only Firestore credentials target the development runtime project
-        env:
-          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          credential_project="$(gcloud config get-value project 2>/dev/null)"
-          if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
-            echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
-            exit 1
-          fi
-          if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
-            echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but RUNTIME_GCP_PROJECT_ID is $RUNTIME_GCP_PROJECT_ID."
-            exit 1
-          fi
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
 
       - name: Verify serving Firestore indexes
-        id: firestore_readiness
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --check-only \
-            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Validate blocked Firestore schema proposal
-        id: validate_firestore_proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Preserve blocked Firestore schema proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
-          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
-          if-no-files-found: error
-          retention-days: 1
+          source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          verify_credential_project: 'true'
 
   deploy:
     needs: firestore_readiness
@@ -300,6 +260,7 @@ jobs:
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: auto-dev
+          dev_free_tier_local_processing_cohort: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: development
           deploy_targets: all

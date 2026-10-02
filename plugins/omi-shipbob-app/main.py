@@ -582,7 +582,7 @@ async def handle_shipbob_callback(
             log(f"Channel selection error (non-fatal): {ch_err}")
 
         # Redirect to home with uid
-        return RedirectResponse(url=f"/?uid={uid}")
+        return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
     except Exception as e:
         log(f"OAuth error: {e}")

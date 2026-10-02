@@ -61,6 +61,7 @@ from utils.stt.live_failure import (
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 from utils.stt.streaming import (
     MODULATE_DEATH_SERVE_ERROR,
     STTService,
@@ -181,15 +182,17 @@ def test_matching_tolerates_provider_casing_and_punctuation():
     assert modulate_death_reason('  INTERNAL SERVER ERROR ') == MODULATE_DEATH_SERVE_ERROR
 
 
-def test_account_state_refusals_are_serve_errors():
-    """Velma's connect-time over-quota answer: no stream can be served."""
-    assert modulate_death_reason('Monthly usage limit reached.') == MODULATE_DEATH_SERVE_ERROR
+def test_account_state_refusals_are_budget_exhausted():
+    """Velma's over-quota answer is the same class as Soniox monthly budget."""
+    assert modulate_death_reason('Monthly usage limit reached.') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('usage limit reached') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('quota exceeded') == PROVIDER_BUDGET_EXHAUSTED
 
 
-def test_session_scoped_shapes_stay_untyped():
+def test_session_scoped_shapes_have_an_explicit_censored_cause():
     """Invalid audio we sent is our fault; a rate limit is this session's.
     Neither may bench the provider for every other client."""
-    assert modulate_death_reason(SESSION_SCOPED_MESSAGE) is None
+    assert modulate_death_reason(SESSION_SCOPED_MESSAGE) == 'other'
     assert modulate_death_reason('rate limit') is None
     assert modulate_death_reason('connection reset') is None
 
@@ -219,7 +222,7 @@ def test_a_session_scoped_frame_logs_at_warning_not_error(caplog):
     with caplog.at_level(logging.WARNING, logger=STREAMING_LOGGER):
         sock = _drive_socket([_error_frame(SESSION_SCOPED_MESSAGE)])
     assert sock.is_connection_dead
-    assert sock.typed_death_reason is None
+    assert sock.typed_death_reason == 'other'
     assert [r.levelname for r in caplog.records if 'Modulate stream' in r.message] == ['WARNING']
 
 
@@ -268,12 +271,12 @@ def test_the_vad_gate_proxies_the_modulate_typed_reason():
     assert gated.typed_death_reason == MODULATE_DEATH_SERVE_ERROR
 
 
-def test_the_gate_reports_none_for_an_untyped_modulate_death():
-    """A session-scoped death wrapped by the gate must read as untyped too."""
+def test_the_gate_preserves_the_censored_modulate_cause():
+    """A session-scoped death wrapped by the gate must retain its explicit non-provider cause."""
     dead = _drive_socket([_error_frame(SESSION_SCOPED_MESSAGE)])
     gated = GatedSTTSocket(dead)
     assert gated.is_connection_dead
-    assert gated.typed_death_reason is None
+    assert gated.typed_death_reason == 'other'
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +308,7 @@ def test_the_serve_error_is_circuit_opening_but_connection_lost_is_not():
     """Only the typed serve error benches the provider at the seam; the generic
     observer vantage point (connection_lost) must keep passing through."""
     assert MODULATE_DEATH_SERVE_ERROR in live_failure._CIRCUIT_OPENING_REASONS
+    assert PROVIDER_BUDGET_EXHAUSTED in live_failure._CIRCUIT_OPENING_REASONS
     assert 'connection_lost' not in live_failure._CIRCUIT_OPENING_REASONS
     assert 'soniox_idle_timeout' not in live_failure._CIRCUIT_OPENING_REASONS
 
@@ -382,7 +386,9 @@ def _receiver_with_dead_modulate(dead_socket):
     receiver = ListenReceiver(host, [], {})
     receiver.stt_socket = dead_socket
     receiver.vad_gate = None
-    receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
+    # Audio-timeline: _stt_rebuild holds a callback FACTORY plus the sample
+    # rate (a fresh epoch translator per rebuild), not the callbacks.
+    receiver._stt_rebuild = (lambda: (lambda _s: None, lambda _s: None, None), 16000)
     receiver._create_stt_socket = AsyncMock(return_value=HealthyReplacement())
     return receiver
 
@@ -421,7 +427,7 @@ async def test_a_serve_error_death_surviving_failover_opens_the_selection_circui
 async def test_a_session_scoped_death_surviving_failover_does_not_bench_the_provider():
     """Invalid audio we sent killed THIS stream; other clients keep Velma."""
     dead = await _drive_socket_in_loop([_error_frame(SESSION_SCOPED_MESSAGE)])
-    assert dead.typed_death_reason is None
+    assert dead.typed_death_reason == 'other'
     receiver = _receiver_with_dead_modulate(dead)
     calls, opener = _circuit_recorder()
 
@@ -526,9 +532,11 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
 
 def test_the_circuit_recovers_through_the_half_open_probe():
     """Benching Velma must not brick it: after the serve-error cooldown a
-    probe is offered, and enough consecutive probe successes close it again.
-    A single half-open connect is not recovery during a 5xx storm
-    (first transcript succeeds, then teardown fails)."""
+    probe is offered, and enough consecutive SERVING probe successes close it
+    again. A grace-only connect success keeps the breaker half-open — during a
+    5xx storm the probe the grace admits is exactly the stream that dies
+    mid-session (2026-09-22: the re-close re-admitted the failing provider
+    every ~3 minutes for hours)."""
     now = [0.0]
     circuit = ProviderCircuitBreaker(
         failure_threshold=3,
@@ -551,8 +559,11 @@ def test_the_circuit_recovers_through_the_half_open_probe():
     circuit.record_success()
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success(serving=True)
     assert circuit.state == 'closed'

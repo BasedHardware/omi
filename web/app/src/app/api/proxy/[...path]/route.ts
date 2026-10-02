@@ -117,20 +117,6 @@ async function handleRequest(request: Request) {
     // Get response data
     const responseContentType = response.headers.get('content-type');
 
-    // Handle streaming responses (for chat)
-    if (
-      responseContentType?.includes('text/event-stream') ||
-      responseContentType?.includes('text/plain')
-    ) {
-      const text = await response.text();
-      return new Response(text, {
-        status: response.status,
-        headers: forwardedResponseHeaders(response, {
-          'Content-Type': responseContentType || 'text/plain',
-        }),
-      });
-    }
-
     // Handle download/streaming responses (e.g., data export) — pass body through without buffering
     const contentDisposition = response.headers.get('content-disposition');
     if (contentDisposition) {

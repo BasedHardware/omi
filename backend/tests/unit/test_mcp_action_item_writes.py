@@ -324,6 +324,64 @@ class TestMutationGuards:
         assert update_data['description'] == 'New'
 
 
+@patch('utils.mcp_action_items.upsert_action_item_vector', MagicMock())
+@patch('utils.mcp_action_items.delete_action_item_vector', MagicMock())
+class TestReminderSync:
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_with_due_date_arms_reminder(self, mock_db, mock_sync):
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1')
+        actions.create_action_item(UID, 'Email Bob', due_at=NOW)
+        mock_sync.assert_called_once_with(
+            user_id=UID, action_item_id='a1', description='Email Bob', completed=False, due_at=NOW
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_without_due_date_sends_nothing(self, mock_db, mock_sync):
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1', due_at=None)
+        actions.create_action_item(UID, 'Email Bob')
+        mock_sync.assert_not_called()
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_complete_cancels_reminder(self, mock_db, mock_sync):
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', completed=True)]
+        mock_db.mark_action_item_completed.return_value = True
+        actions.set_completed(UID, 'a1', completed=True)
+        mock_sync.assert_called_once_with(
+            user_id=UID, action_item_id='a1', description='Email Bob', completed=True, due_at=NOW
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_due_date_change_reschedules_reminder(self, mock_db, mock_sync):
+        later = datetime(2026, 7, 2, tzinfo=timezone.utc)
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', due_at=later)]
+        mock_db.update_action_item.return_value = True
+        actions.update_action_item(UID, 'a1', due_at='2026-07-02')
+        mock_sync.assert_called_once_with(
+            user_id=UID, action_item_id='a1', description='Email Bob', completed=False, due_at=later
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_delete_cancels_reminder(self, mock_db, mock_sync):
+        mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
+        actions.delete_action_item(UID, 'a1')
+        mock_sync.assert_called_once_with(user_id=UID, action_item_id='a1', description='', completed=True, due_at=None)
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True, side_effect=RuntimeError('fcm'))
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_reminder_failure_does_not_fail_the_write(self, mock_db, _mock_sync):
+        mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
+        actions.delete_action_item(UID, 'a1')
+
+
 class TestSearchOrchestration:
     @patch('utils.mcp_action_items.search_action_items_by_vector')
     @patch('utils.mcp_action_items.action_items_db')

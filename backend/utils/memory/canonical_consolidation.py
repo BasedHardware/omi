@@ -998,6 +998,9 @@ Rules:
 - Use supersedes only when older active facts are outdated/false or when this
   synthesized item intentionally replaces/merges them.
 - Duplicate candidates route archive or reject; do not promote another copy.
+- A user_asserted=true candidate from promotion.source_surface=agent_preference
+  is a direct chat preference. Promote it when stable, safe, and non-duplicate;
+  do not archive it merely for lacking independent corroboration.
 - owner_rejected_examples and vector candidates with user_rejected=true are
   owner-rejected negative examples. A near-duplicate of an owner-rejected item
   MUST NOT route promote; route it archive or reject with

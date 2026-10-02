@@ -5,17 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 
-ServerConversation _conversation({List<AppResponse> appResults = const []}) {
+ServerConversation _conversation({List<AppResponse> appResults = const [], ConversationSource? source}) {
   return ServerConversation(
     id: 'test-id',
     createdAt: DateTime.utc(2026, 7, 1, 12, 0, 0),
     structured: Structured('Test', 'Test'),
     appResults: appResults,
+    source: source,
   );
 }
 
 void main() {
   group('ServerConversation cache round trip', () {
+    test('serializes conversation source using its wire value', () {
+      final conv = _conversation(source: ConversationSource.sdcard);
+      final json = conv.toJson();
+
+      expect(json['source'], 'sdcard');
+      expect(ServerConversation.fromJson(json).source, ConversationSource.sdcard);
+    });
+
     test('toJson output with app results parses back without throwing and preserves them', () {
       final conv = _conversation(appResults: [AppResponse('summary text', appId: 'app-1')]);
       final restored = ServerConversation.fromJson(jsonDecode(jsonEncode(conv.toJson())));

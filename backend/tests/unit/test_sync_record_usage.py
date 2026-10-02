@@ -70,13 +70,13 @@ class TestV1RecordUsage:
 
     def test_record_usage_called_in_v1(self):
         body = self._get_v1_body()
-        assert 'record_usage(' in body, "v1 must call record_usage"
+        assert 'record_usage,' in body, "v1 must call record_usage"
 
     def test_record_usage_after_failed_segments_check(self):
         """record_usage must come after the all-segments-failed guard."""
         body = self._get_v1_body()
         all_failed_pos = body.find('successful_segments == 0')
-        record_pos = body.find('record_usage(')
+        record_pos = body.find('record_usage,')
         assert all_failed_pos > 0, "all-segments-failed guard must exist"
         assert record_pos > 0, "record_usage must exist"
         assert record_pos > all_failed_pos, "record_usage must come after all-segments-failed check"
@@ -85,7 +85,7 @@ class TestV1RecordUsage:
         """record_usage must NOT be nested inside fair_use_restrict_dg block."""
         body = self._get_v1_body()
         # Find the record_usage call
-        record_idx = body.find('record_usage(')
+        record_idx = body.find('record_usage,')
         # Walk backwards to find the enclosing if-block
         preceding = body[:record_idx]
         lines = preceding.split('\n')
@@ -103,7 +103,7 @@ class TestV1RecordUsage:
     def test_record_usage_wrapped_in_try_except(self):
         """record_usage must be protected by try/except."""
         body = self._get_v1_body()
-        record_idx = body.find('record_usage(')
+        record_idx = body.find('record_usage,')
         # Check there's a try: before it (within ~5 lines)
         preceding_chunk = body[max(0, record_idx - 200) : record_idx]
         assert 'try:' in preceding_chunk, "record_usage must be inside a try block"
@@ -114,7 +114,7 @@ class TestV1RecordUsage:
     def test_record_usage_logs_error_on_failure(self):
         """Error from record_usage must be logged, not silenced."""
         body = self._get_v1_body()
-        record_idx = body.find('record_usage(')
+        record_idx = body.find('record_usage,')
         following = body[record_idx : record_idx + 300]
         assert 'logger.error' in following, "record_usage failure must be logged"
 

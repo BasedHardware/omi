@@ -313,7 +313,7 @@ def provider_for_model_token(model: str) -> str | None:
     hosted identity; use ``deepgram_provider_for_runtime`` where it matters.
     """
     normalized = model.strip().lower()
-    if normalized == 'parakeet':
+    if normalized in ('parakeet', 'parakeet-window'):
         return PARAKEET_PROVIDER
     if normalized == 'modulate-velma-2':
         return MODULATE_PROVIDER
@@ -340,6 +340,8 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
     A Deepgram token is admissible when either deployment is allowed. Selection
     re-checks the runtime's own provider, so this cannot reach a withheld one.
     """
+    if model.strip().lower() == 'parakeet-window' and surface != STTServingSurface.STREAMING:
+        return False
     provider = provider_for_model_token(model)
     if provider is None:
         return False

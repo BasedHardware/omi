@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "FC-gate-hides-its-operator-prerequisite",
+  "violated_contract": "A fail-closed gate whose pass condition depends on an operator-owned identity or permission outside the repository must (a) discover that dependency before it spends the pipeline's expensive irreversible work, and (b) name the ACTIVE identity in the failure, distinguishing an unexpected identity from a missing grant. A gate that instead discovers the denial only after the build and rollout it was supposed to guard, and then reports a bare error class with a grant command for an unnamed principal, misdirects the operator: a credential rotated to the wrong service account produces the same 403 as a missing grant, and prescribing `add-iam-policy-binding` for whatever identity happens to be active sends an operator to grant IAM to the wrong principal. The development Pusher lane held this shape from the named-signer cutover (67697b2fe7, #13667) onward: IAM signJwt as firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com was denied (custom_token_signing/permission_denied) on every run, minutes after a needless image build and Helm rollout. The suspected missing TokenCreator grant existed for omi-ci-deployer-dev the whole time; the actual cause was the development environment's GCP_CREDENTIALS secret rotated (2026-09-13 06:17:48Z) to a key of local-development-joan@based-hardware-dev, re-rotated back on 2026-09-20 14:23:30Z after which signing passed. The same lane's scrape-target gate also failed for ~26 hours (2026-09-16 -> 09-17) without saying which required job was dark, so the crash-looping dev Pusher behind da58f3e94b had to be found by log archaeology across unrelated runs.",
+  "canonical_prevention": "The gate's preflight tests the external permission itself before any expensive step (gcloud iam service-accounts test-iam-permissions for iam.serviceAccounts.signJwt against the named signer) and fails fast; the remediation names the caller identity resolved from the active credentials and lists both denial causes -- a GCP_CREDENTIALS key rotated to another service account, or a genuinely missing roles/iam.serviceAccountTokenCreator grant with the exact add-iam-policy-binding command for the resolved caller -- never prescribing the grant unconditionally. The token minter prints the same identity-first remediation to stderr on a 403 so the machine-readable FAIL report on stdout stays parsable. The alert-route gate's scrape-target failure carries each required job's observed min(up) value (0/1/absent) so the first red run names the culprit instead of a blame-free sentence.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+    "backend/scripts/firebase_release_probe_token.py",
+    "backend/scripts/verify_pusher_live_alert_route.py",
+    "backend/tests/unit/test_pusher_deployment_control_workflow.py",
+    "backend/tests/unit/test_firebase_release_probe_token.py",
+    "backend/tests/unit/test_verify_pusher_live_alert_route.py"
+  ],
+  "evidence_prs": [
+    13667,
+    14364
+  ],
+  "scope_hints": [
+    ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+    "backend/scripts/**",
+    "backend/tests/unit/**"
+  ],
+  "status": "open"
+}

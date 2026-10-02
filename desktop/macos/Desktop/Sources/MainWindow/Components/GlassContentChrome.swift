@@ -287,6 +287,7 @@ extension View {
 // MARK: - Components
 
 /// A page's title block: the heading and the sentence under it, in the two rungs glass carries.
+/// The one page-title style (docs/ux-contract.md §11): subheading semibold over a caption.
 struct GlassPageHeader<Trailing: View>: View {
   let title: String
   var subtitle: String?
@@ -296,10 +297,14 @@ struct GlassPageHeader<Trailing: View>: View {
     HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(title)
-          .inkStyle(InkType.firstTitle, color: Ink.primary)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .lineLimit(1)
         if let subtitle {
           Text(subtitle)
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(1)
         }
       }
       Spacer(minLength: OmiSpacing.md)
@@ -314,32 +319,7 @@ extension GlassPageHeader where Trailing == EmptyView {
   }
 }
 
-/// The "there is nothing here yet" state, in one place so nine pages do not each pick a different
-/// glyph size and grey.
-struct GlassEmptyState: View {
-  let systemImage: String
-  let title: String
-  var message: String?
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Image(systemName: systemImage)
-        .font(.system(size: 30, weight: .light))
-        // `secondary`, not a fainter step: on glass there is no third rung to spend here.
-        .foregroundStyle(Ink.secondary)
-      Text(title)
-        .inkStyle(InkType.rowCopy, color: Ink.primary)
-      if let message {
-        Text(message)
-          .inkStyle(InkType.statusLabel, color: Ink.secondary)
-          .multilineTextAlignment(.center)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.xxl)
-  }
-}
+// `GlassEmptyState`, `GlassErrorState` and `GlassLoadingState` live in GlassPageStates.swift.
 
 /// A rule between blocks on glass. `Ink.separator` at 1 px, never a `Divider()` inside a card — a
 /// `Divider` inherits the host window's appearance rather than the panel's pinned one.

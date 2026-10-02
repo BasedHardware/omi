@@ -76,7 +76,7 @@ extension SettingsContentView {
 
               Spacer()
 
-              Button("Browse...") {
+              Button("Browse…") {
                 let panel = NSOpenPanel()
                 panel.canChooseFiles = false
                 panel.canChooseDirectories = true
@@ -135,7 +135,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: taskExtractionInterval) { _, newValue in
                 performStepHaptic()
                 TaskAssistantSettings.shared.extractionInterval = newValue
@@ -168,7 +168,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $taskMinConfidence, in: 0.3...0.9, step: 0.1)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: taskMinConfidence) { _, newValue in
                   performStepHaptic()
                   TaskAssistantSettings.shared.minConfidence = newValue
@@ -402,7 +402,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: insightExtractionInterval) { _, newValue in
                 performStepHaptic()
                 InsightAssistantSettings.shared.extractionInterval = newValue
@@ -435,7 +435,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $insightMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: insightMinConfidence) { _, newValue in
                   performStepHaptic()
                   InsightAssistantSettings.shared.minConfidence = newValue
@@ -612,7 +612,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: memoryExtractionInterval) { _, newValue in
                 performStepHaptic()
                 MemoryAssistantSettings.shared.extractionInterval = newValue
@@ -645,7 +645,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $memoryMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: memoryMinConfidence) { _, newValue in
                   performStepHaptic()
                   MemoryAssistantSettings.shared.minConfidence = newValue
@@ -779,7 +779,7 @@ extension SettingsContentView {
               }
             ), in: 0...Double(analysisDelayOptions.count - 1), step: 1
           )
-          .tint(Ink.accent)
+          .tint(SettingsSelection.valueFill)
           .onChange(of: analysisDelay) { _, newValue in
             performStepHaptic()
             AssistantSettings.shared.analysisDelay = newValue
@@ -835,36 +835,6 @@ extension SettingsContentView {
 
   var preferencesSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
-      // Multiple Chat Sessions toggle
-      settingsCard(settingId: "advanced.preferences.multichat") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "bubble.left.and.bubble.right")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Multiple Chat Sessions")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text(
-              multiChatEnabled
-                ? "Create separate chat threads"
-                : "Single chat synced with mobile app"
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          Toggle("", isOn: $multiChatEnabled)
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-        }
-      }
-
       settingsCard(settingId: "advanced.preferences.speaknotifications") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "speaker.wave.2")
@@ -988,11 +958,20 @@ extension SettingsContentView {
 
           Spacer()
 
-          Button("Reset") {
-            IntegrationNudgeStore.shared.resetAll()
+          Button("Reset…") {
+            isConfirmingNudgeReset = true
           }
           .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         }
+      }
+      .shellConfirmation(
+        isPresented: $isConfirmingNudgeReset,
+        title: "Reset Integration Suggestions?",
+        message: "Every integration's suggestion history is cleared, including ones you hid, so Omi may "
+          + "suggest them again. This can't be undone.",
+        confirmTitle: "Reset"
+      ) {
+        IntegrationNudgeStore.shared.resetAll()
       }
     }
   }
@@ -1184,14 +1163,15 @@ struct RescanFilesRow: View {
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
-    .alert("Rescan Files?", isPresented: $showConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Rescan") { rescan() }
-    } message: {
-      Text(
-        "Omi re-reads the names, sizes and folders of the files in your standard folders so recent "
-          + "ones are searchable. File contents are not read."
-      )
+    .shellConfirmation(
+      isPresented: $showConfirmation,
+      title: "Rescan Files?",
+      message: "Omi re-reads the names, sizes and folders of the files in your standard folders so recent "
+        + "ones are searchable. File contents are not read.",
+      confirmTitle: "Rescan",
+      isDestructive: false
+    ) {
+      rescan()
     }
   }
 

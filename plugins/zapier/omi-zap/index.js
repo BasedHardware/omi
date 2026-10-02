@@ -8,7 +8,10 @@ module.exports = {
   authentication: authentication,
   requestTemplate: {
     params: { uid: '{{bundle.authData.uid}}' },
-    headers: { 'X-UID': '{{bundle.authData.uid}}' },
+    headers: {
+      'X-UID': '{{bundle.authData.uid}}',
+      Authorization: 'Bearer {{bundle.authData.token}}',
+    },
   },
   triggers: { [onMemoryCreatedTrigger.key]: onMemoryCreatedTrigger },
   creates: { [createMemoryCreate.key]: createMemoryCreate },

@@ -32,6 +32,7 @@ import pytest
 from routers import desktop_chat
 from utils.llm import chat as chat_module
 from utils.llm import conversation_processing as conv_proc
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
     EXPLICIT_CACHE_MINIMUM_CHARACTERS,
@@ -261,7 +262,7 @@ def real_langchain_runnables():
     """Real langchain objects, built once: constructing them is the expensive part."""
     from langchain_openai import ChatOpenAI
 
-    model = ChatOpenAI(model='gpt-5.6-luna', api_key='sk-not-used')
+    model = ChatOpenAI(model=LUNA_MODEL, api_key='sk-not-used')
     return (
         model,
         model.bind(extra_body={'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}),

@@ -172,8 +172,7 @@ def test_default_applier_rejects_a_deleted_source_without_mutating_target(monkey
 
 def test_default_applier_commits_a_restatement_through_the_canonical_store(monkeypatch):
     """Exercise the real operation journal, source fence, and evidence merge."""
-    monkeypatch.setenv("MEMORY_MODE", "write")
-    monkeypatch.delenv("MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     uid = "uid-belief-e2e"
     existing = _fresh_short_term_item(
         uid=uid, memory_id="mem-old", conversation_id="conv-old", content="Lives in NYC"
@@ -232,8 +231,7 @@ def test_default_applier_commits_a_restatement_through_the_canonical_store(monke
 
 def test_default_applier_rejects_a_source_revision_that_changed_after_judgment(monkeypatch):
     """The real transaction must reject a delayed judgment before target writes."""
-    monkeypatch.setenv("MEMORY_MODE", "write")
-    monkeypatch.delenv("MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     uid = "uid-belief-source-race"
     existing = _fresh_short_term_item(
         uid=uid, memory_id="mem-old", conversation_id="conv-old", content="Lives in NYC"
@@ -290,8 +288,7 @@ def test_default_applier_rejects_a_source_revision_that_changed_after_judgment(m
 
 
 def test_default_applier_real_retry_does_not_increment_corroboration_twice(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "write")
-    monkeypatch.delenv("MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     uid = "uid-belief-real-retry"
     existing, new, db = _canonical_pair(uid)
     judgment = EvidenceEventJudgment(event=EvidenceEventKind.restated, target_memory_id=existing.memory_id)
@@ -307,8 +304,7 @@ def test_default_applier_real_retry_does_not_increment_corroboration_twice(monke
 
 
 def test_default_applier_real_contradiction_supersedes_target(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "write")
-    monkeypatch.delenv("MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     uid = "uid-belief-real-contradiction"
     existing, new, db = _canonical_pair(uid)
 
@@ -327,8 +323,7 @@ def test_default_applier_real_contradiction_supersedes_target(monkeypatch):
 
 
 def test_default_applier_real_resolution_sets_valid_to_without_archiving_row(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "write")
-    monkeypatch.delenv("MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     uid = "uid-belief-real-resolution"
     existing, new, db = _canonical_pair(uid)
 

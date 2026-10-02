@@ -21,7 +21,9 @@ absorb the lanes that clients already pin to `gemini-2.5-flash-lite`.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+
+from config.vertex_reservations import RESERVATIONS, State, policy
 
 # --- Provisioned Throughput orders ----------------------------------------
 # The prepaid model today: 5 GSU, us-central1, flat ~$290.32/day until
@@ -31,8 +33,8 @@ PT_MODEL_CURRENT = 'gemini-2.5-flash'
 
 # Migration target. A PT order for this model provisions in ~10 business days.
 # Nothing needs to be redeployed when it lands: the proxy attempts `dedicated`
-# on this model, and a non-429 response is the proof that capacity exists.
-PT_MODEL_TARGET = 'gemini-3.1-flash-lite'
+# on this model; only a successful dedicated response proves capacity exists.
+PT_MODEL_TARGET = 'gemini-3.8-flash'
 
 # Overflow ladder, most-capable first. Overflow is always on-demand, so this is
 # also a cost ladder: 3.1-flash-lite ($1.50 out) beats 2.5-flash spillover
@@ -45,33 +47,58 @@ PT_MODEL_TARGET = 'gemini-3.1-flash-lite'
 OVERFLOW_PREFERENCE = ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite')
 
 # --- Fallback chains -------------------------------------------------------
-# Output price per 1M tokens (Vertex list, captured 2026-08-18). Declared here
+# List price per 1M tokens (Vertex list, captured 2026-08-18). Declared here
 # so the cost direction of every chain is checkable rather than asserted in
-# prose. Embedding has no output tokens and no substitute, so it is absent.
+# prose. Embedding has no text-token price and no substitute, so it is absent.
+PRICE_PER_MTOK_IN: dict[str, float] = {
+    'gemini-2.5-flash-lite': 0.10,
+    'gemini-3.1-flash-lite': 0.25,
+    'gemini-2.5-flash': 0.30,
+    'gemini-2.5-pro': 1.25,
+    PT_MODEL_TARGET: 1.50,
+}
 PRICE_PER_MTOK_OUT: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.40,
     'gemini-3.1-flash-lite': 1.50,
     'gemini-2.5-flash': 2.50,
     'gemini-2.5-pro': 10.00,
+    PT_MODEL_TARGET: 7.50,
 }
+
+# Feature name (see model_config.FEATURE_PT_OVERFLOW_ORIGIN) or desktop
+# requested-model anchor -> the model whose list price caps overflow.
+# A lane admitted to Provisioned Throughput on behalf of a cheaper origin
+# declares that origin here. Absent means no ceiling: the declared ladder is
+# unchanged. Empty until a lane actually moves — moving one is eval-gated and
+# is not this policy.
+LANE_OVERFLOW_ORIGINS: dict[str, str] = {}
+
+# Stamped onto a gateway route's provider_options, then read off the provider
+# request. Not a Vertex body field.
+OVERFLOW_ORIGIN_OPTION = 'pt_overflow_origin'
 
 # Every model the proxy can route to declares, as data, the ordered models that
 # may serve its traffic when it cannot serve it itself. One reviewable table
 # beats per-model conditionals scattered through the proxy.
 #
-# Three invariants, all enforced by tests rather than convention:
-#   * every chain is non-increasing in output price, so a degraded request can
-#     never cost more than the request it replaces;
+# Invariants, all enforced by tests rather than convention:
+#   * every chain is non-increasing in input and output price, so a degraded
+#     request can never cost more than the request it replaces;
 #   * a chain never contains its own head, so a dead model cannot retry itself;
 #   * the model currently holding Provisioned Throughput is filtered out at
 #     resolution time (FC-degraded-fallback-consumes-protected-budget) —
-#     degraded traffic must not consume the reservation the quota protects.
+#     degraded traffic must not consume the reservation the quota protects;
+#   * when a lane declares an origin model, overflow and fallback candidates
+#     are also filtered to models whose input and output list price are both
+#     at or below that origin (FC-degraded-fallback-exceeds-origin-price).
+#     No declared origin leaves the chain unchanged.
 #
 # An empty chain means terminal: the model is the cheapest option in its lane
 # and there is nothing left to fall back to. `gemini-2.5-flash-lite` is the
 # floor of the text ladder and is also the model clients pin directly, so
 # giving it a chain would promote those lanes onto costlier models.
 MODEL_FALLBACKS: dict[str, tuple[str, ...]] = {
+    PT_MODEL_TARGET: ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-2.5-pro': ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-2.5-flash': ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'),
     'gemini-3.1-flash-lite': ('gemini-2.5-flash-lite',),
@@ -161,24 +188,10 @@ def vertex_endpoint(
 
 
 def thinking_config_for(*, budget: int) -> dict[str, object]:
-    """Return the thinkingConfig body to send, for every model.
+    """Legacy 2.5/3.1 budget helper; 3.8 attempts use model_payload's low level.
 
-    There is deliberately no per-family branch here. Measured 2026-08-18 on the
-    global endpoint, `gemini-3.1-flash-lite` HONORS `thinkingBudget`:
-
-        thinkingBudget: 0        -> thoughts=0    output=64
-        thinkingBudget: 1024     -> thoughts=278  output=77
-        thinkingLevel: 'minimal' -> thoughts=0    output=75
-        thinkingLevel: 'high'    -> thoughts=603  output=76
-        (no thinking config)     -> thoughts=0    output=64
-
-    while 2.5-family models reject `thinkingLevel` outright with HTTP 400
-    ('thinking_level is not supported by this model'). `thinkingBudget` is
-    therefore the one option both families accept, and `thinkingLevel` is the
-    one that works on neither universally. An earlier revision split on family
-    from documentation rather than measurement and had it backwards; the split
-    is gone rather than inverted, so a fallback chain that crosses families
-    needs no body rewriting at all.
+    3.1 Flash-Lite accepted budgets in the 2026-08-18 probe, while 2.5
+    rejects thinkingLevel. Adapt the body for each actual serving model.
     """
     return {'thinkingBudget': int(budget)}
 
@@ -196,7 +209,8 @@ def thinking_config_for(*, budget: int) -> dict[str, object]:
 COMPANY_PAID_VERTEX_TEXT_MODELS = frozenset(
     {
         PT_MODEL_CURRENT,  # gemini-2.5-flash — the us-central1 reservation
-        PT_MODEL_TARGET,  # gemini-3.1-flash-lite — the migration target
+        PT_MODEL_TARGET,  # gemini-3.8-flash — dedicated only when capacity observed
+        'gemini-3.1-flash-lite',  # existing Pro remap and overflow
         'gemini-2.5-flash-lite',  # cheap shared floor
     }
 )
@@ -237,61 +251,103 @@ def company_paid_vertex_text_model(model: str, *, knob: str = '') -> str:
     )
 
 
-def resolve_pt_model(*, target_dedicated_ready: bool, override: str = '') -> str:
-    """Which model currently owns prepaid capacity.
+def resolve_pt_models(states: Mapping[str, State], *, override: str = '') -> frozenset[str]:
+    """All protected capacity, after per-model override resolution at the boundary."""
+    protected = protected_reservations(states)
+    if override:
+        pinned = company_paid_vertex_text_model(override, knob='pt model override')
+        if pinned not in RESERVATIONS:
+            protected |= {pinned}
+    return protected
 
-    `override` is the operator escape hatch and wins unconditionally, so a bad
-    auto-detection can be pinned back without a code change. It must name a
-    declared company-paid anchor: any other value — in particular a
-    Pro/image-output shape — fails closed instead of becoming the served
-    model (SCA-481).
+
+def lane_overflow_origin(lane_key: str) -> str:
+    """Declared origin for a feature or desktop anchor, or '' when unset."""
+    return _normalize(LANE_OVERFLOW_ORIGINS.get(_normalize(lane_key), ''))
+
+
+def overflow_origin_from_request(request: Mapping[str, object]) -> str:
+    """Origin stamped on a gateway provider request, or '' when absent."""
+    raw = request.get(OVERFLOW_ORIGIN_OPTION, '')
+    if not isinstance(raw, str):
+        return ''
+    return _normalize(raw)
+
+
+def _list_price(model: str) -> tuple[float, float] | None:
+    normalized = _normalize(model)
+    price_in = PRICE_PER_MTOK_IN.get(normalized)
+    price_out = PRICE_PER_MTOK_OUT.get(normalized)
+    if price_in is None or price_out is None:
+        return None
+    return price_in, price_out
+
+
+def model_within_origin_price(candidate: str, origin: str) -> bool:
+    """Whether `candidate` costs no more than `origin` on input and on output.
+
+    An unknown price fails closed: a ceiling that cannot be checked must not
+    admit the candidate.
     """
-    pinned = _normalize(override)
-    if pinned:
-        return company_paid_vertex_text_model(pinned, knob='pt model override')
-    return PT_MODEL_TARGET if target_dedicated_ready else PT_MODEL_CURRENT
+    origin_price = _list_price(origin)
+    candidate_price = _list_price(candidate)
+    if origin_price is None or candidate_price is None:
+        return False
+    origin_in, origin_out = origin_price
+    candidate_in, candidate_out = candidate_price
+    return candidate_in <= origin_in and candidate_out <= origin_out
 
 
-def resolve_overflow_model(*, pt_model: str, override: str = '') -> str:
+def _under_origin_ceiling(chain: tuple[str, ...], origin_model: str) -> tuple[str, ...]:
+    """Drop rungs above `origin_model`'s list price. No origin leaves `chain`."""
+    origin = _normalize(origin_model)
+    if not origin:
+        return chain
+    return tuple(rung for rung in chain if model_within_origin_price(rung, origin))
+
+
+def resolve_overflow_model(*, pt_model: str, override: str = '', origin_model: str = '') -> str:
     """Which model absorbs work that prepaid capacity cannot serve.
 
     Never returns `pt_model`: overflow exists to spare the reservation, so
     routing it back onto the reservation would defeat the quota entirely
-    (FC-degraded-fallback-consumes-protected-budget).
+    (FC-degraded-fallback-consumes-protected-budget). When `origin_model` is
+    set, the choice must also cost no more than that origin on input and output.
     """
-    pinned = _normalize(override)
-    protected = _normalize(pt_model)
-    if pinned:
-        if pinned == protected:
-            raise ValueError(
-                f'overflow override {pinned!r} equals the provisioned model; '
-                'overflow must never consume the protected reservation'
-            )
-        return company_paid_vertex_text_model(pinned, knob='overflow model override')
-    for candidate in OVERFLOW_PREFERENCE:
-        if candidate != protected:
-            return candidate
-    raise ValueError(f'no overflow model available outside the provisioned model {protected!r}')
+    return resolve_overflow_ladder(pt_model=pt_model, override=override, origin_model=origin_model)[0]
 
 
-def resolve_overflow_ladder(*, pt_model: str, override: str = '') -> tuple[str, ...]:
+def resolve_overflow_ladder(
+    *, pt_model: str, override: str = '', origin_model: str = '', protected_models: Iterable[str] = ()
+) -> tuple[str, ...]:
     """Every on-demand model that may absorb work, best first.
 
     A ladder rather than a single model so a rung that cannot be called at all
     falls through to one that can, instead of failing the request. Never
     includes `pt_model` (FC-degraded-fallback-consumes-protected-budget).
+
+    `origin_model` is the lane's price ceiling. Candidates above that model's
+    input or output list price are dropped. Unset, the declared ladder is
+    returned unchanged (FC-degraded-fallback-exceeds-origin-price).
     """
     protected = _normalize(pt_model)
     pinned = _normalize(override)
     if pinned:
-        if pinned == protected:
+        if pinned == protected or pinned in protected_models:
             raise ValueError(
                 f'overflow override {pinned!r} equals the provisioned model; '
                 'overflow must never consume the protected reservation'
             )
-        return (company_paid_vertex_text_model(pinned, knob='overflow model override'),)
-    ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected)
+        ladder: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='overflow model override'),)
+    else:
+        ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected and c not in protected_models)
+    ladder = _under_origin_ceiling(ladder, origin_model)
     if not ladder:
+        origin = _normalize(origin_model)
+        if origin:
+            raise ValueError(
+                f'no overflow model at or below origin {origin!r} ' f'outside the provisioned model {protected!r}'
+            )
         raise ValueError(f'no overflow model available outside the provisioned model {protected!r}')
     return ladder
 
@@ -302,6 +358,8 @@ def resolve_fallback_chain(
     pt_model: str,
     unreachable: Iterable[str] = (),
     override: str = '',
+    origin_model: str = '',
+    protected_models: Iterable[str] = (),
 ) -> tuple[str, ...]:
     """Models that may serve `model`'s traffic when `model` itself cannot, best first.
 
@@ -318,13 +376,16 @@ def resolve_fallback_chain(
     `override` is the operator pin and replaces the whole chain, which is what
     makes a bad table correctable without a deploy. It is still refused when it
     aliases the reservation, and it can never point a model at itself.
+
+    `origin_model` applies the same price ceiling as the overflow ladder.
+    Unset, the filtered declared chain is returned unchanged.
     """
     protected = _normalize(pt_model)
     head = _normalize(model)
     dead = {_normalize(name) for name in unreachable}
     pinned = _normalize(override)
     if pinned:
-        if pinned == protected:
+        if pinned == protected or pinned in protected_models:
             raise ValueError(
                 f'fallback override {pinned!r} equals the provisioned model; '
                 'fallback must never consume the protected reservation'
@@ -332,7 +393,17 @@ def resolve_fallback_chain(
         chain: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='fallback model override'),)
     else:
         chain = MODEL_FALLBACKS.get(head, ())
-    return tuple(rung for rung in chain if rung != protected and rung != head and rung not in dead)
+    return _under_origin_ceiling(
+        _under_origin_ceiling(
+            tuple(
+                rung
+                for rung in chain
+                if rung != protected and rung not in protected_models and rung != head and rung not in dead
+            ),
+            head,
+        ),
+        origin_model,
+    )
 
 
 def request_type_for(*, model: str, pt_model: str) -> str:
@@ -346,10 +417,11 @@ def request_type_for(*, model: str, pt_model: str) -> str:
 
 
 def is_provisioned_capacity_exhausted(status: int, message: str) -> bool:
-    """Whether a response means 'prepaid capacity is full', not 'slow down'.
+    """Whether a response matches the ambiguous absent-or-full capacity signature.
 
-    Vertex returns 429 for both a saturated PT order and ordinary per-project
-    rate limiting. Only the former should fall back to on-demand; treating a
+    Vertex returns the same capacity signature for absent and saturated orders.
+    Neither establishes reservation state. Ordinary per-project rate limiting
+    must not fall back to on-demand; treating a
     generic 429 as overflow would convert real backpressure into extra spend.
     """
     if status != 429:
@@ -403,7 +475,8 @@ def is_provisioned_capacity_absent(status: int, message: str) -> bool:
 DESKTOP_TEXT_LANES: dict[str, str] = {
     PT_MODEL_CURRENT: 'omi:auto:desktop-vertex-flash',
     'gemini-2.5-pro': 'omi:auto:desktop-vertex-pro',
-    PT_MODEL_TARGET: 'omi:auto:desktop-vertex-target',
+    'gemini-3.1-flash-lite': 'omi:auto:desktop-vertex-target',
+    PT_MODEL_TARGET: 'omi:auto:desktop-vertex-flash-38',
     'gemini-2.5-flash-lite': 'omi:auto:desktop-vertex-flash-lite',
 }
 DESKTOP_EMBEDDING_MODEL = 'gemini-embedding-001'
@@ -414,18 +487,89 @@ def desktop_text_lane_id(model: str) -> str | None:
     return DESKTOP_TEXT_LANES.get(_normalize(model))
 
 
-def desktop_serving_model(model: str, *, target_dedicated_ready: bool, override: str = '') -> str:
+def desktop_serving_model(model: str, *, override: str = '') -> str:
     """The model that actually serves a company-paid desktop request for `model`.
 
-    The pin policy the desktop proxy ran in-process before the gateway move:
-      * `gemini-2.5-pro`    -> the migration target (never the $10/M on-demand pro)
-      * `PT_MODEL_CURRENT`  -> whichever model currently owns prepaid capacity
-      * client-pinned models serve as themselves (flash-lite stays the cheap floor;
-        3.1-flash-lite becomes `dedicated` automatically once it holds the order)
+    Pro retains its inexpensive 3.1 Flash-Lite remap. Old Flash clients retain
+    2.5 Flash, changing only from dedicated to shared after the order moves.
+    Client-pinned Lite and new 3.8 requests serve their requested model.
     """
     normalized = _normalize(model)
-    if normalized == 'gemini-2.5-pro':
-        return PT_MODEL_TARGET
-    if normalized == PT_MODEL_CURRENT:
-        return resolve_pt_model(target_dedicated_ready=target_dedicated_ready, override=override)
+    if override:
+        company_paid_vertex_text_model(override, knob='pt model override')
+    action = policy(normalized, State.UNKNOWN)
+    if action.kind == 'remap':
+        return action.model
     return normalized
+
+
+# Location for the MOVED order, not the on-demand residency default. A global
+# order requires explicit operator sign-off; no automatic global discovery.
+PT_TARGET_LOCATION_ENV = 'OMI_VERTEX_PT_TARGET_LOCATION'
+
+
+def target_capacity_endpoint(*, location: str) -> tuple[str, str]:
+    """Accept a declared regional/us/global order location without guessing its shape."""
+    normalized = _normalize(location) or MULTI_REGION_LOCATION
+    if normalized in {'us', 'global', 'eu'}:
+        return MULTI_REGION_HOST, normalized
+    if not normalized or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in normalized):
+        raise ValueError('invalid PT target location')
+    return f'{normalized}-aiplatform.googleapis.com', normalized
+
+
+def model_payload(payload: Mapping[str, object], model: str) -> dict[str, object]:
+    """Adapt thinking for each real attempt, including cross-family fallback."""
+    adapted = dict(payload)
+    key = 'generation_config' if 'generation_config' in adapted else 'generationConfig'
+    value = adapted.get(key, {})
+    config = dict(value) if isinstance(value, Mapping) else {}
+    thinking_key = 'thinking_config' if 'thinking_config' in config else 'thinkingConfig'
+    thinking = config.get(thinking_key)
+    if model in RESERVATIONS and RESERVATIONS[model].thinking_level:
+        config.pop('thinking_config', None)
+        config['thinkingConfig'] = {'thinkingLevel': RESERVATIONS[model].thinking_level}
+    elif not uses_multi_region_endpoint(model) and isinstance(thinking, Mapping):
+        level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
+        if level is not None:
+            config.pop('thinking_config', None)
+            config['thinkingConfig'] = {'thinkingBudget': 0 if level == 'minimal' else 1024}
+    adapted[key] = config
+    return adapted
+
+
+def reservation_capacity(model: str, states: Mapping[str, State], *, override: str = '') -> str:
+    if override:
+        company_paid_vertex_text_model(override, knob='pt model override')
+        if model not in RESERVATIONS:
+            return request_type_for(model=model, pt_model=override)
+    return policy(model, states.get(model, State.UNKNOWN)).kind
+
+
+def protected_reservations(states: Mapping[str, State]) -> frozenset[str]:
+    return frozenset(m for m in RESERVATIONS if policy(m, states.get(m, State.UNKNOWN)).kind == 'dedicated')
+
+
+def reservation_endpoint(model: str, env: Mapping[str, str]) -> tuple[str, str]:
+    spec = RESERVATIONS[model]
+    return target_capacity_endpoint(
+        location=env.get(spec.location_env, spec.location) if spec.location_env else spec.location
+    )
+
+
+def recovery_action(model: str, capacity: str, status: int, message: str, *, overflow_enabled: bool) -> str:
+    """One transport-independent policy; generic backpressure never buys a retry."""
+    spec = RESERVATIONS.get(model)
+    capacity_error = is_provisioned_capacity_exhausted(status, message) or is_provisioned_capacity_absent(
+        status, message
+    )
+    unavailable = is_model_unavailable(status, message)
+    if spec and spec.overflow == 'shared' and capacity == REQUEST_TYPE_DEDICATED:
+        if overflow_enabled and (capacity_error or unavailable):
+            return 'shared'
+        return 'none'
+    if unavailable:
+        return 'unavailable'
+    if overflow_enabled and capacity == REQUEST_TYPE_DEDICATED and capacity_error:
+        return 'overflow'
+    return 'none'

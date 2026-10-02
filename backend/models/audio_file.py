@@ -4,6 +4,13 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
+class ChunkSpan(BaseModel):
+    """One contiguous stretch of stored PCM, in wall-epoch seconds."""
+
+    start: float
+    end: float
+
+
 class AudioFile(BaseModel):
     id: str = Field(description="Unique identifier for the audio file")
     uid: str = Field(description="User ID who owns this audio file")
@@ -14,3 +21,11 @@ class AudioFile(BaseModel):
         default=None, description="When this audio file started (absolute timestamp)"
     )
     duration: float = Field(description="Duration in seconds")
+    # Audio-timeline v2: authoritative contiguous coverage as {start, end}
+    # wall-epoch second objects (Firestore cannot store nested arrays),
+    # populated from blob metadata at upload time.
+    # Absent on legacy files; a v1-only chunk list is at best a candidate,
+    # never proof of full coverage.
+    chunk_spans: Optional[List[ChunkSpan]] = Field(
+        default=None, description="Validated contiguous coverage spans (v2 only)"
+    )

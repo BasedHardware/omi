@@ -4,6 +4,7 @@ import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef IntegrationStatusFetcher = Future<IntegrationResponse?> Function(String appKey);
 typedef IntegrationSaver = Future<bool> Function(String appKey, Map<String, dynamic> details);
@@ -29,6 +30,7 @@ class IntegrationProvider extends ChangeNotifier {
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+  bool _needsRetry = false;
   int _sessionGeneration = 0;
   Future<void>? _inFlightLoad;
 
@@ -59,25 +61,61 @@ class IntegrationProvider extends ChangeNotifier {
 
   Future<void> _loadFromBackendBody() async {
     final generation = _sessionGeneration;
+    final syncAttempt = ProductTelemetry.instance.start(
+      ProductJourney.integrationSync,
+      surface: ProductSurface.integration,
+    );
+    var syncCompleted = false;
+    void completeSync(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (syncCompleted) return;
+      syncCompleted = true;
+      syncAttempt.complete(outcome, failure: failure);
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
       final keys = trackedAppKeys;
       final responses = await Future.wait(keys.map(_fetchStatus));
-      if (!_isCurrent(generation)) return;
-
-      for (var i = 0; i < keys.length; i++) {
-        final connected = responses[i]?.connected ?? false;
-        _integrations[keys[i]] = connected;
-        await _persistPref(prefKeyFor(keys[i]), connected);
-        if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
       }
 
-      if (!_isCurrent(generation)) return;
+      var allFetched = true;
+      for (var i = 0; i < keys.length; i++) {
+        final key = keys[i];
+        final response = responses[i];
+        if (response == null) {
+          allFetched = false;
+          _integrations.putIfAbsent(key, () => SharedPreferencesUtil().getBool(prefKeyFor(key)));
+          continue;
+        }
+        _integrations[key] = response.connected;
+        await _persistPref(prefKeyFor(key), response.connected);
+        if (!_isCurrent(generation)) {
+          completeSync(ProductOutcome.superseded);
+          return;
+        }
+      }
+
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
       _hasLoaded = true;
+      _needsRetry = !allFetched;
+      completeSync(
+        allFetched ? ProductOutcome.success : ProductOutcome.failure,
+        failure: allFetched ? ProductFailure.none : ProductFailure.network,
+      );
     } catch (e) {
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
+      completeSync(ProductOutcome.failure, failure: ProductFailure.network);
       Logger.debug('Error loading integrations from backend: $e');
     } finally {
       if (_isCurrent(generation)) {
@@ -88,7 +126,7 @@ class IntegrationProvider extends ChangeNotifier {
   }
 
   Future<void> ensureLoaded() async {
-    if (_hasLoaded) return;
+    if (_hasLoaded && !_needsRetry) return;
     await loadFromBackend();
   }
 
@@ -136,6 +174,7 @@ class IntegrationProvider extends ChangeNotifier {
     _integrations.clear();
     _isLoading = false;
     _hasLoaded = false;
+    _needsRetry = false;
     for (final key in trackedAppKeys) {
       _persistPref(prefKeyFor(key), false);
     }

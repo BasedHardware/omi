@@ -14,12 +14,12 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from database.firestore_read_metrics import FirestoreReadSite
+from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     MessageEvent,
     MessageServiceStatusEvent,
-    SpeakerLabelSuggestionEvent,
 )
 from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
@@ -44,14 +44,25 @@ from utils.fair_use import (
 )
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
 from utils.listen_session_bootstrap import finalize_listen_connect_context, load_listen_connect_base
+from utils.listen_reconnect_budget import listen_reconnect_budget
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
+from utils.observability.transcription import (
+    LiveSTTAttempt,
+    LiveSessionTranscriptOutcome,
+    record_live_session_transcript_outcome,
+    record_live_stt_audio_seconds,
+)
 from utils.pusher import PusherCircuitBreakerOpen
-from utils.product_telemetry import emit_product_event
+from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_speaker_suggestion
 from utils.stt.streaming import get_stt_service_for_language
+from utils.stt.live_failure import terminate_live_stt_backoff
+from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
+from config.live_stt_registry import routing_on
+from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -68,7 +79,6 @@ from database.account_deletion_policy import account_deletion_blocks_access
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.audio import AudioRingBuffer
 from utils.other.storage import get_user_has_speech_profile
-from utils.transcribe_decisions import USER_SELF_PERSON_ID, person_id_for_client
 
 from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
@@ -80,7 +90,7 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
-from utils.observability.transcription import record_listen_session_accepted
+from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +126,7 @@ class ListenSessionRuntime:
 
     def __init__(self, request: ListenRequest):
         self.request = request
+        self.declared_codec = request.codec
         self.limits = ListenLimits()
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
@@ -127,7 +138,6 @@ class ListenSessionRuntime:
             request.websocket.headers
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
-        record_listen_session_accepted(source=request.source, platform=self.client_device_context.platform)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
@@ -136,6 +146,8 @@ class ListenSessionRuntime:
         self.stt_service_selected: Any = None
         self.stt_language = ''
         self.stt_model = ''
+        self.language_profile: LiveLanguageProfile | None = None
+        self.language_observations: LiveLanguageObservations | None = None
         self.vocabulary: List[str] = []
         self.translation_language: Optional[str] = None
         self.user_has_credits = True
@@ -202,30 +214,18 @@ class ListenSessionRuntime:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 
-    def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
-        emit_product_event(
-            uid=self.request.uid,
-            event='Speaker Identity Proposed',
-            properties={
-                'recording_id': self.recording_session_id,
-                'conversation_id': self.state.current_conversation_id,
-                'speaker_id': speaker_id,
-                'matched_existing_person': bool(person_id),
-                'auto_assign_enabled': self.request.speaker_auto_assign_enabled,
-                'proposal_source': 'live_speaker_identification',
-            },
-        )
-        self.send_event(
-            SpeakerLabelSuggestionEvent(
-                speaker_id=speaker_id,
-                person_id=(
-                    'user'
-                    if person_id == USER_SELF_PERSON_ID
-                    else person_id_for_client(person_id, self.request.speaker_auto_assign_enabled)
-                ),
-                person_name=person_name,
-                segment_id=segment_id,
-            )
+    def emit_speaker_suggestion(
+        self,
+        speaker_id: int,
+        person_id: str,
+        person_name: str,
+        segment_id: str,
+        suggested_person_id: Optional[str] = None,
+        *,
+        retracted: bool = False,
+    ) -> None:
+        emit_live_speaker_suggestion(
+            self, speaker_id, person_id, person_name, segment_id, suggested_person_id, retracted=retracted
         )
 
     def start_live_transcription(self) -> None:
@@ -269,6 +269,7 @@ class ListenSessionRuntime:
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
+        self.state.live_transcript_delivered = True
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
         client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
@@ -293,9 +294,127 @@ class ListenSessionRuntime:
             else:
                 client_attempt.cancel()
 
+    # Under this wall-clock span a session is "too short" for the transcript
+    # SLI: the provider barely had anything to transcribe. Matches the ~10s
+    # brief guidance; quiet sessions must not count as failures.
+    SESSION_TOO_SHORT_AUDIO_SECONDS = 10.0
+
+    def _session_speech_seconds(self) -> Optional[float]:
+        """Cumulative VAD speech seconds, or None when no gate measured speech.
+
+        The managed chain exposes the total on its session object (which also
+        plays the receiver's vad_gate role); the legacy path exposes it through
+        VADStreamingGate.get_metrics(). Multi-channel and VAD-off sessions have
+        no gate, so they are judged on audio span alone.
+        """
+
+        gate = getattr(self.receiver, 'vad_gate', None)
+        if gate is None:
+            return None
+        total_speech_ms = getattr(gate, 'total_speech_ms', None)
+        if isinstance(total_speech_ms, (int, float)):
+            return float(total_speech_ms) / 1000.0
+        get_metrics = getattr(gate, 'get_metrics', None)
+        if callable(get_metrics):
+            try:
+                metrics = get_metrics()
+                if isinstance(metrics, dict):
+                    return float(metrics.get('speech_ms_total') or 0) / 1000.0
+            except Exception as error:
+                logger.warning('Listen session speech total read failed type=%s', type(error).__name__)
+        return None
+
+    def _session_ended_in_terminal_stt_failure(self) -> bool:
+        # Only an STT-terminal death (chain exhausted at session start, or a
+        # provider close 1011) forfeits the too_short excuse. The broader
+        # live_transcription_failed flag is also set by supervisor lifetime_done
+        # — including the 90s idle heartbeat reap of a silent socket — and a
+        # silent session must stay too_short, not count as no_transcript.
+        return self.state.stt_terminal_failure or self.state.close_code == 1011
+
+    def _session_transcript_outcome(self) -> LiveSessionTranscriptOutcome:
+        """Classify the session for the headline SLI (what the user felt)."""
+
+        if self.state.live_transcript_delivered:
+            return 'transcribed'
+        if self._session_ended_in_terminal_stt_failure():
+            # An STT-terminal session never gets the too_short excuse, even when
+            # it died before its first audio byte: initialize_stt failures are
+            # exactly the incident shape (chain exhausted at session start).
+            return 'no_transcript'
+        first = self.state.first_audio_byte_timestamp
+        last = self.state.last_audio_received_time
+        audio_span = max(0.0, last - first) if first is not None and last is not None else 0.0
+        if audio_span < self.SESSION_TOO_SHORT_AUDIO_SECONDS:
+            return 'too_short'
+        speech_seconds = self._session_speech_seconds()
+        if speech_seconds is not None and speech_seconds <= 0:
+            return 'too_short'
+        return 'no_transcript'
+
+    def _capture_cost_routing_arm(self) -> None:
+        self._cost_routing_arm: str | None = None
+        if managed_chain_enabled(self):
+            try:
+                self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
+            except (ValueError, TypeError):
+                # Selection owns invalid-config diagnostics and static fallback.
+                # A cohort metric must never prevent that serving path running.
+                self._cost_routing_arm = 'control'
+
+    def _record_session_transcript_outcome(self) -> None:
+        """Emit omi_live_session_transcript_outcome_total exactly once per session.
+
+        Session-end seam: _teardown_components reaches this on every disconnect
+        path after STT initialization (the run() finally). Limitations, on
+        purpose: (1) sessions that fail admission/_bootstrap or crash before
+        the supervisor starts never tear down and are not counted — the same
+        seam the existing LiveSTTAttempt terminal uses; (2) the unit is one
+        accepted backend-STT WebSocket, so a client that reconnects mid
+        conversation counts once per socket: the runtime cannot see the prior
+        socket's transcripts without cross-connection state, and each
+        transcript-less reconnect is itself a user-felt failure. Custom-STT
+        sessions are skipped: their transcripts are the client's own.
+        """
+
+        if getattr(self, '_session_transcript_outcome_recorded', False):
+            return
+        self._session_transcript_outcome_recorded = True
+        # getattr: harness-constructed runtimes may predate this field; a real
+        # session always sets it in __init__ and defaults to counting.
+        if getattr(self, 'use_custom_stt', False):
+            return
+        try:
+            outcome = self._session_transcript_outcome()
+            record_live_session_transcript_outcome(
+                outcome=outcome,
+                uid=self.request.uid,
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                recording_id=self.request.client_conversation_id,
+            )
+            WINDOW_CANARY_OUTCOME.labels(
+                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+            ).inc()
+            arm = getattr(self, '_cost_routing_arm', None)
+            if arm is not None:
+                COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
+        except Exception as error:
+            logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
+
     async def _admit(self) -> bool:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
+            return False
+        device_id = getattr(getattr(self, 'client_device_context', None), 'client_device_id', None)
+        allowed, retry_after = listen_reconnect_budget.admit(self.request.uid, device_id)
+        if not allowed:
+            await terminate_live_stt_backoff(
+                self.request.websocket,
+                self.state,
+                reason='reconnect_budget',
+                retry_after=retry_after,
+            )
             return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
@@ -369,10 +488,33 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        language_profile_in_scope = not (self.is_multi_channel or self.use_custom_stt or get_byok_keys())
+        learned_sessions = None
+        if (
+            language_profile_in_scope
+            and self.multi_lang_enabled
+            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+        ):
+            try:
+                learned_sessions = await asyncio.wait_for(
+                    run_blocking(db_executor, get_live_language_sessions, request.uid), timeout=2.0
+                )
+            except Exception:
+                logger.warning('Live STT language profile read failed')
+        self.language_profile = LiveLanguageProfile.create(
+            self.language,
+            multi=self.multi_lang_enabled,
+            uid=request.uid,
+            in_scope=language_profile_in_scope,
+            learned_sessions=learned_sessions,
+        )
+        self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
+            language_profile=self.language_profile,
+            **window_selection_kwargs(self, request.uid),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
@@ -417,7 +559,19 @@ class ListenSessionRuntime:
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
         ):
-            self.has_speech_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            # A Firestore voiceprint is sufficient for matching even if its GCS
+            # audio cache has disappeared. Only probe audio for legacy profiles
+            # whose embedding still needs to be extracted.
+            try:
+                embedding = await self.persistence.call(user_db.get_user_speaker_embedding, request.uid)
+            except Exception as error:
+                logger.error('Speaker ID user embedding availability failed type=%s', type(error).__name__)
+                embedding = None
+            self.has_speech_profile = bool(embedding) or await self.persistence.call(
+                get_user_has_speech_profile, request.uid
+            )
+            if not self.has_speech_profile:
+                logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
@@ -622,7 +776,7 @@ class ListenSessionRuntime:
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
-            if speech_ms:
+            if speech_ms and not managed_chain_enabled(self):
                 # Live provider minutes: VAD speech seconds actually sent for
                 # STT (not wall-clock, not fair-use transcription_seconds),
                 # attributed to the provider serving at flush time — failover
@@ -641,7 +795,10 @@ class ListenSessionRuntime:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
         seconds = billable_transcription_seconds(
-            self.state.last_usage_record_timestamp, self.state.last_audio_received_time, now
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            now,
+            getattr(self.state, 'last_audio_resume_time', None),
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
@@ -678,6 +835,10 @@ class ListenSessionRuntime:
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
                 client_kind=self.client_kind,
+                # v2 audio requires the capture clock (single channel, server
+                # STT — always on internally) AND the AUDIO_TIMELINE_V2
+                # persistence admission AND a pusher capability acknowledgment.
+                audio_timeline_v2=bool(getattr(self.state, 'capture_timeline_v2', False)),
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -764,8 +925,12 @@ class ListenSessionRuntime:
             await self.asend_event(
                 MessageServiceStatusEvent(status='stt_initiating', status_text='STT Service Starting')
             )
+            # Intent-to-treat cohort: snapshot before selection, including
+            # initialization failures and fail-open sessions in the on arm.
+            self._capture_cost_routing_arm()
             if not await self.receiver.initialize_stt():
                 return
+            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(
@@ -843,6 +1008,7 @@ class ListenSessionRuntime:
             self.request.owner_persistence_blocked.set()
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self._finish_live_transcription()
+        self._record_session_transcript_outcome()
         if not owner_persistence_blocked:
             try:
                 await self.transcripts.flush_translations()
@@ -913,6 +1079,8 @@ class ListenSessionRuntime:
                     logger.error('Pusher close failed type=%s', type(error).__name__)
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
+        if self.language_observations is not None:
+            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self.receiver.clear()
@@ -921,4 +1089,13 @@ class ListenSessionRuntime:
 
 
 async def run_listen_session(request: ListenRequest) -> None:
-    await ListenSessionRuntime(request).run()
+    runtime: Optional[ListenSessionRuntime] = None
+    try:
+        runtime = ListenSessionRuntime(request)
+        await runtime.run()
+    finally:
+        if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
+            record_listen_no_audio_teardown(
+                source=request.source,
+                platform=runtime.client_device_context.platform,
+            )

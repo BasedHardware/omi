@@ -324,6 +324,7 @@ def _desktop_transcribe_isolation():
         _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
         _speaker_embedding.extract_embedding_from_bytes = MagicMock()
         _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+        _speaker_embedding.speaker_embedding_configured = lambda: True
         sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
         _attach_existing_module('utils.stt.speaker_embedding')
 
@@ -1410,7 +1411,7 @@ class TestTranscribeStreamWebSocket:
             attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
             attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
 
-            dying_socket = MagicMock()
+            dying_socket = MagicMock(leg_outcome=None)
             dying_socket.is_connection_dead = False
             dying_socket.death_reason = 'stream error'
 
@@ -1422,7 +1423,7 @@ class TestTranscribeStreamWebSocket:
             dying_socket.finalize = MagicMock()
             dying_socket.finish = MagicMock()
 
-            replacement_socket = MagicMock()
+            replacement_socket = MagicMock(leg_outcome=None)
             replacement_socket.is_connection_dead = False
             replacement_socket.death_reason = None
             replacement_accept_order = []
@@ -1509,7 +1510,7 @@ class TestTranscribeStreamWebSocket:
             attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
             attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
 
-            dying_socket = MagicMock()
+            dying_socket = MagicMock(leg_outcome=None)
             dying_socket.is_connection_dead = False
             dying_socket.death_reason = 'stream error'
 
@@ -1521,7 +1522,7 @@ class TestTranscribeStreamWebSocket:
             dying_socket.finalize = MagicMock()
             dying_socket.finish = MagicMock()
 
-            rejected_socket = MagicMock()
+            rejected_socket = MagicMock(leg_outcome=None)
             rejected_socket.is_connection_dead = True
             rejected_socket.death_reason = 'capacity_full'
             rejected_socket.finish = MagicMock()

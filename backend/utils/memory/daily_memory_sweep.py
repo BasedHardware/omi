@@ -33,14 +33,15 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 import atexit
+import hashlib
 import importlib
 import logging
 import os
 import re
 import threading
+import time as _time_mod
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
-
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from models.daily_sweep_dispatch import SweepDispatchScope
@@ -98,6 +99,7 @@ from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
 from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.usage_tracker import Features, track_usage
 from utils.observability.fallback import record_fallback
 
@@ -190,6 +192,7 @@ DAILY_MEMORY_SWEEP_COHORT_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME"
 DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
 DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS"
 DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED"
+DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV = "MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS"
 
 # The QA run seam is intentionally separate from the ordinary scheduler
 # controls.  A caller must provide every QA-only gate below; setting a run id
@@ -200,7 +203,7 @@ QA_SWEEP_PROJECT = "based-hardware-dev"
 QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 QA_SWEEP_COHORT = "jit-qa-sweep-v1"
-QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
+QA_SWEEP_MODEL_NAME = LUNA_MODEL
 QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 # Qualification uses the same completed-day producer with an explicit tighter
@@ -218,15 +221,15 @@ QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
 QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
-# The deployed memories route is gpt-5.6-luna at $0.20/M input and $1.20/M
-# output.  The parser instructions alone are about 9.6K UTF-8 bytes and the
+# The deployed memories route is gpt-x-luna at $0.10/M input and $0.60/M
+# output (half of 5.6-luna, David Zhang 2026-09-23). The parser instructions alone are about 9.6K UTF-8 bytes and the
 # profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
 # with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
 # and 256 completion tokens cannot hold a reasoning model's structured output.
 # Gateway ceiling is 32_768.  24_576 input leaves room for parser ~9.6K +
 # profile ~3.2K + 8K spine + envelope.  Worst-case reserve at Luna rates:
-#   24_576 * $0.20 / 1e6 + 2_048 * $1.20 / 1e6
-#   = $0.0049152 + $0.0024576 = $0.0073728
+#   24_576 * $0.10 / 1e6 + 2_048 * $0.60 / 1e6
+#   = $0.0024576 + $0.0012288 = $0.0036864
 # still under the $0.05 run envelope (QA_SWEEP_MAX_SPEND_MICRO_USD).  The
 # gateway enforces these same headers against the provider request and
 # settles usage.
@@ -600,7 +603,8 @@ def validate_qa_sweep_environment(environ: Optional[Mapping[str, str]] = None) -
             raise ValueError(f"QA sweep requires {name}={expected!r}")
     if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
         raise ValueError("QA sweep proof must use named Cloud Firestore")
-    if env.get("SERVICE_ACCOUNT_JSON", "").strip() or env.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
+    customer_selectors = ("SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH", "OMI_CUSTOMER_DATA_PROJECT")
+    if any(env.get(name, "").strip() for name in customer_selectors):
         raise ValueError("QA sweep proof cannot select customer Firebase credentials")
     return run_id
 
@@ -4418,8 +4422,8 @@ def _read_completed_day_conversation_sources(
                 return _incomplete_day_read("eligibility_scan_over_budget")
     page_capped = len(eligible_snapshots) > fetch_limit
 
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
@@ -4953,8 +4957,8 @@ def _produce_onboarding_sources(
         for key, value in raw_progress.items()
         if isinstance(key, str) and key.startswith("onboarding:") and isinstance(value, int) and value >= 0
     }
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
@@ -4990,7 +4994,7 @@ def _produce_onboarding_sources(
             continue
         source_keys.append(source_key)
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
+            prepared = prepare_conversation_for_read(raw, uid)
             conversation = Conversation(**(prepared or {}))
             text = (conversation.get_transcript(include_timestamps=False) or "").strip()
         except Exception:
@@ -6360,6 +6364,64 @@ def _pending_completed_dates(
     )
 
 
+def daily_memory_sweep_stagger_spread_seconds(environ: Optional[Mapping[str, str]] = None) -> int:
+    """Read the per-user stagger window. ``0`` and any non-integer keep today's pileup."""
+
+    source = os.environ if environ is None else environ
+    raw = str(source.get(DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV, "0") or "0").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def daily_memory_sweep_stagger_delay_seconds(uid: str, spread_seconds: int) -> int:
+    """Stable slot in ``[0, spread_seconds)`` for one uid. Disabled at ``0``.
+
+    Uses SHA-256 so the slot does not change across processes (``hash()`` is
+    salted per interpreter).
+    """
+
+    if spread_seconds <= 0:
+        return 0
+    normalized = (uid or "").strip()
+    if not normalized:
+        return 0
+    digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % spread_seconds
+
+
+def _sweep_monotonic() -> float:
+    return _time_mod.monotonic()
+
+
+def _sweep_sleep(seconds: float) -> None:
+    _time_mod.sleep(seconds)
+
+
+def _sleep_until_sweep_stagger_slot(
+    uid: str,
+    *,
+    spread_seconds: int,
+    started_monotonic: float,
+) -> None:
+    """Wait until this uid's slot, measured from the scheduler start.
+
+    A sequential drain must not sleep ``hash(uid) % spread`` in full for every
+    user. The slot is an offset from ``started_monotonic``, so added wait stays
+    inside one spread window. Receipts make a late or replayed start an exact
+    no-op when that uid's day already committed.
+    """
+
+    delay = daily_memory_sweep_stagger_delay_seconds(uid, spread_seconds)
+    if delay <= 0:
+        return
+    remaining = delay - (_sweep_monotonic() - started_monotonic)
+    if remaining > 0:
+        _sweep_sleep(remaining)
+
+
 def run_daily_memory_sweep_scheduler(
     *,
     db_client: Any,
@@ -6412,6 +6474,21 @@ def run_daily_memory_sweep_scheduler(
     _ = cohort_authority, cohort_authorizer
     if belief_model_enabled() and not belief_automation_enabled():
         return DailySweepSchedulerSummary(errors=("belief_automation_paused",))
+    stagger_spread_seconds = daily_memory_sweep_stagger_spread_seconds()
+    stagger_started = _sweep_monotonic()
+    scheduled_uids = bounded_uids
+    if stagger_spread_seconds > 0:
+        logger.info(
+            "daily-memory-sweep staggering %s users across %ss",
+            len(bounded_uids),
+            stagger_spread_seconds,
+        )
+        scheduled_uids = tuple(
+            sorted(
+                bounded_uids,
+                key=lambda uid: (daily_memory_sweep_stagger_delay_seconds(uid, stagger_spread_seconds), uid),
+            )
+        )
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
@@ -6421,6 +6498,11 @@ def run_daily_memory_sweep_scheduler(
 
     def process_one(uid: str) -> ProcessOutcome:
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
+        _sleep_until_sweep_stagger_slot(
+            uid,
+            spread_seconds=stagger_spread_seconds,
+            started_monotonic=stagger_started,
+        )
         attempted += 1
         try:
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
@@ -6565,7 +6647,7 @@ def run_daily_memory_sweep_scheduler(
             errors.append(f"uid={uid}:{type(exc).__name__}")
             return ProcessOutcome.reject(type(exc).__name__, reason="processor_exception")
 
-    drain_sweep_uids(bounded_uids, process_one)
+    drain_sweep_uids(scheduled_uids, process_one)
     return DailySweepSchedulerSummary(
         attempted_users=attempted,
         committed_users=committed_users,
@@ -6618,6 +6700,7 @@ __all__ = [
     "DAILY_MEMORY_SWEEP_COHORT_NAME_ENV",
     "DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV",
     "DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV",
+    "DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV",
     "QA_SWEEP_RUN_ID_ENV",
     "QA_SWEEP_ADMISSION_ENV",
     "QA_SWEEP_PROJECT",

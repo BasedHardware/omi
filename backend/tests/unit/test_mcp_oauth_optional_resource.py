@@ -10,12 +10,13 @@ step of the claude.ai Connect flow died with a FastAPI 422
 
 External contract: https://datatracker.ietf.org/doc/html/rfc8707#section-2
 ("the resource parameter ... MAY be used") — at the authorization step an
-omitted indicator binds the grant to the canonical MCP_RESOURCE_URL (the
-audience the protected-resource metadata advertises); at the token endpoint an
-omitted indicator keeps the audience already stored on the code / refresh-token
-document (stored-audience matching lives in database.mcp_oauth and is covered
-by test_mcp_oauth.py). Explicit values — an empty string included — are
-validated exactly as before.
+omitted indicator binds the grant to the LEGACY ``/v1/mcp/sse`` audience so a
+rollback keeps every token valid; only an explicit canonical resource stores
+the canonical audience. At the token endpoint an omitted indicator keeps the
+audience already stored on the code / refresh-token document (stored-audience
+matching lives in database.mcp_oauth and is covered by test_mcp_oauth.py).
+Explicit values — an empty string included — are validated exactly as before,
+and canonical/legacy forms are the same audience for validation.
 
 These tests exercise the real router through FastAPI's TestClient (conftest
 sets the fake env vars needed for import).
@@ -23,6 +24,7 @@ sets the fake env vars needed for import).
 
 import base64
 import hashlib
+from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -83,37 +85,58 @@ def _authorize_params(**overrides):
     return params
 
 
-def test_authorize_get_without_resource_defaults_to_canonical_resource(client, mcp_sse, claude_client):
+def test_authorize_get_without_resource_defaults_to_legacy_resource(client, mcp_sse, claude_client):
     """The claude.ai request shape (no resource) must render consent, not 422."""
     response = client.get("/authorize", params=_authorize_params())
     assert response.status_code == 200
     # The consent page round-trips oauth_params into the POST form, so the
-    # defaulted canonical resource must be embedded for the consent step.
-    assert mcp_sse.MCP_RESOURCE_URL in response.text
+    # defaulted LEGACY resource must be embedded for the consent step — a
+    # rollback keeps every token minted this way valid.
+    assert mcp_sse.mcp_oauth_db.MCP_LEGACY_RESOURCE_URL in response.text
 
 
-def test_authorize_get_with_explicit_resource_still_works(client, claude_client, mcp_sse):
-    response = client.get("/authorize", params=_authorize_params(resource=mcp_sse.MCP_RESOURCE_URL))
+@pytest.mark.parametrize(
+    "resource_attr",
+    ["MCP_RESOURCE_URL", "MCP_LEGACY_RESOURCE_URL"],
+)
+def test_authorize_get_with_explicit_resource_still_works(client, claude_client, mcp_sse, resource_attr):
+    """Both audience forms validate: explicit canonical and explicit legacy."""
+    response = client.get("/authorize", params=_authorize_params(resource=getattr(mcp_sse.mcp_oauth_db, resource_attr)))
     assert response.status_code == 200
 
 
+def _error_redirect_params(response):
+    assert response.status_code == 302
+    location = response.headers["location"]
+    assert location.startswith(REDIRECT_URI)
+    return dict(parse_qsl(urlsplit(location).query))
+
+
 def test_authorize_get_still_rejects_a_wrong_explicit_resource(client, claude_client):
-    """Defaulting must not loosen validation of explicitly supplied values."""
-    response = client.get("/authorize", params=_authorize_params(resource="https://evil.example/v1/mcp/sse"))
-    body = response.json()
-    assert body["error"] == "invalid_request"
-    assert "resource" in body["error_description"].lower()
+    """Defaulting must not loosen validation of explicitly supplied values.
+    The client and redirect URI are both valid, so the failure is delivered as
+    an RFC 9207 error redirect carrying ``iss``, not a JSON error."""
+    response = client.get(
+        "/authorize",
+        params=_authorize_params(resource="https://evil.example/v1/mcp/sse"),
+        follow_redirects=False,
+    )
+    params = _error_redirect_params(response)
+    assert params["error"] == "invalid_target"
+    assert "resource" in params["error_description"].lower()
+    assert params["state"] == "opaque-state"
+    assert params["iss"] == "https://api.omi.me"
 
 
 def test_authorize_get_still_rejects_an_empty_explicit_resource(client, claude_client):
     """Present-but-empty is an invalid explicit value, not an omission to default."""
-    response = client.get("/authorize", params=_authorize_params(resource=""))
-    body = response.json()
-    assert body["error"] == "invalid_request"
-    assert "resource" in body["error_description"].lower()
+    response = client.get("/authorize", params=_authorize_params(resource=""), follow_redirects=False)
+    params = _error_redirect_params(response)
+    assert params["error"] == "invalid_target"
+    assert "resource" in params["error_description"].lower()
 
 
-def test_consent_post_without_resource_grants_against_canonical_resource(client, mcp_sse, claude_client, monkeypatch):
+def test_consent_post_without_resource_grants_against_legacy_resource(client, mcp_sse, claude_client, monkeypatch):
     captured = {}
 
     def fake_verify_id_token(token):
@@ -131,8 +154,30 @@ def test_consent_post_without_resource_grants_against_canonical_resource(client,
     form["firebase_id_token"] = "firebase-token"
     response = client.post("/authorize", data=form)
     assert response.status_code == 200
-    assert captured["resource"] == mcp_sse.MCP_RESOURCE_URL
+    assert captured["resource"] == mcp_sse.mcp_oauth_db.MCP_LEGACY_RESOURCE_URL
     assert "code=auth-code-1" in response.json()["redirect_uri"]
+
+
+def test_consent_post_with_explicit_canonical_resource_stores_canonical(client, mcp_sse, claude_client, monkeypatch):
+    """Only an explicit canonical resource stores the canonical audience."""
+    captured = {}
+
+    monkeypatch.setattr(mcp_sse.firebase_admin.auth, "verify_id_token", lambda token: {"uid": "user-1"})
+    monkeypatch.setattr(
+        mcp_sse.mcp_oauth_db,
+        "create_grant_and_authorization_code_if_allowed",
+        lambda uid, client_id, redirect_uri, resource, scopes, code_challenge: (
+            captured.setdefault("resource", resource),
+            {"id": "grant-1"},
+            "auth-code-1",
+        )[1:],
+    )
+
+    form = _authorize_params(resource=mcp_sse.mcp_oauth_db.MCP_RESOURCE_URL)
+    form["firebase_id_token"] = "firebase-token"
+    response = client.post("/authorize", data=form)
+    assert response.status_code == 200
+    assert captured["resource"] == mcp_sse.mcp_oauth_db.MCP_RESOURCE_URL
 
 
 def test_token_code_exchange_without_resource_defers_to_stored_audience(client, mcp_sse, claude_client, monkeypatch):

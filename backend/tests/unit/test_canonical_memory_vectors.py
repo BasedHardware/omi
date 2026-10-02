@@ -404,6 +404,21 @@ def test_account_purge_removes_all_uid_rows_across_provider_id_generations(monke
     }
 
 
+def test_delete_canonical_memory_vectors_confirms_absence_when_index_unconfigured(monkeypatch):
+    """Privacy deletion must not fail closed on a deployment with no vector store.
+
+    No index means no vector copy can exist, so the desired absence is
+    trivially confirmed. The production backend and prod desktop-backend run
+    without ``PINECONE_API_KEY``; requiring a live provider here made every
+    explicit delete (and every cascade conversation delete) 503 forever
+    (#10446 recurrence: desktop delete errors, mobile re-adds on refresh).
+    """
+    vector_db = _load_vector_db_with_stubs()
+    monkeypatch.setattr(vector_db, "index", None)
+
+    assert vector_db.delete_canonical_memory_vectors("uid-first", "mem-any") is True
+
+
 def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 

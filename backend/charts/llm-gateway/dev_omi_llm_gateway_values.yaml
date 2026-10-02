@@ -54,6 +54,25 @@ ingress:
   tls: []
 
 env:
+  # Optional shared evidence. Missing bindings use strict process-local state.
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-reservation-runtime-config
+        key: REDIS_DB_HOST
+        optional: true
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: VERTEX_RESERVATION_REDIS_PASSWORD
+        optional: true
+  - name: REDIS_DB_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-reservation-runtime-config
+        key: REDIS_DB_PORT
+        optional: true
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -104,8 +123,6 @@ env:
     value: "1"
   - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
     value: "1000"
-  - name: OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS
-    value: "public_shared_conversation_chat"
   - name: LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
     value: "true"
 

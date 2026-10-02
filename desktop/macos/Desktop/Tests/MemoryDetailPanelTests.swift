@@ -98,7 +98,7 @@ final class MemoryDetailPanelTests: XCTestCase {
       panel.contains("isPresented: $isConfirmingPublic"),
       "Making a memory public must be confirmed")
     XCTAssertTrue(
-      panel.contains("Button(\"Make public…\")"),
+      panel.contains("Button(\"Make Public…\")"),
       "Publishing belongs in the secondary actions menu")
   }
 

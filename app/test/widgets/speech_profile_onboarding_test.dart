@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -181,5 +183,41 @@ void main() {
     expect(find.text('Voice profile saved'), findsNothing);
     expect(find.byKey(const Key('introduction_save_all')), findsOneWidget);
     expect(find.byKey(const Key('introduction_leave_review')), findsOneWidget);
+  });
+
+  testWidgets('both save receipts render together, and do not collide', (tester) async {
+    // saveAll() enrolls the voice before uploading the answers, so this pairing is
+    // the normal path for every successful save, not a race. Rendered flush, the
+    // spinner and the check sat on one leading edge and read as a broken glyph.
+    final io = FakeVoiceIO()..pendingMemory = Completer<void>();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak();
+    await flow.next();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await pump(tester, flow);
+
+    unawaited(flow.saveAll());
+    await tester.pump();
+    await tester.pump();
+
+    final saving = find.text('Saving your answers…');
+    final saved = find.text('Voice profile saved');
+    expect(saving, findsOneWidget);
+    expect(saved, findsOneWidget, reason: 'the voice is enrolled first, so its receipt is already up');
+
+    final savingRect = tester.getRect(saving);
+    final savedRect = tester.getRect(saved);
+    expect(
+      savedRect.top - savingRect.bottom,
+      greaterThanOrEqualTo(12.0),
+      reason: 'the two receipts must be separated like the done view, not stacked flush',
+    );
+
+    io.pendingMemory!.complete();
+    await tester.pumpAndSettle();
   });
 }

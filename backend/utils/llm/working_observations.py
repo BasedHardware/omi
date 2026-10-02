@@ -17,7 +17,12 @@ from models.memory_contracts import (
     deterministic_contract_id,
 )
 from utils.llm.usage_tracker import Features, track_usage
-from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
+from utils.llm.prompt_cache import (
+    EXPLICIT_CACHE_BREAKPOINT,
+    EXPLICIT_CACHE_OPTIONS,
+    has_cacheable_prefix,
+    prefix_cache_key,
+)
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
 from utils.memory.belief_model import belief_model_enabled
 
@@ -51,6 +56,7 @@ logger = logging.getLogger(__name__)
 # Thirty-two one-evidence candidates leave margin to retract the preceding
 # bounded source set in the same atomic commit.
 MAX_WORKING_OBSERVATION_ITEMS = 32
+MEMORY_L1_CACHE_NAMESPACE = 'omi-memory-l1-v1'
 
 # Decision state is deliberately an argument on the existing memory
 # proposition.  It is not a new memory kind, task, or trigger.  Keep this
@@ -455,12 +461,27 @@ def extract_l1_memory_archive_items_from_text(
         language_instruction=language_instruction,
         rejected_memory_examples=rejected_memory_examples,
     )
-    cache_enabled = bool(prompt_prefix and prompt_prefix.cache_eligible and prompt_cache_enabled)
+    static_system = legacy_messages[0][1]
+    cache_enabled = bool(prompt_cache_enabled and has_cacheable_prefix(static_system))
+    static_system_message: dict[str, Any] = (
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': static_system,
+                    'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT),
+                }
+            ],
+        }
+        if cache_enabled
+        else {'role': 'system', 'content': static_system}
+    )
     if prompt_prefix is not None:
         volatile_human = _rejection_feedback_block(rejected_memory_examples)
         messages: Sequence[Any] = [
-            *prompt_prefix.messages(cache_enabled=cache_enabled),
-            {'role': 'system', 'content': legacy_messages[0][1]},
+            static_system_message,
+            *prompt_prefix.messages(cache_enabled=False),
             {
                 'role': 'user',
                 'content': (
@@ -470,7 +491,7 @@ def extract_l1_memory_archive_items_from_text(
             },
         ]
     else:
-        messages = legacy_messages
+        messages = [static_system_message, {'role': 'user', 'content': legacy_messages[1][1]}]
 
     if llm is not None:
         model = llm
@@ -481,8 +502,8 @@ def extract_l1_memory_archive_items_from_text(
                 LlmInvoker,
                 llm_factory(
                     'memory_l1',
-                    cache_key=prompt_prefix.cache_key if cache_enabled and prompt_prefix else None,
-                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if cache_enabled else None,
+                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if cache_enabled else None,
+                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if prompt_cache_enabled else None,
                 ),
             )
         except Exception as exc:

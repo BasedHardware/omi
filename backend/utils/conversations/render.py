@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
+from database.auth import get_user_name
 from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
@@ -67,8 +68,7 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
+    user_name = get_user_name(uid, use_default=False) or 'User'
 
     all_person_ids: Set[str] = set()
     for conv in conversations:
@@ -167,6 +167,11 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
+    # Where the live receiver heard each segment is internal placement evidence, not transcript.
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('audio_capture_start', None)
+            segment.pop('audio_capture_end', None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:

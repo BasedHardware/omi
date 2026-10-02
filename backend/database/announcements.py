@@ -81,8 +81,9 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
     # Sort by version descending
     changelogs.sort(key=lambda x: _version_tuple(x.app_version or "0"), reverse=True)
 
-    # Return only the most recent N changelogs
-    return changelogs[:limit]
+    # Return only the most recent N changelogs. Clamp defensively: a negative limit would
+    # otherwise slice from the end (Python semantics) and return the wrong set.
+    return changelogs[: max(0, limit)]
 
 
 def get_firmware_features(firmware_version: str, device_model: Optional[str] = None) -> List[Announcement]:

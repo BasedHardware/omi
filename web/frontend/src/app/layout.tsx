@@ -3,10 +3,11 @@ import { Mulish } from 'next/font/google';
 import './globals.css';
 import AppHeader from '../components/shared/app-header';
 import ConditionalFooter from '../components/shared/conditional-footer';
+import AnnouncementBar from '../components/shared/announcement-bar';
 import envConfig from '../constants/envConfig';
-import { GleapInit } from '@/src/components/shared/gleap';
 import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
 import { PublicBuildCanary } from '../components/public-build-canary';
+import { ShareAnalytics } from '../components/shared/share-analytics';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -35,18 +36,15 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <PublicBuildCanary />
+        <ShareAnalytics />
         <AppHeader />
         {/* Elfsight Announcement Bar */}
-        <div
-          className="elfsight-app-4df8bf4f-92a3-44bb-8bae-fcdac7faa58a"
-          data-elfsight-app-lazy
-        ></div>
+        <AnnouncementBar />
         <main className="flex min-h-screen flex-col">
           <div className="w-full flex-grow">{children}</div>
         </main>
         <ConditionalFooter />
       </body>
-      <GleapInit />
       <GoogleAnalytics />
     </html>
   );

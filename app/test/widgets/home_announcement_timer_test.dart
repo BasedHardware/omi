@@ -6,7 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
@@ -15,6 +19,7 @@ import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -60,6 +65,35 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(HomePage), findsNothing);
   });
+
+  testWidgets('system back on another tab returns to the Home tab first (D6)', (tester) async {
+    await _pumpHomePage(tester);
+    final home = tester.element(find.byType(HomePage)).read<HomeProvider>();
+    home.setIndex(HomeProvider.tasksTab);
+    await tester.pump();
+
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(handled, isTrue, reason: 'the shell consumed back instead of leaving the app');
+    expect(home.selectedIndex, 0);
+    expect(find.byType(HomePage), findsOneWidget);
+    await _disposeHomePage(tester);
+  });
+
+  testWidgets('the mounted Home registers as the one shell links open into (nav #3)', (tester) async {
+    await _pumpHomePage(tester);
+    expect(HomeNavigation.isHomeMounted, isTrue);
+
+    await _disposeHomePage(tester);
+    expect(HomeNavigation.isHomeMounted, isFalse);
+  });
+}
+
+Future<void> _disposeHomePage(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 900));
 }
 
 Future<void> _pumpHomePage(WidgetTester tester) async {
@@ -116,6 +150,12 @@ List<SingleChildWidget> _homeProviders() {
     ChangeNotifierProvider(create: (_) => MemoriesProvider()),
     ChangeNotifierProvider(create: (_) => PeopleProvider()),
     ChangeNotifierProvider(create: (_) => LocaleProvider()),
+    // Home embeds the conversation list; its speaker-tag card fetches through this seam, so no I/O.
+    ChangeNotifierProvider(
+      create: (_) => SpeakerTagPromptsProvider(
+        fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+      ),
+    ),
   ];
 }
 

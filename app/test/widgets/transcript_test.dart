@@ -1,15 +1,18 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   setUpAll(() async {
@@ -41,6 +44,41 @@ void main() {
       translations: [],
     );
   }
+
+  testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
+    await setupSharedPreferences();
+    var loaded = <Person>[];
+    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final segment = segmentFor('reactive', 2)..personId = 'later';
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: people,
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment])),
+        )));
+    await tester.pumpAndSettle();
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
+    loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
+    await people.setPeople();
+    await tester.pumpAndSettle();
+    expect(find.text('Alex'), findsOneWidget);
+    await people.updatePersonProvider(people.people.single, 'Sam');
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Alex'), findsNothing);
+    people.clearUserData();
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsNothing);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
+  });
 
   group('Speaker label display', () {
     testWidgets('shows person name when personId is set and in cache', (tester) async {
@@ -107,14 +145,29 @@ void main() {
       expect(find.text('Speaker 1'), findsOneWidget);
     });
 
+    testWidgets('unavailable resolution does not render chunk ids as distinct people', (tester) async {
+      final segments = [segmentFor('first', 27), segmentFor('second', 28)];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: segments, unresolvedSpeakers: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker ?'), findsNWidgets(2));
+      expect(find.text('Speaker 1'), findsNothing);
+      expect(find.text('Speaker 2'), findsNothing);
+    });
+
     testWidgets('Tag button is removed from UI', (tester) async {
       final segment = segmentFor('seg3', 1);
-      final suggestion = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: 'person-456',
-        personName: 'Bob',
-        segmentId: 'seg3',
-      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -126,7 +179,7 @@ void main() {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true, suggestions: {'seg3': suggestion}),
+            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
           ),
         ),
       );
@@ -134,6 +187,117 @@ void main() {
 
       // Tag button should no longer exist
       expect(find.text('Tag'), findsNothing);
+    });
+  });
+
+  group('Saved conversation lines', () {
+    testWidgets('name and clock time sit over the words, with no bubble or avatar', (tester) async {
+      await setupSharedPreferences();
+      final mine = TranscriptSegment(
+        id: 'mine',
+        text: 'We ship the widgets first.',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        personId: null,
+        start: 0,
+        end: 2,
+        translations: [],
+      );
+      final theirs = TranscriptSegment(
+        id: 'theirs',
+        text: 'Agreed, chat can follow.',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        personId: null,
+        start: 65,
+        end: 67,
+        translations: [],
+      );
+      final named = <(String, int)>[];
+      final played = <String>[];
+      final edited = <int>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: TranscriptWidget(
+              segments: [mine, theirs],
+              isConversationDetail: true,
+              startedAt: DateTime(2026, 9, 30, 12, 40),
+              editSegment: (id, speakerId) => named.add((id, speakerId)),
+              onSegmentTap: (segment) => played.add(segment.id),
+              onEditSegmentText: edited.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('Speaker 1'), findsOneWidget);
+      // The wall clock (start + offset), not "0:00" / "1:05"; intl may put a narrow space before PM.
+      expect(find.textContaining(RegExp(r'^12:40\sPM$')), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^12:41\sPM$')), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsNothing);
+
+      // Only a voice nobody has named is underlined.
+      final unnamed = tester.widget<Text>(find.text('Speaker 1'));
+      expect(unnamed.style?.decoration, TextDecoration.underline);
+      expect(unnamed.style?.decorationStyle, TextDecorationStyle.dotted);
+      expect(tester.widget<Text>(find.text('You')).style?.decoration, isNull);
+
+      await tester.tap(find.text('Speaker 1'));
+      expect(named, [('theirs', 1)]);
+      expect(played, isEmpty);
+
+      // Tapping the words plays from that line; so does the rest of the line (the time).
+      // A single tap waits out the double-tap window (double-tap edits).
+      await tester.tap(find.text('We ship the widgets first.', findRichText: true));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await tester.tap(find.textContaining(RegExp(r'^12:41')));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      expect(played, ['mine', 'theirs']);
+
+      final words = find.text('Agreed, chat can follow.', findRichText: true);
+      await tester.tap(words);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(words);
+      await tester.pumpAndSettle();
+      expect(edited, [1]);
+      expect(played, ['mine', 'theirs']);
+    });
+
+    testWidgets('a long saved transcript opens at its first line and stays there when it changes', (tester) async {
+      await setupSharedPreferences();
+      List<TranscriptSegment> lines(int count) => [
+            for (var i = 0; i < count; i++)
+              TranscriptSegment(
+                id: 'line-$i',
+                text: 'Line number $i of the conversation.',
+                speaker: 'SPEAKER_0${i % 2}',
+                isUser: i.isEven,
+                personId: null,
+                start: i * 10.0,
+                end: i * 10.0 + 5,
+                translations: [],
+              ),
+          ];
+      Widget page(List<TranscriptSegment> segments) => MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
+          );
+
+      await tester.pumpWidget(page(lines(60)));
+      await tester.pumpAndSettle();
+      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
+      expect(find.text('Line number 59 of the conversation.', findRichText: true), findsNothing);
+
+      await tester.pumpWidget(page(lines(61)));
+      await tester.pumpAndSettle();
+      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
     });
   });
 

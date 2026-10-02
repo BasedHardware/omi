@@ -48,11 +48,19 @@ extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
     var segmentsToPersist = [TranscriptionService.BackendSegment]()
 
-    for segment in segments {
-      guard !segment.text.isEmpty else { continue }
+    for incomingSegment in segments {
+      guard !incomingSegment.text.isEmpty else { continue }
+      UpdateInstallActivity.markTranscriptActivity()
 
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
-      let speakerId = segment.speaker_id ?? 0
+      let speakerId = incomingSegment.speaker_id ?? 0
+
+      let segment: TranscriptionService.BackendSegment
+      if sttSession.useLocalSTT, let manualPersonId = liveManualSpeakerPersonMap[speakerId] {
+        segment = segmentWithPersonId(incomingSegment, personId: manualPersonId)
+      } else {
+        segment = incomingSegment
+      }
 
       // Barge-in interruption: if the user speaks while voice playback is active,
       // halt playback immediately so Omi never talks over the user.
@@ -168,6 +176,23 @@ extension AppState {
     segmentsToPersist.append(segment)
     log(
       "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
+    )
+  }
+
+  private func segmentWithPersonId(
+    _ segment: TranscriptionService.BackendSegment,
+    personId: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: segment.id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: false,
+      person_id: personId,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
     )
   }
 
@@ -512,9 +537,15 @@ extension AppState {
       // confusing and a battery/trust hit. Sticky until next app launch or
       // successful plan reactivation.
       isPaywalled = true
+      // The admission event is fresher than the 60s trial-metadata poll: record
+      // it so `fetchTrialMetadata` cannot immediately clear the flag and let a
+      // persisted-intent restore re-arm capture into another rejection — a
+      // verdict disagreement would otherwise loop stop/start forever (SCA-526).
+      lastPaywallAdmissionStopAt = Date()
       if isTranscribing {
         log("Paywall: stopping transcription (freemium threshold)")
-        stopTranscription()
+        captureAttempt?.noteErrorTerminal()
+        stopTranscription(finalizationReason: .paywall)
       }
       Task { @MainActor in
         ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)

@@ -33,6 +33,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from database import conversation_finalization_jobs as jobs
+from database import conversation_terminal_title as terminal_title
 from services import conversation_finalization as service
 
 _NOW = datetime(2026, 8, 25, tzinfo=timezone.utc)
@@ -355,9 +356,44 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
     assert job_update['fanout_status'] == 'fenced'
     # The customer is taken off `processing` in the same transaction, and the
     # recording stays retrievable and reprocessable rather than discarded.
-    assert transaction.updates[1] == (conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    # It is never left untitled: no transcript and no start time still yield the
+    # deterministic label, and no retry marker (BYOK is not a transient failure).
+    assert transaction.updates[1] == (
+        conversation_ref,
+        {
+            'status': 'completed',
+            'finalization_status': 'dead_letter',
+            'structured': {'title': 'Recording', 'overview': ''},
+        },
+    )
     # Firestore requires every transactional read before the first write.
     assert transaction.read_after_write is False
+
+
+def test_abandoned_conversation_gets_its_first_sentence_title_and_keeps_a_real_one():
+    titled = _bound_conversation({'transcript_segments': [{'text': 'Budget review for Q4. Then more.'}]})
+    transaction = _OrderedTransaction()
+    _abandon(transaction, _Ref('job-1', _stranded_job()), titled, projection=_Collection())
+    assert transaction.updates[1][1]['structured'] == {'title': 'Budget review for Q4.', 'overview': ''}
+    assert 'summary_retryable' not in transaction.updates[1][1]
+
+    kept = _bound_conversation({'structured': {'title': 'Existing', 'overview': 'x'}})
+    transaction = _OrderedTransaction()
+    _abandon(transaction, _Ref('job-1', _stranded_job()), kept, projection=_Collection())
+    assert transaction.updates[1] == (kept, {'status': 'completed', 'finalization_status': 'dead_letter'})
+
+
+def test_abandonment_at_the_document_limit_still_closes_the_conversation_without_growth():
+    probe = _bound_conversation({'transcript_segments': [{'text': 'Budget review.'}]})
+    base = terminal_title.estimate_firestore_document_bytes(probe.data, None)
+    filler = terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES - terminal_title.TERMINAL_SIZE_HEADROOM_BYTES - base - 8
+    near_limit = _bound_conversation({'transcript_segments': [{'text': 'Budget review. ' + 'x' * filler}]})
+    transaction = _OrderedTransaction()
+
+    disposition = _abandon(transaction, _Ref('job-1', _stranded_job()), near_limit, projection=_Collection())
+
+    assert disposition == {'status': 'abandoned', 'conversation_outcome': 'closed'}
+    assert transaction.updates[1] == (near_limit, {'status': 'completed', 'finalization_status': 'dead_letter'})
 
 
 def test_terminal_moves_the_projection_shard_deltas():

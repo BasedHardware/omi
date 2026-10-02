@@ -71,7 +71,7 @@ void main() {
     expect(find.text('product'), findsNothing);
     expect(find.text('Connection Error'), findsOneWidget);
     expect(find.text('Migration in Progress'), findsNothing);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
     expect(find.byType(TextButton), findsOneWidget);
 
@@ -129,7 +129,7 @@ void main() {
     expect(find.text('product'), findsNothing);
     expect(find.text('Connection Error'), findsOneWidget);
     expect(find.text('Migration in Progress'), findsNothing);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
     expect(find.byType(TextButton), findsOneWidget);
 
@@ -164,7 +164,7 @@ void main() {
     // fall back on: retrying is the only way this screen can ever clear.
     expect(find.byType(TextButton), findsNothing);
 
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try Again'));
     await tester.pump();
     expect(fetches, 2);
     expect(find.text('product'), findsNothing);
@@ -199,11 +199,11 @@ void main() {
     await runtime.bindAuthenticatedOwner('owner-a');
     await _pumpGate(tester);
 
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try Again'));
     await tester.pump();
     expect(fetches, 2);
 
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try Again'));
     await tester.pump(const Duration(seconds: 30));
     expect(fetches, 2);
 
@@ -233,7 +233,7 @@ void main() {
     expect(find.text('product'), findsNothing);
     expect(find.text('No internet connection'), findsOneWidget);
     expect(find.text('Migration in Progress'), findsNothing);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

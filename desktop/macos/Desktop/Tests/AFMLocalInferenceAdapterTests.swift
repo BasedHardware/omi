@@ -161,12 +161,15 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertFalse(properties[0].isOptional)
   }
 
+  // red-proof: iterate propertiesObject.keys.sorted() in the bridge again
   func testParsesLocalSummaryDraftSchema() throws {
     let node = try AFMJSONSchemaBridge.parse(LocalSummaryDraft.jsonSchema)
     guard case .object(let name, let properties, _) = node else {
       return XCTFail("draft schema must parse as an object")
     }
     XCTAssertEqual(name, "client_processing_draft")
+    XCTAssertEqual(
+      properties.map(\.name), ["title", "overview", "emoji", "category", "sections", "events", "action_items"])
     XCTAssertEqual(schemaProperty(properties, "title")?.node, .string)
     XCTAssertEqual(schemaProperty(properties, "title")?.isOptional, false)
     XCTAssertEqual(schemaProperty(properties, "overview")?.isOptional, false)
@@ -177,33 +180,73 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(schemaProperty(properties, "emoji")?.node, .string)
     XCTAssertEqual(schemaProperty(properties, "category")?.node, .string)
 
-    guard case .array(let sectionItems) = schemaProperty(properties, "sections")?.node,
+    guard case .array(let sectionItems, let sectionMax) = schemaProperty(properties, "sections")?.node,
       case .object(_, let sectionProperties, _) = sectionItems
     else {
       return XCTFail("sections must be an array of objects")
     }
+    // Bounded on purpose: a LanguageModelSession's transcript is prompt plus
+    // completion against one window, so an unbounded array lets the model spend
+    // the window on its own output. Measured on live AFM as
+    // "The session's transcript exceeded the model's context size."
+    XCTAssertEqual(sectionProperties.map(\.name), ["heading", "body_markdown"])
+    XCTAssertEqual(sectionMax, 8, "sections must stay bounded or long conversations overflow the context")
     XCTAssertEqual(schemaProperty(sectionProperties, "heading")?.isOptional, false)
     XCTAssertEqual(schemaProperty(sectionProperties, "body_markdown")?.isOptional, false)
 
-    guard case .array(let eventItems) = schemaProperty(properties, "events")?.node,
+    guard case .array(let eventItems, let eventMax) = schemaProperty(properties, "events")?.node,
       case .object(_, let eventProperties, _) = eventItems
     else {
       return XCTFail("events must be an array of objects")
     }
+    XCTAssertEqual(eventProperties.map(\.name), ["title", "description", "start", "duration"])
+    XCTAssertEqual(eventMax, 6, "events must stay bounded for the same reason as sections")
     XCTAssertEqual(schemaProperty(eventProperties, "duration")?.node, .integer)
     XCTAssertEqual(schemaProperty(eventProperties, "title")?.isOptional, false)
     XCTAssertEqual(schemaProperty(eventProperties, "start")?.isOptional, false)
     XCTAssertEqual(schemaProperty(eventProperties, "description")?.isOptional, true)
 
-    guard case .array(let actionItems) = schemaProperty(properties, "action_items")?.node,
+    guard case .array(let actionItems, _) = schemaProperty(properties, "action_items")?.node,
       case .object(_, let actionProperties, _) = actionItems
     else {
       return XCTFail("action_items must be an array of objects")
     }
+    XCTAssertEqual(actionProperties.map(\.name), ["description", "completed"])
     XCTAssertEqual(schemaProperty(actionProperties, "description")?.node, .string)
     XCTAssertEqual(schemaProperty(actionProperties, "completed")?.node, .boolean)
     XCTAssertEqual(schemaProperty(actionProperties, "description")?.isOptional, false)
     XCTAssertEqual(schemaProperty(actionProperties, "completed")?.isOptional, true)
+  }
+
+  // red-proof: use raw key bytes instead of decoding JSON string escapes
+  func testPropertyOrderHandlesEscapesAndStructuralTextInDescriptions() throws {
+    let json =
+      #"{"type":"object","description":"fake \"properties\": { } [ ], \\ end","properties":{"z\u002eitems":{"type":"object","properties":{"\u0068eading":{"type":"string"},"body_markdown":{"type":"string"}}},"a\"b":{"type":"string"},"雪":{"type":"boolean"}}}"#
+    let node = try AFMJSONSchemaBridge.parse(.init(name: "probe", json: Data(json.utf8)))
+    guard case .object(_, let properties, _) = node,
+      case .object(_, let nested, _) = properties.first?.node
+    else { return XCTFail("expected nested objects") }
+    XCTAssertEqual(properties.map(\.name), ["z.items", "a\"b", "雪"])
+    XCTAssertEqual(nested.map(\.name), ["heading", "body_markdown"])
+  }
+
+  // red-proof: remove the scanner's duplicate decoded-key rejection
+  func testAmbiguousOrMalformedSchemaFailsClosed() {
+    let cases = [
+      #"{"type":"object","properties":{"title":{"type":"string"},"\u0074itle":{"type":"boolean"}}}"#,
+      #"{"type":"object","type":"object"}"#,
+      #"{"type":"object","properties":{"x":{"type":"object","properties":{"a":{"type":"string"},"a":{"type":"boolean"}}}}}"#,
+      #"{"type":"object","description":"unterminated}"#,
+      #"{"type":"object","properties":[]}"#,
+      #"{"type":"object"} trailing"#,
+    ]
+    for json in cases {
+      XCTAssertThrowsError(try AFMJSONSchemaBridge.parse(.init(name: "probe", json: Data(json.utf8)))) { error in
+        guard case LocalInferenceError.capabilityUnavailable = error else {
+          return XCTFail("expected capabilityUnavailable, got \(error)")
+        }
+      }
+    }
   }
 
   func testUnsupportedShapesThrowCapabilityUnavailable() {

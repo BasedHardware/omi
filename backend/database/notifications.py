@@ -21,6 +21,7 @@ from google.cloud.firestore import DELETE_FIELD
 from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
+from .firestore_transaction_retry import run_with_transaction_contention_retry
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union, cast
 
@@ -32,7 +33,7 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def save_token(uid: str, data: Dict[str, Any]) -> None:
+def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """
     Store token in subcollection with device key as document ID
     Structure: users/{uid}/fcm_tokens/{device_key}
@@ -43,7 +44,8 @@ def save_token(uid: str, data: Dict[str, Any]) -> None:
     token = data.get('fcm_token')
     time_zone = data.get('time_zone')
 
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
 
     # Step 1: Migrate legacy token if exists
     user_doc = user_ref.get()
@@ -87,15 +89,9 @@ def save_token(uid: str, data: Dict[str, Any]) -> None:
         {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}, merge=True
     )
 
-    # time_zone (when provided) plus any absent daily-summary schedule fields.
-    # A user doc that becomes eligible via time_zone must already carry both
-    # schedule fields so the indexed recipient query can match them.
-    schedule_patch: Dict[str, Any] = {}
-    if time_zone:
-        schedule_patch['time_zone'] = time_zone
-    schedule_patch.update(daily_summary_schedule_defaults(user_data))
-    if schedule_patch:
-        user_ref.set(schedule_patch, merge=True)
+    # Migration's earlier snapshot must not decide which schedule fields are
+    # absent: another client can opt out while its token is being registered.
+    _update_summary_schedule(uid, {'time_zone': time_zone} if time_zone else {}, firestore_client=client)
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
@@ -109,9 +105,12 @@ def get_user_time_zone(uid: str) -> Optional[str]:
 
 
 def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
-    """Persist the client's reported IANA timezone on the user document."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    client.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    """Persist the client timezone and atomically fill absent schedule fields.
+
+    Tokenless clients need the same defaults as token registration to match the
+    indexed recipient query. Present values, including False and 0, are preserved.
+    """
+    _update_summary_schedule(uid, {'time_zone': time_zone}, firestore_client=firestore_client)
 
 
 def resolve_user_timezone(uid: str) -> str:
@@ -147,21 +146,18 @@ def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
     return request_tz
 
 
-def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
+def set_user_time_zone_if_missing(uid: str, time_zone: str, *, firestore_client: Any = None) -> bool:
     """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
 
     ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
     registration. A desktop-only owner never registers a token, so their document never carried
-    the field — and ``get_users_for_daily_summary`` selects users *by* it, so the daily-summary
-    cron never saw them. Mobile stays authoritative: a zone already present is never replaced here.
+    the field — and ``get_users_for_daily_summary_indexed`` selects users *by* it, so the
+    daily-summary cron never saw them. Mobile stays authoritative: a zone already present is never
+    replaced here.
     """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
-    user_data = _typed_doc(user_doc) if getattr(user_doc, "exists", False) else {}
-    if user_data.get('time_zone'):
-        return False
-    user_ref.set({'time_zone': time_zone, **daily_summary_schedule_defaults(user_data)}, merge=True)
-    return True
+    return _update_summary_schedule(
+        uid, {'time_zone': time_zone}, only_if_timezone_missing=True, firestore_client=firestore_client
+    )
 
 
 # **************************************
@@ -180,11 +176,42 @@ def daily_summary_schedule_defaults(user_data: Mapping[str, Any]) -> Dict[str, A
     included. Empty dict when both fields are already on the document.
     """
     patch: Dict[str, Any] = {}
-    if 'daily_summary_enabled' not in user_data:
+    if not isinstance(user_data.get('daily_summary_enabled'), bool):
         patch['daily_summary_enabled'] = DEFAULT_DAILY_SUMMARY_ENABLED
-    if 'daily_summary_hour_local' not in user_data:
+    if not isinstance(h := user_data.get('daily_summary_hour_local'), (int, float)) or isinstance(h, bool):
         patch['daily_summary_hour_local'] = DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
     return patch
+
+
+def _update_summary_schedule(
+    uid: str, patch: Dict[str, Any], *, only_if_timezone_missing: bool = False, firestore_client: Any = None
+) -> bool:
+    """Fill absent defaults from the same snapshot whose write is committed.
+
+    Explicit fields remain authoritative; implicit defaults and desktop timezone
+    seeding must never overwrite a concurrent client choice.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+
+    @firestore.transactional
+    def update(transaction):
+        snapshot = user_ref.get(transaction=transaction)
+        current = _typed_doc(snapshot) if snapshot.exists else {}
+        if only_if_timezone_missing and current.get('time_zone'):
+            return False
+        payload = {**daily_summary_schedule_defaults(current), **patch}
+        if not payload:
+            return False
+        if snapshot.exists:
+            transaction.update(user_ref, payload)
+        else:
+            transaction.create(user_ref, payload)
+        return True
+
+    return bool(
+        run_with_transaction_contention_retry(client.transaction, update, operation_name='notification_schedule_update')
+    )
 
 
 def get_daily_summary_hour_local(uid: str) -> int | None:
@@ -193,11 +220,11 @@ def get_daily_summary_hour_local(uid: str) -> int | None:
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
         value = user_data.get('daily_summary_hour_local')
-        return int(value) if isinstance(value, (int, float)) else None
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
     return None
 
 
-def set_daily_summary_hour_local(uid: str, hour_local: int) -> bool:
+def set_daily_summary_hour_local(uid: str, hour_local: int, *, firestore_client: Any = None) -> bool:
     """
     Set user's preferred daily summary hour in local time.
 
@@ -211,14 +238,7 @@ def set_daily_summary_hour_local(uid: str, hour_local: int) -> bool:
     if not (0 <= hour_local <= 23):
         raise ValueError(f"Invalid hour: {hour_local}. Must be 0-23.")
 
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
-    user_data = _typed_doc(user_doc) if getattr(user_doc, "exists", False) else {}
-    user_ref.set(
-        {**daily_summary_schedule_defaults(user_data), 'daily_summary_hour_local': hour_local},
-        merge=True,
-    )
-    return True
+    return _update_summary_schedule(uid, {'daily_summary_hour_local': hour_local}, firestore_client=firestore_client)
 
 
 def get_daily_summary_enabled(uid: str) -> bool:
@@ -226,20 +246,13 @@ def get_daily_summary_enabled(uid: str) -> bool:
     user_ref = db.collection('users').document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        return bool(user_data.get('daily_summary_enabled', True))
+        return DEFAULT_DAILY_SUMMARY_ENABLED if (val := user_data.get('daily_summary_enabled')) is None else bool(val)
     return True
 
 
-def set_daily_summary_enabled(uid: str, enabled: bool) -> bool:
+def set_daily_summary_enabled(uid: str, enabled: bool, *, firestore_client: Any = None) -> bool:
     """Enable or disable daily summary for user."""
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
-    user_data = _typed_doc(user_doc) if getattr(user_doc, "exists", False) else {}
-    user_ref.set(
-        {**daily_summary_schedule_defaults(user_data), 'daily_summary_enabled': enabled},
-        merge=True,
-    )
-    return True
+    return _update_summary_schedule(uid, {'daily_summary_enabled': enabled}, firestore_client=firestore_client)
 
 
 # **************************************
@@ -373,77 +386,6 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
-    """
-    Get users who should receive daily summary notifications.
-
-    This function queries users who:
-    1. Are in one of the provided timezones (where it's currently target_local_hour)
-    2. Have daily_summary_hour_local set to target_local_hour OR have no preference (uses default)
-    3. Have daily_summary_enabled not explicitly set to False
-
-    Args:
-        timezones: List of IANA timezone names where it's currently target_local_hour
-        target_local_hour: The local hour we're sending notifications for (0-23)
-
-    Returns:
-        List of (uid, [tokens], time_zone) tuples.
-    """
-    if not timezones:
-        return []
-
-    users: List[Tuple[str, List[str], Any]] = []
-
-    # 'Where in' query only supports 30 or fewer items in list so we split in chunks
-    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
-
-    for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[str], Any]] = []
-        try:
-            # Query users in these timezones
-            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
-
-            for user_doc in query.stream():
-                uid = str(user_doc.id)
-                user_data = _typed_doc(user_doc)
-
-                # Check if daily summary is enabled (default: True)
-                if user_data.get('daily_summary_enabled') is False:
-                    continue
-
-                # Check if user's preferred hour matches target hour
-                # If not set, use default (22 = 10 PM)
-                user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
-                if user_hour != target_local_hour:
-                    continue
-
-                # Collect tokens from subcollection
-                tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                for token_doc in token_docs:
-                    token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
-                    if token_value:
-                        tokens.append(str(token_value))
-
-                # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
-                if legacy_token and legacy_token not in tokens:
-                    tokens.append(str(legacy_token))
-
-                # Tokenless users still get a record written. Generation is not
-                # push delivery: a desktop-only owner has no FCM token and must
-                # not be dropped here.
-                time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, tokens, time_zone))
-
-        except Exception as e:
-            logger.error(f"Error querying chunk for daily summary: {e}")
-        users.extend(chunk_users)
-
-    return users
-
-
 def get_users_for_daily_summary_indexed(
     timezones: list[str], target_local_hour: int
 ) -> List[Tuple[str, List[str], Any]]:
@@ -455,7 +397,7 @@ def get_users_for_daily_summary_indexed(
     full ``time_zone IN`` pass. A user without those fields is invisible here
     until the backfill or a later write fills them. Chunks of >30 zones, token
     collection (subcollection + legacy ``fcm_token``), tokenless users, and
-    per-chunk try/except-log-and-continue match ``get_users_for_daily_summary``.
+    per-chunk try/except-log-and-continue match the retired full-scan selector it replaced.
     """
     if not timezones:
         return []

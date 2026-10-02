@@ -59,6 +59,8 @@ to handle a rule in flux — not delaying the lock.
 | INV-AGENT-* | Agent control-plane contracts | locked | [agent-control-plane.md](./agent-control-plane.md) |
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |
+| INV-UI-2 | Desktop UX uses the shared interaction components | locked | [desktop-ux-contract.md](./desktop-ux-contract.md) |
+| INV-UI-3 | Mobile UX contract — one primitive per UI job | locked | [mobile-ux-contract.md](./mobile-ux-contract.md) |
 | INV-AUTH-1 | Desktop Firebase session truth | locked | [auth-session.md](./auth-session.md) |
 | INV-BETA-1 | Desktop Beta build identity | locked | [desktop-beta-identity.md](./desktop-beta-identity.md) |
 | INV-DATA-1 | Production-family customer data-plane continuity | locked | [data-plane-continuity.md](./data-plane-continuity.md) |

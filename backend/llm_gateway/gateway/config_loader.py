@@ -8,6 +8,7 @@ from typing import Any, TypeAlias, cast
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -51,10 +52,19 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     )
     desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
+    systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
-    lanes = _parse_lanes([*generated_lane_items, *desktop_lane_items, *embedding_lane_items, *lane_items])
+    lanes = _parse_lanes(
+        [*generated_lane_items, *desktop_lane_items, *embedding_lane_items, *systemone_lane_items, *lane_items]
+    )
     route_artifacts = _parse_route_artifacts(
-        [*generated_artifact_items, *desktop_artifact_items, *embedding_artifact_items, *artifact_items],
+        [
+            *generated_artifact_items,
+            *desktop_artifact_items,
+            *embedding_artifact_items,
+            *systemone_artifact_items,
+            *artifact_items,
+        ],
         prod_mode=resolved_prod_mode,
     )
     feature_bundles = _parse_feature_bundles([*generated_bundle_items, *bundle_items])
@@ -292,6 +302,18 @@ def _generated_feature_route_items(
     return lanes, artifacts, bundles
 
 
+def _desktop_overflow_origin_options(anchor: str) -> dict[str, str]:
+    """Origin ceiling for a desktop anchor, omitted entirely when unset.
+
+    An empty dict keeps generated routes byte-identical until a lane declares
+    an origin in LANE_OVERFLOW_ORIGINS.
+    """
+    origin = ptr.lane_overflow_origin(anchor)
+    if not origin:
+        return {}
+    return {ptr.OVERFLOW_ORIGIN_OPTION: origin}
+
+
 def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
     """Company-paid desktop Gemini text lanes, generated from the PT policy.
 
@@ -329,7 +351,7 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'surface': 'openai.chat_completions',
                 'primary': {'provider': 'gemini', 'model': anchor},
                 'fallbacks': [],
-                'provider_options': {},
+                'provider_options': _desktop_overflow_origin_options(anchor),
                 'output_budget': None,
                 'timeouts': {'request_ms': 120000},
                 'retry': {'max_attempts': 1},
@@ -431,6 +453,66 @@ def _generated_embedding_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
             }
         )
     return lanes, artifacts
+
+
+def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """The one decision-model lane (``omi:auto:jev-decisions``, #14835).
+
+    Pinned to one Jev version on OpenRouter's systemone endpoint. One provider
+    attempt and no fallback: callers treat any failure as "no answer" and keep
+    their safe default, so a second provider would only add latency.
+    """
+    capabilities = {
+        'text_input': True,
+        'streaming': False,
+        'structured_output': 'none',
+        'tools': False,
+        'translation': False,
+    }
+    route_id = 'route.jev-decisions.systemone.001'
+    lane = {
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'capabilities': capabilities,
+        'objective': {'quality': 0.4, 'latency': 0.5, 'cost': 0.1},
+        'credential_policy': _credential_policy(),
+        'active_route': route_id,
+        'last_known_good': route_id,
+    }
+    artifact = {
+        'route_artifact_id': route_id,
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'primary': {'provider': JEV_PROVIDER, 'model': JEV_MODEL},
+        'fallbacks': [],
+        'provider_options': {},
+        'output_budget': None,
+        'timeouts': {'request_ms': JEV_GATEWAY_REQUEST_MS},
+        'retry': {'max_attempts': 1},
+        'capabilities': capabilities,
+        'evidence': {
+            'benchmark_snapshot': 'jev_pilots_2026_09_23',
+            'eval_report': 'github.com/BasedHardware/omi/issues/14835',
+            'benchmark_source': 'omi_eval',
+            'dev_only': False,
+        },
+        'rollout': {'stage': 'active', 'percent': 100},
+        'credential_policy': _credential_policy(),
+        'fallback_policy': {
+            'fallback_on': [],
+            'never_fallback_on': [
+                'byok_auth',
+                'byok_quota',
+                'byok_rate_limit',
+                'byok_unsupported_provider',
+                'missing_byok_key',
+                'capability_mismatch',
+                'provider_invalid_request',
+                'invalid_config',
+            ],
+        },
+    }
+    return [lane], [artifact]
 
 
 def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:

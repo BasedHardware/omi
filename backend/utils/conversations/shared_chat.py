@@ -3,15 +3,48 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from uuid import uuid4
 from typing import Any
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
 
 _TRANSCRIPT_TRUNCATION_MARKER = '[... transcript truncated at segment boundaries ...]'
-_PER_IP_LIMIT = 8
-_GLOBAL_LIMIT = 120
-_RATE_LIMIT_WINDOW_SECONDS = 60
+SUBJECT_MINUTE_LIMIT = 8
+ANONYMOUS_FREE_QUESTIONS = 3
+CONVERSATION_DAILY_LIMIT = 60
+ANONYMOUS_GLOBAL_MINUTE_LIMIT = 20
+ANONYMOUS_GLOBAL_DAILY_LIMIT = 3_000
+SIGNED_USER_DAILY_LIMIT = 30
+SIGNED_GLOBAL_DAILY_LIMIT = 2_000
+MINUTE_SECONDS = 60
+DAY_SECONDS = 24 * 60 * 60
+
+# One atomic admission across the daily budgets. Redis TIME provides one clock
+# for every backend instance; sorted sets enforce a true rolling window.
+_ROLLING_LIMIT_LUA = redis_db.r.register_script('''
+local now_parts = redis.call('TIME')
+local now = tonumber(now_parts[1]) * 1000 + math.floor(tonumber(now_parts[2]) / 1000)
+local count = #KEYS
+for i = 1, count do
+    local limit = tonumber(ARGV[2 * i])
+    local window = tonumber(ARGV[2 * i + 1])
+    redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', now - window)
+    if redis.call('ZCARD', KEYS[i]) >= limit then
+        local oldest = redis.call('ZRANGE', KEYS[i], 0, 0, 'WITHSCORES')
+        local retry = math.max(1, math.ceil((tonumber(oldest[2]) + window - now) / 1000))
+        return {i, retry, 0}
+    end
+end
+local remaining = 0
+for i = 1, count do
+    local window = tonumber(ARGV[2 * i + 1])
+    redis.call('ZADD', KEYS[i], now, ARGV[1])
+    redis.call('PEXPIRE', KEYS[i], window)
+    if i == 1 then remaining = tonumber(ARGV[2]) - redis.call('ZCARD', KEYS[i]) end
+end
+return {0, 0, remaining}
+''')
 
 
 class SharedConversationUnavailable(Exception):
@@ -20,8 +53,9 @@ class SharedConversationUnavailable(Exception):
 
 
 class PublicSharedChatRateLimited(Exception):
-    def __init__(self, retry_after: int) -> None:
+    def __init__(self, retry_after: int, reason: str = 'subject_minute') -> None:
         self.retry_after = max(1, retry_after)
+        self.reason = reason
         super().__init__('public shared conversation chat rate limit exceeded')
 
 
@@ -45,22 +79,73 @@ def check_public_shared_chat_rate_limits(
         per_ip_allowed, _, per_ip_retry_after = check(
             opaque_subject,
             'public_shared_conversation_chat:per_ip',
-            _PER_IP_LIMIT,
-            _RATE_LIMIT_WINDOW_SECONDS,
+            SUBJECT_MINUTE_LIMIT,
+            MINUTE_SECONDS,
         )
         if not per_ip_allowed:
-            raise PublicSharedChatRateLimited(per_ip_retry_after)
+            raise PublicSharedChatRateLimited(per_ip_retry_after, 'subject_minute')
 
         global_allowed, _, global_retry_after = check(
             'all',
             'public_shared_conversation_chat:global',
-            _GLOBAL_LIMIT,
-            _RATE_LIMIT_WINDOW_SECONDS,
+            ANONYMOUS_GLOBAL_MINUTE_LIMIT,
+            MINUTE_SECONDS,
         )
         if not global_allowed:
-            raise PublicSharedChatRateLimited(global_retry_after)
+            raise PublicSharedChatRateLimited(global_retry_after, 'global_minute')
     except PublicSharedChatRateLimited:
         raise
+    except Exception as exc:
+        raise PublicSharedChatRateLimiterUnavailable() from exc
+
+
+def _reserve_rolling_budgets(budgets: list[tuple[str, int, int, str]]) -> tuple[int, str]:
+    keys = [f'public_shared_chat:v2:{key}' for key, _, _, _ in budgets]
+    reservation = uuid4().hex
+    args: list[str | int] = [reservation]
+    for _, limit, window, _ in budgets:
+        args.extend((limit, window * 1000))
+    try:
+        denied, retry_after, remaining = _ROLLING_LIMIT_LUA(keys=keys, args=args)
+    except Exception as exc:
+        raise PublicSharedChatRateLimiterUnavailable() from exc
+    if denied:
+        raise PublicSharedChatRateLimited(int(retry_after), budgets[int(denied) - 1][3])
+    return int(remaining), reservation
+
+
+def check_anonymous_shared_chat_daily_limits(opaque_subject: str, conversation_id: str) -> int:
+    """Reserve all anonymous daily budgets before any conversation read."""
+    remaining, _ = _reserve_rolling_budgets(
+        [
+            (
+                f'free:{opaque_subject}:{conversation_id}',
+                ANONYMOUS_FREE_QUESTIONS,
+                DAY_SECONDS,
+                'free_questions_exhausted',
+            ),
+            (f'conversation:{conversation_id}', CONVERSATION_DAILY_LIMIT, DAY_SECONDS, 'conversation_daily'),
+            ('anonymous_global_daily', ANONYMOUS_GLOBAL_DAILY_LIMIT, DAY_SECONDS, 'global_daily'),
+        ]
+    )
+    return remaining
+
+
+def check_signed_shared_chat_daily_limits(uid: str) -> str:
+    _, reservation = _reserve_rolling_budgets(
+        [
+            (f'signed:{uid}', SIGNED_USER_DAILY_LIMIT, DAY_SECONDS, 'signed_user_daily'),
+            ('signed_global_daily', SIGNED_GLOBAL_DAILY_LIMIT, DAY_SECONDS, 'signed_global_daily'),
+        ]
+    )
+    return reservation
+
+
+def release_signed_shared_chat_daily_limits(uid: str, reservation: str) -> None:
+    """Give a non-Omi identity its provisional signed slots back."""
+    try:
+        redis_db.r.zrem(f'public_shared_chat:v2:signed:{uid}', reservation)
+        redis_db.r.zrem('public_shared_chat:v2:signed_global_daily', reservation)
     except Exception as exc:
         raise PublicSharedChatRateLimiterUnavailable() from exc
 

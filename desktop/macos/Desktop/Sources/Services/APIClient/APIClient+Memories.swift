@@ -222,7 +222,6 @@ enum ServerMemoryEvidenceState: Equatable {
   case valid([ServerMemoryEvidence])
   case invalid
 }
-
 struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
@@ -246,6 +245,7 @@ struct ServerMemory: Decodable, Identifiable {
   let contextSummary: String?
   let isRead: Bool
   let isDismissed: Bool
+  var isLocked: Bool = false
   // Tags for filtering (e.g., ["tips", "productivity"])
   let tags: [String]
   // Reasoning behind the memory/tip (from advice system)
@@ -288,7 +288,6 @@ struct ServerMemory: Decodable, Identifiable {
     if case .valid = evidenceState { return true }
     return false
   }
-
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
       headline, tier, layer, evidence
@@ -307,6 +306,7 @@ struct ServerMemory: Decodable, Identifiable {
     case contextSummary = "context_summary"
     case isRead = "is_read"
     case isDismissed = "is_dismissed"
+    case isLocked = "is_locked"
     case currentActivity = "current_activity"
     case inputDeviceName = "input_device_name"
     case windowTitle = "window_title"
@@ -384,7 +384,6 @@ struct ServerMemory: Decodable, Identifiable {
     let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
-
     func parseMemoryDate(_ key: CodingKeys) -> Date? {
       guard let raw = try? container.decode(String.self, forKey: key) else { return nil }
       return f.date(from: raw) ?? std.date(from: raw)
@@ -415,9 +414,9 @@ struct ServerMemory: Decodable, Identifiable {
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
     let layerValue =
-      try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
-      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
-    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+      wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+      ?? (try? container.decode(MemoryLayer.self, forKey: .layer))
+    let tierValue = try? container.decode(MemoryLayer.self, forKey: .tier)
     let memoryTierValue =
       try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
@@ -466,6 +465,7 @@ struct ServerMemory: Decodable, Identifiable {
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
+    isLocked = wire?.isLocked ?? (try? container.decode(Bool.self, forKey: .isLocked)) ?? false
     tags = wire?.tags ?? (try? container.decode([String].self, forKey: .tags)) ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
@@ -737,6 +737,32 @@ extension APIClient {
     let end: Double
   }
 
+  struct CaptureEvidenceLineage: Encodable, Sendable {
+    struct Unit: Encodable, Sendable {
+      let id: String
+      let startMs: Int64
+      let endMs: Int64
+
+      enum CodingKeys: String, CodingKey {
+        case id
+        case startMs = "start_ms"
+        case endMs = "end_ms"
+      }
+    }
+    let version: Int
+    let capability: String
+    let captureRoot: String
+    let clockDomain: String
+    let lineage: String
+    let units: [Unit]
+
+    enum CodingKeys: String, CodingKey {
+      case version, capability, lineage, units
+      case captureRoot = "capture_root"
+      case clockDomain = "clock_domain"
+    }
+  }
+
   struct CreateConversationFromSegmentsRequest: Encodable, Sendable {
     // swift-format-ignore
     let transcript_segments: [UploadSegment]
@@ -755,33 +781,36 @@ extension APIClient {
     /// Exact stored S10 JSON bytes. Nil keeps today's segments-only upload.
     // swift-format-ignore
     let client_processing: Data?
+    let captureEvidence: CaptureEvidenceLineage?
 
     enum CodingKeys: String, CodingKey {
-      case transcript_segments
+      case transcriptSegments = "transcript_segments"
       case source
-      case started_at
-      case finished_at
+      case startedAt = "started_at"
+      case finishedAt = "finished_at"
       case language
-      case client_conversation_id
-      case conversation_role
-      case conversation_finalization_reason
-      case client_processing
+      case clientConversationId = "client_conversation_id"
+      case conversationRole = "conversation_role"
+      case conversationFinalizationReason = "conversation_finalization_reason"
+      case clientProcessing = "client_processing"
+      case captureEvidence = "capture_evidence"
     }
 
     func encode(to encoder: Encoder) throws {
       var container = encoder.container(keyedBy: CodingKeys.self)
-      try container.encode(transcript_segments, forKey: .transcript_segments)
+      try container.encode(transcript_segments, forKey: .transcriptSegments)
       try container.encode(source, forKey: .source)
-      try container.encodeIfPresent(started_at, forKey: .started_at)
-      try container.encodeIfPresent(finished_at, forKey: .finished_at)
+      try container.encodeIfPresent(started_at, forKey: .startedAt)
+      try container.encodeIfPresent(finished_at, forKey: .finishedAt)
       try container.encode(language, forKey: .language)
-      try container.encodeIfPresent(client_conversation_id, forKey: .client_conversation_id)
-      try container.encode(conversation_role, forKey: .conversation_role)
+      try container.encodeIfPresent(client_conversation_id, forKey: .clientConversationId)
+      try container.encode(conversation_role, forKey: .conversationRole)
       try container.encodeIfPresent(
-        conversation_finalization_reason, forKey: .conversation_finalization_reason)
-      if let client_processing {
-        let payload = try ClientProcessingContract.decode(client_processing)
-        try container.encode(payload, forKey: .client_processing)
+        conversation_finalization_reason, forKey: .conversationFinalizationReason)
+      try container.encodeIfPresent(captureEvidence, forKey: .captureEvidence)
+      if let clientProcessing = client_processing {
+        let payload = try ClientProcessingContract.decode(clientProcessing)
+        try container.encode(payload, forKey: .clientProcessing)
       }
     }
   }

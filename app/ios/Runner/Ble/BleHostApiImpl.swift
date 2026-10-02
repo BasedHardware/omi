@@ -95,6 +95,10 @@ final class BleHostApiImpl: BleHostApi {
         completion(.success(bleManager.getDeviceDiagnostics(uuid: uuid)))
     }
 
+    func getExtendedDeviceDiagnostics(uuid: String, completion: @escaping (Result<String, Error>) -> Void) {
+        completion(.success(bleManager.getExtendedDeviceDiagnostics(uuid: uuid)))
+    }
+
     func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void) {
         completion(.success(bleManager.getBatteryHistory(uuid: uuid)))
     }

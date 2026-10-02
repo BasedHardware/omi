@@ -9,6 +9,8 @@ import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class CategoryAppsPage extends StatefulWidget {
   final Category category;
@@ -23,6 +25,7 @@ class CategoryAppsPage extends StatefulWidget {
 class _CategoryAppsPageState extends State<CategoryAppsPage> {
   List<App> _apps = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
   int _totalCount = 0;
 
   @override
@@ -43,6 +46,7 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
   Future<void> _fetchCategoryApps() async {
     setState(() {
       _isLoading = true;
+      _loadFailed = false;
     });
 
     try {
@@ -65,17 +69,47 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _loadFailed = true;
         });
       }
     }
   }
 
+  Widget _buildBody() {
+    if (_isLoading) return const OmiLoadingState();
+    // The apps handed in from the store stay on screen if the refresh fails; only an empty page
+    // offers Try Again.
+    if (_apps.isEmpty && _loadFailed) {
+      return OmiErrorState(message: context.l10n.unableToLoadApps, onRetry: _fetchCategoryApps);
+    }
+    if (_apps.isEmpty) {
+      return OmiEmptyState(
+        icon: Icons.folder_open_outlined,
+        title: context.l10n.noAppsInCategoryYet,
+        message: context.l10n.checkBackLaterForNewApps,
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+      itemCount: _apps.length,
+      itemBuilder: (context, index) {
+        final app = _apps[index];
+        final allApps = context.read<AppProvider>().apps;
+        final originalIndex = allApps.indexWhere((a) => a.id == app.id);
+
+        return AppListItem(app: app, index: originalIndex >= 0 ? originalIndex : index);
+      },
+      separatorBuilder: (context, index) => const SizedBox(height: OmiSpacing.xs),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
+        leading: const OmiBackButton(),
         title: Text(widget.category.getLocalizedTitle(context)),
         centerTitle: true,
         elevation: 0,
@@ -84,52 +118,13 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Text(
-                  _isLoading ? '' : '$_totalCount app${_totalCount == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 16, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
-                ),
-                const Spacer(),
-              ],
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            child: Text(
+              _isLoading || (_apps.isEmpty && _loadFailed) ? '' : context.l10n.categoryAppCount(_totalCount),
+              style: OmiType.callout.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             ),
           ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                : _apps.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade600),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No apps in this category yet',
-                              style: TextStyle(fontSize: 18, color: Colors.grey.shade400),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Check back later for new apps',
-                              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: _apps.length,
-                        itemBuilder: (context, index) {
-                          final app = _apps[index];
-                          final allApps = context.read<AppProvider>().apps;
-                          final originalIndex = allApps.indexWhere((a) => a.id == app.id);
-
-                          return AppListItem(app: app, index: originalIndex >= 0 ? originalIndex : index);
-                        },
-                        separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      ),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
     );

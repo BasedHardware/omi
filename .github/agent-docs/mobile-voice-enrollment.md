@@ -87,3 +87,28 @@ resets for each prompt and reveals save errors after a failed attempt; dragging
 the review dismisses the keyboard. Tests include partial saves, duplicate taps,
 cleanup meaning preservation, restore-original, and a small screen with large
 text and the keyboard open.
+
+## Labeling other speakers
+
+Mobile preserves the backend's canonical `speaker_id`; provider labels are not
+rewritten. Installed older mobile builds still parse labels. macOS, Windows and
+web domain adapters still need a separate canonical-ID adaptation review.
+
+The name sheet edits the selected segments, including previously assigned ones.
+Selecting every related segment explicitly sets a speaker-wide default. Labels
+are painted only after the REST assignment succeeds; failed saves remain in the
+sheet. All assignment routes share the transactional manual command. Name-only
+suggestions populate this sheet without creating contacts until accepted.
+
+People shows stored voice readiness, not an enrollment guarantee. A clean labeled
+sample with saved audio can teach a later conversation, but live teaching remains
+best-effort; labeling before audio arrives or a failed/crashed attempt can be lost.
+Reassigning is the current retry. Private-cloud-off suppresses new saved capture
+audio; it does not erase earlier samples or universally disable recognition.
+On-device/custom STT and multiple people sharing a phone-call channel do not gain
+automatic diarization or acoustic recognition from this change.
+
+A changed saved label on summarized completed content offers Reprocess
+Conversation beside the transcript. It runs only on a tap; failed regeneration
+keeps the label and action. It is not proof that the earlier summary used an
+unnamed speaker. No exact historical summary receipt is stored.

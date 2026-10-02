@@ -28,6 +28,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from google.cloud import firestore  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL  # noqa: E402
 
 from database.memory_collections import MemoryCollections  # noqa: E402
 from models.memory_apply import MemoryControlState, WriterMode  # noqa: E402
@@ -725,7 +726,7 @@ def main() -> int:
                         max_attempts=1,
                         max_spend_micro_usd=50_000,
                         provider="openai",
-                        model="gpt-5.6-luna",
+                        model=LUNA_MODEL,
                         input_tokens=100,
                         cached_input_tokens=0,
                         output_tokens=10,

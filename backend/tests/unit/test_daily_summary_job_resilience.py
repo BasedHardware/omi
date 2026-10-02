@@ -94,7 +94,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
     fallbacks = RecordedFallbacks()
     notification_db = _module(
         'database.notifications',
-        get_users_for_daily_summary=no_db_work,
+        get_users_for_daily_summary_indexed=no_db_work,
         get_users_token_in_timezones=no_db_work,
     )
     notification_message = type(
@@ -124,7 +124,11 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
-        'utils.conversations.factory': _module('utils.conversations.factory', deserialize_conversation=lambda v: v),
+        'utils.conversations.factory': _module(
+            'utils.conversations.factory',
+            deserialize_conversation=lambda v: v,
+            deserialize_conversations=lambda items: list(items),
+        ),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
             generate_comprehensive_daily_summary=lambda *_a, **_k: {},
@@ -215,7 +219,7 @@ def test_failing_hour_group_does_not_abort_the_remaining_groups() -> None:
                 raise RuntimeError('firestore unavailable')
             return _users(3, hour=22)
 
-        notification_db.get_users_for_daily_summary = read_users
+        notification_db.get_users_for_daily_summary_indexed = read_users
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
         outcome = asyncio.run(notifications.send_daily_summary_notification())
@@ -262,7 +266,7 @@ def test_job_budget_checkpoints_the_unfinished_tail() -> None:
 def test_next_execution_resumes_at_the_checkpointed_tail() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
         notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
-        notification_db.get_users_for_daily_summary = lambda _tz, _hour: _users(9)
+        notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(9)
         notifications.summary_budget.write_job_cursor(
             notifications.summary_budget.job_cursor_key(),
             {'hour': 22, 'uid': 'uid-08'},
@@ -289,7 +293,7 @@ def test_a_partially_read_hour_group_does_not_clear_the_checkpoint() -> None:
                 raise RuntimeError('firestore unavailable')
             return _users(3)
 
-        notification_db.get_users_for_daily_summary = read_users
+        notification_db.get_users_for_daily_summary_indexed = read_users
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
         asyncio.run(notifications.send_daily_summary_notification())
@@ -450,7 +454,7 @@ def test_job_survives_a_redis_outage_end_to_end() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
         redis.fail = True
         notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
-        notification_db.get_users_for_daily_summary = lambda _tz, _hour: _users(3)
+        notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(3)
         served: List[str] = []
         notifications._send_summary_notification = lambda user: served.append(user[0])
 
@@ -516,7 +520,7 @@ def _loaded_send_path(
         ),
         'database.notifications': _module(
             'database.notifications',
-            get_users_for_daily_summary=lambda *_a, **_k: [],
+            get_users_for_daily_summary_indexed=lambda *_a, **_k: [],
             get_users_token_in_timezones=lambda *_a, **_k: [],
         ),
         'database.redis_db': _module(
@@ -529,7 +533,9 @@ def _loaded_send_path(
             r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(
-            'utils.conversations.factory', deserialize_conversation=lambda _v: _FakeConversation()
+            'utils.conversations.factory',
+            deserialize_conversation=lambda _v: _FakeConversation(),
+            deserialize_conversations=lambda items: [_FakeConversation() for _ in items],
         ),
         'utils.conversations.render': _module('utils.conversations.render', conversations_to_string=lambda _c: 'text'),
         'utils.llm.external_integrations': _module(

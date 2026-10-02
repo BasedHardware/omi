@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-generated-presentation-contract-bypass",
+  "violated_contract": "User-visible model output must not be persisted or rendered merely because it parsed against the response schema. Internal evidence identifiers, diarization placeholders, and unsafe Markdown destinations can all be schema-valid while violating the presentation contract and exposing implementation details as clickable prose.",
+  "canonical_prevention": "At the model boundary, apply a deterministic presentation-contract gate after schema parsing: recover only unambiguous citations into typed evidence fields, validate identifiers against authoritative input, allow one bounded correction pass for ambiguous leakage, and scrub the violation if that pass fails. Apply the conservative deterministic recovery at read time for historical records, and pin both writer and reader behavior with tests.",
+  "canonical_prevention_artifact": [
+    "backend/utils/llm/meeting_notes_presentation.py",
+    "backend/utils/llm/meeting_notes_validation.py",
+    "backend/tests/unit/test_conversation_notes_v2.py",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift",
+    "desktop/macos/Desktop/Tests/ConversationSummarySelectionTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/conversation_processing.py",
+    "backend/utils/llm/meeting_notes_validation.py",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift"
+  ],
+  "status": "open"
+}

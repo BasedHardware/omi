@@ -25,6 +25,21 @@ enum ConversationProcessingProgress {
   /// (memories, action items, embeddings) are typically still landing.
   static let derivedSettleGrace: TimeInterval = 45
 
+  /// First-run title-pass failure is recoverable, not a prior retry.
+  static let untitledRecoverableBadgeText = "Title didn't generate"
+  static let untitledRecoverableBadgeHelp =
+    "The transcript was captured but the title pass didn't produce one. Try Reprocess."
+
+  /// Whether the row should show "Adding memories & tasks…" after status
+  /// flips to completed. Requires a real title — a completed untitled row
+  /// did not succeed through the title pass, so derived-data landing is not
+  /// the honest story. `.untitledRecoverable` and `.failed` must never show it.
+  static func showsSettlingDerived(displayState: ConversationDisplayState, isSettling: Bool) -> Bool {
+    guard isSettling else { return false }
+    if case .titled = displayState { return true }
+    return false
+  }
+
   /// Processing starts when the recording ends, not when the row was created —
   /// a 40-minute meeting created 40 minutes ago is not 40 minutes stalled.
   static func processingStart(for conversation: ServerConversation) -> Date {

@@ -77,3 +77,31 @@ def test_config_map_entries_falls_back_to_legacy_manifest_shape(
     assert name == 'dev-omi-backend-config'
     assert entries['REDIS_DB_HOST'] == 'value-for-REDIS_DB_HOST'
     assert entries['GOOGLE_CLIENT_ID'] == 'value-for-GOOGLE_CLIENT_ID'
+
+
+@pytest.mark.parametrize('value', [None, '', 'uid:fixture-a,uid:fixture-b', 'uid:'])
+def test_optional_cohort_config_map_uses_empty_default_and_validates(value, monkeypatch, tmp_path):
+    key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
+    if value is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, value)
+    manifest = {
+        'environments': {
+            'dev': {
+                'gke': {
+                    'config_map': {
+                        'name': 'dev-omi-backend-config',
+                        'entries': {key: {'source': 'environment', 'default': ''}},
+                    }
+                }
+            }
+        }
+    }
+    path = tmp_path / 'runtime.yaml'
+    path.write_text(yaml.safe_dump(manifest))
+    if value == 'uid:':
+        with pytest.raises(ValueError, match='uid:<non-empty>'):
+            config_map_entries('dev', path)
+    else:
+        assert config_map_entries('dev', path) == ('dev-omi-backend-config', {key: value or ''})

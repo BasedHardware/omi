@@ -110,7 +110,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     /// Keep the open file's gap timer fresh while muted so unmute resumes it.
     private func touchKeepAlive() {
         if isOpen {
-            lastFrameMs = Int64(Date().timeIntervalSince1970 * 1000)
+            lastFrameMs = CheckedIntegerConversion.epochMs()
         }
     }
 
@@ -122,7 +122,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             if admission.muted { touchKeepAlive() }
             return
         }
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = CheckedIntegerConversion.epochMs()
 
         // Gap finalize: a pause longer than gapMs starts a new file (so the
         // backend places resumed audio as a separate conversation).

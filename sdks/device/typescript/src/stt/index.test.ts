@@ -85,7 +85,7 @@ describe('createDeepgramTranscriber', () => {
     expect(openedUrl).not.toInclude('token=');
   });
 
-  test('sends CloseStream before closing the socket', async () => {
+  test('sends CloseStream once and stops audio while draining before closing the socket', async () => {
     const sent: unknown[] = [];
     const events: Array<'send' | 'close'> = [];
     let closeCount = 0;
@@ -111,12 +111,16 @@ describe('createDeepgramTranscriber', () => {
       createWebSocket: (url: string) => new FakeWebSocket(url) as any,
       drainTimeoutMs: 50,
     });
+    const initialAudio = new Uint8Array([1, 2]);
+    transcriber.appendPcm(initialAudio);
     transcriber.stop();
-    expect(events).toEqual(['send']);
+    transcriber.appendPcm(new Uint8Array([3, 4]));
+    transcriber.stop();
+    expect(events).toEqual(['send', 'send']);
     await new Promise((resolve) => setTimeout(resolve, 70));
 
-    expect(events).toEqual(['send', 'close']);
-    expect(sent).toEqual([JSON.stringify({ type: 'CloseStream' })]);
+    expect(events).toEqual(['send', 'send', 'close']);
+    expect(sent).toEqual([initialAudio, JSON.stringify({ type: 'CloseStream' })]);
     expect(closeCount).toBe(1);
   });
 
@@ -207,6 +211,7 @@ describe('createDeepgramTranscriber', () => {
       onTranscript: () => {},
       createWebSocket: (url: string) => new FakeWebSocket(url) as any,
     });
+    transcriber.stop();
     transcriber.stop();
 
     expect(events).toEqual(['send', 'close']);

@@ -533,13 +533,19 @@ void main() {
         reason: 'a permanently refused recording must not buy another upload on every wake');
 
     final wal = (await world.wal.syncs.phone.getAllWals()).single;
-    expect(wal.status, WalStatus.miss, reason: 'audio is never dropped — only the automatic attempt is terminal');
-    expect(wal.retryCount, walMaxAutoRetries, reason: 'the verdict spends the whole budget in one step');
-    expect(wal.syncDisplayState, WalSyncDisplayState.failed,
-        reason: 'the sync row must show this as failed and offer a manual retry');
+    expect(wal.status, WalStatus.unsupportedAudio,
+        reason: 'audio is never dropped — only the sync attempt is terminal');
+    expect(wal.syncDisplayState, WalSyncDisplayState.unsupportedAudio);
     expect(File(walPath).lengthSync(), bytesAfterVerdict, reason: 'the local recording is retained untouched');
 
-    // The per-recording manual retry still reaches the server exactly once.
+    // The row used to render as "Failed — tap Retry", which sent the same bytes
+    // back for the same verdict on every tap and left the needs-attention banner
+    // permanent. The verdict is now stated instead of re-armed.
+    expect(wal.syncDisplayState, isNot(WalSyncDisplayState.failed));
+    expect(isRetryableSyncState(wal.syncDisplayState), isFalse);
+
+    // A deliberate call still reaches the server — audio is never orphaned — but
+    // the sync pages no longer offer it for this state, they offer deletion.
     await world.wal.syncs.phone.syncWal(wal: wal);
     await world.settle();
     expect(world.uploads.attempts, hasLength(2), reason: 'a deliberate retry is honoured');
@@ -548,7 +554,10 @@ void main() {
     await world.coordinator.wake(WakeTrigger.cooldownElapsed);
     await world.settle();
     expect(world.uploads.attempts, hasLength(2), reason: 'one deliberate tap buys exactly one upload');
-    expect((await world.wal.syncs.phone.getAllWals()).single.syncDisplayState, WalSyncDisplayState.failed);
+    expect(
+      (await world.wal.syncs.phone.getAllWals()).single.syncDisplayState,
+      WalSyncDisplayState.unsupportedAudio,
+    );
   });
 
   test('a transient job failure keeps its per-attempt retry budget', () async {

@@ -112,6 +112,24 @@ class PostHogManager {
     log("PostHog: Tracked event '\(eventName)'")
   }
 
+  /// EXP-002: attach `experiment_id` + `variant` to every captured event as
+  /// super-properties, so all product events (`question_asked`/`question_answered`,
+  /// `desktop_daily_summary`, PTT lifecycle, Interject teach) are sliceable by
+  /// arm without per-event plumbing. Distinct id stays the uid — the variant is
+  /// a property, never an identity. Called once the launch's arm resolves.
+  func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
+    guard isInitialized else {
+      log("PostHog: experiment context skipped (not initialized)")
+      return
+    }
+    PostHogSDK.shared.register([
+      "experiment_id": experimentId,
+      "variant": variant,
+      "experiment_forced": forced,
+    ])
+    log("PostHog: registered experiment context \(experimentId)/\(variant)")
+  }
+
   nonisolated static func diagnosticErrorClass(_ value: String) -> String {
     let normalized = value.lowercased()
     if normalized.contains("timeout") || normalized.contains("timed out") {
@@ -218,6 +236,49 @@ class PostHogManager {
   /// compile-checked symbol instead of a raw notification-name string.
   static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
 
+  func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
+    guard isInitialized else { return }
+    // A revocation outcome still belongs to its capture owner, never the account current at terminal time.
+    PostHogSDK.shared.capture(
+      "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
+  }
+
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
+  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
+  /// return cached values on quota/failure, so they cannot renew an upload lease.
+  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
+    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+      let url = URL(string: host + "/flags/?v=2")
+    else { throw ScreenTaskFailure.stopped }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 5
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: [
+      "token": apiKey, "distinct_id": authorization.ownerID,
+      "person_properties": [
+        "platform": "macos",
+        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+        "update_channel": AppBuild.currentUpdateChannel,
+      ],
+    ])
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+      throw ScreenTaskFailure.stopped
+    }
+    return try ScreenTaskFreshFlagResponse.enabled(data)
+  }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -310,7 +371,9 @@ extension PostHogManager {
       properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
   }
 
-  static func transcriptionStoppedProperties(wordCount: Int, attemptId: String? = nil) -> [String: Any] {
+  static func transcriptionStoppedProperties(
+    wordCount: Int, attemptId: String? = nil, reason: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
       "platform": "macos",
       "word_count": wordCount,
@@ -318,13 +381,17 @@ extension PostHogManager {
     if let attemptId {
       properties["attempt_id"] = attemptId
     }
+    if let reason {
+      properties["finalization_reason"] = reason
+    }
     return properties
   }
 
-  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: Self.transcriptionStoppedProperties(wordCount: wordCount, attemptId: attemptId))
+      properties: Self.transcriptionStoppedProperties(
+        wordCount: wordCount, attemptId: attemptId, reason: reason))
   }
 
   // MARK: - Capture Attempt Outcome
@@ -341,17 +408,26 @@ extension PostHogManager {
     _ attempt: CaptureAttemptOutcomeState,
     finalizationReason: TranscriptionFinalizationReason
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos",
       "attempt_id": attempt.attemptId,
       "mode": attempt.mode,
       "intent": attempt.intent.rawValue,
+      "launch_context": attempt.launchContext,
+      "seconds_since_launch": attempt.secondsSinceLaunch,
+      "update_attempt_id": attempt.updateAttemptID ?? "none",
       "capture_eligible": attempt.captureEligible,
       "first_audio_frame": attempt.firstAudioFrame,
       "speech_observed": attempt.speechObserved,
       "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "finalization_reason": finalizationReason.rawValue,
       "conversation_accepted": attempt.conversationAccepted,
     ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
   }
 
   /// Minimal outcome payload for an attempt whose process died mid-flight:
@@ -367,6 +443,12 @@ extension PostHogManager {
 
   func captureAttemptOutcome(properties: [String: Any]) {
     track(Self.captureAttemptOutcomeEventName, properties: properties)
+  }
+
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
   }
 
   func recordingError(
@@ -847,12 +929,18 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(
+    taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0,
+    extractor: String? = nil
+  ) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
