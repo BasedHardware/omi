@@ -87,6 +87,19 @@ class TestMemoriesToDigest(unittest.TestCase):
         self.assertEqual(m2digest.extract_tags(["rust", "systems!"]), ["rust", "systems"])
         self.assertEqual(m2digest.extract_tags("python, fast-api, ai#"), ["python", "fast-api", "ai"])
         self.assertEqual(m2digest.extract_tags(None), [])
+        # Test deduplication per item
+        self.assertEqual(m2digest.extract_tags(["work", "work", "ops"]), ["work", "ops"])
+        self.assertEqual(m2digest.extract_tags("work, work, ops"), ["work", "ops"])
+
+    def test_clean_markdown_cell(self):
+        self.assertEqual(m2digest.clean_markdown_cell("Simple text"), "Simple text")
+        self.assertEqual(m2digest.clean_markdown_cell("Pipe | inside"), "Pipe \\| inside")
+        self.assertEqual(m2digest.clean_markdown_cell("Line\nBreak"), "Line Break")
+        self.assertEqual(m2digest.clean_markdown_cell(None), "")
+        self.assertEqual(
+            m2digest.clean_markdown_cell("Bold *text* & `#tag`"),
+            "Bold \\*text\\* & \\`\\#tag\\`",
+        )
 
     def test_load_and_envelope_unwrapping(self):
         for key in ("memories", "items", "data", "results"):
@@ -102,6 +115,12 @@ class TestMemoriesToDigest(unittest.TestCase):
         loaded_bare = m2digest.load([str(bare_f)])
         self.assertEqual(len(loaded_bare), 1)
         self.assertIn("single", loaded_bare)
+
+        # Unrecognized non-memory objects must be ignored without phantom rows
+        err_f = self.tmp / "err.json"
+        err_f.write_text(json.dumps({"error": "Unauthorized", "status_code": 401}), encoding="utf-8")
+        loaded_err = m2digest.load([str(err_f)])
+        self.assertEqual(len(loaded_err), 0)
 
         # Numeric id coercion
         num_f = self.tmp / "num.json"
@@ -134,6 +153,22 @@ class TestMemoriesToDigest(unittest.TestCase):
         self.assertIn("## Recent Memory Highlights", md)
         self.assertIn("Spoke with design team about mobile UI refresh", md)
         self.assertIn("mem_04_untagged", md)
+
+    def test_unknown_category_and_highlight_truncation(self):
+        long_content = "A" * 150
+        item = {
+            "id": "mem_special",
+            "content": long_content,
+            "category": "my_custom|cat*",
+            "tags": ["deep-learning"],
+            "created_at": "2026-10-02T10:00:00Z",
+        }
+        md = m2digest.build_digest({"mem_special": item}, now=self.now)
+        # Category label must be sanitized
+        self.assertIn("My Custom\\|Cat\\*", md)
+        # Highlight preview must be truncated to <= 120 chars with ...
+        self.assertIn("A" * 117 + "...", md)
+        self.assertNotIn("A" * 150, md)
 
     def test_empty_export_handling(self):
         md = m2digest.build_digest({})
@@ -168,7 +203,16 @@ class TestMemoriesToDigest(unittest.TestCase):
         dest = self.tmp / "digest_err.md"
         src.write_text(json.dumps(self.sample_memories), encoding="utf-8")
 
-        with patch("pathlib.Path.open", side_effect=OSError("Disk full")):
+        real_open = Path.open
+
+        def failing_open(self_path, *args, **kwargs):
+            handle = real_open(self_path, *args, **kwargs)
+            mode = kwargs.get("mode", args[0] if args else "r")
+            if "xb" in mode and str(self_path) == str(dest):
+                handle.write = unittest.mock.Mock(side_effect=OSError("Disk full"))
+            return handle
+
+        with patch.object(Path, "open", autospec=True, side_effect=failing_open):
             with self.assertRaises(OSError):
                 m2digest.convert([str(src)], destination=str(dest), overwrite=False)
         self.assertFalse(dest.exists())

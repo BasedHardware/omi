@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-import io
 import json
 import os
 from pathlib import Path
@@ -71,31 +70,41 @@ def parse_offset(value: str) -> timedelta:
 
 
 def clean_markdown_cell(value: Any) -> str:
-    """Sanitize arbitrary strings for safe Markdown table rendering."""
+    """Sanitize arbitrary user strings for safe Markdown table and list rendering."""
     if value is None:
         return ""
     text = str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
-    text = text.replace("|", "\\|")
+    text = text.replace("\\", "\\\\")
+    for char in ("|", "*", "_", "`", "[", "]", "<", ">", "#"):
+        text = text.replace(char, f"\\{char}")
     return " ".join(text.split())
 
 
 def extract_tags(raw_tags: Any) -> List[str]:
-    """Normalize tags into a clean list of alphanumeric strings."""
+    """Normalize tags into a clean deduplicated list of alphanumeric strings."""
     if raw_tags is None:
         return []
+    seen: set[str] = set()
     tags_list: List[str] = []
+    candidates: List[Any] = []
     if isinstance(raw_tags, list):
-        for t in raw_tags:
-            if t is not None:
-                cleaned = re.sub(r"[^\w-]", "", str(t)).strip().lower()
-                if cleaned:
-                    tags_list.append(cleaned)
+        candidates = raw_tags
     elif isinstance(raw_tags, str):
-        for part in raw_tags.split(","):
-            cleaned = re.sub(r"[^\w-]", "", part).strip().lower()
-            if cleaned:
+        candidates = raw_tags.split(",")
+    for item in candidates:
+        if item is not None:
+            cleaned = re.sub(r"[^\w-]", "", str(item)).strip().lower()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
                 tags_list.append(cleaned)
     return tags_list
+
+
+def is_memory_record(raw: Any) -> bool:
+    """Check whether a dictionary represents an Omi memory record."""
+    if not isinstance(raw, dict):
+        return False
+    return any(key in raw for key in ("content", "category", "structured", "created_at"))
 
 
 def unwrap_memories(raw: Any, source_label: str) -> List[Any]:
@@ -107,7 +116,9 @@ def unwrap_memories(raw: Any, source_label: str) -> List[Any]:
             val = raw.get(key)
             if isinstance(val, list):
                 return val
-        return [raw]
+        if is_memory_record(raw):
+            return [raw]
+        return []
     raise ValueError(f"{source_label}: expected JSON array or object containing memories")
 
 
@@ -230,13 +241,14 @@ def build_digest(
     sorted_cats = sorted(by_category.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     for cat_name, cat_items in sorted_cats:
         meta = CATEGORY_META.get(cat_name, {"label": cat_name.replace("_", " ").title(), "emoji": "📁"})
+        clean_label = clean_markdown_cell(meta["label"])
         cat_tag_counter: Counter[str] = Counter()
         for it in cat_items:
             for t in extract_tags(it.get("tags")):
                 cat_tag_counter[t] += 1
         top_tags_str = ", ".join(f"`#{t}`" for t, _ in cat_tag_counter.most_common(3)) or "_none_"
         share = len(cat_items) / total * 100.0
-        lines.append(f"| {meta['emoji']} {meta['label']} | {len(cat_items)} | {share:.1f}% | {top_tags_str} |")
+        lines.append(f"| {meta['emoji']} {clean_label} | {len(cat_items)} | {share:.1f}% | {top_tags_str} |")
 
     if tag_counter:
         lines += [
@@ -270,8 +282,11 @@ def build_digest(
         for dt, content, cat, item_id in dated_items[:5]:
             local_dt = dt + offset
             meta = CATEGORY_META.get(cat, {"label": cat.replace("_", " ").title(), "emoji": "📁"})
+            clean_label = clean_markdown_cell(meta["label"])
+            clean_content = clean_markdown_cell(content)
+            preview = (clean_content[:117] + "...") if len(clean_content) > 120 else clean_content
             lines.append(
-                f"- **{meta['emoji']} {meta['label']}**: {content} "
+                f"- **{meta['emoji']} {clean_label}**: {preview} "
                 f"· _({local_dt.strftime('%Y-%m-%d %H:%M')})_ · `{item_id}`"
             )
 
@@ -388,6 +403,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.output and args.output != "-":
             print(f"Digest written to {args.output} ({count} memories)")
         return 0
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(1)
     except (OSError, ValueError) as exc:
         sys.exit(f"Digest failed: {exc}")
 
