@@ -1,0 +1,1 @@
+$25 is appropriate for the new `action items -> HTML report` recipe.
