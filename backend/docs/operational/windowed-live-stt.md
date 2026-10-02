@@ -301,7 +301,9 @@ admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
 queue. The existing three managed rebuild attempts, full-pod exclusion, and
 one healthy Soniox re-entry remain. Setup timeout skips its requested family
 and continues within that attempt budget. Cancelled/unadopted replay legs close
-both adapter tasks and their websocket.
+both adapter tasks and their websocket. An adopted live tail drains before EOS
+even after client departure; cancellation, death, or its bounded drain deadline
+meters any undelivered tail in the skipped-seconds counter.
 
 Metrics use only bounded source/successor families (`parakeet`, `modulate`,
 `soniox`, `deepgram`, `unknown`): `omi_stt_replay_wall_seconds`,

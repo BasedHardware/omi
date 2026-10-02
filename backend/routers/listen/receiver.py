@@ -1302,7 +1302,11 @@ class ListenReceiver(ReplayFilterMixin):
         self._pending_live_failover = hop
         # The ordered delivery accepts live capture while the prefix awaits pacing.
         delivery = ReplayTailSocket(
-            raw, ReplayPacer(sample_rate, self.host.stt_service.value, raw), self._replay_live_tail, self.host
+            raw,
+            ReplayPacer(sample_rate, self.host.stt_service.value, raw),
+            self._replay_live_tail,
+            self.host,
+            source=dead_provider or 'unknown',
         )
         self._replay_delivery = delivery
         # Replay capture positions after the last emitted segment.
@@ -1345,7 +1349,10 @@ class ListenReceiver(ReplayFilterMixin):
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
         if previous is not None:
             try:
-                previous.finish()
+                if window_ring is not None:
+                    await abort_replay_socket(previous)
+                else:
+                    previous.finish()
             except Exception:
                 logger.warning('Failed to close the STT socket that died before failover')
             finally:

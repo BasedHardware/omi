@@ -51,6 +51,8 @@ class Transport:
         if isinstance(data, bytes):
             self.byte_count += len(data)
         self.on_send()
+        if data == '':
+            self.inbound.put_nowait('{"finished":true,"type":"done"}')
 
     def __aiter__(self):
         return self
@@ -310,6 +312,7 @@ async def test_managed_soniox_internal_finish_still_fails_over(monkeypatch):
         assert not socket_is_finishing(soniox)
         assert await actual._failover_stt_socket()
         assert actual.host.stt_service == st.STTService.modulate
+        assert raws[0]._ws.closed and raws[0]._send_task.done() and raws[0]._recv_task.done()
         actual.stt_socket.mark_owner_teardown()
         assert socket_is_finishing(actual.stt_socket)
         assert not await actual._failover_stt_socket()
@@ -441,9 +444,9 @@ async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypa
 
 
 def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
-    from utils.stt.resilient_stream import replay_packets
+    from utils.stt.replay_delivery import replay_packets
 
-    monkeypatch.setattr('utils.stt.resilient_stream.REPLAY_PACKET_BYTES', 4)
+    monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PACKET_BYTES', 4)
     assert list(replay_packets(((0, b'AA'), (1, b'BBBB'), (8, b'CCCCCC')))) == [
         (0, b'AABB'),
         (2, b'BB'),
@@ -598,4 +601,39 @@ async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypa
     finally:
         for leg in legs:
             leg.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
+async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkeypatch, virtual_clock, successor):
+    from utils.stt import replay_delivery
+
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
+    actual.stt_socket.raw.fail('first_text_deadline')
+    original = b''.join(data for _, data in actual._window_ring().snapshot())[-640000:]
+    monkeypatch.setattr(actual, '_capture', lambda *args, **kwargs: None)
+    task = asyncio.create_task(actual._failover_stt_socket())
+    try:
+        await until(lambda: bool(raws))
+        await virtual_clock.sleep(0.03)
+        tail = b'\x23\x01' * 480
+        actual._stt_buffer_start_sample = 135 * 16000
+        await actual._flush_stt_buffer(bytearray(tail), force=True)
+        assert await task
+        actual.stt_socket.mark_owner_teardown()
+        actual.host.state.active = False
+        await actual.stt_socket.drain_and_close()
+        actual._settle_pending_live_failover_failure()
+        assert raws[-1]._ws.pcm == original + tail
+        assert raws[-1]._ws.sent[-1] == ''
+        assert raws[-1]._ws.closed and raws[-1]._send_task.done() and raws[-1]._recv_task.done()
+        assert actual.stt_socket._task.done()
+        assert all(leg.leg_outcome.settled for leg in legs)
+        assert len(observations) == len(legs) == 2
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        actual.stt_socket.finish()
         await stop(raws)

@@ -6,7 +6,7 @@ import time
 import os
 import asyncio
 from collections import deque
-from typing import Any, Callable, Iterator, Literal, cast
+from typing import Any, Callable, Literal, cast
 
 from config.stt_provider_policy import provider_for_service
 
@@ -21,6 +21,7 @@ from utils.stt.live_metrics import (
 )
 from utils.stt.replay_delivery import (
     ReplayPacer,
+    replay_packets,
     REPLAY_PREFIX_SECONDS,
     family,
     clock,
@@ -329,7 +330,7 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
     replacement = None
     retire_window_replay_socket(receiver, socket)
     try:
-        socket.finish()
+        await abort_replay_socket(socket)
     except Exception:
         pass
     finally:
@@ -369,6 +370,7 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             ReplayPacer(replay_ring.sample_rate, 'soniox', replacement),
             receiver._replay_live_tail,
             receiver.host,
+            source='soniox',
         )
         receiver._replay_delivery = delivery
         cutoff = replay_ring.finalized_sample
@@ -438,34 +440,9 @@ async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any
     finally:
         if previous is not None:
             try:
-                previous.finish()
+                await abort_replay_socket(previous)
             finally:
                 release_live_stt_socket(previous)
-
-
-REPLAY_PACKET_BYTES = 16 * 1024
-
-
-def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int, bytes]]:
-    """Coalesce adjacent s16le capture spans; bound copies and preserve gaps."""
-    pending = bytearray()
-    first = 0
-    for start, data in chunks:
-        if pending and start != first + len(pending) // 2:
-            yield first, bytes(pending)
-            pending.clear()
-        offset = 0
-        while offset < len(data):
-            if not pending:
-                first = start + offset // 2
-            count = min(REPLAY_PACKET_BYTES - len(pending), len(data) - offset)
-            pending.extend(data[offset : offset + count])
-            offset += count
-            if len(pending) == REPLAY_PACKET_BYTES:
-                yield first, bytes(pending)
-                pending.clear()
-    if pending:
-        yield first, bytes(pending)
 
 
 async def replay_chunks(
