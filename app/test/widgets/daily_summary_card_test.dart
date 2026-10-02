@@ -113,11 +113,36 @@ void main() {
     expect(find.byType(OmiMapPreview), findsNothing);
     expect(find.text('Yesterday'), findsOneWidget);
   });
+
+  testWidgets('a map card keeps a long headline to whole lines at large text sizes', (tester) async {
+    for (final scale in [1.0, 1.3, 1.6]) {
+      await _pumpCard(
+        tester,
+        _summary(
+          locations: [LocationPin(latitude: 37.7749, longitude: -122.4194)],
+          headline: 'Rewrite, equity, and product polish dominated a long and busy day across town',
+        ),
+        textScale: scale,
+      );
+
+      expect(tester.takeException(), isNull, reason: 'no overflow at ${scale}x');
+      final headline = tester.widget<Text>(find.textContaining('Rewrite, equity'));
+      final lineHeight = 15 * scale * 1.3;
+      // The headline's box is the room above the map; the lines it may show must fit in it.
+      final room = tester.getSize(find.textContaining('Rewrite, equity')).height;
+      expect(headline.maxLines, inInclusiveRange(1, 2), reason: 'at ${scale}x');
+      expect(headline.maxLines! * lineHeight, lessThanOrEqualTo(room + 0.5),
+          reason: 'the headline shows whole lines only at ${scale}x');
+      if (scale == 1.0) expect(headline.maxLines, 2, reason: 'two headline lines fit at the default size');
+    }
+  });
 }
 
-Future<void> _pumpCard(WidgetTester tester, DailySummary summary) async {
+Future<void> _pumpCard(WidgetTester tester, DailySummary summary, {double textScale = 1.0}) async {
   await tester.pumpWidget(
     MaterialApp(
+      builder: (context, child) =>
+          MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
@@ -131,12 +156,12 @@ Future<void> _pumpCard(WidgetTester tester, DailySummary summary) async {
   await tester.pump(const Duration(milliseconds: 100));
 }
 
-DailySummary _summary({required List<LocationPin> locations}) {
+DailySummary _summary({required List<LocationPin> locations, String headline = 'A day around the city'}) {
   return DailySummary(
     id: 'summary-1',
     date: '2026-07-15',
     createdAt: DateTime(2026, 7, 16),
-    headline: 'A day around the city',
+    headline: headline,
     overview: '',
     stats: DayStats(),
     locations: locations,

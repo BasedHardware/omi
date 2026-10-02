@@ -20,6 +20,8 @@ from scripts.runtime_env_capability_contracts import (
     validate_speaker_embedding_hosts,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist  # noqa: E402
+from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
@@ -171,6 +173,9 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(
+        ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
+    )
     for key in ('region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))
@@ -728,11 +733,20 @@ def validate_runtime_env(
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     errors = _validate_manifest_shape(env_config, env)
+    errors.extend(validate_jev_uid_allowlist(stage=env, scope=env, config=env_config))
     if errors:
         return errors
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    for service, service_config in (_as_config_dict(env_config.get('gke')) or {}).items():
+        values_file = (_as_config_dict(service_config) or {}).get('values_file')
+        if values_file:
+            errors.extend(
+                validate_jev_uid_allowlist(
+                    stage=env, scope=f'{env}/gke/{service}', config=_load_yaml(ROOT / values_file)
+                )
+            )
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_free_tier_deploy_contract(env, env_config))
@@ -763,6 +777,7 @@ def validate_runtime_env(
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 
     if cloud_run_state is not None:
+        errors.extend(validate_jev_uid_allowlist(stage=env, scope=f'{env}/cloud_run', config=cloud_run_state))
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
         errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors

@@ -645,7 +645,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
 
 
 def test_runtime_emits_speaker_suggestion_event(monkeypatch):
-    import routers.listen.runtime as runtime_module
+    import utils.live_speaker_suggestions as suggestion_module
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
@@ -654,7 +654,7 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
     emitted_events = []
     product_events = []
     runtime.send_event = emitted_events.append
-    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
+    monkeypatch.setattr(suggestion_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
@@ -675,6 +675,12 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
             },
         }
     ]
+
+    assert 'retracted' not in emitted_events[0].to_json()
+    runtime.emit_speaker_suggestion(4, '', '', 'segment-456', retracted=True)
+    assert emitted_events[-1].to_json()['retracted'] is True
+    assert emitted_events[-1].person_id == ''
+    assert len(product_events) == 1, 'a retraction is not another proposed identity'
 
 
 class _LiveSTTAttempt:
@@ -897,7 +903,9 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
-    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
+    processor.speaker_id_allocator = SimpleNamespace(
+        hydrate=lambda _segments: None, hydrate_receipt=MagicMock(), assign=lambda _segment: None
+    )
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op

@@ -22,7 +22,7 @@ def test_pt_model_defaults_to_the_currently_provisioned_order():
 
 
 def test_pt_model_promotes_itself_once_target_capacity_answers():
-    assert ptr.resolve_pt_model(target_dedicated_ready=True) == 'gemini-3.1-flash-lite'
+    assert ptr.resolve_pt_model(target_dedicated_ready=True) == 'gemini-3.8-flash'
 
 
 @pytest.mark.parametrize('ready', [False, True])
@@ -99,7 +99,7 @@ def test_absent_capacity_is_not_read_as_exhausted_capacity():
 
 def test_pt_constants_stay_distinct():
     assert ptr.PT_MODEL_CURRENT != ptr.PT_MODEL_TARGET
-    assert ptr.PT_MODEL_TARGET in ptr.OVERFLOW_PREFERENCE
+    assert ptr.PT_MODEL_TARGET not in ptr.OVERFLOW_PREFERENCE
 
 
 # --- Endpoint selection ----------------------------------------------------

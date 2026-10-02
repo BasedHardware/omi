@@ -3926,9 +3926,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '새 버전 사용 가능';
-
-  @override
   String get no => '아니요';
 
   @override
@@ -4984,7 +4981,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
-  String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
+  String get tasksEmptyStateMessage => '대화를 시작하여 할 일을 만드세요.';
 
   @override
   String get clearChatAction => '채팅 삭제';
@@ -9956,12 +9953,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11344,4 +11335,724 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
+
+  @override
+  String get peopleSearchPlaceholder => '사람 검색';
+
+  @override
+  String get peopleNotHeardYet => '아직 듣지 못함';
+
+  @override
+  String get peopleRecent => '최근';
+
+  @override
+  String get deletePeopleMessage => '음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
+
+  @override
+  String get personTalkTime => '발화 시간';
+
+  @override
+  String get personLastHeard => '마지막으로 들은 날';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명을 삭제할까요?',
+      one: '1명을 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
+
+  @override
+  String get greetingMorning => '좋은 아침이에요';
+
+  @override
+  String get greetingAfternoon => '좋은 오후예요';
+
+  @override
+  String get greetingEvening => '좋은 저녁이에요';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name님';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '무엇이 궁금하세요?';
+
+  @override
+  String get askSuggestDecide => '오늘 무엇을 결정했지?';
+
+  @override
+  String get askSuggestOwe => '아직 사람들에게 해 줘야 할 일은?';
+
+  @override
+  String get askSuggestNotice => 'Omi가 알아챈 것은?';
+
+  @override
+  String get pastChats => '지난 채팅';
+
+  @override
+  String get newChat => '새 채팅';
+
+  @override
+  String get startFresh => '처음부터 시작';
+
+  @override
+  String get noPastChats => 'Omi와 나눈 채팅이 여기에 표시돼요.';
+
+  @override
+  String get deleteChatQuestion => '이 채팅을 삭제할까요?';
+
+  @override
+  String get deleteChatMessage => '지난 채팅에서 영구히 사라져요.';
+
+  @override
+  String get deleteChat => '채팅 삭제';
+
+  @override
+  String get appsAskWith => '이것과 함께 Omi에게 묻기';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '오늘 대화 $count개.',
+      one: '오늘 대화 1개.',
+      zero: '오늘은 대화가 없어요.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '화면에 표시된 내용';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '이 회의의 스크린샷';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '스크린샷을 삭제할까요?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.';
+
+  @override
+  String get conversationSummaryFailed => '요약 실패';
+
+  @override
+  String get reconnectionsRecent => '재연결 (최근 7일)';
+
+  @override
+  String get failedConnections => '실패한 연결';
+
+  @override
+  String get failedConnectionsRecent => '실패한 연결 (최근 7일)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '페어링 이후 $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => '낮은 신뢰도';
+
+  @override
+  String get peopleFilterPinned => '고정됨';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명 고정됨',
+      one: '1명 고정됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => '확인됨';
+
+  @override
+  String get confidenceLikely => '가능성 높음';
+
+  @override
+  String get confidenceUnverified => '미확인';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return '신뢰도: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '직접 $count번 라벨을 지정했어요',
+      one: '직접 1번 라벨을 지정했어요',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '제안 $count개에서 선택함',
+      one: '제안 1개에서 선택함',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '일치 $count건을 확인했어요',
+      one: '일치 1건을 확인했어요',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => '자동 일치만 있고 확인한 적 없음';
+
+  @override
+  String get confidenceReasonNeverConfirmed => '확인한 적 없음';
+
+  @override
+  String get confidenceReasonCorrected => '일치 결과를 직접 고쳤어요';
+
+  @override
+  String get confidenceReasonVoiceReady => '음성 준비됨';
+
+  @override
+  String get confidenceReasonNeedsVoice => '음성 필요';
+
+  @override
+  String get confidenceReasonNotHeard => '아직 들리지 않음';
+
+  @override
+  String get confidenceSheetTitle => '신뢰도';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi가 $name의 목소리를 인식하고, 직접 확인도 했어요.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi가 대체로 $name의 목소리를 인식하지만, 직접 확인한 건 몇 번뿐이에요.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return '아직 $name을(를) 뒷받침할 활동이 없어요.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => '근거';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '내가 대화 $count개에서 라벨 지정',
+      one: '내가 대화 1개에서 라벨 지정',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '제안 $count개에서 “예”',
+      one: '제안 1개에서 “예”',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '제안 $count개에서 선택함',
+      one: '제안 1개에서 선택함',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '자동 일치 $count건 확인함',
+      one: '자동 일치 1건 확인함',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '일치 $count건을 다른 사람으로 변경함',
+      one: '일치 1건을 다른 사람으로 변경함',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '아무도 확인하지 않은 자동 일치 $count건',
+      one: '아무도 확인하지 않은 자동 일치 1건',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => '음성 샘플 준비됨';
+
+  @override
+  String get evidenceNoVoice => '아직 음성 샘플 없음';
+
+  @override
+  String get evidenceNotHeard => '아직 대화에서 들리지 않음';
+
+  @override
+  String get evidenceNothing => '아직 라벨을 지정하거나 확인하지 않았어요';
+
+  @override
+  String get effectCountsALot => '크게 반영됨';
+
+  @override
+  String get effectCounts => '반영됨';
+
+  @override
+  String get effectCountsALittle => '조금 반영됨';
+
+  @override
+  String get effectBarelyCounts => '거의 반영 안 됨';
+
+  @override
+  String get effectCountsAgainst => '감점 요인';
+
+  @override
+  String get effectNeeded => '확인됨에 필요';
+
+  @override
+  String get confidenceToReachConfirmed => '확인됨이 되려면';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi에는 $name의 음성 샘플도 필요해요. “목소리 기억”을 켠 상태에서 라벨을 지정하세요.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name은(는) 확인됨 상태예요. Omi는 라벨을 지정할 때마다 계속 배워요.';
+  }
+
+  @override
+  String get confidenceFootnote => '신뢰도를 크게 바꾸는 건 내 답변뿐이에요. 자동 일치만으로는 거의 반영되지 않아요.';
+
+  @override
+  String get personWhyConfidence => '왜죠?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name 고정';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name을(를) 목록 위에 두고, 대화에 등장할 사람으로 기억해요';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi가 추측하지 않고 비슷한 일치는 확인을 요청해요.';
+
+  @override
+  String get pinAction => '고정';
+
+  @override
+  String get unpinAction => '고정 해제';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name 고정됨';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name 고정 해제됨';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return '$level인 이유는?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name을(를) 삭제할까요?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name은(는) 고정되어 있어요. 음성 샘플이 삭제되고 Omi가 더 이상 인식하지 못하며, 지난 대본에는 이름 없는 화자로 표시돼요. 이 작업은 되돌릴 수 없어요.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name 삭제';
+  }
+
+  @override
+  String get selectPeople => '사람 선택';
+
+  @override
+  String get cleanUpEllipsis => '정리…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi가 확신하지 못하는 사람 $count명',
+      one: 'Omi가 확신하지 못하는 사람 1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => '대부분 잘못 들은 이름이에요. 검토하고 실제가 아닌 항목을 삭제하세요.';
+
+  @override
+  String get reviewAction => '검토';
+
+  @override
+  String get cleanUpTitle => '정리';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi가 이 $count명을 확신하지 못해요. 대부분 대본에서 잘못 들은 이름이에요. 유지할 사람은 선택을 해제하세요.',
+      one: 'Omi가 이 사람을 확신하지 못해요. 유지하려면 선택을 해제하세요.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => '고정된 사람은 정리에 포함되지 않아요.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명 삭제',
+      one: '1명 삭제',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명 삭제됨',
+      one: '1명 삭제됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => '정리할 항목 없음';
+
+  @override
+  String get cleanUpNothingMessage => '지금은 Omi가 확신하지 못하는 사람이 없어요.';
+
+  @override
+  String get selectAllSkipsPinned => '모두 선택은 고정된 사람을 건너뛰어요. 각자의 페이지에서 한 명씩 삭제하세요.';
+
+  @override
+  String get pinnedNotSelectable => '고정됨, 선택할 수 없음';
+
+  @override
+  String get ignoredVoicesTitle => '무시한 목소리';
+
+  @override
+  String get ignoredVoicesSubtitle => '“사람 아님”으로 표시한 TV, 팟캐스트 등의 목소리';
+
+  @override
+  String get ignoredVoicesEmpty => '무시한 목소리 없음';
+
+  @override
+  String get restoreAction => '복원';
+
+  @override
+  String get voiceRestoredToast => 'Omi가 이 목소리에 대해 다시 물어볼 수 있어요';
+
+  @override
+  String get speakerTagPromptSomeoneElse => '다른 사람…';
+
+  @override
+  String get speakerTagPromptNotAPerson => '사람 아님';
+
+  @override
+  String get speakerTagPromptNotSureAction => '모르겠어요';
+
+  @override
+  String get speakerTagPromptThatsMeAction => '저예요';
+
+  @override
+  String get speakerTagPromptClosestVoices => '가장 비슷한 목소리';
+
+  @override
+  String get speakerTagPromptRecentPeople => '최근에 대화한 사람';
+
+  @override
+  String get voiceMatchClose => '매우 비슷함';
+
+  @override
+  String get voiceMatchPossible => '비슷할 수 있음';
+
+  @override
+  String get voiceMatchWeak => '별로 비슷하지 않음';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return '목소리 일치: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => '답할 때마다 Omi가 목소리를 배우고 그 사람의 신뢰도가 올라가요.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '“예”를 누르면 $name의 신뢰도가 올라가요.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => '내 음성 프로필을 정확하게 유지해서 Omi가 나를 다른 사람으로 부르는 일이 없게 해요.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '$name(으)로 저장됨';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => '나로 저장됨';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi가 이 목소리에 대해 다시 묻지 않아요';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '$name(으)로 라벨 지정됨';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => '나로 라벨 지정됨';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => '사람 아님으로 표시됨';
+
+  @override
+  String get speakerTagPromptRejectedToast => '라벨 삭제됨';
+
+  @override
+  String get whoIsItTitle => '누구인가요?';
+
+  @override
+  String get newPersonEllipsis => '새 사람…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '“$name” 추가';
+  }
+
+  @override
+  String get everyoneHeader => '모든 사람';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => '이 화자의 모든 발언에 적용돼요';
+
+  @override
+  String get collapseAction => '접기';
+
+  @override
+  String get speakerTagPromptNotMeAction => '제가 아니에요';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개에서 더 라벨을 지정해 주세요.',
+      one: '대화 1개에서 더 라벨을 지정해 주세요.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return '단축어 → Siri에서 Omi를 켜세요. “$askPhrase” 또는 “$questionPhrase”라고 말한 다음 질문하세요.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' “$searchPhrase for what I did today”라고 말할 수도 있습니다.';
+  }
+
+  @override
+  String get updateAvailableTitle => '업데이트 가능';
+
+  @override
+  String get updateAvailableMessage => '수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.';
+
+  @override
+  String get updateRequiredTitle => '업데이트 필요';
+
+  @override
+  String get updateRequiredMessage => '이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.';
+
+  @override
+  String get exportingAllData => '데이터를 보내는 중… Omi를 열어 두세요. 데이터가 많은 계정은 몇 분 정도 걸릴 수 있습니다.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '화자 $count명',
+      one: '화자 1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => '동기화된 사본 자동 삭제';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '동기화된 사본은 $days일 후 삭제됩니다';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '동기화 후 $days일에 로컬 사본을 삭제합니다. 클라우드 사본은 유지됩니다.';
+  }
+
+  @override
+  String get localCopiesSection => '로컬 사본';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return '라벨을 지정한 줄 수: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '목소리를 학습했어요',
+        'pending': '목소리 학습 중…',
+        'disabled': '목소리 저장이 꺼져 있어요',
+        'other': '아직 목소리를 학습하지 못했어요',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '다음부터 Omi가 $name님을 알아볼 거예요.',
+        'pending': '몇 초 정도 걸려요.',
+        'disabled': 'Omi가 $name님을 알아보려면 설정에서 목소리 저장을 켜 주세요.',
+        'other': 'Omi에 $name님의 또렷한 음성이 더 필요해요. 계속 시도할게요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return '이 목소리의 이전 대화 수: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '추정',
+        'soundsLike': '$name님 목소리와 비슷해요',
+        'notPerson': '$name님 아님',
+        'carried': '계속 $name님이에요. 지난 대화에서 이어졌어요.',
+        'change': '변경',
+        'alsoTitle': '이분도 $name님인가요?',
+        'alsoBody': 'Omi가 이전 대화에서 같은 목소리를 찾았어요.',
+        'confirmed': '이 라벨을 확인했어요',
+        'other': '검토',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '이 목소리 $duration';
+  }
 }

@@ -21,6 +21,7 @@ from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
+from database.speaker_learning_fields import voice_learning_fields
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -232,12 +233,12 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
-def get_meeting_note_screenshots_enabled(uid: str) -> bool:
+def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[float] = None) -> bool:
     """Account-level setting gating screen-frame egress admission (contract
     §6). Default true — off means the feature does nothing and existing
-    frames stay hidden (contract §9), it does not delete anything."""
+    frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict() or {}
+    user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
     return user_data.get('meeting_note_screenshots_enabled', True)
 
 
@@ -1054,6 +1055,8 @@ def replace_person_speech_profile(
     embedding: list,
     conversation_id: str,
     segment_ids: list[str],
+    *,
+    speech_seconds: Optional[float] = None,
 ) -> Optional[list[str]]:
     """Publish one verified sample, its embedding and teaching provenance atomically.
 
@@ -1061,19 +1064,15 @@ def replace_person_speech_profile(
     """
     user_ref = db.collection('users').document(uid)
     ref = user_ref.collection('people').document(person_id)
-    return _replace_speech_profile_transaction(
-        db.transaction(),
-        ref,
-        expected_updated_at,
-        {
-            'speech_samples': [sample_path],
-            'speech_sample_transcripts': [transcript],
-            'speech_samples_version': 3,
-            'speaker_embedding': embedding,
-            'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
-        },
-        user_ref=user_ref,
-    )
+    profile = {
+        'speech_samples': [sample_path],
+        'speech_sample_transcripts': [transcript],
+        'speech_samples_version': 3,
+        'speaker_embedding': embedding,
+        'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
+        **voice_learning_fields('learned', 'stored', speech_seconds),
+    }
+    return _replace_speech_profile_transaction(db.transaction(), ref, expected_updated_at, profile, user_ref=user_ref)
 
 
 @transactional

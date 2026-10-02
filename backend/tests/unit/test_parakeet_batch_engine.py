@@ -63,6 +63,7 @@ def _parakeet_modules():
             _g["WorkItem"] = gpu_worker.WorkItem
             _g["WorkType"] = gpu_worker.WorkType
             _g["BatchEngine"] = batch_engine.BatchEngine
+            _g["PendingRequest"] = batch_engine.PendingRequest
             _g["QueueFullError"] = batch_engine.QueueFullError
             _g["_unlink_safe"] = batch_engine._unlink_safe
             yield
@@ -91,6 +92,40 @@ def _make_mock_gpu_worker(results_fn=None):
 
     worker.submit.side_effect = submit
     return worker
+
+
+def test_live_lane_precedes_backfill_and_unmarked_defaults_to_backfill():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=2)
+    loop = asyncio.new_event_loop()
+    try:
+        engine._pending = [
+            PendingRequest('/tmp/old.wav', True, loop.create_future()),
+            PendingRequest('/tmp/live-a.wav', True, loop.create_future(), lane='live'),
+            PendingRequest('/tmp/live-b.wav', True, loop.create_future(), lane='live'),
+        ]
+        assert [r.audio_path for r in engine._select_batch()] == ['/tmp/live-a.wav', '/tmp/live-b.wav']
+        snapshot = engine.pressure_snapshot()
+        assert snapshot['pending_requests'] == 3
+        assert snapshot['live_pending_requests'] == 2
+        assert snapshot['backfill_pending_requests'] == 1
+    finally:
+        loop.close()
+
+
+def test_aged_backfill_gets_one_turn_after_four_live_batches():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=2, starvation_timeout_sec=5)
+    loop = asyncio.new_event_loop()
+    try:
+        old = PendingRequest('/tmp/old.wav', True, loop.create_future(), submitted_at=time.monotonic() - 10)
+        engine._pending = [old] + [
+            PendingRequest(f'/tmp/live-{i}.wav', True, loop.create_future(), lane='live') for i in range(10)
+        ]
+        for _ in range(4):
+            assert all(r.lane == 'live' for r in engine._select_batch())
+        assert engine._select_batch() == [old]
+        assert all(r.lane == 'live' for r in engine._select_batch())
+    finally:
+        loop.close()
 
 
 class TestBatchEngineSubmit:

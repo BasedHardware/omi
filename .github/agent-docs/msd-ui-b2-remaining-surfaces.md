@@ -1,9 +1,5 @@
 # B2 remaining surfaces — read-only inventory
 
-Historical inventory: #19730 removed the bottom tab row. Current Home navigation
-is owned by `app/lib/pages/home/page.dart`; tab-specific plans below describe the
-earlier shell and must be reassessed before implementation.
-
 Cut from `origin/main` (`37c2fb558b`). No app code in this branch. B1 catalog
 and oracle live on `task/msd-ui-b1-chat`; this file reads **current `main` widgets**
 against B1’s grammar (`omi.<surface>.<control>` plus optional qualifier;
@@ -47,9 +43,11 @@ declared in `controls[]` as B1’s schema stands.
 ## 1. home
 
 **Owners:** `app/lib/pages/home/home_content.dart` (`HomeContentPage`, catalog
-widget), the former bottom tab row (removed by #19730), shell
+widget), historical bottom-tab row (current replacement:
+`app/lib/pages/home/widgets/home_tab_switcher.dart`), shell
 `app/lib/pages/home/page.dart` (**hot**). `main.dart` not required for tab
-addressability.
+addressability. The bottom-bar findings below describe the original snapshot,
+not the replacement's current tab layout.
 
 **Reach:** IndexedStack tab 0 of `HomePage` (`_ensurePageInitialized` case 0).
 Route row today: `kind: tab, tab: 0`, fixture `identity-empty`, `auth:

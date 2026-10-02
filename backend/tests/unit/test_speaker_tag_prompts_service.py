@@ -51,8 +51,11 @@ class World:
 
         def assign(uid, conversation_id, **kwargs):
             self.assignments.append(kwargs)
-            segments = [{'id': 's1', 'start': 0, 'end': 9}, {'id': 's2', 'start': 9, 'end': 12}]
-            return {'transcript_segments': segments}, ['s1', 's2'], [], []
+            segments = [
+                {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9},
+                {'id': 's2', 'speaker_id': 1, 'start': 9, 'end': 12},
+            ]
+            return {'id': conversation_id, 'transcript_segments': segments}, ['s1', 's2'], [], []
 
         monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
 
@@ -78,7 +81,13 @@ def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
     world = World(monkeypatch, paid=False)
     response = service.apply_answer('u', _request(K.owner_check, O.unnamed, A.me), world.schedule, NOW)
     assert world.assignments == [
-        {'person_id': None, 'is_user': True, 'speaker_id': 1, 'use_for_speech_training': False}
+        {
+            'person_id': None,
+            'is_user': True,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+        }
     ]
     assert world.scheduled[0][0] is service.store_owner_voice_sample
     assert response.voice_sample_queued and response.quality_outcome == Q.owner_missed
@@ -119,16 +128,32 @@ def test_rejecting_an_automatic_label_clears_it(monkeypatch):
     world = World(monkeypatch)
     response = service.apply_answer('u', _request(K.owner_check, O.auto_user, A.not_me), world.schedule, NOW)
     assert world.assignments == [
-        {'person_id': None, 'is_user': False, 'speaker_id': 1, 'use_for_speech_training': False}
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+            'rejection': {'kind': 'not_me', 'person_id': None},
+        }
     ]
     assert response.quality_outcome == Q.owner_auto_rejected
 
 
-def test_unknown_voice_and_skip_write_nothing(monkeypatch):
+def test_unknown_voice_writes_an_anonymous_decision_and_skip_writes_nothing(monkeypatch):
     world = World(monkeypatch)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.skip), world.schedule, NOW)
-    assert world.assignments == [] and world.answered == ['pid', 'pid']
+    assert world.assignments == [
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+        }
+    ]
+    assert world.answered == ['pid', 'pid']
 
 
 def test_invalid_answer_for_kind(monkeypatch):
@@ -565,7 +590,7 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service,
         'conversation_clip_pcm',
-        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * 16000,
+        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
     )
 
     async def verify(wav, rate, text, language=None):
@@ -575,7 +600,9 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
     monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]], dtype=np.float32))
     monkeypatch.setattr(
-        service.voice_profiles_db, 'add_owner_voice_confirmation', lambda uid, embedding, pool, conversation_id: 1
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -617,7 +644,7 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     }
     pooled = []
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         assert text == 'hello there friend' and language == 'en'
@@ -628,7 +655,10 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id: pooled.append((embedding, pool([embedding]))) or 1,
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: pooled.append(
+            (embedding, pool([embedding]))
+        )
+        or 1,
     )
     outcome = asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a']))
     assert outcome == 'stored'
@@ -643,7 +673,7 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hi'}],
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         return None, False, 'multi_speaker: ratio=0.40'
@@ -653,3 +683,131 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         service.voice_profiles_db, 'add_owner_voice_confirmation', lambda *a, **k: pytest.fail('must not pool')
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a'])) == 'rejected_quality'
+
+
+def test_someone_else_with_a_person_is_the_correction_path(monkeypatch):
+    world = World(monkeypatch)
+    request = _request(K.confirm_person, O.auto_person, A.someone_else, person_id='p1', suggested_person_id='p9')
+    response = service.apply_answer('u', request, world.schedule, NOW)
+    assert world.assignments[0]['person_id'] == 'p1' and world.assignments[0]['evidence_source'] == 'card'
+    assert response.person_id == 'p1' and response.quality_outcome == Q.person_auto_corrected
+    new = _request(K.confirm_person, O.auto_person, A.someone_else, name='Dana', suggested_person_id='p9')
+    response = service.apply_answer('u', new, world.schedule, NOW)
+    assert world.created[-1]['name'] == 'Dana' and response.person_id == world.created[-1]['id']
+
+
+def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
+    world = World(monkeypatch)
+    ignored = []
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: ignored.append(args))
+    response = service.apply_answer('u', _request(K.confirm_person, O.auto_person, A.not_a_person), world.schedule, NOW)
+    assert world.assignments == [
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+            'rejection': {'kind': 'not_a_person', 'person_id': None},
+        }
+    ]
+    assert ignored == [('u', 'c1', 1, NOW)] and world.answered == ['pid']
+    assert response.quality_outcome == Q.person_auto_corrected
+    # Revalidate even unnamed prompts: the stored label may have changed since it was served.
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person), world.schedule, NOW)
+    assert len(world.assignments) == 2 and len(ignored) == 2
+
+
+def test_not_a_person_on_owner_check_is_free(monkeypatch):
+    world = World(monkeypatch, paid=False)
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: None)
+    response = service.apply_answer('u', _request(K.owner_check, O.unnamed, A.not_a_person), world.schedule, NOW)
+    assert response.quality_outcome == Q.unknown_voice
+
+
+def test_not_a_person_rejects_a_conversation_outside_the_authenticated_account(monkeypatch):
+    World(monkeypatch)
+    markers = []
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kw: markers.append(args))
+
+    def missing(uid, conversation_id, **kwargs):
+        assert uid == 'u' and conversation_id == 'foreign'
+        raise LookupError('Conversation not found')
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', missing)
+    with pytest.raises(LookupError):
+        service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='foreign'))
+    assert markers == []
+
+
+def test_ignored_voices_list_skips_deleted_conversations_and_restore_forgets_answers(monkeypatch):
+    state = {
+        'ignored_voices': {
+            'c1:1': {'conversation_id': 'c1', 'speaker_id': 1, 'ignored_at': NOW},
+            'c2:3': {'conversation_id': 'c2', 'speaker_id': 3, 'ignored_at': NOW - timedelta(hours=1)},
+            'bad': {'conversation_id': 'c3'},
+        }
+    }
+    monkeypatch.setattr(service.voice_profiles_db, 'get_tag_prompt_state', lambda uid: state)
+    monkeypatch.setattr(
+        service.conversations_db,
+        'get_conversations_by_id_without_photos',
+        lambda uid, ids: [
+            {'id': 'c1', 'structured': {'title': ' TV night '}, 'started_at': NOW},
+            {'id': 'c2', 'deleted': True},
+        ],
+    )
+    voices = service.list_ignored_voices('u').voices
+    assert [(v.conversation_id, v.speaker_id, v.conversation_title) for v in voices] == [('c1', 1, 'TV night')]
+    removed = []
+    monkeypatch.setattr(service.voice_profiles_db, 'remove_ignored_voice', lambda *args: removed.append(args) or True)
+    assert service.restore_ignored_voice('u', 'c1', 1)
+    uid, conversation_id, speaker_id, prompt_ids = removed[0]
+    assert (uid, conversation_id, speaker_id) == ('u', 'c1', 1)
+    assert set(prompt_ids) == {service.prompt_id('c1', 1, kind) for kind in K}
+
+
+def test_ignored_voices_limit_applies_after_missing_and_deleted_conversations(monkeypatch):
+    entries = [
+        {'conversation_id': f'c{i}', 'speaker_id': 1, 'ignored_at': NOW - timedelta(minutes=i)} for i in range(120)
+    ]
+    state = {'ignored_voices': {f"{entry['conversation_id']}:1": entry for entry in entries}}
+    monkeypatch.setattr(service.voice_profiles_db, 'get_tag_prompt_state', lambda uid: state)
+
+    def conversations(uid, ids):
+        assert uid == 'u'
+        return [{'id': cid, 'deleted': int(cid[1:]) < 60} for cid in ids if cid != 'c60']
+
+    monkeypatch.setattr(service.conversations_db, 'get_conversations_by_id_without_photos', conversations)
+    result = service.list_ignored_voices('u').voices
+    assert len(result) == service.IGNORED_VOICES_LIST_LIMIT
+    assert [voice.conversation_id for voice in result] == [f'c{i}' for i in range(61, 111)]
+
+
+def test_ignored_voice_uses_the_merged_survivor_and_resolved_speaker(monkeypatch):
+    World(monkeypatch)
+    markers = []
+
+    def assign(uid, conversation_id, **kwargs):
+        assert uid == 'u' and conversation_id == 'donor' and kwargs['speaker_id'] == 1
+        return (
+            {
+                'id': 'survivor',
+                'manual_speaker_assignments': {'generation': 7},
+                'transcript_segments': [
+                    {'id': 's1', 'speaker_id': 8},
+                    {'id': 's2', 'speaker_id': 8},
+                    {'id': 'other', 'speaker_id': 1},
+                ],
+            },
+            ['s1', 's2'],
+            [],
+            [],
+        )
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: markers.append((args, kwargs))
+    )
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='donor'), now=NOW)
+    assert markers == [(('u', 'survivor', 8, NOW), {'assignment_generation': 7})]

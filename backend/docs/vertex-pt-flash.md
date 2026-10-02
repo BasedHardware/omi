@@ -1,4 +1,4 @@
-# Vertex Provisioned Throughput for Gemini 2.5 Flash
+# Vertex Provisioned Throughput: 2.5 Flash to 3.8 Flash
 
 We bought **5 GSU Provisioned Throughput** for `gemini-2.5-flash` in
 `us-central1` so company-paid Flash text is reserved and cheaper than Gemini
@@ -57,7 +57,7 @@ therefore keep `GOOGLE_CLOUD_PROJECT` and `GCP_LOCATION` set on the
 (`OMI_VERTEX_PT_MODEL`, `OMI_GEMINI_OVERFLOW_MODEL`,
 `OMI_GEMINI_OVERFLOW_ENABLED`, `OMI_VERTEX_GLOBAL_LOCATION`) apply to the
 **gateway** process once feature mode is on.
-## Model prices (Vertex list, captured 2026-08-18)
+## Model prices (Vertex list snapshots)
 
 | Model | Input $/1M | Output $/1M |
 | --- | ---: | ---: |
@@ -65,6 +65,10 @@ therefore keep `GOOGLE_CLOUD_PROJECT` and `GCP_LOCATION` set on the
 | `gemini-3.1-flash-lite` | 0.25 | 1.50 |
 | `gemini-2.5-flash` | 0.30 | 2.50 |
 | `gemini-2.5-pro` | 1.25 | 10.00 |
+| `gemini-3.8-flash` | 1.50 | 7.50 |
+
+Legacy prices were captured 2026-08-18; 3.8 prices are the authorized
+2026-10-02 benchmark snapshot. Reservation fees are separate.
 
 **`gemini-3.1-flash-lite` is not the same price class as
 `gemini-2.5-flash-lite`** — it is 2.5x input and 3.75x output. It is cheaper
@@ -139,9 +143,17 @@ boundary. Location is resolved **per model**, never once per process: a
 fallback chain crosses families, so the reservation and the model absorbing its
 overflow legitimately sit on different endpoints.
 
-**Unresolved:** whether a Provisioned Throughput order for a 3.x model is
-purchased as a multi-region order and how that would interact with the existing
-regional `gemini-2.5-flash` order. Nothing in the code assumes an answer.
+**Moved order location is not established.** On-demand 3.8 Flash was verified
+on `locations/us` in the authorized 2026-10-02 benchmark. Dedicated requests
+use `OMI_VERTEX_PT_TARGET_LOCATION`, defaulting to the existing US multi-region.
+Set it to the order's declared region, `us`, or `global` before migration.
+Only target-model dedicated attempts use that location; shared target attempts
+stay on the existing US endpoint. A regional dedicated publisher 404 retries
+US shared without marking the whole model unavailable. No request discovers
+`global` automatically. A global order requires explicit residency approval:
+its dedicated requests can be served worldwide. Order discovery/control-plane
+access was outside the authorized experiment; regional/global dedicated
+successes are hermetic tests, not evidence of a live order.
 
 ## Fallback chains and learned reachability
 
@@ -150,6 +162,7 @@ Every model the proxy can route to declares its fallback chain as data, in
 
 | Model | Falls back to |
 | --- | --- |
+| `gemini-3.8-flash` | `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite` |
 | `gemini-2.5-pro` | `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite` |
 | `gemini-2.5-flash` | `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite` |
 | `gemini-3.1-flash-lite` | `gemini-2.5-flash-lite` |
@@ -218,64 +231,85 @@ Run 2026-08-18 via `backend/scripts/probe_gemini_thinking_contract.py`:
 The 3.x rows were measured on the multi-region endpoint once the routing fix
 made those models reachable.
 
-**This table deleted a branch rather than justifying one.** `gemini-3.1-flash-lite`
-*honors* `thinkingBudget` — budget 0 really is 0 thoughts, budget 1024 spends
-278 — and 2.5 models *reject* `thinkingLevel` with HTTP 400
-(`thinking_level is not supported by this model`). So `thinkingBudget` is the
-one option both families accept and `thinkingLevel` is the one that works on
-neither universally. An earlier revision split on family from documentation
-rather than measurement and had the direction backwards. `ptr.thinking_config_for()`
-is now a single path, and a fallback that crosses families needs no body
-rewriting at all.
+The table is historical evidence for 2.5 and 3.1 Flash-Lite; those lanes retain
+`thinkingBudget`. New 3.8 Flash requests use `thinkingLevel: low`, verified on
+`us` in the 2026-10-02 benchmark. The BFF preserves that level through the
+gateway wire. `model_payload()` adapts each actual attempt: 3.8 always uses
+low; a fallback to 2.5 replaces the level with budget 1024 (minimal becomes 0).
+This avoids sending unsupported 3.x thinking levels to a 2.5 fallback.
 
-It also shows why the proxy injects a budget: `gemini-2.5-flash` with no
-thinking config spent 516 thinking tokens on a trivial prompt, all billed as
-output.
+## Migrating the reservation to `gemini-3.8-flash`
 
-## Migrating the reservation to `gemini-3.1-flash-lite`
+`PT_MODEL_TARGET` is 3.8 Flash. No code deployment is required when the order
+moves, provided its location is already declared as above.
 
-Requested 2026-08-18; PT orders provision in ~10 business days. **No deploy is
-needed when it lands.** The proxy detects it and promotes itself:
+Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
+(`dedicated` or `shared`); implicit spillover would hide double billing.
 
-1. Company-paid text asks the reservation for `dedicated` capacity via the
-   `X-Vertex-AI-LLM-Request-Type` header. Without that header Vertex silently
-   spills over-cap requests onto pay-as-you-go; with it, an over-cap request
-   returns 429 `Exceeded the Provisioned Throughput` instead.
-2. On that 429 the proxy overflows to `gemini-3.1-flash-lite`. If a capacity
-   probe is due (`_PT_PROBE_TTL_SECONDS`, 600s) the first overflow attempt asks
-   for `dedicated`. That single request **is** the auto-detection: if the new
-   order exists it succeeds, and if it does not it 429s and falls through to
-   the on-demand call the proxy would have made anyway. Detection therefore
-   costs nothing and only happens when the old reservation is already full.
-3. A successful probe latches `_pt_target_ready` and logs
-   `desktop_proxy pt_promotion`. From then on `gemini-2.5-flash` requests are
-   served by `gemini-3.1-flash-lite` on prepaid capacity.
+1. Before migration, old-client 2.5 Flash stays on regional **dedicated**
+   capacity. New 3.8 requests ask for dedicated target capacity at most once
+   per instance per 600 seconds. Every failed dedicated probe (any HTTP error, timeout, connection or
+   malformed response) retries the same target on US **shared** capacity,
+   without surfacing the probe error or marking shared model health unavailable.
+   Gateway probes have a whole-attempt deadline of at most one second and one
+   quarter of the remaining request budget; shared recovery uses the original
+   deadline. Streaming probe output is bounded and buffered until success, so
+   partial output and ambiguous promotion cannot escape. This budget applies
+   to gateway capacity discovery, not requests on an already confirmed order.
+2. Only a successful dedicated target response promotes: HTTP 2xx, with
+   `usageMetadata.trafficType` equal to `PROVISIONED_THROUGHPUT` when present.
+   Streaming observes the completed response's final traffic metadata. No 429
+   of any wording, other HTTP error, timeout or connection failure promotes;
+   errors never prove that an order exists. Before promotion, any failed
+   dedicated target probe retries the same model shared and retains the
+   600-second probe TTL. After promotion, any dedicated target 429 leaves the
+   target promoted and spills this request to **gemini-3.8-flash shared**, at the same model/list price as its origin,
+   rather than a cheaper rung: this lane's value is its extraction precision.
+   Existing models keep
+   their original overflow ladder, deadlines and HTTP status handling (<400
+   accepts the body). Only target discovery probes require a 2xx response. Both streaming and nonstreaming providers observe
+   the actual model and capacity. The latch is process-local, so rollout is
+   gradual as instances receive 3.8 traffic; there is no startup probe.
+3. After promotion, new 3.8 requests use dedicated target capacity at its
+   declared location. Old-client 2.5 requests keep **2.5 Flash**, regional,
+   but now **shared/on-demand**. Pro remains the existing 3.1 Flash-Lite remap;
+   client-pinned 2.5 Flash-Lite and BYOK remain unchanged. Remapping old Flash
+   to 3.8 shared would raise both input/output prices, so it is disallowed.
+4. Existing-model reserved overflow uses shared 3.1 Flash-Lite then 2.5 Flash-Lite, subject to
+   reachability, live-reservation exclusion, and the lane's starting price
+   ceiling. Old 2.5 overflow never probes the more expensive target. Price
+   ceilings also apply to operator overrides and cross-family fallbacks.
 
-The positive observation is latched rather than TTL'd on purpose: a PT purchase
-is long-lived, and expiring it would flap the serving model every time overflow
-stopped re-probing. A vanished order still degrades safely — requests 429 and
-overflow absorbs them.
+On 2026-10-02, a live dedicated `gemini-3.8-flash` request on `locations/us`,
+with no target order in existence, returned HTTP 429 / `RESOURCE_EXHAUSTED`:
 
-The latch is **per Cloud Run instance**, held in process memory. Promotion
-therefore rolls out gradually: each instance switches the first time it
-overflows and probes successfully, so expect a mixed fleet for a while rather
-than a single cutover instant. Grep the logs for
-`desktop_proxy pt_promotion` to see how far it has spread, and set
-`OMI_VERTEX_PT_MODEL` if you need every instance on one model immediately.
+> Too many requests. Exceeded the provisioned throughput. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.
 
-**Retire the old order when promotion happens.** The `gemini-2.5-flash` order
-bills a flat ~$290.32/day until ~2027-05-28 whether or not traffic uses it, so
-once traffic moves to `gemini-3.1-flash-lite` the old reservation is paid-for
-and idle. Promotion is a code-side cutover; converting or cancelling the 5 GSU
-`gemini-2.5-flash` order is a separate commercial action that has to be done in
-Cloud Console, and until it is, both are billed.
+The existing exhaustion matcher matches this absent-order response. It remains
+useful for legacy overflow routing, but must never authorize promotion. The live
+gateway smoke verified a bounded dedicated 429 followed by same-model US shared
+200 `ON_DEMAND`, no promotion, and a single shared attempt inside the probe TTL.
+
+Before migration 3.8 PayGo is incremental alongside the existing fixed fee.
+After migration old-client 2.5 PayGo becomes incremental at $0.30/$2.50 per
+million input/output tokens; 3.8's dedicated usage has prepaid marginal cost.
+This workload alone does not fill the order. Moving other lanes remains a
+separate evaluation and cost decision. Converting/cancelling an order is an
+operator commercial action, not a routing effect.
+
+`test_screen_task_vertex_transition.py` pins absent-order/shared behavior,
+dedicated promotion at declared US/regional/global locations, old-client
+pricing, thinking adaptation, and bounded metadata. Existing proxy/provider
+contracts pin direct kill-switch and streaming recovery. No real order was
+queried or changed by this PR.
 
 ## Never move dedicated traffic off a reservation early
 
 Moving `gemini-2.5-flash` onto an on-demand model *before* the replacement
 order is live pays the flat reservation fee for idle capacity **and** full
 on-demand for every token — strictly worse than either alone. This is why the
-flash remap is gated on observed capacity rather than shipped as a constant.
+capacity transition is gated on observed target capacity. Old Flash is never
+remapped to the more expensive target.
 `test_flash_stays_on_the_current_reservation_until_target_capacity_exists`
 holds that gate.
 
@@ -294,8 +328,7 @@ The gateway stamps that origin onto the route (`pt_overflow_origin`); the
 desktop kill-switch reads the same table by the requested model. Overflow and
 fallback candidates are then kept only when both `PRICE_PER_MTOK_IN` and
 `PRICE_PER_MTOK_OUT` are at or below the origin
-(FC-degraded-fallback-exceeds-origin-price). No origin declared means the
-ladder is unchanged — that is every lane today. Do not change a feature's
+(FC-degraded-fallback-exceeds-origin-price). No lower origin declared means the serving anchor is the ceiling. Do not change a feature's
 route without declaring the origin in the same change.
 
 Before moving any lane, re-read the hourly headroom table (C020, weekdays
@@ -310,8 +343,8 @@ and is not this policy.
 
 `OVERFLOW_PREFERENCE` is a ladder, not a pin, and
 `resolve_overflow_model()` never returns the model that currently holds prepaid
-capacity. Once `gemini-3.1-flash-lite` *is* the reservation, overflow steps
-past it to `gemini-2.5-flash-lite` automatically. Pinning overflow to
+capacity. If an operator declares a Lite model as the reservation, overflow steps past
+it automatically. The default 3.8 target is never an overflow candidate. Pinning overflow to
 `gemini-3.1-flash-lite` would, after promotion, dump degraded traffic onto the
 budget the quota exists to protect — that is
 `FC-degraded-fallback-consumes-protected-budget` (PR #10686), and the guard is
@@ -319,14 +352,15 @@ budget the quota exists to protect — that is
 
 ## Operator overrides
 
-All four are read per request, so a bad promotion can be corrected without
+These knobs are read per request, so a bad promotion can be corrected without
 shipping code.
 
 | Env | Effect |
 | --- | --- |
-| `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
+| `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
-| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables overflow entirely; a full reservation then returns 429 to the client. |
+| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Gateway target discovery/full-capacity attempts retain same-model shared recovery to preserve extraction precision. |
+| `OMI_VERTEX_PT_TARGET_LOCATION` | Dedicated target order location. Default US multi-region; regional/global require an explicit declared order location. Global requires residency sign-off. Shared target traffic retains its residency default. |
 | `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 
 ## Keeping the reservation for work that must be Flash
@@ -355,8 +389,9 @@ work off `gemini-2.5-flash`:
 The desktop clients pin the low-value lanes (memory extraction, LiveNotes,
 goals, task dedup/prioritization, home suggestions, Windows insight) to
 `gemini-2.5-flash-lite` directly — see `ModelQoS.Gemini.lightweight`
-(macOS) and the Windows assistant model pins. Task extraction stays on
-`gemini-2.5-flash`: Flash-Lite measurably fails its prompt contract there
+(macOS) and the Windows assistant model pins. Flag-off task extraction stays on
+`gemini-2.5-flash`; `screen_task_jev_gate` enables the one-call 3.8 path
+([pipeline contract](../../desktop/macos/docs/screen-task-pipeline.md)). Flash-Lite measurably fails its prompt contract there
 (omi-knowledge-base, vertex-pt-flash-spend, 2026-08-17 overflow bakeoff).
 
 ## Durable runtime env

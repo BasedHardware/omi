@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-contentless-recovery-surfaced-visible",
+  "violated_contract": "Server recovery must never turn a hidden row with nothing a person could want back (empty transcript, filler, mic check) into a visible completed conversation; it must reach the same relevance verdict capture-end processing would, recorded as an explicit, restorable server-recovery discard.",
+  "canonical_prevention": "At the recovery rule-skip point, emit a server-recovery RelevanceDecision for a clear ordinary rule discard and return discarded=True so the explicit-discard terminal path persists it; only ambiguous or kept content may reach the visible minimum terminal.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_recovery_rule_skip.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/recovery.py",
+    "backend/services/conversation_selfheal.py"
+  ],
+  "status": "open"
+}

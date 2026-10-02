@@ -147,6 +147,8 @@ def decide_window(
     force: bool,
     pause: bool = False,
     empty_cap_slide: float = 0.0,
+    min_cap_progress: float = 0.0,
+    force_replay_cut: bool = False,
 ) -> WindowDecision:
     at_cap = duration >= max_context
     if force:
@@ -154,6 +156,10 @@ def decide_window(
             return WindowDecision((), duration, forced_cut=False)
         return WindowDecision(tuple(segments), duration, forced_cut=False)
     emit = _held_emit(segments, duration, pause=pause)
+    if force_replay_cut and segments and len(emit) < len(segments):
+        # The capture ring can fill before provider PCM does when VAD gates
+        # gaps. Emit the held tail while enough replay headroom remains.
+        return WindowDecision(tuple(segments), segments[-1].end, forced_cut=True)
     if at_cap:
         if not segments:
             slide = min(max(0.0, empty_cap_slide), duration)
@@ -162,6 +168,12 @@ def decide_window(
             only = segments[0]
             return WindowDecision((only,), only.end, forced_cut=True)
         new_anchor = emit[-1].end if emit else None
+        if new_anchor is None or new_anchor < min_cap_progress:
+            # A short leading segment plus one long unfinished tail can move
+            # the anchor slower than new audio arrives, filling the PCM buffer
+            # despite successful POSTs. At the hard context limit, cut that
+            # tail just as we already do for a single unfinished segment.
+            return WindowDecision(tuple(segments), segments[-1].end, forced_cut=True)
         return WindowDecision(tuple(emit), new_anchor, forced_cut=False)
     if not segments:
         return WindowDecision((), None, forced_cut=False)

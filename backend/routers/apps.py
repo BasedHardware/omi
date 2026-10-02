@@ -886,7 +886,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
@@ -1044,11 +1044,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
-        # Return existing persona
-        return persona
+        safe_persona = _safe_app_from_dict(persona)
+        if safe_persona is not None:
+            return safe_persona
+        logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
     # Create a new persona for the user
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
@@ -1111,10 +1113,12 @@ def update_app(
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
+    # Ownership was checked on the path id; a body `id` must not retarget the write to another app.
+    data['id'] = app_id
     data['updated_at'] = datetime.now(timezone.utc)
 
-    # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
 
@@ -1146,11 +1150,11 @@ def update_app(
 
     # payment link
     upsert_app_payment_link(
-        data.get('id'),
+        app_id,
         data.get('is_paid', False),
         data.get('price'),
         data.get('payment_plan'),
-        data.get('uid'),
+        uid,
         previous_price=app.get("price", 0),
     )
 

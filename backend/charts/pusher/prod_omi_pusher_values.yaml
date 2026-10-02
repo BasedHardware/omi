@@ -175,13 +175,19 @@ env:
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
+  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
+    value: "true"
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-prod-screen-frames"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
@@ -195,6 +201,20 @@ env:
     value: "0"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
+    value: "2"
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
+    value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "1"
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
+    value: "60000"
+  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
+    value: "60000"
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST

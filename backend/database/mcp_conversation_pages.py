@@ -133,7 +133,7 @@ def get_mcp_conversation_cards_page(
             after_ts, after_id = last_position
             if after_ts is None:
                 raise ValueError('conversation keyset timestamp is invalid')
-            if not after_id.strip() or '/' in after_id:
+            if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
                 raise ValueError('conversation keyset doc id is invalid')
             query = query.start_after({'created_at': after_ts, '__name__': collection.document(after_id)})
         raw_docs = list(query.stream())

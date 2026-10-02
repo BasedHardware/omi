@@ -81,7 +81,8 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
     prev_messages_safe = Message.deserialize_many_safe(prev_messages, on_error=_log_skipped_message)
 
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    # A malformed/legacy stored app doc must read as app-unavailable, not 500 initial-message.
+    app = App.deserialize_safe(app) if app else None
 
     text: str
     if app and app.is_a_persona():

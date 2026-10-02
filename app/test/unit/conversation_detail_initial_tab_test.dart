@@ -57,15 +57,15 @@ void main() {
   });
 
   test('opens a transcript-only fragment on Transcript', () {
-    expect(conversationDetailInitialTabIndex(_conversation()), 0);
+    expect(conversationDetailInitialTab(_conversation()), ConversationTab.transcript);
   });
 
   test('keeps normal summarized conversations on Summary', () {
     expect(
-      conversationDetailInitialTabIndex(
+      conversationDetailInitialTab(
         _conversation(overview: 'A useful summary.'),
       ),
-      1,
+      ConversationTab.summary,
     );
   });
 
@@ -74,30 +74,30 @@ void main() {
     () {
       final conversation = _conversation();
       expect(
-        conversationDetailInitialTabIndex(conversation, requestedTabIndex: 1),
-        1,
+        conversationDetailInitialTab(conversation, requested: ConversationTab.summary),
+        ConversationTab.summary,
       );
       expect(
-        conversationDetailInitialTabIndex(conversation, requestedTabIndex: 2),
-        2,
+        conversationDetailInitialTab(conversation, requested: ConversationTab.transcript),
+        ConversationTab.transcript,
       );
     },
   );
 
   test('re-evaluates after detail hydration adds a summary', () {
     final conversation = _conversation();
-    expect(conversationDetailInitialTabIndex(conversation), 0);
+    expect(conversationDetailInitialTab(conversation), ConversationTab.transcript);
 
     conversation.structured.overview = 'Hydrated summary.';
-    expect(conversationDetailInitialTabIndex(conversation), 1);
+    expect(conversationDetailInitialTab(conversation), ConversationTab.summary);
   });
 
   test('does not treat blank transcript segments as meaningful content', () {
     expect(
-      conversationDetailInitialTabIndex(
+      conversationDetailInitialTab(
         _conversation(segments: [_segment('  ')]),
       ),
-      1,
+      ConversationTab.summary,
     );
   });
 
@@ -105,9 +105,57 @@ void main() {
     'keeps an in-progress capture on Summary until processing completes',
     () {
       final conversation = _conversation()..status = ConversationStatus.processing;
-      expect(conversationDetailInitialTabIndex(conversation), 1);
+      expect(conversationDetailInitialTab(conversation), ConversationTab.summary);
     },
   );
+
+  testWidgets('tabs read Summary then Transcript, with no Tasks tab even when it has tasks', (tester) async {
+    final initial = _conversation(overview: 'A useful summary.');
+    initial.structured.actionItems.add(ActionItem('Send the widget build'));
+    final details = Completer<ServerConversation?>()..complete(initial);
+    final conversations = _conversationProvider(initial, details);
+    final detail = ConversationDetailProvider();
+    final apps = AppProvider();
+    detail.setProviders(apps, conversations);
+    addTearDown(() {
+      detail.dispose();
+      conversations.dispose();
+      apps.dispose();
+    });
+
+    await tester.pumpWidget(_detailApp(initial, detail, conversations, apps));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final summary = find.byKey(const Key('conversation_tab_summary'));
+    final transcript = find.byKey(const Key('conversation_tab_transcript'));
+    expect(find.descendant(of: summary, matching: find.text('Summary')), findsOneWidget);
+    expect(find.descendant(of: transcript, matching: find.text('Transcript')), findsOneWidget);
+    expect(tester.getCenter(summary).dx, lessThan(tester.getCenter(transcript).dx));
+    expect(find.byType(Tab), findsNWidgets(2));
+    expect(find.text('Tasks'), findsNothing);
+    expect(
+      tester.state<ConversationDetailPageState>(find.byType(ConversationDetailPage)).selectedTab,
+      ConversationTab.summary,
+    );
+
+    // Visibility is no chip under the title: a quiet label at the end of the tab row, and the ⋯ menu.
+    final visibility = find.byKey(const Key('conversation_visibility'));
+    expect(find.text('Private'), findsOneWidget);
+    expect(find.descendant(of: visibility, matching: find.text('Private')), findsOneWidget);
+    expect(tester.getCenter(visibility).dy, moreOrLessEquals(tester.getCenter(transcript).dy, epsilon: 1));
+    expect(tester.getCenter(visibility).dx, greaterThan(tester.getCenter(transcript).dx));
+
+    // Ask Omi left the top bar for the bottom bar; the summary template moved into the ⋯ menu.
+    expect(find.byKey(const Key('conversation_ask_omi')), findsNothing);
+    expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('conversation_more')));
+    await tester.pumpAndSettle();
+    expect(find.text('Summary Template'), findsOneWidget);
+    expect(find.text('Visibility'), findsOneWidget);
+    expect(tester.getCenter(find.text('Summary Template')).dy, lessThan(tester.getCenter(find.text('Visibility')).dy));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('waits for detail hydration before auto-selecting Transcript', (tester) async {
     final initial = _conversation();
@@ -156,10 +204,9 @@ void main() {
     await tester.pumpWidget(_detailApp(initial, detail, conversations, apps));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester
-        .tap(find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Transcript'));
+    await tester.tap(find.byKey(const Key('conversation_tab_transcript')));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Summary'));
+    await tester.tap(find.byKey(const Key('conversation_tab_summary')));
     await tester.pump(const Duration(milliseconds: 300));
 
     details.complete(initial);
@@ -193,7 +240,7 @@ Widget _detailApp(
   ConversationDetailProvider detail,
   ConversationProvider conversations,
   AppProvider apps, {
-  int? initialTabIndex,
+  ConversationTab? initialTab,
 }) {
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -215,7 +262,7 @@ Widget _detailApp(
           ),
         ),
       ],
-      child: ConversationDetailPage(conversation: initial, initialTabIndex: initialTabIndex),
+      child: ConversationDetailPage(conversation: initial, initialTab: initialTab),
     ),
   );
 }

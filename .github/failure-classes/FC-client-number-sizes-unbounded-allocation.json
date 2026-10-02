@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-client-number-sizes-unbounded-allocation",
+  "violated_contract": "A client-supplied number that sizes a server-side allocation must be bounded at admission, before any buffer is built. /v4/listen range-checked sample_rate only for opus, so a pcm8/pcm16/aac client could send any integer; with speaker identification enabled, AudioRingBuffer(60, sample_rate) allocated 60 * rate * 2 zero-filled bytes at bootstrap, and sample_rate=30000000 (~3.6 GB) exceeded the listen pod memory limit and OOM-killed every live session on the pod.",
+  "canonical_prevention": "Validate the parameter against an explicit allow-list or upper bound at the connection's admission step for every variant (not only the variant whose decoder happens to reject it), and have the allocating primitive cap its own size so a caller that skips validation cannot allocate unboundedly. Cover both with regression tests that drive huge, zero and negative values.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_validate_audio_format.py",
+    "backend/tests/unit/test_audio_ring_buffer_nonpositive_rate.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/routers/listen/", "backend/utils/audio.py", "backend/utils/transcribe_decisions.py"],
+  "status": "open"
+}

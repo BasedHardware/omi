@@ -5,6 +5,7 @@
 // isCloudBacked in filtering.ts).
 
 import { omiApi } from '../apiClient'
+import { cloudConversationDeletePath } from './cloudConversationDelete'
 import { trackEvent } from '../analytics'
 import type { MergeConversationsResponse } from '../omiApi.generated'
 import { conversationShareUrl, newShareId } from '../shareLinks'
@@ -26,6 +27,11 @@ export async function moveConversationToFolder(id: string, folderId: string | nu
  *  window.omi.updateLocalConversationTitle instead. */
 export async function setConversationTitle(id: string, title: string): Promise<void> {
   await omiApi.patch(`/v1/conversations/${id}/title`, null, { params: { title } })
+}
+
+/** Delete a cloud conversation and the memories taken from it. */
+export async function deleteCloudConversation(id: string): Promise<void> {
+  await omiApi.delete(cloudConversationDeletePath(id))
 }
 
 /** Mac's "Copy link" (APIClient.getConversationShareLink): flip the conversation

@@ -6,7 +6,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -40,6 +39,7 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
+import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -3420,20 +3420,15 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
-    if (event.speakerId < 0 || event.segmentId.isEmpty || event.personName.trim().isEmpty) return;
-    // Tagging
-    if (taggingSegmentIds.contains(event.segmentId)) {
-      return;
+    switch (reconcileSpeakerSuggestion(event, segments, taggingSegmentIds, suggestionsBySegmentId)) {
+      case SpeakerSuggestionDisposition.ignored:
+        return;
+      case SpeakerSuggestionDisposition.retained:
+        notifyListeners();
+        return;
+      case SpeakerSuggestionDisposition.assignment:
+        break;
     }
-    // If segment already exists, check if it's assigned. If so, ignore suggestion.
-    var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
-    if (segment == null || segment.speakerId != event.speakerId || segment.personId != null || segment.isUser) return;
-    if (event.personId.isEmpty) {
-      suggestionsBySegmentId[event.segmentId] = event;
-      notifyListeners();
-      return;
-    }
-    suggestionsBySegmentId.remove(event.segmentId);
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';

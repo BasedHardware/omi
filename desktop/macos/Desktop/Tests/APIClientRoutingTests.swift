@@ -656,6 +656,46 @@ final class APIClientRoutingTests: XCTestCase {
     }
   }
 
+  func testAssignConversationSpeakerRoutesToPython() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data(
+        """
+        {
+          "id": "c1",
+          "created_at": "2026-10-01T12:00:00Z",
+          "structured": {},
+          "transcript_segments": [
+            {
+              "id": "seg-real",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 428,
+              "is_user": false,
+              "person_id": "person 9/x",
+              "start": 0.0,
+              "end": 1.0,
+              "text": "hi"
+            }
+          ]
+        }
+        """.utf8))
+    let client = await makeTestClient()
+    let updated = try await client.assignConversationSpeaker(
+      conversationId: "c1", speakerId: 2, personId: "person 9/x")
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c1/assign-speaker/2", method: "PATCH",
+      label: "assignConversationSpeaker")
+    let queryItems = URLComponents(url: requests[0].url, resolvingAgainstBaseURL: false)?.queryItems
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "assign_type" })?.value, "person_id")
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "value" })?.value, "person 9/x")
+    XCTAssertEqual(
+      updated.transcriptSegments.first?.speakerId, 428,
+      "the structured speaker_id is authoritative — a misleading SPEAKER_00 label must not select speaker 0")
+    XCTAssertEqual(updated.transcriptSegments.first?.id, "seg-real")
+  }
+
   // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
 
   private func makeTestClient() async -> APIClient {

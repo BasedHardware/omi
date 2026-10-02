@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from models.shared import StatusResponse
 
 import database.fair_use as fair_use_db
-from database._client import db
+from database.serving_query_reads import find_fair_use_case_snapshots
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
@@ -195,8 +195,7 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
 def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
     # Search across all users' events for this case_ref
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
+    for doc in find_fair_use_case_snapshots(case_ref):
         data = doc.to_dict()
         path_parts = doc.reference.path.split('/')
         if len(path_parts) >= 2:
@@ -226,8 +225,7 @@ def get_public_case_status(case_ref: str):
     Returns only non-sensitive info: stage, message, timestamps, support email.
     No usage data or user identity exposed.
     """
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
+    for doc in find_fair_use_case_snapshots(case_ref):
         data = doc.to_dict()
         # Extract uid to get current enforcement stage
         path_parts = doc.reference.path.split('/')
