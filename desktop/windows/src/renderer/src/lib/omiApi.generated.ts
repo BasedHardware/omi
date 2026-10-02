@@ -3999,6 +3999,11 @@ export interface ScreenFrameSubjectIn {
   kind: "conversation";
 }
 
+export interface ScreenTaskAdmissionResponse {
+  enabled: boolean;
+  lease_seconds?: number;
+}
+
 export interface ScreenTaskGateRequest {
   app_name?: string;
   ocr_text: string;
@@ -5887,6 +5892,7 @@ export interface OmiApiSchemas {
   "ScreenFrameSettingsUpdateRequest": ScreenFrameSettingsUpdateRequest;
   "ScreenFrameSharingUpdateRequest": ScreenFrameSharingUpdateRequest;
   "ScreenFrameSubjectIn": ScreenFrameSubjectIn;
+  "ScreenTaskAdmissionResponse": ScreenTaskAdmissionResponse;
   "ScreenTaskGateRequest": ScreenTaskGateRequest;
   "ScreenTaskGateResponse": ScreenTaskGateResponse;
   "SearchConversationsResponse": SearchConversationsResponse;
@@ -8998,6 +9004,16 @@ export interface OmiApiPaths {
       operationId: "update_screen_frame_settings_v1_screen_frame_egress_settings_patch";
       responses: {
         "200": ScreenFrameSettings;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/screen-task/admission": {
+    get: {
+      operationId: "screen_task_admission_v1_screen_task_admission_get";
+      responses: {
+        "200": ScreenTaskAdmissionResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16460,6 +16476,25 @@ export async function update_screen_frame_settings_v1_screen_frame_egress_settin
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function screen_task_admission_v1_screen_task_admission_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ScreenTaskAdmissionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-task/admission`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function screen_task_gate_v1_screen_task_gate_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenTaskGateRequest, init?: OmiApiClientInit): Promise<ScreenTaskGateResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/screen-task/gate`;
@@ -20126,4 +20161,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 469 client methods generated.
+// Total: 470 client methods generated.

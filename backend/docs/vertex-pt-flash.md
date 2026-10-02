@@ -422,3 +422,15 @@ Single `embedContent` uses Vertex `:predict` when a project is set.
 - Proxy logs: `provider_route=vertex_ai`, not `ai_studio`, for server-paid Flash
 
 Incident: 2026-08-04 cutover. GitHub #6935 / SCA-323.
+
+
+### Accepted BFF thinking-config corrections
+
+Two additional differences from the pre-screen-task BFF translator are accepted:
+camelCase `thinkingBudget: 0` now reaches the provider as an explicit zero (the old
+truthiness expression dropped it), and `thinkingLevel: high` is forwarded on
+3.1 Flash-Lite (the old translator omitted it). These honor the caller's explicit
+request and can change thinking usage and latency even with the screen-task flag
+off. `test_bff_to_vertex_wire_accepts_explicit_zero_budget_and_flash_lite_level`
+pins the BFF-to-Vertex wire, including these values. This is offline wire evidence,
+not provider compatibility, cost or latency evidence.
