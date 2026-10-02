@@ -10,7 +10,7 @@ export function createDeepgramTranscriber(options: {
   sampleRate?: number;
   onTranscript: TranscriptHandler;
   createWebSocket: (url: string, headers: Record<string, string>) => WebSocket;
-  /** How long stop waits for final transcripts after CloseStream. Default 5s. */
+  /** Optional final-transcript drain after CloseStream. Default 0 (immediate close). */
   drainTimeoutMs?: number;
 }): StreamingTranscriber {
   const sampleRate = options.sampleRate ?? 16000;
@@ -67,7 +67,7 @@ export function createDeepgramTranscriber(options: {
       } catch {
         // CloseStream is best-effort; still tear down the socket.
       }
-      const drainTimeoutMs = options.drainTimeoutMs ?? 5000;
+      const drainTimeoutMs = options.drainTimeoutMs ?? 0;
       if (!sentClose || finished || drainTimeoutMs <= 0) {
         finish();
         return;

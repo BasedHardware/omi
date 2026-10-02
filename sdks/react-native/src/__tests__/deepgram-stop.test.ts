@@ -47,10 +47,27 @@ describe('createDeepgramTranscriber stop', () => {
     jest.useRealTimers();
   });
 
-  test('sends CloseStream and closes after the default drain deadline', () => {
+  test('preserves immediate teardown when the factory drain option is omitted', () => {
+    const socket = new FakeSocket();
+    const onTranscript = jest.fn();
+    const transcriber = createTranscriber('deepgram', {
+      apiKey: 'synthetic',
+      onTranscript,
+      createWebSocket: () => socket as unknown as WebSocket,
+    });
+    transcriber.stop();
+    socket.emitTranscript('late words');
+    expect(socket.events).toEqual(['send', 'close']);
+    expect(socket.closeCount).toBe(1);
+    expect(onTranscript).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('sends CloseStream and closes after an opted-in drain deadline', () => {
     const socket = new FakeSocket();
     const transcriber = createDeepgramTranscriber({
       apiKey: 'synthetic',
+      drainTimeoutMs: 5000,
       onTranscript: () => undefined,
       createWebSocket: () => socket as unknown as WebSocket,
     });
@@ -69,6 +86,7 @@ describe('createDeepgramTranscriber stop', () => {
     const received: string[] = [];
     const transcriber = createDeepgramTranscriber({
       apiKey: 'synthetic',
+      drainTimeoutMs: 5000,
       onTranscript: (text) => received.push(text),
       createWebSocket: () => socket as unknown as WebSocket,
     });
@@ -107,6 +125,7 @@ describe('createDeepgramTranscriber stop', () => {
     socket.onclose = onClose;
     const transcriber = createDeepgramTranscriber({
       apiKey: 'synthetic',
+      drainTimeoutMs: 5000,
       onTranscript: () => undefined,
       createWebSocket: () => socket as unknown as WebSocket,
     });
@@ -116,7 +135,7 @@ describe('createDeepgramTranscriber stop', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  test('allows opting out of receiver draining', () => {
+  test('allows explicitly selecting immediate teardown', () => {
     const socket = new FakeSocket();
     const transcriber = createDeepgramTranscriber({
       apiKey: 'synthetic',
