@@ -301,7 +301,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
         ):
@@ -337,7 +337,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
             patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
@@ -379,7 +379,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
         ):
@@ -405,7 +405,7 @@ class TestDevWebhookAutoDisable:
         mock_sem.__aexit__ = AsyncMock()
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
         ):
@@ -473,7 +473,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
@@ -505,7 +505,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
         ):
@@ -524,7 +524,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -561,7 +561,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
@@ -2129,7 +2129,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=AsyncMock()),
         ):
@@ -2166,7 +2166,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -2203,7 +2203,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),

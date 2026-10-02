@@ -29,10 +29,10 @@ from utils.conversations.render import conversation_to_dict, redact_conversation
 from utils.executors import db_executor, run_blocking
 from utils.http_client import (
     UnsafeWebhookURLError,
-    get_webhook_client,
+    get_pinned_delivery_client,
     get_webhook_circuit_breaker,
     get_webhook_semaphore,
-    safe_request_target,
+    safe_request_targets,
 )
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.journeys import ClientJourneyAttempt
@@ -174,7 +174,7 @@ async def _post_dev_webhook(
     headers.setdefault('Idempotency-Key', idempotency_key or str(uuid.uuid4()))
     request_kwargs['headers'] = headers
 
-    client = get_webhook_client()
+    client = get_pinned_delivery_client()
     attempts = len(retry_delays) + 1
     last_response = None
     last_exception = None
@@ -186,37 +186,57 @@ async def _post_dev_webhook(
         try:
             async with get_webhook_semaphore():
                 try:
-                    pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, webhook_url)
+                    pinned_targets = await run_blocking(db_executor, safe_request_targets, webhook_url)
                 except (UnsafeWebhookURLError, ValueError):
                     # Treat invalid stored targets like a deterministic rejection:
                     # no network or retries, with the existing DLQ/health path.
                     last_response = httpx.Response(400)
                     last_exception = None
                     break
-                attempt_kwargs = dict(request_kwargs)
-                attempt_kwargs['headers'] = {key: value for key, value in headers.items() if key.lower() != 'host'}
-                attempt_kwargs['headers'].update(pin_kwargs['headers'])
-                attempt_kwargs['extensions'] = {
-                    **(request_kwargs.get('extensions') or {}),
-                    **pin_kwargs['extensions'],
-                }
-                attempt_kwargs['follow_redirects'] = False
-                response = await client.post(pinned_url, **attempt_kwargs)
-            last_response = response
-            last_exception = None
-            if 200 <= response.status_code < 300:
-                logger.info(
-                    f'{webhook_name}: delivery succeeded status={response.status_code} '
-                    f'attempt={attempt_number}/{attempts} url={log_url}'
-                )
-                return response
-            failure_reason = f'HTTP {response.status_code}'
-            if _is_deterministic_rejection(response.status_code):
-                # Deterministic rejection: a repeat post cannot converge. Fall
-                # through to the final handling below (ERROR log + DLQ) with
-                # this response as the last one — DLQ, circuit breaker, and
-                # auto-disable all fire off the final response unchanged.
-                break
+                response = None
+                connect_error = None
+                for pinned_url, pin_kwargs in pinned_targets:
+                    attempt_kwargs = dict(request_kwargs)
+                    attempt_kwargs['headers'] = {key: value for key, value in headers.items() if key.lower() != 'host'}
+                    attempt_kwargs['headers'].update(pin_kwargs['headers'])
+                    attempt_kwargs['extensions'] = {
+                        **(request_kwargs.get('extensions') or {}),
+                        **pin_kwargs['extensions'],
+                    }
+                    attempt_kwargs['follow_redirects'] = False
+                    try:
+                        response = await client.post(pinned_url, **attempt_kwargs)
+                    except Exception as exc:
+                        # Try the next safe resolved address before giving up
+                        # on this attempt: dual-stack or multi-A records would
+                        # otherwise see avoidable delivery outages.
+                        logger.info(
+                            f'{webhook_name}: pinned target unreachable reason={type(exc).__name__} '
+                            f'attempt={attempt_number}/{attempts}; trying next resolved address'
+                        )
+                        connect_error = exc
+                        response = None
+                        continue
+                    if 200 <= response.status_code < 300 or _is_deterministic_rejection(response.status_code):
+                        break
+                if response is None:
+                    # Every safe address failed to connect.
+                    raise connect_error or httpx.ConnectError('all pinned addresses failed')
+                last_response = response
+                last_exception = None
+                if 200 <= response.status_code < 300:
+                    logger.info(
+                        f'{webhook_name}: delivery succeeded status={response.status_code} '
+                        f'attempt={attempt_number}/{attempts} url={log_url}'
+                    )
+                    return response
+                failure_reason = f'HTTP {response.status_code}'
+                if _is_deterministic_rejection(response.status_code):
+                    # Deterministic rejection: a repeat post cannot converge. Fall
+                    # through to the final handling below (ERROR log + DLQ) with
+                    # this response as the last one — DLQ, circuit breaker, and
+                    # auto-disable all fire off the final response unchanged.
+                    break
         except Exception as e:
             last_response = None
             last_exception = e

@@ -25,7 +25,7 @@ def delivery(monkeypatch):
     monkeypatch.setattr(socket, 'getaddrinfo', dns)
     client = MagicMock()
     client.post = AsyncMock(return_value=httpx.Response(200))
-    monkeypatch.setattr(webhooks, 'get_webhook_client', lambda: client)
+    monkeypatch.setattr(webhooks, 'get_pinned_delivery_client', lambda: client)
     monkeypatch.setattr(webhooks.asyncio, 'sleep', AsyncMock())
     monkeypatch.setattr(webhooks, 'enqueue_dev_webhook_dlq', MagicMock())
     monkeypatch.setattr(webhooks, 'user_webhook_status_db', MagicMock(return_value=True))
@@ -164,7 +164,7 @@ async def test_redirect_is_not_followed_even_if_client_or_caller_enables_it(deli
         return httpx.Response(302, headers={'Location': 'http://127.0.0.1/private'})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle), follow_redirects=True) as client:
-        monkeypatch.setattr(webhooks, 'get_webhook_client', lambda: client)
+        monkeypatch.setattr(webhooks, 'get_pinned_delivery_client', lambda: client)
         response = await webhooks._post_dev_webhook('test', URL, retry_delays=(), follow_redirects=True)
     assert response.status_code == 302
     assert len(seen) == 1
@@ -294,9 +294,9 @@ async def pinned_client(delivery, monkeypatch):
     monkeypatch.setenv('HTTPS_PROXY', 'http://proxy.example:8080')
     monkeypatch.setattr(http_client, '_get_client', lambda name, factory: factory())
     network = _Network()
-    async with http_client.get_webhook_client() as client:
+    async with http_client.get_pinned_delivery_client() as client:
         client._transport._pool._network_backend = network
-        monkeypatch.setattr(webhooks, 'get_webhook_client', lambda: client)
+        monkeypatch.setattr(webhooks, 'get_pinned_delivery_client', lambda: client)
         yield client, network
 
 
@@ -321,9 +321,55 @@ async def test_pinning_preserves_legacy_url_basic_auth(delivery, monkeypatch):
         return httpx.Response(200)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        monkeypatch.setattr(webhooks, 'get_webhook_client', lambda: client)
+        monkeypatch.setattr(webhooks, 'get_pinned_delivery_client', lambda: client)
         response = await webhooks._post_dev_webhook('test', 'https://user:pass@receiver.example/hook', retry_delays=())
     assert response.status_code == 200
     assert seen[0].url.host == PUBLIC_IP
     assert seen[0].headers['Authorization'] == 'Basic dXNlcjpwYXNz'
     assert seen[0].headers['Host'] == 'receiver.example'
+
+
+@pytest.mark.asyncio
+async def test_unreachable_first_address_falls_back_to_next_safe_answer(delivery):
+    client, dns, _ = delivery
+    dns.return_value = _addresses(PUBLIC_IP, '1.1.1.1')
+    client.post.side_effect = [httpx.ConnectError('first address down'), httpx.Response(200)]
+    response = await webhooks._post_dev_webhook('test', URL, retry_delays=(1, 5))
+    assert response.status_code == 200
+    calls = client.post.await_args_list
+    assert [call.args[0] for call in calls] == [
+        f'https://{PUBLIC_IP}/hook?token=secret-query',
+        'https://1.1.1.1/hook?token=secret-query',
+    ]
+    assert all(call.kwargs['headers']['Host'] == 'receiver.example' for call in calls)
+    webhooks.asyncio.sleep.assert_not_awaited()
+    webhooks.enqueue_dev_webhook_dlq.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_all_safe_addresses_unreachable_fails_the_attempt(delivery):
+    client, dns, _ = delivery
+    dns.return_value = _addresses(PUBLIC_IP, '1.1.1.1')
+    client.post.side_effect = httpx.ConnectError('all addresses down')
+    with pytest.raises(httpx.ConnectError):
+        await webhooks._post_dev_webhook('test', URL, retry_delays=())
+    assert client.post.await_count == 2
+
+
+def test_safe_request_targets_preserves_all_answers_in_order(monkeypatch):
+    monkeypatch.setattr(socket, 'getaddrinfo', MagicMock(return_value=_addresses(PUBLIC_IP, '1.1.1.1')))
+    targets = http_client.safe_request_targets('https://receiver.example:8443/hook')
+    assert [url for url, _extra in targets] == [
+        f'https://{PUBLIC_IP}:8443/hook',
+        'https://1.1.1.1:8443/hook',
+    ]
+    assert all(extra['headers']['Host'] == 'receiver.example:8443' for _url, extra in targets)
+
+
+def test_safe_request_targets_deduplicates_repeated_answers(monkeypatch):
+    monkeypatch.setattr(socket, 'getaddrinfo', MagicMock(return_value=_addresses(PUBLIC_IP, PUBLIC_IP, '1.1.1.1')))
+    targets = http_client.safe_request_targets(URL)
+    assert [url for url, _extra in targets] == [
+        f'https://{PUBLIC_IP}/hook?token=secret-query',
+        'https://1.1.1.1/hook?token=secret-query',
+    ]
