@@ -14,6 +14,14 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
 from slack_client import SlackClient
+try:
+    from slack_client import resolve_channel_id
+except ImportError:
+    def resolve_channel_id(channel, channels=None):
+        target = getattr(sys.modules.get("slack_client"), "resolve_channel_id", None)
+        if callable(target):
+            return target(channel, channels)
+        return None, None
 from message_detector import MessageDetector
 
 load_dotenv()
@@ -1233,7 +1241,7 @@ async def chat_tool_send_message(request: Request):
         data = await request.json()
         
         # Validate required parameters
-        if not data:
+        if not data or not isinstance(data, dict):
             return JSONResponse(
                 content={'error': 'Missing request body'},
                 status_code=400
@@ -1243,17 +1251,17 @@ async def chat_tool_send_message(request: Request):
         channel = data.get('channel')
         message = data.get('message')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not channel:
+        if not channel or not isinstance(channel, str) or not channel.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: channel'},
                 status_code=400
             )
-        if not message:
+        if not message or not isinstance(message, str) or not message.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: message'},
                 status_code=400
@@ -1271,16 +1279,7 @@ async def chat_tool_send_message(request: Request):
         
         # Get channels to find channel ID
         channels = slack_client.list_channels(access_token)
-        channel_id = None
-        channel_name = channel
-        
-        # Try to find channel by name (handle # prefix)
-        channel_search = channel.lstrip('#').lower()
-        for ch in channels:
-            if ch["name"].lower() == channel_search:
-                channel_id = ch["id"]
-                channel_name = ch["name"]
-                break
+        channel_id, channel_name = resolve_channel_id(channel, channels)
         
         if not channel_id:
             return JSONResponse(
@@ -1296,8 +1295,9 @@ async def chat_tool_send_message(request: Request):
         )
         
         if result and result.get("success"):
+            display_name = channel_name.lstrip('#') if channel_name else channel
             return JSONResponse(
-                content={'result': f'Successfully sent message to #{channel_name}'}
+                content={'result': f'Successfully sent message to #{display_name}'}
             )
         else:
             error = result.get("error", "Unknown error") if result else "Failed to send message"
@@ -1333,18 +1333,29 @@ async def chat_tool_search_messages(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query')
         channel = data.get('channel')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not query:
+        if not query or not isinstance(query, str) or not query.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: query'},
+                status_code=400
+            )
+        if channel is not None and (not isinstance(channel, str) or not channel.strip()):
+            return JSONResponse(
+                content={'error': 'Invalid channel parameter'},
                 status_code=400
             )
         
@@ -1363,12 +1374,7 @@ async def chat_tool_search_messages(request: Request):
         channel_name = None
         if channel:
             channels = slack_client.list_channels(access_token)
-            channel_search = channel.lstrip('#').lower()
-            for ch in channels:
-                if ch["name"].lower() == channel_search:
-                    channel_id = ch["id"]
-                    channel_name = ch["name"]
-                    break
+            channel_id, channel_name = resolve_channel_id(channel, channels)
         
         # Search messages
         print(f"🔍 Searching messages - query: '{query}', channel: '{channel_name or channel}'", flush=True)
@@ -1453,15 +1459,22 @@ async def chat_tool_search_channels(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query', '')  # Allow empty query to list all channels
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        # Query is optional - if empty or "all", will return all channels
+        if query is not None and not isinstance(query, str):
+            query = str(query)
         
         # Get user's authentication token
         user = SimpleUserStorage.get_user(uid)

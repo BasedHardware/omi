@@ -62,6 +62,7 @@ def dedupe_segments_for_merge(
     *,
     text_match_slop_seconds: float = _MERGE_TEXT_DUP_SLOP_SECONDS,
     duration_ratio_slop: float = _MERGE_TEXT_DUP_DURATION_RATIO,
+    single_match_slop_seconds: float = 0,
 ) -> list:
     """Return incoming segments that are not already represented on the conversation.
 
@@ -71,6 +72,8 @@ def dedupe_segments_for_merge(
     3. Batch-gated text+slop for clock-offset live+offline duplicates (#4769):
        only when enough eligible lines match (all remaining, or >=2), and only
        for text long enough that short repeated phrases are kept.
+    4. For a live explicit target, one eligible line in a mixed batch may be
+       removed with the caller's much tighter single-match time bound.
     """
     existing_abs = set()
     existing_rel = set()
@@ -111,6 +114,7 @@ def dedupe_segments_for_merge(
         return survivors
 
     text_dup_flags = []
+    close_dup_flags = []
     for segment in survivors:
         abs_start, abs_end = _segment_abs_range(segment)
         text = _normalize_merge_segment_text(segment.get('text'))
@@ -125,12 +129,23 @@ def dedupe_segments_for_merge(
                 duration_ratio_slop=duration_ratio_slop,
             )
         )
+        close_dup_flags.append(
+            single_match_slop_seconds > 0
+            and _is_text_clock_offset_duplicate(
+                text=text,
+                abs_start=abs_start,
+                duration=duration,
+                existing_text_index=existing_text_index,
+                text_match_slop_seconds=single_match_slop_seconds,
+                duration_ratio_slop=duration_ratio_slop,
+            )
+        )
 
     text_dup_count = sum(1 for flag in text_dup_flags if flag)
     # Batch gate: full remaining batch is a re-upload, or multiple lines share
     # the same clock-offset fingerprint (#4769 "every line duplicated").
     apply_text_dedupe = text_dup_count >= 2 or (text_dup_count == len(survivors) and text_dup_count >= 1)
     if not apply_text_dedupe:
-        return survivors
+        return [segment for segment, is_dup in zip(survivors, close_dup_flags) if not is_dup]
 
     return [segment for segment, is_dup in zip(survivors, text_dup_flags) if not is_dup]

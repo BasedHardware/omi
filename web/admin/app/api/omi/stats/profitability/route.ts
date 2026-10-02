@@ -29,9 +29,9 @@ export const maxDuration = 3600;
 //   1. Firestore `fcm_tokens` device_key prefix (`macos_…` → desktop,
 //      `ios_…`/`android_…` → mobile). Misses users who never enabled
 //      notifications.
-//   2. PostHog events where `properties.$os_name = 'macOS'` — desktop users.
+//   2. PostHog events where `properties.$os_name = 'macOS'` — desktop users,
+//      or `properties.$os_name IN ('iOS','Android')` — mobile users.
 //      Already proven by crash-rate / macos-versions / dau-trends routes.
-//   3. Mixpanel `$os` in ['iOS','Android'] — mobile users.
 //
 // Each source provides distinct_id/uid → platform pairs. We merge them so a
 // user appears desktop if ANY source tags them as desktop, and mobile if any
@@ -41,7 +41,7 @@ export const maxDuration = 3600;
 //   new users per day per platform: Firebase Auth creationTime bucketed by day
 //     and joined with the merged platform map. Users whose platform cannot be
 //     determined count as "unknown" and are excluded from chart series.
-//   active users per day per platform: taken directly from PostHog + Mixpanel
+//   active users per day per platform: taken directly from PostHog
 //     daily unique-user segmentation.
 //   revenue: Stripe active subs joined by metadata.uid against the platform
 //     map → exact per-platform MRR.
@@ -102,7 +102,7 @@ export interface ProfitabilityPayload {
       firebaseAuth: boolean;
       firestoreTokens: boolean;
       posthogDesktop: boolean;
-      mixpanelMobile: boolean;
+      posthogMobile: boolean;
       stripeActive: boolean;
       stripeNewPaid: boolean;
       infraCosts: boolean;
@@ -297,103 +297,87 @@ async function fetchDesktopActivePerDay(
   }
 }
 
-// Mixpanel segmentation — active mobile users per day via $ae_session.
+// PostHog — active mobile users per day (unique distinct_ids with any event).
 async function fetchMobileActivePerDay(
   days: number
 ): Promise<Record<string, number> | null> {
-  const secret = process.env.MIXPANEL_SECRET;
-  const base = process.env.MIXPANEL_API_BASE || "https://mixpanel.com/api/2.0";
-  if (!secret) return null;
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
+  if (!apiKey || !projectId) return null;
 
-  const now = new Date();
-  now.setUTCHours(0, 0, 0, 0);
-  const from = new Date(now);
-  from.setUTCDate(from.getUTCDate() - (days - 1));
-
-  const params = new URLSearchParams({
-    event: "$ae_session",
-    from_date: formatDate(from),
-    to_date: formatDate(now),
-    unit: "day",
-    type: "unique",
-    on: 'properties["$os"]',
-  });
-
+  const query = `
+    SELECT toDate(timestamp) as day, count(DISTINCT distinct_id) as users
+    FROM events
+    WHERE properties.$os_name IN ('iOS','Android')
+      AND timestamp >= now() - interval ${days} day
+    GROUP BY day
+    ORDER BY day
+  `;
   try {
-    const auth = Buffer.from(`${secret}:`).toString("base64");
-    const response = await fetch(
-      `${base.replace(/\/$/, "")}/segmentation?${params.toString()}`,
-      {
-        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
-      }
-    );
+    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
+    });
     if (!response.ok) return null;
     const raw = await response.json();
-    if (raw?.error) return null;
-    const values: Record<string, Record<string, number>> = raw?.data?.values ??
-    {};
+    const rows: [string, number][] = raw?.results ?? [];
     const out: Record<string, number> = {};
-    for (const [os, daily] of Object.entries(values)) {
-      const lower = os.toLowerCase();
-      if (lower !== "ios" && lower !== "android" && lower !== "iphone os")
-        continue;
-      for (const [day, count] of Object.entries(daily)) {
-        const key = String(day).slice(0, 10);
-        out[key] = (out[key] ?? 0) + Number(count ?? 0);
-      }
-    }
+    for (const [day, count] of rows)
+      out[String(day).slice(0, 10)] = Number(count ?? 0);
     return out;
   } catch (err) {
-    console.error("Mixpanel mobile active exception:", err);
+    console.error("PostHog mobile active exception:", err);
     return null;
   }
 }
 
-// Mixpanel JQL-like alternative: engage with $os filter. Simpler: use
-// segmentation over `$ae_session` grouped by $os, then for each known OS
-// collect user count. But segmentation doesn't yield UIDs. Instead, we query
-// engage with a where clause filtering on $os.
-async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
-  const secret = process.env.MIXPANEL_SECRET;
-  const base = process.env.MIXPANEL_API_BASE || "https://mixpanel.com/api/2.0";
-  if (!secret) return null;
+// PostHog distinct_ids are typically the Firebase uid (set via identify()).
+async function fetchMobileUidsFromPostHog(
+  days: number
+): Promise<Set<string> | null> {
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
+  if (!apiKey || !projectId) return null;
 
-  const uids = new Set<string>();
+  const query = `
+    SELECT DISTINCT distinct_id
+    FROM events
+    WHERE properties.$os_name IN ('iOS','Android')
+      AND timestamp >= now() - interval ${Math.max(days, 90)} day
+    LIMIT 500000
+  `;
   try {
-    const auth = Buffer.from(`${secret}:`).toString("base64");
-    let sessionId: string | undefined;
-    let page = 0;
-    for (let i = 0; i < 200; i++) {
-      const params = new URLSearchParams({
-        where: 'properties["$os"] in ["iOS","Android"]',
-      });
-      if (sessionId) params.set("session_id", sessionId);
-      if (sessionId) params.set("page", String(page));
-      const response = await fetch(
-        `${base.replace(/\/$/, "")}/engage?${params.toString()}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${auth}`,
-            Accept: "application/json",
-          },
-        }
+    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
+    });
+    if (!response.ok) {
+      console.error(
+        "PostHog mobile uids failed:",
+        response.status,
+        await response.text()
       );
-      if (!response.ok) {
-        console.error("Mixpanel engage failed:", response.status);
-        break;
-      }
-      const raw = await response.json();
-      const results: { $distinct_id: string }[] = raw?.results ?? [];
-      for (const r of results) if (r?.$distinct_id) uids.add(r.$distinct_id);
-      if (!raw?.session_id || !raw?.page_size || results.length < raw.page_size)
-        break;
-      sessionId = raw.session_id;
-      page = (raw.page ?? 0) + 1;
+      return null;
     }
-    return uids;
+    const raw = await response.json();
+    const rows: [string][] = raw?.results ?? [];
+    return new Set(rows.map((r) => String(r[0])).filter(Boolean));
   } catch (err) {
-    console.error("Mixpanel engage exception:", err);
+    console.error("PostHog mobile uids exception:", err);
     return null;
   }
 }
@@ -401,7 +385,7 @@ async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
 function mergeUserPlatforms(
   tokens: Map<string, { desktop: Date | null; mobile: Date | null }> | null,
   posthogDesktopUids: Set<string> | null,
-  mixpanelMobileUids: Set<string> | null
+  posthogMobileUids: Set<string> | null
 ): Map<string, UserPlatformInfo> {
   const result = new Map<string, UserPlatformInfo>();
 
@@ -424,8 +408,8 @@ function mergeUserPlatforms(
   }
   if (posthogDesktopUids)
     for (const uid of Array.from(posthogDesktopUids)) addHas(uid, "desktop");
-  if (mixpanelMobileUids)
-    for (const uid of Array.from(mixpanelMobileUids)) addHas(uid, "mobile");
+  if (posthogMobileUids)
+    for (const uid of Array.from(posthogMobileUids)) addHas(uid, "mobile");
 
   // Resolve primary platform: prefer earliest token date when both. Otherwise
   // desktop wins if only desktop signal, mobile wins if only mobile signal.
@@ -645,7 +629,7 @@ export async function computeProfitability(opts: {
     buildUserPlatformMapFromTokens(),
     listAllAuthSignups(),
     fetchDesktopUidsFromPostHog(days),
-    fetchMobileUidsFromMixpanel(),
+    fetchMobileUidsFromPostHog(days),
     fetchDesktopActivePerDay(days),
     fetchMobileActivePerDay(days),
     fetchInfraCosts(days),
@@ -980,7 +964,7 @@ export async function computeProfitability(opts: {
         firebaseAuth: signups != null,
         firestoreTokens: tokens != null,
         posthogDesktop: desktopUids != null || desktopActive != null,
-        mixpanelMobile: mobileUids != null || mobileActive != null,
+        posthogMobile: mobileUids != null || mobileActive != null,
         stripeActive: stripeRes != null,
         stripeNewPaid: stripeRes != null,
         infraCosts: infraCosts != null,
@@ -1004,7 +988,7 @@ export async function GET(request: NextRequest) {
 
     // Cache-first: precompute writes this off the request path. This route is
     // far too heavy (full fcm_tokens collection-group scan + auth.listUsers
-    // over ~150k users + Mixpanel paging) to recompute on the request path, so
+    // over ~150k users + PostHog UID queries) to recompute on the request path, so
     // a precomputed payload within the freshness bound is served immediately.
     // A doc older than the bound is a key no active writer maintains (the
     // Aug-25 freeze: boards requesting legacy cost params read a doc frozen

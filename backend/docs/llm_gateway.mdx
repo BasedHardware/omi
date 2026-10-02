@@ -189,7 +189,7 @@ Backend-listen env:
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
-| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Independent `off` or `gateway` switch, default and checked-in value `off`; gateway mode has no direct-provider fallback |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Independent `off` or `gateway` switch; dev is checked in as `gateway`, prod and default remain `off`; gateway mode has no direct-provider fallback |
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Required and set to `true` on prod callers; prevents an accidental production route flip without an explicit checked-in enablement |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
 | `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |

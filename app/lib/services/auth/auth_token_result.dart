@@ -50,6 +50,13 @@ final class AuthSessionExpiredEvent {
   final String? code;
 }
 
+final class AuthSessionSnapshot {
+  const AuthSessionSnapshot({required this.ownerUid, required this.generation});
+
+  final String ownerUid;
+  final int generation;
+}
+
 final class AuthUserSnapshot {
   const AuthUserSnapshot({required this.uid, this.email, this.displayName, this.isAnonymous = false});
 

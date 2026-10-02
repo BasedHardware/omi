@@ -111,7 +111,7 @@ class BleDisconnectEvent {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   final String rssiTrend;
@@ -222,6 +222,11 @@ abstract class BleHostApi {
   @async
   @SwiftFunction('getDeviceDiagnostics(uuid:)')
   BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
+
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  @async
+  @SwiftFunction('getExtendedDeviceDiagnostics(uuid:)')
+  String getExtendedDeviceDiagnostics(String uuid);
 
   @async
   @SwiftFunction('getBatteryHistory(uuid:)')

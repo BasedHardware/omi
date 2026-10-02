@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -24,7 +25,6 @@ class WrappedColors {
   static const Color lightBlue = Color(0xFFE8F4F8);
   static const Color coral = Color(0xFFFF6B6B);
   static const Color mint = Color(0xFF4ECDC4);
-  static const Color purple = Color(0xFF9B59B6);
   static const Color yellow = Color(0xFFF39C12);
   static const Color pink = Color(0xFFE91E63);
   static const Color teal = Color(0xFF00897B);
@@ -170,6 +170,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     });
 
     final response = await generateWrapped2025();
+    if (!mounted) return;
 
     if (response != null) {
       setState(() {
@@ -257,10 +258,9 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final box = context.findRenderObject() as RenderBox?;
       final sharePositionOrigin = box != null ? Rect.fromLTWH(0, 0, box.size.width, box.size.height / 2) : null;
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: context.l10n.wrappedShareText,
-        sharePositionOrigin: sharePositionOrigin,
+      await SharePlus.instance.share(
+        ShareParams(
+            files: [XFile(file.path)], text: context.l10n.wrappedShareText, sharePositionOrigin: sharePositionOrigin),
       );
 
       PlatformManager.instance.analytics.wrappedSharedSuccessfully(
@@ -286,7 +286,12 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         setState(() {
           _currentShareTemplate = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.wrappedFailedToShare)));
+        OmiFeedback.error(
+          context,
+          context.l10n.wrappedFailedToShare,
+          actionLabel: context.l10n.tryAgain,
+          onAction: () => _shareTemplate(template, filename),
+        );
       }
     }
   }
@@ -584,7 +589,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          _isLoading ? const Center(child: CircularProgressIndicator(color: Colors.white)) : _buildContent(),
+          _isLoading ? const OmiLoadingState() : _buildContent(),
           // Offstage share template renderer
           if (_currentShareTemplate != null)
             Positioned(
@@ -592,6 +597,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               top: -10000,
               child: RepaintBoundary(key: _shareTemplateKey, child: _currentShareTemplate!),
             ),
+          // A pushed page: the leading back control floats over every card (docs/ux-contract.md §1).
+          const SafeArea(child: OmiBackButton.circled()),
         ],
       ),
     );
@@ -659,7 +666,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final pct = (_progress?['pct'] ?? 0.0) as num;
 
     return Container(
-      color: WrappedColors.purple,
+      color: WrappedColors.blue,
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -3821,6 +3828,7 @@ class _SummaryCollageAnimated extends StatefulWidget {
 }
 
 class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with TickerProviderStateMixin {
+  static const _wordmarkStyle = TextStyle(color: Colors.white54, fontSize: 18, fontWeight: FontWeight.w800);
   late AnimationController _mainController;
   late Animation<double> _mainAnimation;
   late AnimationController _tilesController;
@@ -4154,10 +4162,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                 const Spacer(),
                 Opacity(
                   opacity: tilesProgress.clamp(0.0, 1.0),
-                  child: const Text(
-                    'omi',
-                    style: TextStyle(color: Colors.white54, fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
+                  child: const Text('omi', style: _wordmarkStyle), // omi-ux-allow: hardcoded-text -- brand wordmark
                 ),
               ],
             ),
@@ -4225,330 +4230,6 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
           ),
         ],
       ),
-    );
-  }
-}
-
-// That's a Wrap animated end card - premium design (DEPRECATED - kept for reference)
-class _ThatsAWrapAnimated extends StatefulWidget {
-  final double totalHours;
-  final int totalConvs;
-  final int totalActions;
-  final int completionRate;
-  final String archetype;
-  final String phrase;
-  final int phraseCount;
-  final GlobalKey shareCardKey;
-  final Widget Function(dynamic, int, int) buildShareableImage;
-  final VoidCallback onShare;
-  final bool isActive;
-
-  const _ThatsAWrapAnimated({
-    required this.totalHours,
-    required this.totalConvs,
-    required this.totalActions,
-    required this.completionRate,
-    required this.archetype,
-    required this.phrase,
-    required this.phraseCount,
-    required this.shareCardKey,
-    required this.buildShareableImage,
-    required this.onShare,
-    required this.isActive,
-  });
-
-  @override
-  State<_ThatsAWrapAnimated> createState() => _ThatsAWrapAnimatedState();
-}
-
-class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerProviderStateMixin {
-  late AnimationController _mainController;
-  late Animation<double> _mainAnimation;
-  late AnimationController _statsController;
-  late Animation<double> _statsAnimation;
-  late AnimationController _buttonController;
-  late Animation<double> _buttonAnimation;
-
-  bool _hasAnimated = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _mainController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
-    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
-
-    _statsController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-    _statsAnimation = CurvedAnimation(parent: _statsController, curve: Curves.easeOutBack);
-
-    _buttonController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
-    _buttonAnimation = CurvedAnimation(parent: _buttonController, curve: Curves.elasticOut);
-
-    if (widget.isActive) {
-      _startAnimation();
-    }
-  }
-
-  void _startAnimation() async {
-    if (_hasAnimated) return;
-    _hasAnimated = true;
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (!mounted) return;
-
-    _mainController.forward();
-    HapticFeedback.heavyImpact();
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    _statsController.forward();
-
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    _buttonController.forward();
-  }
-
-  @override
-  void didUpdateWidget(_ThatsAWrapAnimated oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !_hasAnimated) {
-      _startAnimation();
-    }
-  }
-
-  @override
-  void dispose() {
-    _mainController.dispose();
-    _statsController.dispose();
-    _buttonController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Hidden share card
-        SizedBox.shrink(
-          child: OverflowBox(
-            maxWidth: 1080,
-            maxHeight: 1920,
-            child: Transform.translate(
-              offset: const Offset(-10000, -10000),
-              child: RepaintBoundary(
-                key: widget.shareCardKey,
-                child: widget.buildShareableImage(widget.totalHours, widget.totalConvs, widget.totalActions),
-              ),
-            ),
-          ),
-        ),
-        // Main content
-        AnimatedBuilder(
-          animation: Listenable.merge([_mainAnimation, _statsAnimation, _buttonAnimation]),
-          builder: (context, child) {
-            final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
-            final statsOpacity = _statsAnimation.value.clamp(0.0, 1.0);
-            final buttonOpacity = _buttonAnimation.value.clamp(0.0, 1.0);
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 48),
-                // Animated "2025" large text
-                Opacity(
-                  opacity: mainOpacity,
-                  child: Transform.scale(
-                    scale: 0.5 + mainOpacity * 0.5,
-                    alignment: Alignment.centerLeft,
-                    child: ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF667eea), Color(0xFF764ba2), Color(0xFFf953c6)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(bounds),
-                      child: const Text(
-                        '2025',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 100,
-                          fontWeight: FontWeight.w900,
-                          height: 0.9,
-                          letterSpacing: -4,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // "That's a wrap" text
-                Opacity(
-                  opacity: mainOpacity,
-                  child: Transform.translate(
-                    offset: Offset(-20 * (1 - mainOpacity), 0),
-                    child: const Text(
-                      "That's a wrap!",
-                      style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                // Stats grid with glassmorphism
-                Opacity(
-                  opacity: statsOpacity,
-                  child: Transform.translate(
-                    offset: Offset(0, 30 * (1 - statsOpacity)),
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.white.withValues(alpha: 0.15), Colors.white.withValues(alpha: 0.05)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
-                      ),
-                      child: Column(
-                        children: [
-                          // Stats row
-                          Row(
-                            children: [
-                              Expanded(child: _buildStatItem('${widget.totalHours.toStringAsFixed(0)}', 'hours', '⏱️')),
-                              Container(width: 1, height: 50, color: Colors.white.withValues(alpha: 0.2)),
-                              Expanded(child: _buildStatItem('${widget.totalConvs}', 'convos', '💬')),
-                              Container(width: 1, height: 50, color: Colors.white.withValues(alpha: 0.2)),
-                              Expanded(child: _buildStatItem('${widget.totalActions}', 'actions', '✅')),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Container(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                          const SizedBox(height: 20),
-                          // Archetype badge
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  widget.archetype,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '${widget.completionRate}% done',
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // Signature phrase
-                          Row(
-                            children: [
-                              const Text('🗣️', style: TextStyle(fontSize: 20)),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  '"${widget.phrase}" × ${widget.phraseCount}',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: 16,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                // Share button with animation
-                Opacity(
-                  opacity: buttonOpacity,
-                  child: Transform.scale(
-                    scale: 0.8 + buttonOpacity * 0.2,
-                    child: GestureDetector(
-                      onTap: widget.onShare,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(40),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF667eea).withValues(alpha: 0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.share_rounded, color: Colors.white, size: 24),
-                            SizedBox(width: 12),
-                            Text(
-                              'Share Your Wrapped',
-                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                // Footer
-                Opacity(
-                  opacity: buttonOpacity * 0.7,
-                  child: Center(
-                    child: Text(
-                      'omi.me/wrapped',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String value, String label, String emoji) {
-    return Column(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
-        ),
-        Text(
-          label,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w500),
-        ),
-      ],
     );
   }
 }

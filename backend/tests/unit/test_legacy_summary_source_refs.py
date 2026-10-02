@@ -119,7 +119,9 @@ def test_flag_off_reprocess_composition_validates_source_evidence(monkeypatch):
     monkeypatch.setattr(process_module, '_fetch_dedup_candidates', lambda *_args, **_kwargs: [])
     monkeypatch.setattr(process_module, '_primary_user_name', lambda *_args: None)
 
-    result, discarded = process_module._get_structured('uid-legacy', 'en', conversation, force_process=True)
+    result, discarded = process_module._get_structured(
+        'uid-legacy', 'en', conversation, trigger=process_module.ProcessingTrigger.USER_REPROCESS
+    )
 
     assert discarded is False
     assert captured_kwargs['transcript_segment_ids'] == ['s1', 's2']

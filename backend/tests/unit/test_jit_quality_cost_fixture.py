@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from utils.llm.model_config import LUNA_MODEL
 
 FIXTURE = (
     Path(__file__).parents[2] / "testing" / "jit_processing" / "fixtures" / "jit_architecture_quality_cost_v1.json"
@@ -128,12 +129,12 @@ def test_v2_replays_real_prompt_builders_without_provider_calls() -> None:
 
     routes = fixture["billing_receipt_contract"]["runtime_route_contract"]
     assert routes["legacy_director"]["gateway_lane"] == "omi:auto:desktop-proactive-reasoning"
-    assert routes["legacy_director"]["model"] == "gpt-5.6-luna"
+    assert routes["legacy_director"]["model"] == LUNA_MODEL
     assert routes["jit_nano"]["gateway_lane"] == "omi:auto:desktop-proactive-extraction"
     assert routes["jit_nano"]["model"] == "gpt-5-nano"
     assert routes["jit_full"]["gateway_lane"] == "omi:auto:chat-agent"
     assert routes["jit_full"]["requested_model_alias"] == "claude-sonnet-4-6 -> omi-sonnet"
-    assert routes["jit_full"]["model"] == "gpt-5.6-luna"
+    assert routes["jit_full"]["model"] == LUNA_MODEL
     assert routes["jit_full"]["requested_max_completion_tokens"] is None
     for environment in ("dev", "prod"):
         configured = routes["configured_runtime"][environment]
@@ -182,7 +183,7 @@ def test_v2_replays_real_prompt_builders_without_provider_calls() -> None:
         assert case["review_oracle"]["reason"] not in jit["materialized_full_prompt"]
         assert jit["full_operation"] == "chat_agent"
         assert jit["full_gateway_lane"] == "omi:auto:chat-agent"
-        assert jit["full_model"] == "gpt-5.6-luna"
+        assert jit["full_model"] == LUNA_MODEL
         assert jit["full_max_completion_tokens"] is None
 
     dst = next(case for case in fixture["cases"] if case["case_id"] == "dst_local_deadline")

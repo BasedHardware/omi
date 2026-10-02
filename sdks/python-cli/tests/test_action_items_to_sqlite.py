@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from action_items_to_sqlite import load, SCHEMA, boolean_to_int, utc_stamp
+from action_items_to_sqlite import load, SCHEMA, boolean_to_int, utc_stamp, validate_db_path
 
 
 class TestActionItemsToSqlite(unittest.TestCase):
@@ -32,8 +32,45 @@ class TestActionItemsToSqlite(unittest.TestCase):
         self.assertEqual(boolean_to_int(False), 0)
         self.assertEqual(boolean_to_int("true"), 1)
         self.assertEqual(boolean_to_int("1"), 1)
+        self.assertEqual(boolean_to_int("yes"), 1)
+        self.assertEqual(boolean_to_int("done"), 1)
+        self.assertEqual(boolean_to_int("completed"), 1)
         self.assertEqual(boolean_to_int("false"), 0)
+        self.assertEqual(boolean_to_int("no"), 0)
+        self.assertEqual(boolean_to_int("0"), 0)
         self.assertEqual(boolean_to_int(None), 0)
+
+    def test_path_traversal_rejected(self):
+        """Paths containing '..' must be rejected before any DB is opened."""
+        sample_tasks = [{"id": "t1", "description": "task", "completed": False}]
+        json_file = self.dir_path / "tasks.json"
+        json_file.write_text(json.dumps(sample_tasks), encoding="utf-8")
+
+        escape = self.dir_path.parent / "escape.sqlite"
+        existed = escape.exists()
+        try:
+            with self.assertRaises(ValueError, msg="Expected ValueError for '..' in path"):
+                load(str(self.dir_path / ".." / "escape.sqlite"), [str(json_file)])
+            if not existed:
+                self.assertFalse(escape.exists())
+        finally:
+            if not existed and escape.exists():
+                escape.unlink()
+
+    def test_non_sqlite_file_rejected(self):
+        """Overwriting an existing file that is not a SQLite database must raise ValueError."""
+        not_a_db = self.dir_path / "output.sqlite"
+        original = b"This is not a SQLite file at all"
+        not_a_db.write_bytes(original)
+
+        sample_tasks = [{"id": "t1", "description": "task", "completed": False}]
+        json_file = self.dir_path / "tasks.json"
+        json_file.write_text(json.dumps(sample_tasks), encoding="utf-8")
+
+        with self.assertRaises(ValueError, msg="Expected ValueError when output is not SQLite"):
+            load(str(not_a_db), [str(json_file)])
+
+        self.assertEqual(not_a_db.read_bytes(), original)
 
     def test_load_and_query(self):
         sample_tasks = [
@@ -49,7 +86,7 @@ class TestActionItemsToSqlite(unittest.TestCase):
             {
                 "id": "task_2",
                 "description": "Review PR #15129",
-                "completed": True,
+                "completed": "done",
                 "due_at": None,
                 "created_at": "2026-09-20T09:00:00Z",
                 "updated_at": "2026-09-20T09:30:00Z",
@@ -70,6 +107,10 @@ class TestActionItemsToSqlite(unittest.TestCase):
 
         # Check count of open tasks
         cursor.execute("SELECT COUNT(*) FROM action_items WHERE completed = 0")
+        self.assertEqual(cursor.fetchone()[0], 1)
+
+        # Check completed status coerced from 'done'
+        cursor.execute("SELECT completed FROM action_items WHERE id = 'task_2'")
         self.assertEqual(cursor.fetchone()[0], 1)
 
         # Check raw json extraction
@@ -112,6 +153,49 @@ class TestActionItemsToSqlite(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             load(str(self.db_path), [str(bad_file)])
+
+    def test_empty_wrappers_load_zero_rows(self):
+        # Regression: an empty list is falsy, so the old `or` chain
+        # treated a recognised empty wrapper as an absent key and
+        # failed with "action item is missing an id". Empty wrappers
+        # must import zero rows instead.
+        for key in ("action_items", "items", "data"):
+            source = self.dir_path / f"empty_{key}.json"
+            source.write_text(json.dumps({key: []}), encoding="utf-8")
+            loaded, added, total = load(str(self.db_path), [str(source)])
+            self.assertEqual((loaded, added, total), (0, 0, 0), key)
+
+    def test_mixed_batch_with_empty_wrapper(self):
+        empty = self.dir_path / "empty.json"
+        empty.write_text(json.dumps({"action_items": []}), encoding="utf-8")
+        valid = self.dir_path / "valid.json"
+        valid.write_text(json.dumps([
+            {"id": "task_1", "description": "First"},
+            {"id": "task_2", "description": "Second"},
+        ]), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(empty), str(valid)])
+        self.assertEqual((loaded, added, total), (2, 2, 2))
+
+    def test_malformed_input_leaves_database_unchanged(self):
+        seed = self.dir_path / "seed.json"
+        seed.write_text(json.dumps([
+            {"id": "task_1", "description": "Keep me", "completed": False},
+        ]), encoding="utf-8")
+        load(str(self.db_path), [str(seed)])
+
+        malformed = self.dir_path / "malformed.json"
+        malformed.write_text(json.dumps({"action_items": "not-a-list"}), encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            load(str(self.db_path), [str(malformed)])
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, description FROM action_items")
+        rows = cursor.fetchall()
+        conn.close()
+        self.assertEqual(rows, [("task_1", "Keep me")])
 
 
 if __name__ == "__main__":

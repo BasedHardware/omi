@@ -25,13 +25,18 @@ final class LiveTranscriptSelectionBoundaryTests: XCTestCase {
   /// segment bubble would wrap its `Text` in an NSTextView-backed layout
   /// engine, and a long capture relays every one of them on each live update —
   /// the same failure class the saved transcript hit in `SpeakerBubbleView`.
+  ///
+  /// Live and saved turns both render through `SpeakerBubbleView`, so the bubble file is held to
+  /// the same bar as the live list that hosts it.
   func testLiveTranscriptBubblesDoNotInstallSwiftUISelection() throws {
-    let source = try source("MainWindow/Components/LiveTranscriptView.swift")
+    for path in ["MainWindow/Components/LiveTranscriptView.swift", "MainWindow/Components/SpeakerBubbleView.swift"] {
+      let source = try source(path)
 
-    XCTAssertFalse(
-      source.contains(".textSelection(.enabled)"),
-      "live transcript bubbles must not install SwiftUI SelectionOverlay; copy is served by the saved transcript's Copy control"
-    )
+      XCTAssertFalse(
+        source.contains(".textSelection(.enabled)"),
+        "\(path): transcript bubbles must not install SwiftUI SelectionOverlay; copy is served by the saved transcript's Copy control"
+      )
+    }
   }
 
   /// The long-nested-markdown hosts this fixed (expanded agent cards and the

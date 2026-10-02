@@ -19,7 +19,7 @@
 # exports FIRESTORE_EMULATOR_HOST from firebase.json (127.0.0.1:8085).
 #
 # The environment below mirrors _subprocess_env() in
-# backend/scripts/jit_qa_orchestrated_dogfood.py. MEMORY_MODE=read is required:
+# backend/scripts/jit_qa_orchestrated_dogfood.py. MEMORY_ENABLED=on is required:
 # the production canonical-intake fence defaults to off, and without it every
 # write-path scenario fails closed with CanonicalMemoryIntakePausedError, which
 # is a harness precondition rather than a defect.
@@ -40,7 +40,7 @@ export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-demo-omi-jit-qa}"
 export GCLOUD_PROJECT="$GOOGLE_CLOUD_PROJECT"
 export FIREBASE_PROJECT_ID="$GOOGLE_CLOUD_PROJECT"
 export PROVIDER_MODE=offline
-export MEMORY_MODE=read
+export MEMORY_ENABLED=on
 export ENCRYPTION_SECRET="${ENCRYPTION_SECRET:-omi_emulator_proof_key_32_bytes_ok}"  # pragma: allowlist secret
 export GOOGLE_AUTH_DISABLE_GCE_CHECK=true
 export GCE_METADATA_HOST=127.0.0.1:9

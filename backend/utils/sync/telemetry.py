@@ -1,4 +1,21 @@
+from config.sync_telemetry import (
+    bounded_correlation_ref,
+    bounded_exception_class,
+    bounded_sync_phase,
+    new_attempt_ref,
+)
 from utils.sync.lanes import SyncLane
+
+__all__ = [
+    'bounded_correlation_ref',
+    'bounded_exception_class',
+    'bounded_exception_reason',
+    'bounded_exception_type',
+    'bounded_sync_lane',
+    'bounded_sync_model',
+    'bounded_sync_phase',
+    'new_attempt_ref',
+]
 
 _SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
 

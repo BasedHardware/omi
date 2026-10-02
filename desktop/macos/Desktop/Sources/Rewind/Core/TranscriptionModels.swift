@@ -33,6 +33,42 @@ enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
   case maxDurationRotation = "max_duration_rotation"
   case crashRecovery = "crash_recovery"
   case retry = "retry"
+  /// Audio Recording mode switched to Off (user or settings sync).
+  case recordingDisabled = "recording_disabled"
+  /// System sleep tore the session down; the wake handler re-arms it.
+  case systemSleep = "system_sleep"
+  /// App termination teardown.
+  case appTerminated = "app_terminated"
+  /// `freemium_threshold_reached` admission stop.
+  case paywall = "paywall"
+  /// Microphone could not start or lost authorization mid-session.
+  case microphoneUnavailable = "microphone_unavailable"
+  /// BLE audio source had no live connection when capture armed.
+  case deviceUnavailable = "device_unavailable"
+  /// Repeated silent-mic recoveries failed and the session was stopped.
+  case silentMicExhausted = "silent_mic_exhausted"
+  /// A meeting-boundary conversation rotation failed and the session was
+  /// torn down rather than left half-rotated.
+  case rotationFailed = "rotation_failed"
+  /// Session stopped to switch STT engines (local↔cloud fallback restart).
+  case sttFallback = "stt_fallback"
+  /// Settings-driven capture restart (e.g. input-device change) stopped the
+  /// old session before re-arming.
+  case settingsChange = "settings_change"
+
+  /// Reasons that name a forced termination rather than an intended boundary:
+  /// the attempt died because capture could not continue, so the outcome funnel
+  /// must count it as `error` even if the call site forgot `noteErrorTerminal()`.
+  var isForcedTermination: Bool {
+    switch self {
+    case .paywall, .microphoneUnavailable, .deviceUnavailable, .silentMicExhausted,
+      .rotationFailed, .sttFallback:
+      return true
+    case .userStop, .finishAndContinue, .meetingStarted, .meetingEnded, .maxDurationRotation,
+      .crashRecovery, .retry, .recordingDisabled, .systemSleep, .appTerminated, .settingsChange:
+      return false
+    }
+  }
 }
 
 /// Conversation processing status (from backend)
@@ -94,6 +130,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var eventsJson: String?  // JSON-encoded [Event]
   var sectionsJson: String?  // JSON-encoded [SummarySection]
   var localSummaryJson: String?  // Selected display attribution; never the upload/retry blob
+  var captureGroupJson: String?  // Server-owned cross-surface event membership (ServerCaptureGroup)
 
   // MARK: - Additional Conversation Data
   var geolocationJson: String?  // JSON-encoded Geolocation
@@ -107,6 +144,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var discarded: Bool
   var deleted: Bool
   var isLocked: Bool
+  var visibility: String?
   var starred: Bool
   var folderId: String?
 
@@ -147,6 +185,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     eventsJson: String? = nil,
     sectionsJson: String? = nil,
     localSummaryJson: String? = nil,
+    captureGroupJson: String? = nil,
     // Additional data
     geolocationJson: String? = nil,
     photosJson: String? = nil,
@@ -157,6 +196,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     discarded: Bool = false,
     deleted: Bool = false,
     isLocked: Bool = false,
+    visibility: String? = "private",
     starred: Bool = false,
     folderId: String? = nil
   ) {
@@ -192,6 +232,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.eventsJson = eventsJson
     self.sectionsJson = sectionsJson
     self.localSummaryJson = localSummaryJson
+    self.captureGroupJson = captureGroupJson
     // Additional data
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
@@ -202,6 +243,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
   }
@@ -222,9 +264,26 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
 
   // MARK: - Computed Properties
 
-  /// Check if this session can be retried (under max retry count)
+  /// Strategy the canonical finalizer uses: the persisted choice, else the legacy default.
+  var effectiveFinalizationStrategy: TranscriptionFinalizationStrategy {
+    if let finalizationStrategy {
+      return finalizationStrategy
+    }
+    if backendId?.isEmpty == false {
+      return .cloudReconcile
+    }
+    return source == ConversationSource.desktop.rawValue ? .localSegments : .cloudReconcile
+  }
+
+  /// Check if this session can be retried. Local-segment uploads hold the only copy of the
+  /// transcript and are idempotent server-side, so they never exhaust.
   var canRetry: Bool {
-    retryCount < 5
+    effectiveFinalizationStrategy == .localSegments || retryCount < 5
+  }
+
+  /// The last attempt was rejected by the backend rather than failing in transit.
+  var hasPermanentFinalizationFailure: Bool {
+    lastError?.hasPrefix(FinalizationRetryPolicy.permanentFailurePrefix) == true
   }
 
   /// True once the local session has been associated with a backend conversation.
@@ -242,9 +301,10 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
 
   /// Calculate backoff delay in seconds based on retry count
   var retryBackoffSeconds: TimeInterval {
-    // Exponential backoff: 2^retryCount minutes
-    // 0 retries = 1 min, 1 = 2 min, 2 = 4 min, 3 = 8 min, 4 = 16 min
-    return pow(2.0, Double(retryCount)) * 60.0
+    FinalizationRetryPolicy.backoffSeconds(
+      retryCount: retryCount,
+      permanentFailure: hasPermanentFinalizationFailure
+    )
   }
 
   /// Check if enough time has passed since last update for retry
@@ -436,6 +496,7 @@ extension TranscriptionSessionRecord {
       eventsJson: eventsJson,
       sectionsJson: sectionsJson,
       localSummaryJson: conversation.localSummary.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
+      captureGroupJson: conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
       geolocationJson: geolocationJson,
       photosJson: photosJson,
       appsResultsJson: appsResultsJson,
@@ -443,6 +504,7 @@ extension TranscriptionSessionRecord {
       discarded: conversation.discarded,
       deleted: conversation.deleted,
       isLocked: conversation.isLocked,
+      visibility: conversation.visibility,
       starred: conversation.starred,
       folderId: conversation.folderId
     )
@@ -468,6 +530,8 @@ extension TranscriptionSessionRecord {
     self.inputDeviceName = conversation.inputDeviceName
 
     updateSummary(from: conversation)
+    // Membership is server-owned and independent of the summary's projection rules.
+    self.captureGroupJson = conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) }
 
     // Update additional data
     self.geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
@@ -485,6 +549,7 @@ extension TranscriptionSessionRecord {
     self.discarded = conversation.discarded
     self.deleted = conversation.deleted
     self.isLocked = conversation.isLocked
+    self.visibility = conversation.visibility
     self.starred = conversation.starred
     self.folderId = conversation.folderId
 
@@ -731,10 +796,14 @@ extension TranscriptionSessionRecord {
       discarded: discarded,
       deleted: deleted,
       isLocked: isLocked,
+      visibility: visibility ?? "private",
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,
-      localSummary: localSummary
+      localSummary: localSummary,
+      captureGroup: captureGroupJson?.data(using: .utf8).flatMap {
+        try? decoder.decode(ServerCaptureGroup.self, from: $0)
+      }
     )
   }
 }

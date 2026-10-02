@@ -114,6 +114,41 @@ final class ConnectorImportOperationsTests: XCTestCase {
     XCTAssertEqual(failureClass, .server)
   }
 
+  func testCalendarDisconnectSuccessExplainsThatImportedMemoriesRemain() async {
+    let outcome = await ConnectorImportOperations.disconnectCalendar {}
+
+    guard case .success(let result, let message) = outcome else {
+      return XCTFail("expected success, got \(outcome)")
+    }
+    XCTAssertNil(result.sourceCount)
+    XCTAssertNil(result.memoryCount)
+    XCTAssertEqual(message, "Google Calendar disconnected. Imported memories remain in Omi.")
+  }
+
+  func testCalendarDisconnectTreatsMissingGrantAsAlreadyDisconnected() async {
+    let outcome = await ConnectorImportOperations.disconnectCalendar {
+      throw APIError.httpError(statusCode: 404, detail: "Integration not found")
+    }
+
+    guard case .success(_, let message) = outcome else {
+      return XCTFail("expected idempotent success, got \(outcome)")
+    }
+    XCTAssertEqual(message, "Google Calendar disconnected. Imported memories remain in Omi.")
+  }
+
+  func testCalendarDisconnectFailureProvidesRetryableCopy() async {
+    let outcome = await ConnectorImportOperations.disconnectCalendar {
+      throw APIError.httpError(statusCode: 503, detail: "sensitive backend detail")
+    }
+
+    guard case .failure(let message, failureClass: let failureClass) = outcome else {
+      return XCTFail("expected failure, got \(outcome)")
+    }
+    XCTAssertEqual(message, "Couldn't disconnect Google Calendar. Check your connection and try again.")
+    XCTAssertEqual(failureClass, .server)
+    XCTAssertFalse(message.contains("sensitive"))
+  }
+
   func testCompletedXImportWithZeroPostsDoesNotSayStillRunning() {
     let message = ConnectorImportOperations.xImportCompletionMessage(
       handle: "omi",

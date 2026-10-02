@@ -509,6 +509,41 @@ async def test_create_new_survives_maxmemory_on_desktop_meeting_write():
     assert 'set_conversation_meeting_id' in host.storage_calls
 
 
+async def test_create_new_skips_malformed_meetings_without_crashing():
+    """A meeting record with a naive datetime, an ISO string, a ``None``
+    ``start_time``, or a missing ``id`` must not raise (#19153) — the
+    previous ``meeting['start_time'] - now`` subtraction crashed on the first
+    three and ``closest['id']`` crashed on the fourth. A valid meeting among
+    them is still linked."""
+    malformed = [
+        {'id': 'meeting-naive', 'start_time': datetime.now() - timedelta(minutes=1)},
+        {'id': 'meeting-string', 'start_time': (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+        {'id': 'meeting-none', 'start_time': None},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed + [_overlapping_meeting()], source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' in host.storage_calls
+
+
+async def test_create_new_skips_meeting_write_when_all_meetings_malformed():
+    """No meeting qualifies (unparseable ``start_time`` or missing ``id``) ->
+    the pointer write is skipped entirely, not crashed into with a bogus id."""
+    malformed = [
+        {'id': 'meeting-unparseable', 'start_time': 'not-a-date'},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed, source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' not in host.storage_calls
+
+
 async def test_create_new_healthy_control_writes_both_pointers():
     socket = _RecordingSocket()
     host = _Host(socket, meetings=[_overlapping_meeting()], source='desktop')

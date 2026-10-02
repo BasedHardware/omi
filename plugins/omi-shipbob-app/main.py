@@ -584,7 +584,7 @@ async def handle_shipbob_callback(
             log(f"Channel selection error (non-fatal): {ch_err}")
 
         # Redirect to home with uid
-        return RedirectResponse(url=f"/?uid={uid}")
+        return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
     except Exception as e:
         log(f"OAuth error: {e}")
@@ -607,7 +607,7 @@ async def disconnect_shipbob(uid: str = Query(...), sig: str = Query("")):
     from shipbob_disconnect_auth import require_disconnect_auth
     require_disconnect_auth(uid, sig)
     delete_shipbob_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.post("/select-channel", dependencies=[Depends(require_shipbob_tools_auth)])

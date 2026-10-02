@@ -34,6 +34,7 @@ from run_checks import (
     resolve_explicit_checks,
     run_git,
     skipped_platform_checks,
+    trigger_matches,
     validate_manifest,
 )
 
@@ -144,6 +145,91 @@ def non_self_running_reason(source: str) -> str | None:
 
 
 class ManifestContractTests(unittest.TestCase):
+    def test_firestore_guard_reuses_selector_scope_in_both_lanes(self) -> None:
+        trigger_matches('@firestore-index-guard', 'firestore.indexes.json')
+        from select_backend_unit_tests import (
+            FIRESTORE_INDEX_GUARD_CONTROL_PATHS,
+            FIRESTORE_INDEX_GUARD_SCHEMA_PATHS,
+            FIRESTORE_INDEX_GUARD_TESTS,
+            is_firestore_index_guard_path,
+        )
+
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == 'firestore-index-guard')
+        self.assertEqual(check.command, ('python3', 'backend/scripts/run_firestore_index_guard.py'))
+        self.assertFalse(check.requires_pr_body)
+        self.assertEqual(len(FIRESTORE_INDEX_GUARD_TESTS), 7)
+        paths = set(FIRESTORE_INDEX_GUARD_CONTROL_PATHS | FIRESTORE_INDEX_GUARD_SCHEMA_PATHS)
+        paths.update('backend/' + test for test in FIRESTORE_INDEX_GUARD_TESTS)
+        paths.update(
+            {
+                'backend/new_package/new_query.py',
+                'backend/routers/conversations.py',
+                'backend/tests/support/firestore_new_driver.py',
+            }
+        )
+        for path in paths:
+            self.assertTrue(is_firestore_index_guard_path(path), path)
+            for lane in ('local', 'ci'):
+                self.assertIn(check, resolve_checks(manifest, [path], lane, include_pr_body_checks=False), path)
+
+    def test_firestore_guard_is_not_selected_for_docs_or_excluded_sources(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in (
+            'docs/README.md',
+            'backend/AGENTS.md',
+            '.github/agent-docs/firestore-queries-and-indexes.md',
+            'backend/scripts/unrelated.py',
+            'backend/tests/unit/test_unrelated.py',
+            'backend/migrations/unrelated.py',
+            'web/personas-open-source/src/app/page.tsx',
+        ):
+            for lane in ('local', 'ci'):
+                self.assertNotIn('firestore-index-guard', {c.id for c in resolve_checks(manifest, [path], lane)}, path)
+
+    def test_firestore_guard_runner_fails_closed_and_uses_only_shared_test_list(self) -> None:
+        trigger_matches('@firestore-index-guard', 'firestore.indexes.json')
+        import run_firestore_index_guard as runner
+
+        scratch = REPO_ROOT / '.agent-brief'
+        scratch.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as tmp:
+            backend = Path(tmp) / 'backend'
+            backend.mkdir()
+            (backend / '.python-version').write_text('3.11.15')
+            for test in runner.FIRESTORE_INDEX_GUARD_TESTS:
+                path = backend / test
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            with patch.object(runner, 'BACKEND_DIR', backend):
+                with patch.object(runner.subprocess, 'run', side_effect=OSError('uv unavailable')):
+                    output = StringIO()
+                    with redirect_stderr(output):
+                        self.assertEqual(runner.main(), 2)
+                    self.assertIn('environment setup failed', output.getvalue())
+                    self.assertIn(runner.GUIDE, output.getvalue())
+                for status in (0, 1):
+                    with patch.object(
+                        runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], status)
+                    ) as run:
+                        output = StringIO()
+                        with redirect_stderr(output), redirect_stdout(output):
+                            self.assertEqual(runner.main(), status)
+                        args, kwargs = run.call_args
+                        self.assertEqual(args[0], ['bash', 'test.sh'])
+                        self.assertEqual(kwargs['cwd'], backend)
+                        env = kwargs['env']
+                        self.assertEqual(
+                            Path(env['BACKEND_UNIT_TEST_FILE_LIST']).read_text().splitlines(),
+                            list(runner.FIRESTORE_INDEX_GUARD_TESTS),
+                        )
+                        self.assertEqual(env['PYTEST_DISABLE_PLUGIN_AUTOLOAD'], '1')
+                        self.assertEqual(env['BACKEND_PYTEST_MARK_EXPR'], 'not integration')
+                        self.assertEqual(env['BACKEND_FAST_UNIT_FAIL_SECONDS'], 'inf')
+                        if status:
+                            self.assertIn('Declare the required index', output.getvalue())
+                            self.assertIn(runner.GUIDE, output.getvalue())
+
     def test_manifest_is_valid(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         self.assertEqual(validate_manifest(manifest, REPO_ROOT), [])
@@ -568,6 +654,23 @@ class RunnerBehaviorTests(unittest.TestCase):
 
             self.assertTrue(Path(resolved).samefile(bash))
 
+    def test_windows_bash_resolution_from_git_hook_exec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "mingw64/libexec/git-core/git.exe"
+            git.parent.mkdir(parents=True)
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
     def test_windows_bash_path_is_converted_back_to_native(self) -> None:
         commands: list[list[str]] = []
 
@@ -877,6 +980,10 @@ esac
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -893,16 +1000,16 @@ esac
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
   exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'guard-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'guard-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
@@ -911,10 +1018,6 @@ chmod +x "{python}"
             guard.parent.mkdir(parents=True, exist_ok=True)
             guard.write_text("# fixture\n", encoding="utf-8")
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(
@@ -951,6 +1054,10 @@ chmod +x "{python}"
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -970,25 +1077,21 @@ chmod +x "{python}"
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
   exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'compose-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
             sync.chmod(0o755)
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(
@@ -1096,6 +1199,40 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(selections[0].check.id, "target")
         self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
         self.assertEqual(selections[0].check.reason, "desktop source changed")
+
+    def test_globstar_prefix_trigger_matches_repository_root(self):
+        """`**/x` covers depth 0. A root-level file is not a different file type."""
+        for pattern, path in (
+            ("**/*.json", "firebase.json"),
+            ("**/*.yaml", "codemagic.yaml"),
+            ("**/*.swift", "Package.swift"),
+            ("**/Dockerfile*", "Dockerfile"),
+            ("**/AGENTS.md", "AGENTS.md"),
+        ):
+            with self.subTest(pattern=pattern, path=path):
+                self.assertTrue(trigger_matches(pattern, path))
+
+    def test_globstar_prefix_trigger_still_matches_nested_and_rejects_others(self):
+        self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
+        self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
+        self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_root_level_source_change_selects_plan_catalog_contract(self):
+        """The Stripe-literal scan walks from the root, so selection must too.
+
+        `plan-catalog-contract` is triggered only by `**/*.<ext>` patterns. Before
+        the leading-`**/` collapse, a production Stripe object ID committed to a
+        root-level source file -- `firebase.json`, `omi.json`, `codemagic.yaml` --
+        changed no path the guard could see, and the exhaustiveness contract it
+        exists to enforce reported success without running.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in ("firebase.json", "codemagic.yaml", "Package.swift"):
+            with self.subTest(path=path):
+                selected = {
+                    selection.check.id for selection in resolve_check_selections(manifest, [path], "ci")
+                }
+                self.assertIn("plan-catalog-contract", selected)
 
     def test_explicit_check_ids_preserve_manifest_commands(self):
         manifest = Manifest(

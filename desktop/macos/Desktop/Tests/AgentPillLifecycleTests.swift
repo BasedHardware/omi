@@ -81,7 +81,8 @@ import XCTest
     XCTAssertTrue(providerSource.contains("struct SpawnedAgentPillProjection: Equatable, Sendable"))
     XCTAssertTrue(pillSource.contains("guard !pill.status.isFinished else { return }"))
     XCTAssertTrue(viewSource.contains("private func mainConversationBackAction()"))
-    XCTAssertTrue(viewSource.contains(".help(agentPills.pills.isEmpty ? \"Close Omi Chat\" : \"Back to subagents\")"))
+    XCTAssertTrue(
+      viewSource.contains(".help(agentPills.pills.isEmpty ? \"Close Omi Chat (Esc)\" : \"Back to subagents\")"))
   }
 
   func testFloatingPillProjectionMergeRequiresCanonicalKernelIds() throws {
@@ -647,9 +648,11 @@ import XCTest
     XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("rowTopOffset: 0"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
-    XCTAssertTrue(source.contains("private var escToClearHint: some View"))
+    // Esc closes and keeps the conversation; clearing is an explicit, labeled control.
+    XCTAssertTrue(source.contains("private var clearConversationButton: some View"))
     XCTAssertTrue(
-      source.contains("        if state.hasVisibleConversation {\n          escToClearHint\n        }"))
+      source.contains("        if state.hasVisibleConversation {\n          clearConversationButton\n        }"))
+    XCTAssertFalse(source.contains("escToClearHint"))
     XCTAssertTrue(source.contains("canClearVisibleConversation: false"))
     XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))

@@ -1,5 +1,6 @@
 import html
 import re
+import unicodedata
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
 
@@ -22,10 +23,18 @@ def clamp_max_results(value: int) -> int:
     return max(1, min(10, value))
 
 
-_DOI_RE = re.compile(
-    r"^10\.\d{4,9}/[-._;()/:A-Z0-9#]+$",
-    re.IGNORECASE,
-)
+_DOI_PREFIX_RE = re.compile(r"^10\.[0-9]{4,9}(?:\.[0-9]+)*/")
+
+
+def _is_valid_doi(value: str) -> bool:
+    """Accept visible DOI characters; reject whitespace and non-graphic code points."""
+    prefix = _DOI_PREFIX_RE.match(value)
+    if prefix is None:
+        return False
+    suffix = value[prefix.end() :]
+    return bool(suffix) and all(
+        unicodedata.category(character)[0] in "LMNPS" for character in suffix
+    )
 
 
 def normalize_doi(value: Any) -> str | None:
@@ -33,8 +42,8 @@ def normalize_doi(value: Any) -> str | None:
 
     Chat callers commonly paste resolver links instead of the bare DOI.  Only
     the two DOI resolver hosts are accepted; their query and fragment are
-    discarded before decoding the path exactly once.  A second encoded layer
-    remains invalid rather than being silently interpreted as a different DOI.
+    discarded before decoding the path exactly once.  Any remaining percent
+    escape is kept literal and safely re-encoded for the Crossref API request.
     """
     if not isinstance(value, str):
         return None
@@ -63,7 +72,7 @@ def normalize_doi(value: Any) -> str | None:
         # Query and fragment are intentionally omitted; decode the path once.
         raw = unquote(parsed.path.lstrip("/"))
 
-    if ".." in raw or not _DOI_RE.fullmatch(raw):
+    if not _is_valid_doi(raw):
         return None
     return raw
 

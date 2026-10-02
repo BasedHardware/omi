@@ -216,6 +216,7 @@ class _HangingConversationLocationCapture extends ConversationLocationCapture {
 
 class _FakeBatchMicRecorder implements IMicRecorderService {
   int startBatchCalls = 0;
+  bool emitRecordingOnStart = false;
 
   @override
   Future<void> start({
@@ -225,7 +226,9 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
     Function()? onInitializing,
     Function()? onStalled,
     Function(bool began)? onInterruption,
-  }) async {}
+  }) async {
+    if (emitRecordingOnStart) onRecording?.call();
+  }
 
   @override
   Future<void> startBatch({
@@ -736,6 +739,32 @@ void main() {
       expect(provider.segments.first.personId, isNull);
     });
 
+    test('replacing a near match removes the old chip across segments of the same speaker', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello'), _segment('seg2', 'later')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Sam', segmentId: 'seg2', suggestedPersonId: 'sam'));
+      expect(provider.suggestionsBySegmentId.keys, ['seg2']);
+      expect(provider.suggestionsBySegmentId['seg2']?.suggestedPersonId, 'sam');
+      expect(provider.segments.every((segment) => segment.personId == null), isTrue);
+    });
+
+    test('a wire retraction clears every stale chip for that speaker even after its segment leaves', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.suggestionsBySegmentId['other'] = SpeakerLabelSuggestionEvent(
+          speakerId: 1, personId: '', personName: 'Other', segmentId: 'other', suggestedPersonId: 'other');
+      provider.segments = [];
+      final retraction = SpeakerLabelSuggestionEvent.fromJson(
+          {'speaker_id': 0, 'person_id': '', 'person_name': '', 'segment_id': 'new', 'retracted': true});
+      provider.onMessageEventReceived(retraction);
+      expect(provider.suggestionsBySegmentId.keys, ['other']);
+    });
+
     test('auto-applies assignment when personId is provided', () {
       final provider = CaptureProvider();
       // Create segment with speakerId 1 to match the event
@@ -1130,19 +1159,37 @@ void main() {
       provider.dispose();
     });
 
-    test('onConnected restores record from interrupted', () {
-      final provider = CaptureProvider();
+    test('onConnected restores record from interrupted', () async {
+      final mic = _FakeBatchMicRecorder()..emitRecordingOnStart = true;
+      final provider = CaptureProvider(
+        phoneMicRecorder: mic,
+        microphonePermissionRequester: () async => true,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
+      );
+      addTearDown(provider.dispose);
       provider.onConnectionStateChanged(true);
-      provider.updateRecordingState(RecordingState.record);
+      await provider.streamRecording();
+      expect(provider.liveCaptureSource, 'phone');
+      expect(provider.recordingState, RecordingState.record);
 
       provider.onClosed();
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.interrupted);
 
       provider.onConnected();
-
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.record);
-      provider.updateRecordingState(RecordingState.stop);
-      provider.dispose();
+      await provider.stopStreamRecording();
     });
 
     test('onConnected does not alter stop state', () {

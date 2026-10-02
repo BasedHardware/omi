@@ -122,13 +122,17 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
+def extract_embedding_from_bytes(
+    audio_data: bytes, filename: str = "audio.wav", *, client: httpx.Client | None = None, timeout: float = 300.0
+) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
     Args:
         audio_data: Raw audio bytes (wav format)
         filename: Filename to use in the request
+        client: Reused connection pool for callers embedding many clips in a row
+        timeout: Per-request timeout in seconds
 
     Returns:
         numpy array of shape (1, D) where D is embedding dimension
@@ -143,7 +147,8 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
+    post = client.post if client is not None else httpx.post
+    response = post(f"{api_url}/v2/embedding", files=files, timeout=timeout)
     response.raise_for_status()
 
     result = response.json()

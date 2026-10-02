@@ -1,17 +1,67 @@
 // Plays Omi's spoken response when the user talks to the device via the
 // hardware button. Ports the chunking + pipelined-playback architecture from
 // `desktop/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift`.
+// ignore_for_file: experimental_member_use
 
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/tts.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/voice_playback/progressive_tts_audio_source.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Registry ints cannot be omitted. Lifecycles that never start audio report this.
+const int _noAudioLatencyMs = -1;
+
+/// Output snapshot taken once at the start of a playback attempt.
+@visibleForTesting
+class VoicePlaybackOutputSnapshot {
+  final bool headphonesConnected;
+  final bool checkFailed;
+  final VoiceReplyPlaybackOutputRoute route;
+
+  const VoicePlaybackOutputSnapshot({
+    required this.headphonesConnected,
+    required this.checkFailed,
+    required this.route,
+  });
+}
+
+/// Test seam for the process-wide playback singleton. Production leaves this null.
+@visibleForTesting
+class VoicePlaybackDebugHooks {
+  final Future<Uint8List?> Function({required String text})? synthesize;
+  final TtsSynthesisRequest Function({required String text})? synthesizeStream;
+  final Future<void> Function(Uint8List bytes)? play;
+  final Future<Duration> Function(ProgressiveTtsAudioSource source)? playStream;
+  final Future<void> Function()? stopPlayback;
+  final Future<void> Function(String text)? speak;
+  final Future<void> Function()? stopSpeak;
+  final Future<VoicePlaybackOutputSnapshot> Function()? probeOutput;
+  final DateTime Function()? now;
+  final Future<void> Function(Duration duration)? delay;
+  final Duration? streamStallTimeout;
+
+  const VoicePlaybackDebugHooks({
+    this.synthesize,
+    this.synthesizeStream,
+    this.play,
+    this.playStream,
+    this.stopPlayback,
+    this.speak,
+    this.stopSpeak,
+    this.probeOutput,
+    this.now,
+    this.delay,
+    this.streamStallTimeout,
+  });
+}
 
 // Chunk-size heuristics ported verbatim from the desktop Swift service.
 // First sentence should feel snappy, later sentences can batch more text to
@@ -27,27 +77,63 @@ class OmiVoicePlaybackService {
   OmiVoicePlaybackService._();
   static final OmiVoicePlaybackService instance = OmiVoicePlaybackService._();
 
-  final AudioPlayer _player = AudioPlayer(handleInterruptions: false);
-  final FlutterTts _fallbackTts = FlutterTts();
+  NativePcmStreamPlayer? _playerField;
+  NativePcmStreamPlayer? _previewPlayerField;
+  FlutterTts? _fallbackTtsField;
+  FlutterTts? _previewFallbackTtsField;
+  NativePcmStreamPlayer get _player => _playerField ??= NativePcmStreamPlayer();
+  NativePcmStreamPlayer get _previewPlayer => _previewPlayerField ??= NativePcmStreamPlayer();
+  FlutterTts get _fallbackTts => _fallbackTtsField ??= FlutterTts();
+  FlutterTts get _previewFallbackTts => _previewFallbackTtsField ??= FlutterTts();
+
+  @visibleForTesting
+  VoicePlaybackDebugHooks? debugHooks;
 
   bool _initialized = false;
   String? _activeMessageId;
+
+  bool _lifecycleOpen = false;
+  int _lifecycleToken = 0;
+  DateTime? _lifecycleStartedAt;
+  VoiceReplyPlaybackMode _lifecycleMode = VoiceReplyPlaybackMode.off;
+  VoiceReplyPlaybackOutputRoute _lifecycleRoute = VoiceReplyPlaybackOutputRoute.unknown;
+  int _chunksRequested = 0;
+  int _chunksPlayed = 0;
+  int _chunksDropped = 0;
+  bool _usedFallback = false;
+  VoiceReplyPlaybackFallbackReason _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
+  DateTime? _firstAudioAt;
+  bool _sawFinal = false;
 
   // What the client already sent to synthesize, measured against the cumulative
   // streamed text. We always use `_spoken` as the slice boundary.
   int _spoken = 0;
 
   final List<_PendingSynthesis> _synthesisQueue = [];
-  final List<Uint8List> _audioQueue = [];
+  final List<_PlaybackChunk> _audioQueue = [];
+  TtsSynthesisRequest? _activeSynthesisRequest;
+  ProgressiveTtsAudioSource? _activeAudioSource;
+  Completer<void>? _debugPlaybackCompletion;
+  int _debugPlaybackCompletionSignals = 0;
   bool _synthesizing = false;
   bool _isPlayingQueue = false;
   bool _sessionActive = false;
   bool _pausedByInterruption = false;
+  bool _previewActive = false;
+  bool _previewOwnsSession = false;
+  Completer<void>? _previewStopSignal;
+  TtsSynthesisRequest? _previewSynthesisRequest;
+  ProgressiveTtsAudioSource? _previewAudioSource;
 
-  bool get isSpeaking => _sessionActive && (_isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing);
+  bool get isSpeaking =>
+      _previewActive || (_sessionActive && (_isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing));
 
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
+    if (debugHooks != null) {
+      _initialized = true;
+      return;
+    }
     _initialized = true;
 
     try {
@@ -69,42 +155,125 @@ class OmiVoicePlaybackService {
       // reply doesn't suddenly blast out of the phone speaker in public.
       session.becomingNoisyEventStream.listen((_) {
         debugPrint('OmiVoicePlayback: headphones disconnected — interrupting');
-        interrupt();
+        interrupt(source: VoiceReplyPlaybackInterruptSource.headphonesUnplugged);
       });
     } catch (e) {
       Logger.debug('OmiVoicePlaybackService: audio_session configure failed: $e');
     }
 
-    _player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) {
-        _playNextFromQueue();
-      }
-    });
+    try {
+      await _player.open();
+      await _previewPlayer.open();
+    } catch (e) {
+      Logger.debug('OmiVoicePlaybackService: PCM player initialization failed: $e');
+    }
 
     try {
       await _fallbackTts.setSpeechRate(0.5);
       await _fallbackTts.setVolume(1.0);
       await _fallbackTts.setPitch(1.0);
+      await _fallbackTts.awaitSpeakCompletion(true);
     } catch (_) {}
+    try {
+      await _previewFallbackTts.setSpeechRate(0.5);
+      await _previewFallbackTts.setVolume(1.0);
+      await _previewFallbackTts.setPitch(1.0);
+      await _previewFallbackTts.awaitSpeakCompletion(true);
+    } catch (_) {}
+  }
+
+  /// Plays one onboarding preview regardless of the saved response mode.
+  /// Uses the same cloud voice as a real reply and falls back to system TTS.
+  Future<void> playPreview(String text) async {
+    final cleaned = _cleanedPlaybackText(text);
+    if (cleaned.isEmpty) return;
+
+    await _ensureInitialized();
+    await _cancelPreview();
+    // A settings preview must never cut off or close a real reply lifecycle.
+    // The reply path owns the shared audio session while it is active.
+    if (_realReplyInFlight) return;
+
+    _previewOwnsSession = !_sessionActive;
+    if (_previewOwnsSession) await _activateSession();
+
+    final stopSignal = Completer<void>();
+    _previewStopSignal = stopSignal;
+    _previewActive = true;
+
+    var fallbackText = cleaned;
+    try {
+      final request = _synthesize(cleaned);
+      _previewSynthesisRequest = request;
+      final audio = await request.response;
+      if (!_previewActive || !identical(_previewStopSignal, stopSignal)) return;
+      if (audio == null) throw TtsUnavailableException(503);
+
+      final source = _sourceFor(audio);
+      _previewAudioSource = source;
+      final result = await Future.any<_CloudPlaybackResult?>([
+        _playPreviewSource(source).then<_CloudPlaybackResult?>((value) => value),
+        stopSignal.future.then<_CloudPlaybackResult?>((_) => null),
+      ]);
+      if (result == null || !_previewActive || !identical(_previewStopSignal, stopSignal)) return;
+      if (result.transfer.state == ProgressiveTtsTransferState.failed) {
+        fallbackText = _unplayedRemainder(cleaned, result, source);
+        if (fallbackText.isNotEmpty) throw result.transfer.error ?? StateError('Preview TTS stream failed');
+      }
+    } catch (e) {
+      if (_previewActive && identical(_previewStopSignal, stopSignal) && fallbackText.isNotEmpty) {
+        Logger.debug('OmiVoicePlaybackService: preview cloud voice failed, using system voice: $e');
+        await _speakPreviewFallback(fallbackText);
+      }
+    } finally {
+      if (identical(_previewStopSignal, stopSignal)) {
+        _previewSynthesisRequest = null;
+        _previewAudioSource = null;
+        _previewActive = false;
+        _previewStopSignal = null;
+        final ownsSession = _previewOwnsSession;
+        _previewOwnsSession = false;
+        if (ownsSession && !_realReplyInFlight) await _deactivateSession();
+      }
+    }
+  }
+
+  /// Stops only an active onboarding preview; real reply playback is untouched.
+  Future<void> stopPreview() async {
+    await _cancelPreview();
   }
 
   /// Start a new response lifecycle. Cancels any prior in-flight playback.
   Future<void> beginResponse({required String messageId}) async {
+    final startedAt = _now();
     final mode = SharedPreferencesUtil().voiceResponseMode;
     debugPrint('OmiVoicePlayback: beginResponse messageId=$messageId mode=$mode');
-    if (mode == 0) return; // Off
+    if (mode == 0) {
+      _emitSkip(
+        mode: VoiceReplyPlaybackMode.off,
+        skipReason: VoiceReplyPlaybackSkipReason.modeOff,
+        outputRoute: VoiceReplyPlaybackOutputRoute.unknown,
+      );
+      return; // Off
+    }
 
     await _ensureInitialized();
+    await _cancelPreview();
 
+    final output = await _probeOutput();
     // Mode 1 (headphones only): skip if no private-listening output is
     // connected so Omi never blasts a private answer out of the phone
     // speaker in public. Mode 2 (always) bypasses this gate.
-    if (mode == 1) {
-      final headphones = await _hasHeadphonesConnected();
-      if (!headphones) {
-        debugPrint('OmiVoicePlayback: no headphones — skipping playback (mode=headphones)');
-        return;
-      }
+    if (mode == 1 && !output.headphonesConnected) {
+      debugPrint('OmiVoicePlayback: no headphones — skipping playback (mode=headphones)');
+      _emitSkip(
+        mode: VoiceReplyPlaybackMode.headphonesOnly,
+        skipReason: output.checkFailed
+            ? VoiceReplyPlaybackSkipReason.headphoneCheckFailed
+            : VoiceReplyPlaybackSkipReason.noHeadphones,
+        outputRoute: output.route,
+      );
+      return;
     }
 
     if (_activeMessageId == messageId && isSpeaking) {
@@ -112,9 +281,21 @@ class OmiVoicePlaybackService {
       return;
     }
 
+    if (_lifecycleOpen && _activeMessageId != null && _activeMessageId != messageId) {
+      _lifecycleToken++;
+      _emit(
+        outcome: VoiceReplyPlaybackOutcome.interrupted,
+        interruptSource: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
+      );
+    }
+
     await _clearInFlightState();
+    final continuing = _lifecycleOpen && _activeMessageId == messageId;
     _activeMessageId = messageId;
     _spoken = 0;
+    if (!continuing) {
+      _openLifecycle(startedAt: startedAt, mode: _modeFromInt(mode), route: output.route);
+    }
 
     await _activateSession();
   }
@@ -122,7 +303,9 @@ class OmiVoicePlaybackService {
   /// True if at least one "private-listening" output is connected — AirPods
   /// (Bluetooth A2DP/LE/SCO), wired 3.5mm / Lightning headphones, USB headset,
   /// or AirPlay. False for the built-in speaker / earpiece alone.
-  Future<bool> _hasHeadphonesConnected() async {
+  Future<VoicePlaybackOutputSnapshot> _probeOutput() async {
+    final probe = debugHooks?.probeOutput;
+    if (probe != null) return probe();
     try {
       final session = await AudioSession.instance;
       final devices = await session.getDevices(includeInputs: false);
@@ -139,12 +322,20 @@ class OmiVoicePlaybackService {
       };
       final hit = devices.any((d) => headphoneTypes.contains(d.type));
       debugPrint('OmiVoicePlayback: headphones=$hit (devices=${devices.map((d) => d.type).toList()})');
-      return hit;
+      return VoicePlaybackOutputSnapshot(
+        headphonesConnected: hit,
+        checkFailed: false,
+        route: _coarsenRoute(devices),
+      );
     } catch (e) {
       debugPrint('OmiVoicePlayback: headphone check failed: $e — skipping playback');
       // Fail closed: if we can't tell whether headphones are connected,
       // we'd rather stay silent than blast audio from the speaker.
-      return false;
+      return const VoicePlaybackOutputSnapshot(
+        headphonesConnected: false,
+        checkFailed: true,
+        route: VoiceReplyPlaybackOutputRoute.unknown,
+      );
     }
   }
 
@@ -159,6 +350,7 @@ class OmiVoicePlaybackService {
       return;
     }
     Logger.log('OmiVoicePlayback: updateStreamingResponse len=${fullText.length} isFinal=$isFinal spoken=$_spoken');
+    if (isFinal) _sawFinal = true;
 
     final cleaned = _cleanedPlaybackText(fullText);
     if (_spoken >= cleaned.length && !isFinal) return;
@@ -187,23 +379,24 @@ class OmiVoicePlaybackService {
     }
 
     _drainSynthesis();
+    if (isFinal && _lifecycleOpen && _isIdle) {
+      _emit(outcome: _naturalOutcome());
+    }
   }
 
   /// Immediately cancel all synthesis + playback.
-  Future<void> interrupt() async {
+  Future<void> interrupt({
+    VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none,
+  }) async {
+    if (_lifecycleOpen) {
+      _lifecycleToken++;
+      _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
+    }
+    await _cancelPreview();
     _activeMessageId = null;
     _spoken = 0;
-    _synthesisQueue.clear();
-    _audioQueue.clear();
-    _synthesizing = false;
-    _isPlayingQueue = false;
-    _pausedByInterruption = false;
-    try {
-      await _player.stop();
-    } catch (_) {}
-    try {
-      await _fallbackTts.stop();
-    } catch (_) {}
+    await _clearInFlightState();
+    await _stopFallback();
     await _deactivateSession();
   }
 
@@ -217,13 +410,13 @@ class OmiVoicePlaybackService {
         case AudioInterruptionType.duck:
           break;
         case AudioInterruptionType.pause:
-          if (_player.playing) {
+          if (_player.isPlaying) {
             _pausedByInterruption = true;
             _player.pause();
           }
           break;
         case AudioInterruptionType.unknown:
-          interrupt();
+          interrupt(source: VoiceReplyPlaybackInterruptSource.audioInterruption);
           break;
       }
     } else {
@@ -233,7 +426,7 @@ class OmiVoicePlaybackService {
         case AudioInterruptionType.pause:
           if (_pausedByInterruption) {
             _pausedByInterruption = false;
-            _player.play();
+            _player.resume();
           }
           break;
         case AudioInterruptionType.unknown:
@@ -248,56 +441,122 @@ class OmiVoicePlaybackService {
 
   Future<void> _clearInFlightState() async {
     _synthesisQueue.clear();
+    final request = _activeSynthesisRequest;
+    _activeSynthesisRequest = null;
+    await request?.cancel();
+    final sources = <ProgressiveTtsAudioSource>{
+      if (_activeAudioSource != null) _activeAudioSource!,
+      for (final chunk in _audioQueue)
+        if (chunk is _CloudPlaybackChunk) chunk.source,
+    };
+    _activeAudioSource = null;
+    final debugCompletion = _debugPlaybackCompletion;
+    _debugPlaybackCompletion = null;
+    _debugPlaybackCompletionSignals = 0;
+    if (debugCompletion != null && !debugCompletion.isCompleted) debugCompletion.complete();
+    for (final source in sources) {
+      await source.cancel();
+    }
     _audioQueue.clear();
     _synthesizing = false;
     _isPlayingQueue = false;
     _pausedByInterruption = false;
-    try {
-      await _player.stop();
-    } catch (_) {}
+    await _stopPlayback();
+  }
+
+  bool get _realReplyInFlight =>
+      _lifecycleOpen ||
+      (_activeMessageId != null && (_sessionActive || _isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing));
+
+  Future<void> _cancelPreview() async {
+    if (!_previewActive) return;
+    final ownsSession = _previewOwnsSession;
+    _previewActive = false;
+    _previewOwnsSession = false;
+    final stopSignal = _previewStopSignal;
+    _previewStopSignal = null;
+    if (stopSignal != null && !stopSignal.isCompleted) stopSignal.complete();
+    final request = _previewSynthesisRequest;
+    _previewSynthesisRequest = null;
+    await request?.cancel();
+    final source = _previewAudioSource;
+    _previewAudioSource = null;
+    await source?.cancel();
+    await _stopPreviewPlayback();
+    if (ownsSession && !_realReplyInFlight) await _deactivateSession();
   }
 
   Future<void> _drainSynthesis() async {
     if (_synthesizing) return;
     if (_synthesisQueue.isEmpty) return;
+    final token = _lifecycleToken;
     _synthesizing = true;
 
-    while (_synthesisQueue.isNotEmpty) {
+    while (_synthesisQueue.isNotEmpty && token == _lifecycleToken && _lifecycleOpen) {
       if (SharedPreferencesUtil().voiceResponseMode == 0) {
-        await interrupt();
+        await interrupt(source: VoiceReplyPlaybackInterruptSource.modeOff);
         break;
       }
       final pending = _synthesisQueue.removeAt(0);
       debugPrint('OmiVoicePlayback: synthesizing "${pending.text}"');
+      _chunksRequested++;
+      TtsSynthesisRequest? request;
       try {
-        final bytes = await synthesizeSpeech(text: pending.text);
-        debugPrint('OmiVoicePlayback: got ${bytes?.length ?? 0} MP3 bytes');
-        if (bytes != null && bytes.isNotEmpty) {
-          _audioQueue.add(bytes);
+        request = _synthesize(pending.text);
+        _activeSynthesisRequest = request;
+        final audio = await request.response;
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
+        if (audio != null) {
+          final source = _sourceFor(audio);
+          debugPrint('OmiVoicePlayback: TTS response streaming (length=${audio.contentLength ?? 'unknown'})');
+          _audioQueue.add(_CloudPlaybackChunk(pending.text, source));
           _tryStartPlayback();
+        } else {
+          throw TtsUnavailableException(0);
         }
       } on TtsUnavailableException catch (e) {
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         Logger.log('TTS unavailable (${e.statusCode}) — falling back to system voice');
-        // Fallback: speak the remaining sentence and any queued ones on-device.
-        await _speakFallback(pending.text);
+        _fallbackReason = _fallbackReasonFromStatus(e.statusCode);
+        _audioQueue.add(_FallbackPlaybackChunk(pending.text));
         for (final rest in _synthesisQueue) {
-          await _speakFallback(rest.text);
+          _audioQueue.add(_FallbackPlaybackChunk(rest.text));
         }
         _synthesisQueue.clear();
+        _tryStartPlayback();
         break;
       } catch (e) {
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         Logger.debug('synthesizeSpeech failed: $e');
-        // Skip this sentence; keep the pipeline moving.
+        _chunksDropped++;
+      } finally {
+        if (identical(_activeSynthesisRequest, request)) _activeSynthesisRequest = null;
       }
     }
 
-    _synthesizing = false;
-    _maybeFinish();
+    if (token == _lifecycleToken) {
+      _synthesizing = false;
+      _maybeFinish();
+    }
   }
 
   Future<void> _speakFallback(String text) async {
+    final token = _lifecycleToken;
+    final startedAt = _now();
     try {
-      await _fallbackTts.speak(text);
+      if (debugHooks != null) {
+        final speak = debugHooks!.speak;
+        if (speak == null) {
+          throw StateError('Voice playback test hooks are installed without a speak function');
+        }
+        await speak(text);
+      } else {
+        await _fallbackTts.speak(text);
+      }
+      if (token == _lifecycleToken && _lifecycleOpen) {
+        _usedFallback = true;
+        _noteFirstAudio(startedAt);
+      }
     } catch (e) {
       Logger.debug('flutter_tts fallback failed: $e');
     }
@@ -305,43 +564,83 @@ class OmiVoicePlaybackService {
 
   void _tryStartPlayback() {
     if (_isPlayingQueue) return;
-    _playNextFromQueue();
+    unawaited(_drainPlaybackQueue());
   }
 
-  Future<void> _playNextFromQueue() async {
-    if (_audioQueue.isEmpty) {
-      _isPlayingQueue = false;
-      _maybeFinish();
-      return;
-    }
+  Future<void> _drainPlaybackQueue() async {
+    if (_isPlayingQueue) return;
     _isPlayingQueue = true;
-    final bytes = _audioQueue.removeAt(0);
-    try {
-      await _player.setAudioSource(_BytesAudioSource(bytes));
-      await _player.play();
-    } catch (e) {
-      Logger.debug('just_audio play failed: $e');
-      _isPlayingQueue = false;
-      // Skip this chunk and try the next one.
-      _playNextFromQueue();
+    final token = _lifecycleToken;
+
+    while (_audioQueue.isNotEmpty && token == _lifecycleToken && _lifecycleOpen) {
+      final chunk = _audioQueue.removeAt(0);
+      if (chunk is _FallbackPlaybackChunk) {
+        await _speakFallback(chunk.text);
+        continue;
+      }
+
+      final cloud = chunk as _CloudPlaybackChunk;
+      _activeAudioSource = cloud.source;
+      try {
+        final result = await _playCloudChunk(cloud.source, token: token);
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
+        if (result.started) {
+          _chunksPlayed++;
+        }
+        if (result.transfer.state == ProgressiveTtsTransferState.failed) {
+          if (!result.started) _chunksDropped++;
+          _fallbackReason = VoiceReplyPlaybackFallbackReason.noResponse;
+          final remainder = _unplayedRemainder(cloud.text, result, cloud.source);
+          Logger.debug(
+            'TTS stream failed after ${cloud.source.receivedBytes} bytes; '
+            'fallback chars=${remainder.length}: ${result.transfer.error}',
+          );
+          if (remainder.isNotEmpty) _audioQueue.insert(0, _FallbackPlaybackChunk(remainder));
+        }
+        if (debugHooks?.playStream == null && debugHooks?.play != null) {
+          if (_debugPlaybackCompletionSignals > 0) {
+            _debugPlaybackCompletionSignals--;
+          } else {
+            final completion = Completer<void>();
+            _debugPlaybackCompletion = completion;
+            await completion.future;
+            if (identical(_debugPlaybackCompletion, completion)) _debugPlaybackCompletion = null;
+          }
+        }
+      } catch (e) {
+        Logger.debug('progressive TTS playback failed: $e');
+        if (token != _lifecycleToken) break;
+        _chunksDropped++;
+      } finally {
+        if (identical(_activeAudioSource, cloud.source)) _activeAudioSource = null;
+      }
     }
+
+    if (token != _lifecycleToken) return;
+    _isPlayingQueue = false;
+    _debugPlaybackCompletionSignals = 0;
+    _maybeFinish();
   }
 
   void _maybeFinish() {
-    if (_synthesisQueue.isEmpty && _audioQueue.isEmpty && !_isPlayingQueue && !_synthesizing) {
-      // Small grace window so tail chunks from the SSE stream don't flap the
-      // foreground service on/off rapidly.
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        if (_synthesisQueue.isEmpty && _audioQueue.isEmpty && !_isPlayingQueue && !_synthesizing) {
-          await _deactivateSession();
-        }
-      });
-    }
+    if (!_isIdle) return;
+    // Small grace window so tail chunks from the SSE stream don't flap the
+    // foreground service on/off rapidly. The session still deactivates when
+    // the window elapses; a natural outcome waits until the stream is final
+    // so a slow answer is not closed between chunks.
+    final token = _lifecycleToken;
+    _delay(const Duration(milliseconds: 500)).then((_) async {
+      if (token != _lifecycleToken || !_isIdle) return;
+      await _deactivateSession();
+      if (token != _lifecycleToken || !_lifecycleOpen || !_isIdle || !_sawFinal) return;
+      _emit(outcome: _naturalOutcome());
+    });
   }
 
   Future<void> _activateSession() async {
     if (_sessionActive) return;
     _sessionActive = true;
+    if (debugHooks != null) return;
     try {
       final session = await AudioSession.instance;
       await session.setActive(true);
@@ -354,10 +653,395 @@ class OmiVoicePlaybackService {
   Future<void> _deactivateSession() async {
     if (!_sessionActive) return;
     _sessionActive = false;
+    if (debugHooks != null) return;
     try {
       final session = await AudioSession.instance;
       await session.setActive(false);
     } catch (_) {}
+  }
+
+  bool get _isIdle => _synthesisQueue.isEmpty && _audioQueue.isEmpty && !_isPlayingQueue && !_synthesizing;
+
+  DateTime _now() => debugHooks?.now?.call() ?? DateTime.now();
+
+  Future<void> _delay(Duration duration) {
+    final delay = debugHooks?.delay;
+    if (delay != null) return delay(duration);
+    return Future<void>.delayed(duration);
+  }
+
+  VoiceReplyPlaybackMode _modeFromInt(int mode) => switch (mode) {
+        0 => VoiceReplyPlaybackMode.off,
+        1 => VoiceReplyPlaybackMode.headphonesOnly,
+        2 => VoiceReplyPlaybackMode.always,
+        _ => VoiceReplyPlaybackMode.unknown,
+      };
+
+  void _openLifecycle({
+    required DateTime startedAt,
+    required VoiceReplyPlaybackMode mode,
+    required VoiceReplyPlaybackOutputRoute route,
+  }) {
+    _lifecycleToken++;
+    _lifecycleOpen = true;
+    _lifecycleStartedAt = startedAt;
+    _lifecycleMode = mode;
+    _lifecycleRoute = route;
+    _chunksRequested = 0;
+    _chunksPlayed = 0;
+    _chunksDropped = 0;
+    _usedFallback = false;
+    _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
+    _firstAudioAt = null;
+    _sawFinal = false;
+  }
+
+  void _noteFirstAudio(DateTime startedAt) {
+    _firstAudioAt ??= startedAt;
+  }
+
+  VoiceReplyPlaybackOutcome _naturalOutcome() {
+    if (_chunksPlayed > 0 && _usedFallback) return VoiceReplyPlaybackOutcome.playedWithFallback;
+    if (_chunksPlayed > 0) return VoiceReplyPlaybackOutcome.played;
+    if (_usedFallback) return VoiceReplyPlaybackOutcome.fallbackOnly;
+    return VoiceReplyPlaybackOutcome.failed;
+  }
+
+  VoiceReplyPlaybackFallbackReason _fallbackReasonFromStatus(int statusCode) => switch (statusCode) {
+        429 => VoiceReplyPlaybackFallbackReason.rateLimited429,
+        503 => VoiceReplyPlaybackFallbackReason.unavailable503,
+        _ => VoiceReplyPlaybackFallbackReason.noResponse,
+      };
+
+  void _emitSkip({
+    required VoiceReplyPlaybackMode mode,
+    required VoiceReplyPlaybackSkipReason skipReason,
+    required VoiceReplyPlaybackOutputRoute outputRoute,
+  }) {
+    AnalyticsManager().voiceReplyPlayback(
+      outcome: VoiceReplyPlaybackOutcome.skipped,
+      skipReason: skipReason,
+      mode: mode,
+      outputRoute: outputRoute,
+      chunksRequested: 0,
+      chunksPlayed: 0,
+      chunksDropped: 0,
+      fallbackReason: VoiceReplyPlaybackFallbackReason.none,
+      firstAudioLatencyMs: _noAudioLatencyMs,
+      interruptSource: VoiceReplyPlaybackInterruptSource.none,
+    );
+  }
+
+  void _emit({
+    required VoiceReplyPlaybackOutcome outcome,
+    VoiceReplyPlaybackSkipReason skipReason = VoiceReplyPlaybackSkipReason.none,
+    VoiceReplyPlaybackInterruptSource interruptSource = VoiceReplyPlaybackInterruptSource.none,
+  }) {
+    if (!_lifecycleOpen) return;
+    _lifecycleOpen = false;
+    final latency = _lifecycleStartedAt != null && _firstAudioAt != null
+        ? _firstAudioAt!.difference(_lifecycleStartedAt!).inMilliseconds
+        : _noAudioLatencyMs;
+    AnalyticsManager().voiceReplyPlayback(
+      outcome: outcome,
+      skipReason: skipReason,
+      mode: _lifecycleMode,
+      outputRoute: _lifecycleRoute,
+      chunksRequested: _chunksRequested,
+      chunksPlayed: _chunksPlayed,
+      chunksDropped: _chunksDropped,
+      fallbackReason: _fallbackReason,
+      firstAudioLatencyMs: latency < 0 ? _noAudioLatencyMs : latency,
+      interruptSource: interruptSource,
+    );
+  }
+
+  TtsSynthesisRequest _synthesize(String text) {
+    if (debugHooks != null) {
+      final synthesizeStream = debugHooks!.synthesizeStream;
+      if (synthesizeStream != null) return synthesizeStream(text: text);
+      final synthesize = debugHooks!.synthesize;
+      if (synthesize == null) {
+        throw StateError('Voice playback test hooks are installed without a synthesize function');
+      }
+      return TtsSynthesisRequest(
+        response: synthesize(text: text).then((bytes) {
+          if (bytes == null) return null;
+          return TtsAudioStream(
+            bytes: Stream<List<int>>.value(bytes),
+            contentLength: bytes.length,
+            contentType: 'audio/mpeg',
+            cancel: () async {},
+          );
+        }),
+        cancel: () async {},
+      );
+    }
+    return synthesizeSpeechStream(text: text);
+  }
+
+  ProgressiveTtsAudioSource _sourceFor(TtsAudioStream stream) => ProgressiveTtsAudioSource(
+        stream,
+        stallTimeout: debugHooks?.streamStallTimeout ?? progressiveTtsStallTimeout,
+      );
+
+  Future<_CloudPlaybackResult> _playPreviewSource(ProgressiveTtsAudioSource source) async {
+    await source.ready;
+    if (source.receivedBytes == 0) {
+      return _CloudPlaybackResult(started: false, position: Duration.zero, transfer: await source.settled);
+    }
+    if (debugHooks != null) {
+      final playStream = debugHooks!.playStream;
+      if (playStream != null) {
+        final position = await playStream(source);
+        return _CloudPlaybackResult(started: true, position: position, transfer: await source.settled);
+      }
+      final play = debugHooks!.play;
+      if (play == null) {
+        throw StateError('Voice playback test hooks are installed without a play function');
+      }
+      await play(await source.collectBytes());
+      return _CloudPlaybackResult(started: true, position: Duration.zero, transfer: await source.settled);
+    }
+    final playback = await ProgressiveTtsPcmPlayer(_previewPlayer).play(source);
+    return _CloudPlaybackResult(
+      started: playback.started,
+      position: playback.position,
+      transfer: playback.transfer,
+    );
+  }
+
+  Future<void> _speakPreviewFallback(String text) async {
+    try {
+      if (debugHooks != null) {
+        final speak = debugHooks!.speak;
+        if (speak == null) {
+          throw StateError('Voice playback test hooks are installed without a speak function');
+        }
+        await speak(text);
+      } else {
+        await _previewFallbackTts.speak(text);
+      }
+    } catch (e) {
+      Logger.debug('OmiVoicePlaybackService: preview flutter_tts fallback failed: $e');
+    }
+  }
+
+  Future<_CloudPlaybackResult> _playCloudChunk(ProgressiveTtsAudioSource source, {required int token}) async {
+    await source.ready;
+    if (source.receivedBytes == 0) {
+      return _CloudPlaybackResult(started: false, position: Duration.zero, transfer: await source.settled);
+    }
+    if (debugHooks != null) {
+      final playStream = debugHooks!.playStream;
+      if (playStream != null) {
+        final playback = playStream(source);
+        if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
+        final position = await playback;
+        return _CloudPlaybackResult(started: true, position: position, transfer: await source.settled);
+      }
+      final play = debugHooks!.play;
+      if (play == null) {
+        throw StateError('Voice playback test hooks are installed without a play function');
+      }
+      final playback = play(await source.collectBytes());
+      if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
+      await playback;
+      return _CloudPlaybackResult(started: true, position: Duration.zero, transfer: await source.settled);
+    }
+    final playback = await ProgressiveTtsPcmPlayer(_player).play(
+      source,
+      onStarted: () {
+        if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
+      },
+    );
+    return _CloudPlaybackResult(
+      started: playback.started,
+      position: playback.position,
+      transfer: playback.transfer,
+    );
+  }
+
+  String _unplayedRemainder(
+    String text,
+    _CloudPlaybackResult result,
+    ProgressiveTtsAudioSource source,
+  ) {
+    if (!result.started) return text;
+
+    final expected = source.expectedBytes;
+    final received = source.receivedBytes;
+    int spokenChars;
+    if (expected != null && expected > 0) {
+      spokenChars = (text.length * (received / expected).clamp(0.0, 1.0)).ceil();
+    } else if (result.position > Duration.zero) {
+      // The endpoint is fixed at 128 kbps but a chunked response has no total
+      // byte count. Twenty characters/second intentionally advances past the
+      // likely spoken word so fallback never repeats a partially heard word.
+      spokenChars = (result.position.inMilliseconds * 20 / 1000).ceil();
+    } else {
+      // Audio started but the native decoder exposed no usable position. It is
+      // safer to omit this damaged chunk than to double-speak it.
+      return '';
+    }
+
+    var boundary = spokenChars.clamp(0, text.length);
+    while (boundary < text.length && !RegExp(r'\s').hasMatch(text[boundary])) {
+      boundary++;
+    }
+    return text.substring(boundary).trimLeft();
+  }
+
+  Future<void> _stopPlayback() async {
+    if (debugHooks != null) {
+      final stop = debugHooks!.stopPlayback;
+      if (stop != null) {
+        try {
+          await stop();
+        } catch (_) {}
+      }
+      return;
+    }
+    try {
+      await _player.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _stopPreviewPlayback() async {
+    if (debugHooks != null) {
+      final stop = debugHooks!.stopPlayback;
+      if (stop != null) {
+        try {
+          await stop();
+        } catch (_) {}
+      }
+      final stopSpeak = debugHooks!.stopSpeak;
+      if (stopSpeak != null) {
+        try {
+          await stopSpeak();
+        } catch (_) {}
+      }
+      return;
+    }
+    try {
+      await _previewPlayer.stop();
+    } catch (_) {}
+    try {
+      await _previewFallbackTts.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _stopFallback() async {
+    if (debugHooks != null) {
+      final stop = debugHooks!.stopSpeak;
+      if (stop != null) {
+        try {
+          await stop();
+        } catch (_) {}
+      }
+      return;
+    }
+    try {
+      await _fallbackTts.stop();
+    } catch (_) {}
+  }
+
+  VoiceReplyPlaybackOutputRoute _coarsenRoute(Iterable<AudioDevice> devices) {
+    var best = VoiceReplyPlaybackOutputRoute.unknown;
+    var bestRank = _routeRank(VoiceReplyPlaybackOutputRoute.unknown);
+    for (final device in devices) {
+      final route = _routeForType(device.type);
+      final rank = _routeRank(route);
+      if (rank < bestRank) {
+        best = route;
+        bestRank = rank;
+      }
+    }
+    return best;
+  }
+
+  int _routeRank(VoiceReplyPlaybackOutputRoute route) => switch (route) {
+        VoiceReplyPlaybackOutputRoute.bluetooth => 0,
+        VoiceReplyPlaybackOutputRoute.wired => 1,
+        VoiceReplyPlaybackOutputRoute.airplay => 2,
+        VoiceReplyPlaybackOutputRoute.usb => 3,
+        VoiceReplyPlaybackOutputRoute.speaker => 4,
+        VoiceReplyPlaybackOutputRoute.unknown => 5,
+      };
+
+  VoiceReplyPlaybackOutputRoute _routeForType(AudioDeviceType type) {
+    switch (type.name) {
+      case 'bluetoothA2dp':
+      case 'bluetoothLe':
+      case 'bluetoothSco':
+        return VoiceReplyPlaybackOutputRoute.bluetooth;
+      case 'wiredHeadphones':
+      case 'wiredHeadset':
+      case 'lineAnalog':
+      case 'lineDigital':
+        return VoiceReplyPlaybackOutputRoute.wired;
+      case 'airPlay':
+        return VoiceReplyPlaybackOutputRoute.airplay;
+      case 'usbAudio':
+        return VoiceReplyPlaybackOutputRoute.usb;
+      case 'builtInSpeaker':
+      case 'builtInEarpiece':
+        return VoiceReplyPlaybackOutputRoute.speaker;
+      default:
+        return VoiceReplyPlaybackOutputRoute.unknown;
+    }
+  }
+
+  @visibleForTesting
+  void debugNotifyPlaybackCompleted() {
+    final completion = _debugPlaybackCompletion;
+    if (completion != null && !completion.isCompleted) {
+      completion.complete();
+    } else if (_synthesizing || _isPlayingQueue || _audioQueue.isNotEmpty) {
+      _debugPlaybackCompletionSignals++;
+    }
+  }
+
+  @visibleForTesting
+  void debugReset() {
+    unawaited(_activeSynthesisRequest?.cancel());
+    unawaited(_previewSynthesisRequest?.cancel());
+    unawaited(_activeAudioSource?.cancel());
+    unawaited(_previewAudioSource?.cancel());
+    for (final chunk in _audioQueue) {
+      if (chunk is _CloudPlaybackChunk) unawaited(chunk.source.cancel());
+    }
+    debugHooks = null;
+    _initialized = false;
+    _activeMessageId = null;
+    _spoken = 0;
+    _synthesisQueue.clear();
+    _audioQueue.clear();
+    _activeSynthesisRequest = null;
+    _activeAudioSource = null;
+    _debugPlaybackCompletion = null;
+    _debugPlaybackCompletionSignals = 0;
+    _synthesizing = false;
+    _isPlayingQueue = false;
+    _sessionActive = false;
+    _pausedByInterruption = false;
+    _previewActive = false;
+    _previewOwnsSession = false;
+    _previewStopSignal = null;
+    _previewSynthesisRequest = null;
+    _previewAudioSource = null;
+    _lifecycleOpen = false;
+    _lifecycleToken++;
+    _lifecycleStartedAt = null;
+    _lifecycleMode = VoiceReplyPlaybackMode.off;
+    _lifecycleRoute = VoiceReplyPlaybackOutputRoute.unknown;
+    _chunksRequested = 0;
+    _chunksPlayed = 0;
+    _chunksDropped = 0;
+    _usedFallback = false;
+    _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
+    _firstAudioAt = null;
+    _sawFinal = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -439,21 +1123,24 @@ class _PendingSynthesis {
   _PendingSynthesis(this.text);
 }
 
-/// In-memory `just_audio` source for a single MP3 chunk.
-class _BytesAudioSource extends StreamAudioSource {
-  final Uint8List _bytes;
-  _BytesAudioSource(this._bytes);
+abstract class _PlaybackChunk {
+  final String text;
+  const _PlaybackChunk(this.text);
+}
 
-  @override
-  Future<StreamAudioResponse> request([int? start, int? end]) async {
-    start ??= 0;
-    end ??= _bytes.length;
-    return StreamAudioResponse(
-      sourceLength: _bytes.length,
-      contentLength: end - start,
-      offset: start,
-      stream: Stream.value(_bytes.sublist(start, end)),
-      contentType: 'audio/mpeg',
-    );
-  }
+class _CloudPlaybackChunk extends _PlaybackChunk {
+  final ProgressiveTtsAudioSource source;
+  const _CloudPlaybackChunk(super.text, this.source);
+}
+
+class _FallbackPlaybackChunk extends _PlaybackChunk {
+  const _FallbackPlaybackChunk(super.text);
+}
+
+class _CloudPlaybackResult {
+  final bool started;
+  final Duration position;
+  final ProgressiveTtsTransferResult transfer;
+
+  const _CloudPlaybackResult({required this.started, required this.position, required this.transfer});
 }

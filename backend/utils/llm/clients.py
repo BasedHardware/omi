@@ -52,6 +52,7 @@ from utils.llm.model_config import (
     is_structured_output_feature,
     supports_cache_retention,
     supports_prompt_cache,
+    uses_explicit_cache_and_chat_sanitizer,
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
@@ -545,12 +546,30 @@ def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]
 
 
 def _create_byok_client(
-    model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
+    model: str,
+    provider: str,
+    byok_key: str,
+    streaming: bool = False,
+    feature: str = '',
+    request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> Optional[BaseChatModel]:
-    """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
+    """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider.
+
+    Callers that need a bounded transport deadline (e.g. viewed-lane translation)
+    pass request_timeout/max_retries explicitly; these override the chat-agent
+    defaults. The cache key includes ctor kwargs, so bounded and default clients
+    never collide.
+    """
     callback_provider = _effective_byok_provider(model, provider)
     kwargs: Dict[str, Any] = _with_llm_callbacks(
-        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
+        {
+            'request_timeout': 120 if request_timeout is None else request_timeout,
+            'max_retries': 1 if max_retries is None else max_retries,
+        },
+        callback_provider,
+        model=model,
+        feature=feature,
     )
     if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
@@ -780,7 +799,9 @@ def get_llm(
             feature=feature,
         )
     elif byok_key:
-        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        byok_client = _create_byok_client(
+            model, provider, byok_key, streaming, feature, request_timeout=request_timeout, max_retries=max_retries
+        )
         result = (
             byok_client
             if byok_client is not None
@@ -814,7 +835,7 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    if prompt_cache_options and model.startswith('gpt-5.6'):
+    if prompt_cache_options and uses_explicit_cache_and_chat_sanitizer(model):
         # This is a provider request field, not a ChatOpenAI constructor field.
         # extra_body lets the OpenAI client merge it into the wire payload. It
         # must be sent even without a cache key: explicit mode with no

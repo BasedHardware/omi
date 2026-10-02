@@ -22,6 +22,8 @@ Wal _wal({required int start, String? ownerUid}) => Wal(
       timerStart: start,
       codec: BleAudioCodec.opus,
       seconds: 30,
+      storage: WalStorage.disk,
+      status: WalStatus.miss,
       ownerUid: ownerUid,
     );
 
@@ -117,5 +119,43 @@ void main() {
     onDisk = await WalFileManager.loadWals();
     expect(onDisk.map((w) => w.timerStart), containsAll([1000, 2000, 3000, 5000]),
         reason: 'no account data is lost across the handover');
+  });
+
+  test('logout and account-switch churn stays within the shared unsynced retention cap', () async {
+    var persisted = <Wal>[];
+
+    SharedPreferences.setMockInitialValues({'uid': 'account-a'});
+    await SharedPreferencesUtil.init();
+    final syncA = LocalWalSyncImpl(
+      _FakeListener(),
+      persistWals: (wals) async => persisted = List<Wal>.from(wals),
+      loadWals: () async => <Wal>[],
+    );
+    syncA.testWals = List.generate(400, (index) => _wal(start: index, ownerUid: 'account-a'));
+    syncA.clearUserData();
+
+    SharedPreferences.setMockInitialValues({'uid': 'account-b'});
+    await SharedPreferencesUtil.init();
+    syncA.testWals = List.generate(400, (index) => _wal(start: 1000 + index, ownerUid: 'account-b'));
+    await syncA.addExternalWal(_wal(start: 2000, ownerUid: 'account-b'), admittedGeneration: syncA.sessionGeneration);
+
+    expect(persisted, hasLength(maxRetainedCaptureWalCount));
+    expect(persisted.where((wal) => wal.ownerUid == 'account-a'), hasLength(319),
+        reason: 'the oldest retired-account WALs must participate in the shared cap');
+
+    SharedPreferences.setMockInitialValues({'uid': 'account-c'});
+    await SharedPreferencesUtil.init();
+    final syncC = LocalWalSyncImpl(
+      _FakeListener(),
+      persistWals: (wals) async => persisted = List<Wal>.from(wals),
+      loadWals: () async => List<Wal>.from(persisted),
+    );
+    syncC.start();
+    await syncC.walReady;
+
+    expect(syncC.testWals, isEmpty, reason: 'the retained account-B WALs are foreign to account C');
+    expect(persisted, hasLength(maxRetainedCaptureWalCount),
+        reason: 'foreign WALs loaded after an account switch remain inside the cap');
+    await syncC.stop();
   });
 }

@@ -211,7 +211,7 @@ def test_memory_use_route_uses_the_configured_customer_data_plane_client(monkeyp
                 "MemoryFirestoreApplyError", "canonical apply blocked by account deletion fence"
             ),
             409,
-            "canonical apply blocked by account deletion fence",
+            "memory update could not be committed",
         ),
     ],
 )

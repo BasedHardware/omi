@@ -740,7 +740,7 @@ def test_non_desktop_conversation_writes_tasks_and_never_proposes(monkeypatch, s
         'prepare_wake_word_capture_gate',
         lambda *a, **kw: pytest.fail('wake adjudication belongs to the Candidate path'),
     )
-    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *a: [])
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *a, **kw: [])
     monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *a: 0)
     monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
@@ -772,7 +772,7 @@ def test_non_desktop_reprocess_replaces_the_conversations_previous_tasks(monkeyp
     monkeypatch.setattr(
         process_conversation.action_items_db,
         'get_action_items_by_conversation',
-        lambda *a: [{'id': 'stale-1'}],
+        lambda *a, **kw: [{'id': 'stale-1'}],
     )
     monkeypatch.setattr(
         process_conversation.action_items_db,

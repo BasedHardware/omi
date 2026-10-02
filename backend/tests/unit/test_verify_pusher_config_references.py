@@ -179,9 +179,23 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
+        "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
+        "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
+        "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
+        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
+        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
+        "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
+        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
+        "CAPTURE_JEV_SHADOW_ENABLED": "true",
+        "CAPTURE_JEV_SHADOW_PERCENT": "0",
+        "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "FREE_TIER_LOCAL_PROCESSING": "true",
         "FREE_TIER_EMERGENCY_STOP": "false",
@@ -189,9 +203,15 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
+        "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
+        "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
+        "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
+        "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED": "true",
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
+        "MEMORY_OWNER_JEV_FLIP_ENABLED": "true",
+        "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
         "OMI_ENV_STAGE": "dev",
         "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
         "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
@@ -199,6 +219,11 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,soniox,dg-nova-3,parakeet",
+        "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
+        "TRANSCRIPTION_SHADOW_ENABLED": "true",
+        "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
+        "TRANSCRIPTION_SHADOW_PERCENT": "0",
+        "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": "omi-release-probe",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
@@ -210,6 +235,12 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     literals = preflight.literal_pusher_values(deployment)
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
+    assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
+    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
+    assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "1"
+    assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,dg-nova-3,parakeet"

@@ -20,6 +20,7 @@ from database.legal_holds import (
     LegalHoldAuthorityUnavailable,
 )
 from database.sync_bridges import mark_sync_bridge_cleaned
+from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
@@ -66,7 +67,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
     visited: set[str] = set()
     while True:
         if conversation_id in visited:
-            raise SyncAssignmentConflict('sync redirect cycle')
+            raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
         visited.add(conversation_id)
         row = conversations_db.get_conversation(uid, conversation_id)
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
@@ -77,7 +78,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
         for source_id in row.get('sync_merged_from', []):
             source = conversations_db.get_conversation(uid, source_id)
             if not source or not source.get('deleted') or not source.get('sync_merged_into'):
-                raise SyncAssignmentConflict('sync bridge source missing or not a tombstone')
+                raise SyncAssignmentConflict('sync bridge source missing or not a tombstone', subtype='other')
             revision = source['sync_content_revision']
             needs_cleanup = source.get('sync_bridge_cleaned_revision') != revision
             audio_target = conversation_id if row.get('private_cloud_sync_enabled') else None
@@ -89,6 +90,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 _record_bridge_retraction('attempted')
                 logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
                 try:
+                    transfer_donor(uid, source_id, conversation_id)
                     retract_sync_bridge_source(uid, source_id)
                 except Exception as error:
                     reason = _deferred_retraction_reason(error)

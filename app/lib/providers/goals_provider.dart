@@ -24,6 +24,9 @@ class GoalsProvider extends ChangeNotifier {
   DateTime? _lastGoalDeletion;
   int _sessionGeneration = 0;
 
+  // Deletes waiting for their Undo toast to close (docs/ux-contract.md §4).
+  final Map<String, ({Goal goal, int index})> _stagedDeletes = {};
+
   List<Goal> get goals => _goals;
   bool get isLoading => _isLoading;
 
@@ -81,7 +84,8 @@ class GoalsProvider extends ChangeNotifier {
       final goals = await _goalsFetcher();
       if (generation != _sessionGeneration) return;
       if (goals != null) {
-        _goals = goals;
+        // A goal waiting on its Undo toast stays hidden until the delete commits or is undone.
+        _goals = goals.where((g) => !_stagedDeletes.containsKey(g.id)).toList();
         await _saveToLocalStorage();
         _notifyAfterFrame();
       }
@@ -108,6 +112,7 @@ class GoalsProvider extends ChangeNotifier {
     _goals = [];
     _isLoading = false;
     _lastGoalDeletion = null;
+    _stagedDeletes.clear();
     notifyListeners();
   }
 
@@ -214,6 +219,43 @@ class GoalsProvider extends ChangeNotifier {
     }
     return success;
   }
+
+  /// Hides the goal now and holds its server delete until [commitStagedGoalDelete];
+  /// [undoStagedGoalDelete] puts it back. Swipe and sheet deletes go through this so they can offer
+  /// Undo (D5) — see `deleteGoalWithUndo`.
+  void stageDeleteGoal(String goalId) {
+    if (_stagedDeletes.containsKey(goalId)) return;
+    final index = _goals.indexWhere((g) => g.id == goalId);
+    if (index == -1) return;
+    _stagedDeletes[goalId] = (goal: _goals.removeAt(index), index: index);
+    notifyListeners();
+  }
+
+  /// Restores a goal hidden by [stageDeleteGoal]. False when it was not staged.
+  bool undoStagedGoalDelete(String goalId) {
+    final staged = _stagedDeletes.remove(goalId);
+    if (staged == null) return false;
+    if (!_goals.any((g) => g.id == goalId)) {
+      _goals.insert(staged.index.clamp(0, _goals.length), staged.goal);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Deletes a goal hidden by [stageDeleteGoal] on the server; on failure it comes back.
+  Future<bool> commitStagedGoalDelete(String goalId) async {
+    final staged = _stagedDeletes.remove(goalId);
+    if (staged == null) return false;
+    // Put it back for one frame's worth of bookkeeping, then run the ordinary delete (optimistic
+    // removal, local storage, server call, rollback on failure).
+    if (!_goals.any((g) => g.id == goalId)) {
+      _goals.insert(staged.index.clamp(0, _goals.length), staged.goal);
+    }
+    return deleteGoal(goalId);
+  }
+
+  @visibleForTesting
+  bool isGoalDeleteStaged(String goalId) => _stagedDeletes.containsKey(goalId);
 
   /// Refresh goals from API
   Future<void> refresh() async {

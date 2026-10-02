@@ -205,6 +205,98 @@ class TestActionItemsToMarkdown(unittest.TestCase):
         finally:
             Path(temp_name).unlink(missing_ok=True)
 
+    def test_completion_normalization_and_loose_typing(self):
+        """Verify is_completed properly handles booleans, numbers, and loose strings without false positives."""
+        # Open / falsy values
+        self.assertFalse(ai2m.is_completed(False))
+        self.assertFalse(ai2m.is_completed(0))
+        self.assertFalse(ai2m.is_completed(0.0))
+        self.assertFalse(ai2m.is_completed(None))
+        self.assertFalse(ai2m.is_completed(""))
+        self.assertFalse(ai2m.is_completed("false"))
+        self.assertFalse(ai2m.is_completed("FALSE"))
+        self.assertFalse(ai2m.is_completed("no"))
+        self.assertFalse(ai2m.is_completed("0"))
+
+        # Completed / truthy values
+        self.assertTrue(ai2m.is_completed(True))
+        self.assertTrue(ai2m.is_completed(1))
+        self.assertTrue(ai2m.is_completed("true"))
+        self.assertTrue(ai2m.is_completed("TRUE"))
+        self.assertTrue(ai2m.is_completed("yes"))
+        self.assertTrue(ai2m.is_completed("1"))
+        self.assertTrue(ai2m.is_completed("done"))
+        self.assertTrue(ai2m.is_completed("completed"))
+
+    def test_issue_19387_string_false_regression(self):
+        """Regression test for Issue #19387: string 'false', 'no', '0' must not be marked completed."""
+        synthetic_items = [
+            {"id": "a", "description": "string false", "completed": "false"},
+            {"id": "b", "description": "string no", "completed": "no"},
+            {"id": "c", "description": "string zero", "completed": "0"},
+            {"id": "d", "description": "boolean false", "completed": False},
+            {"id": "e", "description": "string true", "completed": "true"},
+            {"id": "f", "description": "string yes", "completed": "yes"},
+            {"id": "g", "description": "string one", "completed": "1"},
+            {"id": "h", "description": "boolean true", "completed": True},
+        ]
+
+        md = ai2m.items_to_markdown(synthetic_items, title="Normalization Check", group_by="status")
+
+        # Counts must reflect 4 open, 4 completed
+        self.assertIn("total: 8", md)
+        self.assertIn("open: 4", md)
+        self.assertIn("completed: 4", md)
+        self.assertIn("> **Summary:** 4 open, 4 completed (8 total).", md)
+
+        # Checkboxes
+        self.assertIn("- [ ] string false", md)
+        self.assertIn("- [ ] string no", md)
+        self.assertIn("- [ ] string zero", md)
+        self.assertIn("- [ ] boolean false", md)
+        self.assertIn("- [x] string true", md)
+        self.assertIn("- [x] string yes", md)
+        self.assertIn("- [x] string one", md)
+        self.assertIn("- [x] boolean true", md)
+
+        # Verify grouped sections contain the appropriate items
+        pending_section = md.split("## ✅ Completed Tasks")[0]
+        completed_section = md.split("## ✅ Completed Tasks")[1]
+
+        self.assertIn("string false", pending_section)
+        self.assertIn("string no", pending_section)
+        self.assertIn("string zero", pending_section)
+        self.assertIn("boolean false", pending_section)
+
+        self.assertIn("string true", completed_section)
+        self.assertIn("string yes", completed_section)
+        self.assertIn("string one", completed_section)
+        self.assertIn("boolean true", completed_section)
+
+    def test_load_input_data_envelopes(self):
+        """Ensure load_input_data unwraps action_items, items, data and handles empty envelopes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            for key in ("action_items", "items", "data"):
+                # Non-empty
+                f = tmp_path / f"test_{key}.json"
+                f.write_text(json.dumps({key: [{"id": f"{key}_1", "description": f"task {key}"}]}), encoding="utf-8")
+                loaded = ai2m.load_input_data(str(f))
+                self.assertEqual(len(loaded), 1)
+                self.assertEqual(loaded[0]["id"], f"{key}_1")
+
+                # Empty envelope must return [] and NOT create phantom item
+                f_empty = tmp_path / f"empty_{key}.json"
+                f_empty.write_text(json.dumps({key: []}), encoding="utf-8")
+                loaded_empty = ai2m.load_input_data(str(f_empty))
+                self.assertEqual(loaded_empty, [])
+
+            # Empty dict should return []
+            f_empty_dict = tmp_path / "empty_dict.json"
+            f_empty_dict.write_text("{}", encoding="utf-8")
+            self.assertEqual(ai2m.load_input_data(str(f_empty_dict)), [])
+
 
 if __name__ == "__main__":
     unittest.main()
+

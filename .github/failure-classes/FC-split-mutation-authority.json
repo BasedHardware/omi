@@ -6,6 +6,7 @@
   "canonical_prevention_artifact": [
     "desktop/macos/agent/tests/convergence-authority-ratchet.test.ts",
     "backend/tests/unit/test_canonical_maintenance_ordering.py",
+    "backend/tests/unit/test_sync_status_read_ownership.py",
     "contracts/parity/conversation_summary.json",
     "backend/tests/unit/test_conversation_summary_mutation.py",
     "desktop/macos/Desktop/Tests/ConversationSummaryCompositionTests.swift",

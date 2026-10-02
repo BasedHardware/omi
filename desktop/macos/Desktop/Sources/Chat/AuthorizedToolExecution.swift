@@ -93,6 +93,20 @@ struct AuthorizedToolExecution: @unchecked Sendable {
   let chatMode: String?
   let chatFirstControlGeneration: Int?
 
+  /// Typed chat has no push-to-talk invocation. `web_search` on those surfaces
+  /// is the public-web lane in ChatToolExecutor. The manifest default stays
+  /// `realtimeHub` for voice, which is the only caller that carries the envelope.
+  static func executorForAuthorizedSurface(
+    tool: GeneratedSwiftTool,
+    surfaceKind: String,
+    manifestExecutor: GeneratedSwiftToolExecutor
+  ) -> GeneratedSwiftToolExecutor {
+    if tool == .webSearch, surfaceKind == "main_chat" || surfaceKind == "floating_chat" {
+      return .chatToolExecutor
+    }
+    return manifestExecutor
+  }
+
   static func parse(
     _ payload: [String: Any],
     currentOwnerID: String?
@@ -113,7 +127,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     }
     let requestedToolName = try requiredString("toolName")
     guard let resolvedTool = GeneratedToolExecutors.resolve(requestedToolName),
-      let executor = GeneratedToolExecutors.executorByTool[resolvedTool]
+      let manifestExecutor = GeneratedToolExecutors.executorByTool[resolvedTool]
     else {
       throw Rejection.unsupportedExecutor
     }
@@ -122,6 +136,10 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       throw Rejection.staleManifest
     }
     let surfaceKind = try requiredString("surfaceKind")
+    let executor = executorForAuthorizedSurface(
+      tool: resolvedTool,
+      surfaceKind: surfaceKind,
+      manifestExecutor: manifestExecutor)
     let chatFirstControlGeneration = payload["chatFirstControlGeneration"] as? Int
     // Validate chat-first capability before manifest digest selection so an
     // invalid capability surfaces as .invalidChatFirstCapability rather than

@@ -8,6 +8,31 @@ overlay:
   gke:
     backend-listen:
       env:
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-dev-screen-frames
+          category: storage_retention
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
+        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'gateway'
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '0'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -17,15 +42,31 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         STT_SERVICE_MODELS:
-          value: parakeet-window,soniox
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
-        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'true'
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
           value: '100'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '1'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         HOSTED_PARAKEET_API_URL:
@@ -60,11 +101,65 @@ overlay:
         OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
           value: '1.0'
           category: rollout
-        GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
           category: rollout
     pusher:
       env:
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-dev-screen-frames
+          category: storage_retention
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: omi-release-probe
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '1'
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -96,6 +191,14 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
@@ -103,6 +206,45 @@ overlay:
           category: rollout
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -202,10 +344,8 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: TYPESENSE_API_KEY
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: dev-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         METRICS_SECRET:
           secret:
             name: dev-omi-backend-secrets
@@ -281,13 +421,25 @@ overlay:
     services:
       backend:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          SCREEN_FRAME_SIGNING_SECRET:
+            secret: SCREEN_FRAME_SIGNING_SECRET
+            version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
+          SCREEN_FRAME_EGRESS_ENABLED:
+            value: 'true'
+            category: rollout
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -299,6 +451,14 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -349,6 +509,45 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -357,13 +556,32 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '0'
+            category: rollout
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -383,6 +601,14 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           GOOGLE_CLOUD_PROJECT:
@@ -420,6 +646,45 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -428,13 +693,14 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -487,6 +753,33 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-integration:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -495,13 +788,17 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          POSTHOG_EVENTS_API_KEY:
+            secret: POSTHOG_EVENTS_API_KEY
+            version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -554,7 +851,11 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
           GOOGLE_CLOUD_PROJECT:
@@ -563,9 +864,12 @@ overlay:
         - HOSTED_PUSHER_API_URL
       memory-maintenance-job:
         flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --cpu: '2'
           --memory: 2Gi
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -577,11 +881,19 @@ overlay:
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
       frame-request-retention-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
       daily-memory-sweep-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -593,7 +905,7 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: gpt-5.6-luna
+            value: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0.80'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
@@ -603,13 +915,21 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'true'
       knowledge-ledger-drain-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
       day3-reengagement-email-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           BASE_API_URL:
             value: https://api.omiapi.com
     workflow_files:

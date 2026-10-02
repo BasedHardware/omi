@@ -272,8 +272,8 @@ async def search_articles(payload: dict[str, Any]):
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia search failed.")
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -299,8 +299,8 @@ async def get_article_summary(payload: dict[str, Any]):
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
         return ChatToolResponse(error=f"Wikipedia article request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia article request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia article request failed.")
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -333,5 +333,5 @@ async def get_random_article(payload: dict[str, Any]):
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia random article request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia random article request failed.")

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.conversation_processing import (
     ACTION_ITEMS_CACHE_KEY,
     TRANSCRIPT_STRUCTURE_CACHE_KEY,
@@ -283,14 +284,42 @@ class TestPromptCacheRetention:
         # A renamed/future gpt-5 family model must still get routing + retention.
         assert mc.supports_prompt_cache("gpt-5.9-turbo"), "renamed gpt-5 should support prompt_cache_key"
         assert mc.supports_cache_retention("gpt-5.9-turbo"), "renamed gpt-5 should support 24h retention"
-        assert mc.supports_prompt_cache("gpt-5.6-luna")
-        assert not mc.supports_cache_retention("gpt-5.6-luna"), "GPT-5.6 uses explicit 30m cache options"
+        assert mc.supports_prompt_cache(LUNA_MODEL)
+        assert not mc.supports_cache_retention(LUNA_MODEL), "gpt-x-luna uses explicit cache options"
+        assert mc.supports_prompt_cache("gpt-5.6-sol")
+        assert not mc.supports_cache_retention("gpt-5.6-sol"), "GPT-5.6 uses explicit 30m cache options"
         # Retired product models are no longer treated as active cache targets.
         assert not mc.supports_prompt_cache("gpt-4.1-mini")
         assert not mc.supports_cache_retention("gpt-4.1-mini")
         # Non-OpenAI models get neither.
         assert not mc.supports_prompt_cache("gemini-2.5-flash-lite")
         assert not mc.supports_cache_retention("gemini-2.5-flash-lite")
+
+    def test_explicit_cache_and_chat_sanitizer_predicate(self):
+        """One helper covers the GPT-5.6 wire contract and the canonical Luna id."""
+        mc = self._import_model_config()
+        assert mc.uses_explicit_cache_and_chat_sanitizer(mc.LUNA_MODEL)
+        assert mc.uses_explicit_cache_and_chat_sanitizer("gpt-5.6-sol")
+        assert mc.uses_explicit_cache_and_chat_sanitizer("gpt-5.6-terra")
+        assert not mc.uses_explicit_cache_and_chat_sanitizer("gpt-5-nano")
+        assert not mc.uses_explicit_cache_and_chat_sanitizer("gpt-4o")
+        assert not mc.uses_explicit_cache_and_chat_sanitizer("")
+        assert not mc.supports_cache_retention(mc.LUNA_MODEL)
+        assert not mc.supports_cache_retention("gpt-5.6-terra")
+
+        from pathlib import Path
+
+        backend = Path(__file__).resolve().parent.parent.parent
+        sites = {
+            "utils/llm/clients.py": 1,
+            "utils/llm/model_config.py": 2,
+            "utils/llm/conversation_prompt_prefix.py": 1,
+            "utils/llm/proactive_notification.py": 1,
+            "llm_gateway/gateway/executor.py": 2,
+        }
+        for rel, minimum in sites.items():
+            text = (backend / rel).read_text(encoding="utf-8")
+            assert text.count("uses_explicit_cache_and_chat_sanitizer") >= minimum, rel
 
     def test_cache_retention_not_in_model_kwargs(self):
         """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""

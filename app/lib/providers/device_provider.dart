@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_routes.dart';
 import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -14,6 +14,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
@@ -24,13 +25,16 @@ import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
 typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
@@ -71,6 +75,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
+  final CaptureWedgeMonitor _wedgeMonitor;
+  final Set<String> _intentionalDisconnectDevices = {};
+
+  void markDisconnectIntentional(String deviceId) {
+    _intentionalDisconnectDevices.add(deviceId);
+    _wedgeMonitor.dismissDeviceEpisode(deviceId);
+  }
+
   Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
@@ -109,6 +121,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _discoveryTimer;
   Timer? _disconnectRescanTimer;
   Timer? _firmwarePromptTimer;
+  Timer? _deviceHealthTimer;
   bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
@@ -126,9 +139,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// `_sessionGeneration` at callback time. -1 means no admitted connect.
   int _admittedConnectGeneration = -1;
 
-  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
+  DeviceProvider({
+    BleDiagnosticsLoader? bleDiagnosticsLoader,
+    FindDeviceRunner? findDeviceRunner,
+    CaptureWedgeMonitor? captureWedgeMonitor,
+  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
   }
@@ -164,6 +181,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     _findDeviceRequest = null;
+    _intentionalDisconnectDevices.clear();
+    _wedgeMonitor.reset();
     _firmwareUpdateCheckSessionGuard.invalidate();
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _checkingFirmwareSession = null;
@@ -204,12 +223,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) => ConfirmationDialog(
+        // One answer only (acknowledge), so an alert, not a confirmation.
+        builder: (dialogContext) => OmiAlertDialog(
           title: dialogContext.l10n.bluetooth,
-          description: dialogContext.l10n.deviceUnpairedMessage,
-          confirmText: dialogContext.l10n.gotIt,
-          onConfirm: () => Navigator.of(dialogContext).pop(),
-          onCancel: () {},
+          message: dialogContext.l10n.deviceUnpairedMessage,
+          actions: [
+            OmiDialogAction(
+              label: dialogContext.l10n.gotIt,
+              isDefault: true,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
         ),
       ).whenComplete(() => _pairingLostDialogShowing = false);
     }
@@ -228,6 +252,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
     final sessionStartedAt = _deviceSessionStartedAt;
     final now = DateTime.now();
+    final capture = captureProvider;
+    final liveCaptureDevice = capture?.recordingDevice;
+    final endedDeviceWasLiveCapture = endedDevice != null &&
+        endedDevice.id == liveCaptureDevice?.id &&
+        capture!.recordingState == RecordingState.deviceRecord &&
+        !capture.isPaused &&
+        !SharedPreferencesUtil().batchModeEnabled;
+    final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
     final isNewConnection = device != null && connectedDevice?.id != device.id;
     connectedDevice = device;
     pairedDevice = device;
@@ -255,6 +287,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     if (endedDevice != null && sessionStartedAt != null) {
+      if (endedDeviceWasLiveCapture) {
+        _wedgeMonitor.onBleSessionEnded(
+          deviceId: endedDevice.id,
+          deviceType: endedDevice.type,
+          duration: now.difference(sessionStartedAt),
+          intentional: endedSessionWasIntentional,
+        );
+      }
       BleDisconnectEvent? disconnect;
       try {
         final diagnostics = await _bleDiagnosticsLoader(endedDevice.id);
@@ -486,12 +526,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isCharging = currentStatus;
       notifyListeners();
     }
+    BatteryWidgetService().updateChargingState(currentStatus);
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
         if (isCharging != charging) {
           isCharging = charging;
+          BatteryWidgetService().updateChargingState(charging);
           if (!charging) {
             _hasFullyChargedAlerted = false;
           } else if (batteryLevel >= 100 && !_hasFullyChargedAlerted) {
@@ -677,6 +719,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
     _firmwarePromptTimer?.cancel();
+    _deviceHealthTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -685,11 +728,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     final generation = _sessionGeneration;
+    // Capture before setConnectedDevice(null) clears both device references.
+    final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
     isCharging = false;
+    BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
     unawaited(setisDeviceStorageSupport());
     setIsConnected(false);
@@ -717,7 +763,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
-    PlatformManager.instance.analytics.deviceDisconnected();
+    unawaited(_trackDeviceDisconnected(disconnectedDeviceId, generation));
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
       batteryLevel: -1,
@@ -731,6 +777,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+  }
+
+  /// Emits the enriched Device Disconnected analytics event with the reason
+  /// native persisted for this disconnect. Both platforms persist the event
+  /// before notifying Dart, so the freshest history entry is the one that
+  /// triggered this callback; diagnostics are best-effort and degrade to
+  /// `unknown` when the read fails (non-BLE devices, early teardown).
+  Future<void> _trackDeviceDisconnected(String? deviceId, int generation) async {
+    BleDisconnectEvent? latest;
+    if (deviceId != null && deviceId.isNotEmpty) {
+      try {
+        final diagnostics = await _bleDiagnosticsLoader(deviceId);
+        if (!_isCurrent(generation)) return;
+        final history = diagnostics.disconnectHistory;
+        if (history.isNotEmpty) latest = history.last;
+      } catch (_) {
+        if (!_isCurrent(generation)) return;
+        // Native diagnostics are best-effort; emit without reason detail.
+      }
+    }
+    if (!_isCurrent(generation)) return;
+    PlatformManager.instance.analytics.deviceDisconnected(
+      reason: latest?.reason,
+      reasonCode: latest?.reasonCode,
+      appState: latest?.appState,
+    );
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -840,6 +912,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Auto-sync: check if device has offline files
     unawaited(_checkAndStartAutoSync(device, generation));
+    if (pairedDevice != null) unawaited(DeviceHealthTelemetry.maybeEmit(pairedDevice!));
+    _deviceHealthTimer ??= Timer.periodic(const Duration(hours: 1), (_) {
+      final current = pairedDevice;
+      if (current != null && isConnected) unawaited(DeviceHealthTelemetry.maybeEmit(current));
+    });
 
     notifyListeners();
 
@@ -950,18 +1027,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final ctx = globalNavigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
       SharedPreferencesUtil().companionAssociationPrompted = true;
-      await showDialog(
-        context: ctx,
-        builder: (context) => AlertDialog(
-          title: Text(context.l10n.improveConnectionTitle),
-          content: Text(context.l10n.improveConnectionContent),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.l10n.improveConnectionAction, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+      await showOmiAlert(
+        ctx,
+        title: ctx.l10n.improveConnectionTitle,
+        message: ctx.l10n.improveConnectionContent,
+        okLabel: ctx.l10n.improveConnectionAction,
       );
     } catch (e) {
       if (!_isCurrent(generation)) return;
@@ -1193,13 +1263,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             setFirmwareUpdateInProgress(true);
             if (_isOmiGlassDevice) {
               navigator.push(
-                MaterialPageRoute(
+                omiPageRoute(
                   builder: (context) =>
                       OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
                 ),
               );
             } else {
-              navigator.push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
+              navigator.push(omiPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
             }
           },
           onCancel: () {

@@ -183,9 +183,30 @@ class DeviceService {
     final connection = _connectionBuilder(device);
     if (connection != null) {
       _connections[id] = connection;
-      await connection.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-      );
+      try {
+        await connection.connect(
+          onConnectionStateChanged: onDeviceConnectionStateChanged,
+        );
+      } catch (_) {
+        // A native GATT link may already be up even when device-specific
+        // initialization (for example, a protected Limitless write) fails.
+        // Tear that partial connection down so the UI cannot retain a ghost
+        // "connected" device and the next user attempt starts cleanly.
+        try {
+          await connection.disconnect();
+        } catch (e) {
+          Logger.debug('[DeviceService] Failed to disconnect partial connection: $e');
+        }
+        try {
+          await connection.transport.dispose();
+        } catch (e) {
+          Logger.debug('[DeviceService] Failed to dispose partial transport: $e');
+        }
+        if (identical(_connections[id], connection)) {
+          _connections.remove(id);
+        }
+        rethrow;
+      }
     } else {
       Logger.debug(
         '[DeviceService] Failed to create device connection for ${device.id}',

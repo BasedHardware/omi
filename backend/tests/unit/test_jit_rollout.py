@@ -19,9 +19,7 @@ from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
     DEFAULT_JIT_ROLLOUT_CACHE_SECONDS,
     JIT_ADMISSION_ALLOWLIST,
-    JIT_DAILY_SWEEP_FLAG_KEY,
     JIT_KILL_SWITCH_FLAG_KEY,
-    JIT_LEDGER_MIGRATION_FLAG_KEY,
     JIT_PROCESSING_FLAG_KEY,
     JITDecisionReason,
     JITDecisionStage,
@@ -31,7 +29,6 @@ from utils.jit_rollout import (
     PostHogJITFlagProvider,
     TriState,
     UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS,
-    resolve_jit_ledger_migration_rollout,
     resolve_jit_rollout,
     resolve_jit_rollout_sync,
 )
@@ -194,7 +191,7 @@ class _FakePostHog:
     ('flags', 'rollout', 'kill_switch', 'reason', 'error_class'),
     [
         (
-            {JIT_PROCESSING_FLAG_KEY: True, JIT_KILL_SWITCH_FLAG_KEY: True, JIT_LEDGER_MIGRATION_FLAG_KEY: False},
+            {JIT_PROCESSING_FLAG_KEY: True, JIT_KILL_SWITCH_FLAG_KEY: True},
             TriState.ENABLED,
             TriState.ENABLED,
             JITDecisionReason.EVALUATED,
@@ -208,7 +205,7 @@ class _FakePostHog:
             JITErrorClass.NONE,
         ),
         (
-            {JIT_KILL_SWITCH_FLAG_KEY: False, JIT_DAILY_SWEEP_FLAG_KEY: True},
+            {JIT_KILL_SWITCH_FLAG_KEY: False},
             TriState.DISABLED,
             TriState.DISABLED,
             JITDecisionReason.FLAG_ABSENT,
@@ -244,25 +241,6 @@ async def test_posthog_provider_parses_the_exposure_and_kill_switch_flags(
 
 
 @pytest.mark.asyncio
-async def test_ledger_migration_and_daily_sweep_flags_do_not_change_admission():
-    client = _FakePostHog(
-        {
-            JIT_PROCESSING_FLAG_KEY: True,
-            JIT_KILL_SWITCH_FLAG_KEY: False,
-            JIT_LEDGER_MIGRATION_FLAG_KEY: True,
-            JIT_DAILY_SWEEP_FLAG_KEY: True,
-        }
-    )
-    authority = JITRolloutAuthority(PostHogJITFlagProvider(client_factory=lambda: client))
-
-    decision = await authority.resolve('named-user', stage=JITDecisionStage.READ_ONLY)
-
-    assert decision.permits_work is True
-    assert decision.effective == TriState.ENABLED
-    assert decision.kill_switch == TriState.DISABLED
-
-
-@pytest.mark.asyncio
 async def test_kill_switch_flag_revokes_admission_even_when_rollout_is_enabled():
     """The kill switch is live authority again: it can only ever remove admission."""
 
@@ -270,8 +248,6 @@ async def test_kill_switch_flag_revokes_admission_even_when_rollout_is_enabled()
         {
             JIT_PROCESSING_FLAG_KEY: True,
             JIT_KILL_SWITCH_FLAG_KEY: True,
-            JIT_LEDGER_MIGRATION_FLAG_KEY: False,
-            JIT_DAILY_SWEEP_FLAG_KEY: False,
         }
     )
     authority = JITRolloutAuthority(PostHogJITFlagProvider(client_factory=lambda: client))
@@ -487,12 +463,12 @@ async def test_public_helpers_share_one_allowlist_and_one_exposure_flag(monkeypa
 
     allowlisted = await resolve_jit_rollout(_ALLOWLIST_UID, stage=JITDecisionStage.READ_ONLY)
     stranger = await resolve_jit_rollout('stranger', stage=JITDecisionStage.READ_ONLY)
-    ledger = await resolve_jit_ledger_migration_rollout('stranger', stage=JITDecisionStage.INGRESS)
+    ingress_stranger = await resolve_jit_rollout('stranger', stage=JITDecisionStage.INGRESS)
     sync_allowlisted = resolve_jit_rollout_sync(_ALLOWLIST_UID, stage=JITDecisionStage.READ_ONLY)
 
     assert allowlisted.permits_work is True
     assert stranger.permits_work is False
-    assert ledger.permits_work is False
+    assert ingress_stranger.permits_work is False
     assert sync_allowlisted.permits_work is True
 
 

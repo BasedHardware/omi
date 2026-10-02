@@ -70,8 +70,7 @@ def _account_deletion_status(uid: str) -> str | None:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
         logger.error(
-            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
-            uid,
+            'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
         raise HTTPException(
@@ -160,10 +159,13 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
+        # A keyless deployment has no credential variable at all; its
+        # customer-data project pin marks it as real just the same.
         no_real_credential = not (
             os.getenv('SERVICE_ACCOUNT_JSON')
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+            or os.getenv('OMI_CUSTOMER_DATA_PROJECT')
         )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'

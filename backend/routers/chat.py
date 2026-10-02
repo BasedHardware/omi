@@ -63,7 +63,7 @@ from utils.stt.provider_resilience import close_rejected_socket, fallback_socket
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
-from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
+from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
@@ -75,7 +75,7 @@ from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_rou
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
-from utils.other.chat_file import FileChatTool, UnsupportedChatFileError
+from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, _safe_file_chats
 from utils.multipart import (
     CHAT_FILE_MAX_PART_SIZE,
     MultipartMaxPartSizeRoute,
@@ -368,7 +368,7 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
-def _release_chat_quota_question_best_effort(
+async def _release_chat_quota_question_best_effort(
     uid: str,
     *,
     idempotency_key: str,
@@ -378,7 +378,7 @@ def _release_chat_quota_question_best_effort(
     A release failure must never mask the original stream failure, and a retry
     is idempotent on the same event doc."""
     try:
-        llm_usage_db.release_chat_quota_question(uid, idempotency_key)
+        await run_blocking(db_executor, llm_usage_db.release_chat_quota_question, uid, idempotency_key)
     except Exception:
         logger.exception('Failed to release chat quota question uid=%s', uid)
 
@@ -469,7 +469,7 @@ def send_message(
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
-            files = [FileChat(**f) if f else None for f in files]
+            files = _safe_file_chats([f for f in files if f])
             message.files = files
 
     if chat_session:
@@ -509,7 +509,7 @@ def send_message(
         llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    app = App.deserialize_safe(app) if app else None
 
     app_id_from_app = app.id if app else None
 
@@ -610,7 +610,6 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
-        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -725,7 +724,7 @@ def send_message(
                         )
                     # The turn produced no answer: release the question charged
                     # up front so the user is not billed for a failed turn.
-                    _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+                    await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,
@@ -741,7 +740,7 @@ def send_message(
             raise
         except Exception:
             journey_attempt.finish('failure')
-            _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+            await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
             raise
         finally:
             reset_usage_context(usage_token)
@@ -860,7 +859,17 @@ def get_messages(
         # The greeting belongs to the session that was read, not to whatever
         # session `acquire_chat_session` would pick for the app.
         return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
-    return messages
+    # FastAPI validates the response against Message, so one malformed/legacy stored row would
+    # 500 the whole page; skip bad rows the same way the send path does.
+    return Message.deserialize_many_safe(
+        messages,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed chat message %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.post(
@@ -980,6 +989,14 @@ def create_voice_message_stream(
                 yield chunk
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
+                no_speech = {
+                    'error': 'no_speech',
+                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'provider': bounded_provider(stt_provider),
+                    'retryable': True,
+                    'message': 'No speech was detected.',
+                }
+                yield f"error: {json.dumps(no_speech, separators=(',', ':'))}\n\n"
         except Exception as error:
             if attempt.finished:
                 raise
@@ -1587,7 +1604,7 @@ async def transcribe_voice_message_stream(
             # The second check also covers a selector that ignores ``exclude``
             # and re-offers a provider this session already marked dead.
             return False
-        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop = PendingLiveFailover.from_socket(dg_socket, dead_provider or 'unknown', service.value)
         try:
             if service == STTService.parakeet:
                 # A provider is never offered its own failure as a fallback, so
@@ -1636,7 +1653,7 @@ async def transcribe_voice_message_stream(
         dg_socket = socket
         stt_service, stt_language, stt_model = actual_service, next_language, next_model
         if actual_service.value != hop.to_mode:
-            hop = PendingLiveFailover(from_mode=hop.from_mode, to_mode=actual_service.value)
+            hop.to_mode = actual_service.value
         pending_live_failover = hop
         logger.info(f'STT failover mid-session: {dead_provider} -> {actual_service.value}')
         if previous_socket is not None:
@@ -2121,6 +2138,8 @@ def rate_message(
     message_id: str,
     data: RateMessageRequest,
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
+    x_app_build: str | None = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
@@ -2131,6 +2150,8 @@ def rate_message(
     platform = (x_app_platform or '').strip().lower()
     if platform not in ('desktop', 'mobile'):
         platform = 'desktop'
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = extract_app_build({'x-app-version': x_app_version or '', 'x-app-build': x_app_build or ''})
     triage = extract_rating_triage_fields(snapshot)
     reason = data.reason.value if data.reason else None
     set_chat_message_rating_score(
@@ -2139,6 +2160,8 @@ def rate_message(
         value,
         reason=reason,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
@@ -2151,6 +2174,8 @@ def rate_message(
         reason=reason,
         comment=data.comment,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
     )
 
     # Try to submit feedback to LangSmith

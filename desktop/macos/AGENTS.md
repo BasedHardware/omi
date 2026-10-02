@@ -197,8 +197,8 @@ do not hand-edit those paths to match a specific machine.
   callback/continuation, or await a deterministic state signal. An unavoidable
   real-scheduler integration wait needs
   `// omi-test-quality: wall-clock-wait -- <why injection cannot test this boundary>`.
-- `python3 scripts/check_desktop_test_quality.py` ratchets both legacy
-  source-inspection sites and wall-clock waits; its baselines may only decrease.
+- The [test isolation guide](../../.github/agent-docs/desktop-test-isolation.md)
+  covers shared fixtures and the test-quality ratchet.
 
 ## Key Architecture Notes
 
@@ -262,7 +262,7 @@ runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/
 - **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. A filter that matches no tests fails the iteration (`swift test --filter` exits 0 on zero matches), so a renamed or mistyped filter can never read as PASS. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
 - **Swift suite throughput**: Local suites default to four workers. CI uses two workers only because each gets a copy-on-write SwiftPM scratch directory and an isolated Foundation runtime home (preferences, Application Support, caches, and temporary files). Do not raise it without evidence that both build and runtime state remain isolated. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
 - **Local Python backend**: direct `./run.sh` development reuses a healthy backend that this worktree owns when Python source/config have not changed. Sync dependencies with `cd ../../backend && ./scripts/sync-python-deps.sh` before the first local launch.
-- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
+- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`). Cached at `~/Library/Caches/OmiDesktop/node-runtime`; see README.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
@@ -327,7 +327,7 @@ Fast path (skips web login and sidebar click-through):
 2. **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events). Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once via distinct `OMI_AUTOMATION_PORT` (default 47777). Navigation stays backgrounded unless `--show` is passed.
    - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
-   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
+   - `./scripts/omi-ctl actions` discovers semantic actions; `action <name> [k=v …]` runs them. Registrations require [effects](../../.github/agent-docs/desktop-automation-effects.md); `--read-only` rejects effectful actions.
    - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
 3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
    `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`

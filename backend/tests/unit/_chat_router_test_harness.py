@@ -156,6 +156,8 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
     gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
+    # chat_file imports LUNA_MODEL from model_config, which imports this name.
+    gateway_client.is_auto_lane_id = MagicMock(return_value=False)
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
@@ -266,6 +268,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
     chat_file = install('utils.other.chat_file', ModuleType('utils.other.chat_file'))
     chat_file.FileChatTool = MagicMock()
+    # routers.chat imports this name; these suites never exercise the file branch (their
+    # file_ids are empty), so a stub that returns nothing keeps the module importable.
+    chat_file._safe_file_chats = MagicMock(return_value=[])
     # routers.chat imports this name; the stub must carry it or the module fails to load. A local
     # subclass keeps the real module (PIL, openai, database) out of these suites' import graph.
     chat_file.UnsupportedChatFileError = type('UnsupportedChatFileError', (Exception,), {})

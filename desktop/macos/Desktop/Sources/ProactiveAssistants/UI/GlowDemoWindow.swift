@@ -117,7 +117,7 @@ struct GlowDemoContentView: View {
         if state.phase != .none {
           ProgressView()
             .scaleEffect(0.6)
-          Text(state.phase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
+          Text(state.phase == .focused ? "Showing focused glow…" : "Showing distracted glow…")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(.secondary)
         } else {

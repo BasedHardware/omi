@@ -47,7 +47,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | phoneCallDialpadOpened | Phone Call Dialpad Opened | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellUpgradeTapped | Phone Call Upsell Upgrade Tapped | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellDismissed | Phone Call Upsell Dismissed | none | active | mobile-instrumentation-presence |
-| deviceDisconnected | Device Disconnected | none | active | mobile-instrumentation-presence |
+| deviceDisconnected | Device Disconnected | none | deprecated | mobile-instrumentation-presence |
+| deviceDisconnectedDetailed | Device Disconnected Detailed | reason, reason_code, app_state | active | mobile-instrumentation-presence |
+| diagnosticsSent | Diagnostics Sent | bundle_bytes, disconnect_count, schema_version | active | mobile-instrumentation-presence |
+| diagnosticsSendFailed | Diagnostics Send Failed | bundle_bytes, disconnect_count, schema_version, failure_stage, status_code | active | mobile-instrumentation-presence |
 | speechProfileCapturePageClicked | Speech Profile Capture Page Clicked | none | active | mobile-instrumentation-presence |
 | speechProfileSkipped | Speech Profile Skipped | none | active | mobile-instrumentation-presence |
 | speechProfileUploadSucceeded | Speech Profile Upload Succeeded | none | active | mobile-instrumentation-presence |
@@ -125,3 +128,31 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | appleRemindersSyncCompleted | Apple Reminders Sync Completed | pending_exported, synced_checked, completions_pulled, completions_pushed, title_due_pulled, title_due_pushed, reminders_unlinked | active | mobile-instrumentation-presence |
 | wrappedGenerationCompleted | Wrapped Generation Completed | total_conversations, total_minutes, days_active | active | mobile-instrumentation-presence |
 | typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |
+| appReviewOpportunity | App Review Opportunity | moment, decision | active | mobile-review-presence |
+| appReviewRequestAttempted | App Review Request Attempted | moment | active | mobile-review-presence |
+| appReviewRequestFinished | App Review Request Finished | moment, result | active | mobile-review-presence |
+| productJourneyStarted | Product Journey Started | journey, surface, object_id | active | mobile-product-outcomes |
+| productJourneyFirstResult | Product Journey First Result | journey, surface, object_id, duration_ms | active | mobile-product-outcomes |
+| productJourneyOutcome | Product Journey Outcome | journey, surface, object_id, outcome, failure, duration_ms, result_count | active | mobile-product-outcomes |
+| productValueEvent | Product Value | kind, surface, object_id | active | mobile-product-outcomes |
+| conversationAction | Conversation Action | action, surface | active | mobile-conversation-actions |
+| speakerTagPromptsViewed | Speaker Tag Prompts Viewed | prompt_count, first_time | active | speaker-tag-prompts-funnel |
+| speakerTagPromptClipPlayed | Speaker Tag Prompt Clip Played | kind, loaded | active | speaker-tag-prompts-funnel |
+| speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
+| speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
+| voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |
+| voiceReplyPlayback | Voice Reply Playback | outcome, skip_reason, mode, output_route, chunks_requested, chunks_played, chunks_dropped, fallback_reason, first_audio_latency_ms, interrupt_source | active | mobile-instrumentation-presence |
+| pendantVoiceQuestionDropped | Pendant Voice Question Dropped | reason | active | mobile-instrumentation-presence |
+| siriIntentPerformed | Siri Intent Performed | intent, platform, outcome, latency_ms, invoked_via | active | siri-intents |
+| siriAskOmiPerformed | Siri Ask Omi Performed | platform, outcome, latency_ms, invoked_via | active | siri-intents |
+| siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
+| conversationUntitledRendered | Conversation Untitled Rendered | surface, age_bucket, summary_retryable | active | conversation-untitled-rendered |
+
+## App Review Opportunity decisions
+
+`eligible`, `not_ios_or_android`, `storage_error`, `not_familiar`, `migration_cooldown`, `cooldown`, `budget_exhausted`, `version_already_attempted`, `session_already_attempted`, `lifecycle_not_appropriate`, `lifecycle_changed`, `availability_error`, `unavailable`, `request_error`, `recent_bad_experience`
+
+## Integer sentinel conventions
+
+- `deviceDisconnectedDetailed.reason_code` = `-1`: the disconnect reason is unknown (native sentinel absent).
+- `diagnosticsSendFailed.status_code` = `0`: the failure was not an HTTP failure; otherwise the real HTTP status.

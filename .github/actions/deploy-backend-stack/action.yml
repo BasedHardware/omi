@@ -13,13 +13,11 @@ inputs:
     default: ''
   firebase_probe_signer_credentials:
     description: >-
-      Base64-encoded service-account key for the Firebase auth project, used to
-      sign release-probe custom tokens locally. This is how the development lane
-      signs for production Firebase without an IAM grant. desktop-backend
-      auto-dev no longer uses this path -- it signs via IAM signJwt with the
-      named signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT); gcp_backend.yml
-      and sync_ledger still supply a credential. Mutually exclusive with
-      firebase_probe_signer_service_account.
+      Deprecated: base64-encoded service-account key for the Firebase auth
+      project, used to sign release-probe custom tokens locally. No workflow
+      supplies it any more; every development lane signs through IAM signJwt as
+      the named no-role signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT).
+      Mutually exclusive with firebase_probe_signer_service_account.
     required: false
     default: ''
   dev_free_tier_local_processing_cohort:
@@ -619,8 +617,9 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -690,6 +689,7 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+        identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
@@ -706,8 +706,10 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
+          --max-instances=40
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
@@ -719,11 +721,10 @@ runs:
       run: |
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-    - name: Provision sync-backfill platform
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+    - name: Provision sync-backfill lane
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
-        mode: platform
+        mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
         project_id: ${{ inputs.project_id }}
         firestore_project_id: ${{ inputs.runtime_gcp_project_id }}
         region: ${{ inputs.region }}
@@ -746,6 +747,12 @@ runs:
           --member="serviceAccount:${TASKS_INVOKER_SA}" \
           --role=roles/run.invoker \
           --quiet
+        # Every listen finalization and self-heal recovery shares this queue.
+        # At 4 dispatches the queue saturated (median dispatch delay ~6 min),
+        # which exceeds the 300s replay window: the reconciler then minted a
+        # new generation for most jobs and about half of all dispatches were
+        # stale-generation acks. 16 leaves headroom on backend-sync
+        # (min 5 x concurrency 20) for the I/O-bound handler.
         if gcloud tasks queues describe conversation-finalization \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" >/dev/null 2>&1; then
@@ -753,13 +760,13 @@ runs:
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         else
           gcloud tasks queues create conversation-finalization \
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         fi
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
@@ -774,8 +781,9 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
           --cpu=2
           --memory=2Gi
           --concurrency=40
@@ -907,13 +915,10 @@ runs:
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
         # The development backend authenticates against production Firebase, so
-        # a development deploy identity cannot sign this gate's custom token: it
-        # failed at custom_token_signing and blocked every manual development
-        # deploy. Sign locally with the Firebase project's own key instead.
-        # (desktop_backend_auto_dev.yml has since moved to the named-signer
-        # IAM signJwt path; this lane still stages the key.) The
-        # named-signer input stays available but needs an IAM grant, so it is
-        # only consulted when a credential is not supplied.
+        # a development deploy identity cannot sign this gate's custom token as
+        # itself. It signs through IAM signJwt as the named no-role signer, on
+        # which the deploy identity holds roles/iam.serviceAccountTokenCreator.
+        # The deprecated key input is only consulted if a caller still passes it.
         firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}
         firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}
 

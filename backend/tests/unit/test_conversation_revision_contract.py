@@ -101,13 +101,13 @@ class _PhotoConversationRef(_ConversationRef):
 def test_document_update_time_is_exposed_as_server_revision():
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 
-    result = conversations_db._document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
+    result = conversations_db.document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
 
     assert result == {'id': 'conversation-1', 'updated_at': revision}
 
 
 def test_protobuf_like_document_update_time_is_normalized_for_api_models():
-    result = conversations_db._document_data_with_revision(
+    result = conversations_db.document_data_with_revision(
         _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike('1783598400', '125000'))
     )
 
@@ -118,7 +118,7 @@ def test_protobuf_like_document_update_time_is_normalized_for_api_models():
 
 
 def test_protobuf_nanoseconds_use_the_official_integer_scale():
-    result = conversations_db._document_data_with_revision(
+    result = conversations_db.document_data_with_revision(
         _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike(1783598400, 125_000_000))
     )
 
@@ -126,7 +126,7 @@ def test_protobuf_nanoseconds_use_the_official_integer_scale():
 
 
 def test_user_title_override_is_the_read_projection():
-    result = conversations_db._prepare_conversation_for_read(
+    result = conversations_db.prepare_conversation_for_read(
         {
             'structured': {'title': 'Generated title', 'overview': 'Fresh summary'},
             'user_title': 'My durable title',

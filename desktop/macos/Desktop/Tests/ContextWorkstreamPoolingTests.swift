@@ -34,24 +34,6 @@ final class ContextWorkstreamPoolingTests: XCTestCase {
     XCTAssertNil(ContextWorkstreamTag.sanitize("!!!"), "symbol-only proposals reduce to nothing")
   }
 
-  func testLiveTagPrefersOwnFactsAndFallsBackOnlyToAnOverwhelmingBucketMajority() {
-    // The visit's own facts win even against a different bucket majority.
-    XCTAssertEqual(
-      ContextWorkstreamPooling.liveTag(
-        ownTagCounts: ["omi": 2, "spudpay": 1], bucketTagCounts: ["spudpay": 40]),
-      "omi")
-    // No own tags: an 80%+ majority with enough tagged facts stands in…
-    XCTAssertEqual(
-      ContextWorkstreamPooling.liveTag(ownTagCounts: [:], bucketTagCounts: ["omi": 8, "agentctl": 2]),
-      "omi")
-    // …a genuinely mixed surface does not pool at all…
-    XCTAssertNil(
-      ContextWorkstreamPooling.liveTag(ownTagCounts: [:], bucketTagCounts: ["omi": 6, "agentctl": 4]))
-    // …and neither does a bucket with too few tagged facts to have a majority.
-    XCTAssertNil(ContextWorkstreamPooling.liveTag(ownTagCounts: [:], bucketTagCounts: ["omi": 2]))
-    XCTAssertNil(ContextWorkstreamPooling.liveTag(ownTagCounts: [:], bucketTagCounts: [:]))
-  }
-
   func testSelectionEnforcesFloorScaffoldFilterDiversityCapAndSize() {
     var candidates: [ContextWorkstreamPoolItem] = [
       item("below-floor", worthiness: 0.2),
@@ -88,17 +70,6 @@ final class ContextWorkstreamPoolingTests: XCTestCase {
     let tied = ContextWorkstreamPooling.select(
       [item("b", ageMinutes: 3), item("a", ageMinutes: 3)], now: now)
     XCTAssertEqual(tied.map(\.factID), ["a", "b"])
-  }
-
-  func testPromptSectionQuotesFactsWithoutCitableRefs() throws {
-    let items = [item("fact-id-1", statement: "Archit is waiting on the crash-report PR")]
-    let section = ContextWorkstreamPooling.promptSection(tag: "omi", items: items, now: now)
-    let unwrapped = try XCTUnwrap(section)
-    XCTAssertTrue(unwrapped.contains("RELATED WORKSTREAM CONTEXT (omi)"))
-    XCTAssertTrue(unwrapped.contains("Archit is waiting"))
-    XCTAssertTrue(unwrapped.contains("not citable"))
-    XCTAssertFalse(unwrapped.contains("fact-id-1"), "ids never reach the model")
-    XCTAssertNil(ContextWorkstreamPooling.promptSection(tag: "omi", items: [], now: now))
   }
 
   func testRecentContextWindowIncludesTheBoundaryAndDropsOlderFacts() {

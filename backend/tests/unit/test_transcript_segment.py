@@ -603,3 +603,95 @@ def test_segments_as_string_defaults_to_user_when_name_missing():
     rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
 
     assert rendered.startswith("User: Hello.")
+
+
+def test_cross_speaker_repair_skipped_for_late_arriving_segment():
+    """A segment that starts before the current tail is not its continuation.
+
+    Late arrivals from an earlier batch are appended after a newer tail (see
+    TestCrossBatchSegmentOrdering in test_modulate_stt.py) and only sorted afterwards.
+    Repairing across that pair rewrote the tail's end to the late arrival's start,
+    producing end < start, and moved the tail speaker's words onto the other speaker.
+    """
+    existing = _segment("This is the second utterance. And I was", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("going to say something else here.", speaker="SPEAKER_01", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the second utterance. And I was"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[0].end >= segments[0].start
+    assert segments[1].text == "going to say something else here."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_skipped_across_long_silence():
+    """Ten minutes apart with different speakers is not one split sentence.
+
+    Without a gap bound the older segment was deleted outright and its words were
+    reattributed to the later speaker at the later timestamp.
+    """
+    existing = _segment("So the plan is", speaker="SPEAKER_00", start=0.0, end=3.0)
+    much_later = _segment("we should go with option two.", speaker="SPEAKER_01", start=600.0, end=605.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [much_later])
+
+    assert len(segments) == 2
+    assert segments[0].text == "So the plan is"
+    assert segments[0].start == pytest.approx(0.0)
+    assert segments[1].text == "we should go with option two."
+    assert segments[1].start == pytest.approx(600.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_still_applies_to_adjacent_segments():
+    """The guard must not disable repair for the contiguous case it exists for."""
+    existing = _segment("How are", speaker="SPEAKER_00", start=0.0, end=3.0)
+    following = _segment("you doing today?", speaker="SPEAKER_01", start=3.1, end=6.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [following])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_01"
+    assert segments[0].text == "How are you doing today?"
+    assert removed_ids == [existing.id]
+
+
+def test_same_speaker_merge_skipped_for_late_arriving_segment():
+    """A same-speaker segment that starts before the current tail is not its continuation.
+
+    Unlike the cross-speaker repair above, this path only checked the gap between
+    a.end and b.start, not their relative order: a late arrival from an earlier batch
+    landed within 3 seconds of the tail's end and was absorbed into it, reversing the
+    text order and producing an end that preceded the start.
+    """
+    existing = _segment("This is the later statement.", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("This was the earlier statement.", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the later statement."
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[1].text == "This was the earlier statement."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_lowercase_continuation_merge_skipped_for_late_arriving_segment():
+    """Same guard for the lowercase-continuation predicate, which had no order check at all."""
+    existing = _segment("this is the later statement", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("this was the earlier statement", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "this is the later statement"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[1].text == "this was the earlier statement"
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []

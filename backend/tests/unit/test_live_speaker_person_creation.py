@@ -45,9 +45,12 @@ class _Recorder:
         return None
 
 
-def _processor(recorder, *, owner_name=None, create_speakers=True, language=None):
+def _processor(recorder, *, owner_name=None, create_speakers=True, language=None, paid=True):
     async def resolve_owner_name():
         return owner_name
+
+    async def named_speakers_allowed():
+        return paid
 
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.suggested_segments = set()
@@ -65,6 +68,7 @@ def _processor(recorder, *, owner_name=None, create_speakers=True, language=None
             segment_assignments={},
             queue=asyncio.Queue(),
             resolve_owner_name=resolve_owner_name,
+            named_speakers_allowed=named_speakers_allowed,
         ),
         persistence=recorder,
         request=SimpleNamespace(uid='u1', create_speakers=create_speakers, speaker_auto_assign_enabled=False),
@@ -142,3 +146,33 @@ def test_create_speakers_disabled_still_suppresses_creation():
     recorder = _Recorder()
     _run(_processor(recorder, create_speakers=False), "My name is Alice.")
     assert recorder.created == []
+
+
+@pytest.mark.parametrize('text', ["I'm Because it matters.", "My name is Googling.", "My name is Because."])
+def test_observed_mishears_never_lookup_or_create_people(text):
+    recorder = _Recorder()
+    _run(_processor(recorder), text)
+    assert recorder.created == []
+    assert recorder.lookups == []
+
+
+def test_owner_name_veto_uses_unicode_casefold(monkeypatch):
+    recorder = _Recorder()
+    monkeypatch.setattr(
+        transcripts, 'detect_speaker_introduction', lambda *a, **k: SimpleNamespace(name='STRASSE', explicit=True)
+    )
+    _run(_processor(recorder, owner_name='Straße'), 'synthetic introduction')
+    assert recorder.created == []
+    assert recorder.lookups == []
+
+
+def test_free_introduction_cannot_load_or_create_named_person():
+    recorder = _Recorder()
+    events = []
+    processor = _processor(recorder, paid=False)
+    processor.host.send_event = events.append
+    _run(processor, "My name is Sam.")
+    assert recorder.created == []
+    assert recorder.lookups == []
+    # The free plan must not even receive a name suggestion for the voice.
+    assert events == []

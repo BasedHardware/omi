@@ -8,7 +8,25 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/logger.dart';
 
+typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
+
 class UsageProvider with ChangeNotifier {
+  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest, DateTime Function()? now})
+      : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+        _usageRequest = usageRequest ?? getUserUsage,
+        _now = now ?? DateTime.now;
+
+  final Future<String?> Function() _deviceTimeZone;
+  final UsageRequest _usageRequest;
+  final DateTime Function() _now;
+  String? _usageTimeZone;
+  String? get usageTimeZone => _usageTimeZone;
+  bool _usageTimeZoneResolved = false;
+  int _timeZoneLookupGeneration = 0;
+  int _usageTimeZoneGeneration = 0;
+  Future<bool>? _timeZoneLookupInFlight;
+  Future<void>? _usageFetchInFlight;
+
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
 
@@ -16,12 +34,15 @@ class UsageProvider with ChangeNotifier {
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
+  int? _todayCacheKey;
   UsageStats? get todayUsage => _todayUsage;
 
   UsageStats? _monthlyUsage;
+  int? _monthlyCacheKey;
   UsageStats? get monthlyUsage => _monthlyUsage;
 
   UsageStats? _yearlyUsage;
+  int? _yearlyCacheKey;
   UsageStats? get yearlyUsage => _yearlyUsage;
 
   UsageStats? _allTimeUsage;
@@ -111,19 +132,50 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  @visibleForTesting
+  void debugSetUsage(String period, UsageStats stats, List<UsageHistoryPoint> history) {
+    switch (period) {
+      case 'today':
+        _todayUsage = stats;
+        _todayCacheKey = _periodKey(period);
+        _todayHistory = history;
+      case 'monthly':
+        _monthlyUsage = stats;
+        _monthlyCacheKey = _periodKey(period);
+        _monthlyHistory = history;
+      case 'yearly':
+        _yearlyUsage = stats;
+        _yearlyCacheKey = _periodKey(period);
+        _yearlyHistory = history;
+      case 'all_time':
+        _allTimeUsage = stats;
+        _allTimeHistory = history;
+    }
+    notifyListeners();
+  }
+
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
     TranscriptionAllowanceCache.clear();
     _subscription = null;
     _todayUsage = null;
+    _todayCacheKey = null;
     _monthlyUsage = null;
+    _monthlyCacheKey = null;
     _yearlyUsage = null;
+    _yearlyCacheKey = null;
     _allTimeUsage = null;
     _todayHistory = null;
     _monthlyHistory = null;
     _yearlyHistory = null;
     _allTimeHistory = null;
+    _usageTimeZone = null;
+    _usageTimeZoneResolved = false;
+    _timeZoneLookupGeneration++;
+    _usageTimeZoneGeneration++;
+    _timeZoneLookupInFlight = null;
+    _usageFetchInFlight = null;
     _availablePlans = null;
     _forceOutOfCredits = false;
     _error = null;
@@ -177,29 +229,124 @@ class UsageProvider with ChangeNotifier {
   /// Alias for fetchSubscription - refreshes subscription data from backend
   Future<void> refreshSubscription() => fetchSubscription();
 
-  Future<void> fetchUsageStats({required String period}) async {
-    if (_isUsageLoading) return;
+  int _periodKey(String period) {
+    final date = _now();
+    return switch (period) {
+      'today' => date.year * 10000 + date.month * 100 + date.day,
+      'monthly' => date.year * 100 + date.month,
+      'yearly' => date.year,
+      _ => 0,
+    };
+  }
 
+  bool _expireCalendarCaches() {
+    var expired = false;
+    if (_todayUsage != null && _todayCacheKey != _periodKey('today')) {
+      _todayUsage = null;
+      _todayHistory = null;
+      _todayCacheKey = null;
+      expired = true;
+    }
+    if (_monthlyUsage != null && _monthlyCacheKey != _periodKey('monthly')) {
+      _monthlyUsage = null;
+      _monthlyHistory = null;
+      _monthlyCacheKey = null;
+      expired = true;
+    }
+    if (_yearlyUsage != null && _yearlyCacheKey != _periodKey('yearly')) {
+      _yearlyUsage = null;
+      _yearlyHistory = null;
+      _yearlyCacheKey = null;
+      expired = true;
+    }
+    if (expired) notifyListeners();
+    return expired;
+  }
+
+  /// Drop local-calendar periods when the device zone or calendar period changes.
+  /// All-time usage has no local period boundary and remains reusable.
+  Future<bool> refreshUsageTimeZone() {
+    final pending = _timeZoneLookupInFlight;
+    if (pending != null) return pending;
+    late final Future<bool> lookup;
+    lookup = _refreshUsageTimeZone().whenComplete(() {
+      if (identical(_timeZoneLookupInFlight, lookup)) _timeZoneLookupInFlight = null;
+    });
+    return _timeZoneLookupInFlight = lookup;
+  }
+
+  Future<bool> _refreshUsageTimeZone() async {
+    final session = _sessionGeneration;
+    final lookup = ++_timeZoneLookupGeneration;
+    String? zone;
+    try {
+      zone = await _deviceTimeZone();
+    } catch (_) {
+      // Match the API fallback when the platform timezone is unavailable.
+    }
+    if (session != _sessionGeneration || lookup != _timeZoneLookupGeneration) return false;
+    if (!_usageTimeZoneResolved) {
+      _usageTimeZone = zone;
+      _usageTimeZoneResolved = true;
+      return _expireCalendarCaches();
+    }
+    if (_usageTimeZone == zone) return _expireCalendarCaches();
+    _usageTimeZone = zone;
+    _usageTimeZoneGeneration++;
+    _todayUsage = null;
+    _todayCacheKey = null;
+    _monthlyUsage = null;
+    _monthlyCacheKey = null;
+    _yearlyUsage = null;
+    _yearlyCacheKey = null;
+    _todayHistory = null;
+    _monthlyHistory = null;
+    _yearlyHistory = null;
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> fetchUsageStats({required String period}) async {
+    while (_usageFetchInFlight != null) {
+      await _usageFetchInFlight;
+    }
+    final fetch = _fetchUsageStats(period);
+    _usageFetchInFlight = fetch;
+    try {
+      await fetch;
+    } finally {
+      if (identical(_usageFetchInFlight, fetch)) _usageFetchInFlight = null;
+    }
+  }
+
+  Future<void> _fetchUsageStats(String period) async {
     final generation = _sessionGeneration;
+    await refreshUsageTimeZone();
+    if (generation != _sessionGeneration) return;
+    final timeZoneGeneration = _usageTimeZoneGeneration;
+    final cacheKey = _periodKey(period);
     _isUsageLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final response = await getUserUsage(period: period);
-      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
+      final response = await _usageRequest(period: period, timeZone: _usageTimeZone);
+      if (generation != _sessionGeneration || timeZoneGeneration != _usageTimeZoneGeneration) return;
       if (response != null) {
         switch (period) {
           case 'today':
             _todayUsage = response.today;
+            _todayCacheKey = cacheKey;
             _todayHistory = response.history;
             break;
           case 'monthly':
             _monthlyUsage = response.monthly;
+            _monthlyCacheKey = cacheKey;
             _monthlyHistory = response.history;
             break;
           case 'yearly':
             _yearlyUsage = response.yearly;
+            _yearlyCacheKey = cacheKey;
             _yearlyHistory = response.history;
             break;
           case 'all_time':
@@ -211,7 +358,7 @@ class UsageProvider with ChangeNotifier {
         _error = 'Failed to load usage data. Please try again later.';
       }
     } catch (e) {
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration || timeZoneGeneration != _usageTimeZoneGeneration) return;
       _error = 'Failed to load usage data. Please try again later.';
       Logger.debug('Failed to fetch usage stats: $e');
     } finally {
