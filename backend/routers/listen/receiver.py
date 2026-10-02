@@ -1165,9 +1165,9 @@ class ListenReceiver(ReplayFilterMixin):
         async with self._stt_failover_lock:
             if self._stt_recovery_exhausted:
                 return False
-            # Soniox drain_and_close() sets this before its final flush.  Treat a
-            # finishing socket as receiver teardown even if its dead latch was
-            # already set; opening a replacement here races the zero-audio close.
+            # Owner teardown blocks recovery. Managed transport cleanup also
+            # calls raw.finish() after failure; its raw finishing flag alone
+            # must never suppress the next eligible provider.
             if socket_is_finishing(self.stt_socket):
                 return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
