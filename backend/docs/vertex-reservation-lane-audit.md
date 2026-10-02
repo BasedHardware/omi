@@ -47,8 +47,10 @@ tool calls. Their success path either discards URL response metadata entirely,
 checks only 2xx status, or returns for 2xx before examining error/retry headers.
 Thus the extra refusal headers on HTTP 200 do not cause a retry or model fallback.
 
-The earlier v0.0–v0.6 family uses a JSON/text-only extractor and lacks the complete
-tool signature; its decoder cannot consume this tool-only terminal body. The
+Of the 51 scanned tags below build 7000, 32 (v0.0.1–v0.3.0) contain the
+earlier JSON/text-only native extractor and 19 (v0.3.1–v0.6.6) contain no
+`TaskAssistant.swift`. None has the complete five-tool signature. The inspected
+JSON/text-only decoder cannot consume this tool-only terminal body. The
 additional declared lower bound **`MIN_TERMINAL_TOOL_BUILD = 7000`** excludes it
 also when a request presents copied/inconsistent tools. No incompatible handling
 was found among the matching v0.7.0–v0.12.434 tool-loop families. These are source
