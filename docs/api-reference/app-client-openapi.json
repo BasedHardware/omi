@@ -28015,7 +28015,7 @@
           "analysis_prompt": {
             "anyOf": [
               {
-                "maxLength": 10000,
+                "maxLength": 20000,
                 "type": "string"
               },
               {
