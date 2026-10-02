@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, Iterator, cast
+
+from utils.stt.live_metrics import REPLAY_SKIPPED
+from utils.stt.socket import release_live_stt_socket
 
 REPLAY_WALL_BUDGET = 25.0
 REPLAY_CONNECT_SECONDS = 5.0
@@ -19,13 +22,49 @@ sleep = asyncio.sleep
 
 
 def family(socket: Any, fallback: str = 'unknown') -> str:
-    service = getattr(socket, 'service', None)
-    name = getattr(service, 'value', service)
-    if name in REPLAY_RATES:
-        return name
-    raw = getattr(socket, 'raw', socket)
-    name = type(raw).__name__.lower()
-    return next((key for key in REPLAY_RATES if key in name), fallback if fallback in REPLAY_RATES else 'unknown')
+    current = socket
+    seen: set[int] = set()
+    for _ in range(8):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        service = getattr(current, 'service', None)
+        name = getattr(service, 'value', service)
+        if name in REPLAY_RATES:
+            return name
+        name = type(current).__name__.lower()
+        matched = next((key for key in REPLAY_RATES if key in name), None)
+        if matched:
+            return matched
+        current = (
+            getattr(current, 'raw', None) or getattr(current, '_conn', None) or getattr(current, 'connection', None)
+        )
+    return fallback if fallback in REPLAY_RATES else 'unknown'
+
+
+REPLAY_PACKET_BYTES = 16 * 1024
+
+
+def replay_packets(chunks: tuple[tuple[int, bytes], ...]) -> Iterator[tuple[int, bytes]]:
+    """Coalesce adjacent s16le capture spans; bound copies and preserve gaps."""
+    pending = bytearray()
+    first = 0
+    for start, data in chunks:
+        if pending and start != first + len(pending) // 2:
+            yield first, bytes(pending)
+            pending.clear()
+        offset = 0
+        while offset < len(data):
+            if not pending:
+                first = start + offset // 2
+            count = min(REPLAY_PACKET_BYTES - len(pending), len(data) - offset)
+            pending.extend(data[offset : offset + count])
+            offset += count
+            if len(pending) == REPLAY_PACKET_BYTES:
+                yield first, bytes(pending)
+                pending.clear()
+    if pending:
+        yield first, bytes(pending)
 
 
 class ReplayPacer:
@@ -59,6 +98,7 @@ class ReplayPacer:
 async def abort_replay_socket(socket: Any) -> None:
     """Close a rejected replay leg, including its adapter's receive task."""
     socket.finish()
+    release_live_stt_socket(socket)
     raw = getattr(socket, 'raw', socket)
     if hasattr(raw, '_closed'):
         raw._closed = True
@@ -83,8 +123,6 @@ async def abort_replay_socket(socket: Any) -> None:
 
 def bounded_snapshot(ring: Any, source: str, successor: str) -> tuple[tuple[int, bytes], ...]:
     """Keep the newest unanswered AUDIO duration; capture gaps consume no quota."""
-    from utils.stt.live_metrics import REPLAY_SKIPPED
-
     remaining = int(REPLAY_PREFIX_SECONDS * REPLAY_RATES.get(successor, 1.0) * ring.sample_rate) * 2
     kept = []
     total = ring.buffered_bytes
@@ -111,7 +149,9 @@ class ReplayTailSocket:
     PCM is retained here; overload rejects the leg instead of dropping audio.
     """
 
-    def __init__(self, socket: Any, pacer: ReplayPacer, tail: deque[tuple[int, bytes]], host: Any) -> None:
+    def __init__(
+        self, socket: Any, pacer: ReplayPacer, tail: deque[tuple[int, bytes]], host: Any, *, source: str = 'unknown'
+    ) -> None:
         self.connection, self.pacer, self.tail, self.host = socket, pacer, tail, host
         self._task: asyncio.Task[Any] | None = None
         self._pumping = True
@@ -119,6 +159,8 @@ class ReplayTailSocket:
         self._local_reason: str | None = None
         self._closing = False
         self._finalize_pending = False
+        self._draining = False
+        self.source = source if source in REPLAY_RATES else 'unknown'
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.connection, name)
@@ -151,8 +193,6 @@ class ReplayTailSocket:
             self._pumping = False
 
     async def _pump_tail(self) -> None:
-        from utils.stt.resilient_stream import replay_packets
-
         try:
             while self.tail:
                 start, data = self.tail[0]
@@ -170,7 +210,11 @@ class ReplayTailSocket:
             self._dead = True
 
     def active(self) -> bool:
-        return self.host.state.active and not self._closing and not self.host.state.stt_terminal_failure
+        return (
+            (self.host.state.active or self._draining)
+            and not self._closing
+            and not self.host.state.stt_terminal_failure
+        )
 
     def finalize(self) -> None:
         if self._pumping:
@@ -183,11 +227,24 @@ class ReplayTailSocket:
         if self._task is not None:
             self._task.cancel()
         self.connection.finish()
+        outcome = getattr(self.connection, 'leg_outcome', None)
+        if self.tail and (not self.host.state.active or getattr(outcome, 'owner_closing', False)):
+            REPLAY_SKIPPED.labels(source=self.source, successor=family(self.connection)).inc(
+                sum(len(data) for _, data in self.tail) / (2 * self.pacer.sample_rate)
+            )
         self.tail.clear()
 
     async def drain_and_close(self) -> None:
-        # A disconnected owner cannot wait a replay-lag duration for live tail.
-        self.finish()
-        if self._task is not None:
-            await asyncio.gather(self._task, return_exceptions=True)
-        await self.connection.drain_and_close()
+        # Accepted tail remains owed after client departure. Drain it before
+        # EOS; only cancellation/death/deadline cuts the tail, and finish meters it.
+        self._draining = True
+        try:
+            if self._task is not None and not self._task.done() and not self.is_connection_dead:
+                _, pending = await asyncio.wait({self._task}, timeout=LIVE_TAIL_SECONDS + 2.0)
+                if pending:
+                    self.finish()
+            await self.connection.drain_and_close()
+        finally:
+            self.finish()
+            if self._task is not None:
+                await asyncio.gather(self._task, return_exceptions=True)

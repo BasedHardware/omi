@@ -17,6 +17,7 @@ from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
@@ -360,8 +361,6 @@ class LiveChainSession:
         except asyncio.CancelledError:
             # A setup timeout/disconnect can arrive after a raw socket opens
             # but before the connector hands it back to the receiver.
-            from utils.stt.replay_delivery import abort_replay_socket
-
             for candidate in constructed:
                 candidate.retire_for_replay()
                 candidate.mark_owner_teardown()

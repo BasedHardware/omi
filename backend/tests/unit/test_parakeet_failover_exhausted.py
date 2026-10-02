@@ -267,7 +267,7 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
 
 @pytest.mark.asyncio
 async def test_partial_replay_acceptance_without_text_does_not_discard_prefix(monkeypatch):
-    monkeypatch.setattr("utils.stt.resilient_stream.REPLAY_PACKET_BYTES", 1280)
+    monkeypatch.setattr("utils.stt.replay_delivery.REPLAY_PACKET_BYTES", 1280)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     connect = st.process_audio_modulate
 
