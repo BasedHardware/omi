@@ -12265,4 +12265,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get askAnythingButton => 'Kérdezz bármit';
 }

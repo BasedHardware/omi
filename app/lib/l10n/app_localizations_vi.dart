@@ -12213,4 +12213,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
 }

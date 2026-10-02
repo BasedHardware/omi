@@ -12024,4 +12024,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get askAnythingButton => '何でも聞いてください';
 }

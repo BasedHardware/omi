@@ -12274,4 +12274,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get askAnythingButton => 'Întreabă orice';
 }

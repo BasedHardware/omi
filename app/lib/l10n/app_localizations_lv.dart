@@ -12245,4 +12245,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get askAnythingButton => 'Jautājiet jebko';
 }

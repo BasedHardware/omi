@@ -12256,4 +12256,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get askAnythingButton => 'Pitaj bilo što';
 }

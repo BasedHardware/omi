@@ -12217,4 +12217,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get askAnythingButton => 'Küsi mida tahes';
 }

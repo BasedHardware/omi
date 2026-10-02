@@ -12300,4 +12300,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
 }

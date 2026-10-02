@@ -12028,4 +12028,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get askAnythingButton => '무엇이든 물어보세요';
 }

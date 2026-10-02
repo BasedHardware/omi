@@ -12288,4 +12288,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get askAnythingButton => 'Pregunta qualsevol cosa';
 }

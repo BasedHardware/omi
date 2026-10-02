@@ -12321,4 +12321,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
+
+  @override
+  String get askAnythingButton => 'Demandez n\'importe quoi';
 }

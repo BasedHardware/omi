@@ -12147,4 +12147,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
+
+  @override
+  String get askAnythingButton => 'اسأل أي شيء';
 }

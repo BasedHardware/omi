@@ -3781,5 +3781,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
     "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}",
     "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
-    "speakerLabelTalkTime": "{duration} tästä äänestä"
+    "speakerLabelTalkTime": "{duration} tästä äänestä",
+    "askAnythingButton": "Kysy mitä tahansa"
 }

@@ -3781,5 +3781,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi kitą kartą atpažins {name}.} pending{Tai užtrunka kelias sekundes.} disabled{Įjunkite balsų išsaugojimą nustatymuose, kad Omi galėtų atpažinti {name}.} other{Omi reikia daugiau aiškios {name} kalbos ir toliau bandys.}}",
     "speakerLabelEarlierMatches": "Ankstesni pokalbiai su šiuo balsu: {count}",
     "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
-    "speakerLabelTalkTime": "{duration} šio balso"
+    "speakerLabelTalkTime": "{duration} šio balso",
+    "askAnythingButton": "Klauskite bet ko"
 }

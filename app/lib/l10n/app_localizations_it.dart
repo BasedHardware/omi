@@ -12288,4 +12288,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
+
+  @override
+  String get askAnythingButton => 'Chiedi qualsiasi cosa';
 }

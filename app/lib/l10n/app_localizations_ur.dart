@@ -12230,4 +12230,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get askAnythingButton => 'کچھ بھی پوچھیں';
 }

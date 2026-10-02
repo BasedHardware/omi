@@ -12220,4 +12220,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get askAnythingButton => 'Spør om hva som helst';
 }

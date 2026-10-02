@@ -12212,4 +12212,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
 }

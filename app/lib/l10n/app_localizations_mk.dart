@@ -12283,4 +12283,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get askAnythingButton => 'Праши било што';
 }

@@ -12201,4 +12201,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
+
+  @override
+  String get askAnythingButton => 'कुछ भी पूछें';
 }
