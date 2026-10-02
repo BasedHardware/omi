@@ -288,7 +288,7 @@ cost-router observation and must not be joined as though it were one.
 | Window first-text deadline / empty streak | unresolved audio/recognizer | first_text_deadline / empty_streak | censored, same cause |
 | Admission, PCM/replay/send-queue capacity | us/capacity | capacity_full | censored/capacity_full |
 | VAD / invalid request or audio / loop misuse | us/audio | vad_failed / other | censored, same cause |
-| Soniox 400 no-audio or 408 request timeout | client/input timing | soniox_idle_timeout | censored/soniox_idle_timeout |
+| Soniox 400 no-audio / 408 request timeout | client/input timing | soniox_idle_timeout / soniox_request_timeout | censored, same cause |
 | Soniox duration rotation | protocol lifecycle | soniox_rotation | censored/soniox_rotation |
 
 The closed reason vocabulary stays in `live_reason.py`. Socket-owned typed

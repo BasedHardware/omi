@@ -52,6 +52,7 @@ _rate_limit_log_lock = threading.Lock()
 # all surfaced as one free-text ERROR signature, indistinguishable in metrics
 # and in the terminal-failure reason vocabulary.
 SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
+SONIOX_DEATH_REQUEST_TIMEOUT: Final = 'soniox_request_timeout'
 SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
 SONIOX_DEATH_INVALID_HINT: Final = 'soniox_invalid_hint'
 _SONIOX_BUDGET_ERROR_TYPES: Final = frozenset(
@@ -92,9 +93,6 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
             return PROVIDER_BUDGET_EXHAUSTED
         if error == 'invalid_api_key' or code in {401, 403}:
             return PROVIDER_AUTH_REJECTED
-    if code == 408 or error == 'request_timeout':
-        # The input/keepalive watchdog is session idleness, not a vendor outage.
-        return SONIOX_DEATH_IDLE_TIMEOUT
     if code == 400:
         message = str(error_message or '').strip().lower()
         if 'invalid language hint' in message:
@@ -107,6 +105,11 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
         # covers the no-client-audio case; this shape arrives when VAD gating
         # withheld real audio for the whole window.
         return SONIOX_DEATH_IDLE_TIMEOUT
+    if code == 408 or error == 'request_timeout':
+        # Soniox documents 408 as a request deadline, commonly because audio
+        # arrived too slowly or not at all. That is client/stream timing
+        # evidence, not a provider outage, and differs from its 400 idle error.
+        return SONIOX_DEATH_REQUEST_TIMEOUT
     if code == 413:
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION

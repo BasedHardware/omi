@@ -248,7 +248,7 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 27
+    assert len(LIVE_STT_REASONS) == 28
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
     assert normalize_live_stt_reason('first_text_deadline', 'send_failed') == 'first_text_deadline'
     with pytest.raises(ValueError, match='bounded'):

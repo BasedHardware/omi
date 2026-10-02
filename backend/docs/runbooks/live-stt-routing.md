@@ -17,8 +17,8 @@ seen, otherwise censored. A provider death is counted without a speech minimum
 when the serving owner replaces/rejects it or exhausts recovery. A pending hop
 without successor text settles as degraded after 30 seconds, with no socket or
 audio change. Established fallback reasons stay stable, including quota/auth;
-health retains the corresponding typed account reasons. Soniox 408 request
-and 400 no-audio timeouts use censored `soniox_idle_timeout`.
+health retains the corresponding typed account reasons. Soniox 408 uses censored `soniox_request_timeout`; 400 no-audio uses
+`soniox_idle_timeout`. Neither opens a provider circuit for all users.
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its

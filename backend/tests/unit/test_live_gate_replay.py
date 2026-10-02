@@ -20,7 +20,8 @@ def default_gate(monkeypatch):
 def baseline_counts():
     counts = Counter()
     yield counts
-    # 4 million baseline sessions represent about 222 days at 18k/day.
+    # Fast lane: 400k sessions per rate; slow lane adds 4 million per rate.
+    # Long trajectories remain runnable explicitly without breaking CI CPU limits.
     # Require no false bench in this seeded baseline; bound higher-rate
     # calibration separately so the reported sensitivity does not drift.
     assert counts[0.03] == 0
@@ -28,16 +29,17 @@ def baseline_counts():
     assert counts[0.075] <= 32
 
 
+@pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
 @pytest.mark.parametrize('seed', range(200))
-def test_twenty_thousand_session_baseline(rate, seed, baseline_counts):
+def test_seeded_session_baseline(rate, seed, sessions, baseline_counts):
     rng, state = random.Random(seed), GateState()
-    for n in range(20000):
+    for n in range(sessions):
         state = transition(state, rng.random() < rate, n, witness=f'{n:016x}')
         if state.stage == 0:
             baseline_counts[rate] += 1
             state = GateState()
-    assert state.n <= 20000
+    assert state.n <= sessions
 
 
 def detect(rate, seed, *, warmup=500, horizon=5000):

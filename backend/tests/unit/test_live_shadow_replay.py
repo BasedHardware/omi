@@ -18,17 +18,18 @@ from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, CO
 from tests.unit.test_live_cost_router import MemoryRedis, controls
 
 
+@pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('floor', [0.05, 0.07, 0.10])
 @pytest.mark.parametrize('seed', range(20))
-def test_audio_noise_floor_cannot_bench_provider(floor, seed):
+def test_audio_noise_floor_cannot_bench_provider(floor, seed, sessions):
     rng, state = random.Random(seed), GateState()
-    for n in range(20000):
+    for n in range(sessions):
         outcome = 'no_text' if rng.random() < floor else 'text'
         failed = provider_observation(outcome)
         if failed is not None:
             state = transition(state, failed, n, witness=f'{n:016x}')
         assert state.stage == 100
-    assert state.failures == 0 and 17000 < state.n <= 20000
+    assert state.failures == 0 and 0.85 * sessions < state.n <= sessions
 
 
 @pytest.mark.parametrize(
