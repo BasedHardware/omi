@@ -328,6 +328,7 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
     receiver._settle_pending_live_failover_failure(continuing=True)
     hop = PendingLiveFailover.from_socket(socket, 'soniox', 'soniox')
     replacement = None
+    raw = None
     retire_window_replay_socket(receiver, socket)
     try:
         await abort_replay_socket(socket)
@@ -384,6 +385,13 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             pacer=delivery.pacer,
         )
         if rejected is not None:
+            if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
+                # The owner tore us down mid-replay; the pacer stops without a
+                # provider fault, so classify as teardown instead of send_failed.
+                await abort_replay_socket(replacement)
+                hop.note_failure(None, continuing=True)
+                RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+                return False
             raise RuntimeError('Soniox replay send failed')
         if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
             await abort_replay_socket(replacement)
@@ -395,6 +403,11 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
         if replacement is not None:
             retire_window_replay_socket(receiver, replacement)
             await abort_replay_socket(replacement)
+        elif raw is not None:
+            # Cancellation can land while the unadopted raw provider leg is
+            # still being vetted; close it so it does not outlive the hop.
+            retire_window_replay_socket(receiver, raw)
+            close_rejected_socket(raw)
         raise
     except Exception:
         if replacement is not None:
