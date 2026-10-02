@@ -14,3 +14,8 @@ Use a Developer API key with `goals:read` for reads and `goals:write` for mutati
 | `PATCH` | `/v1/dev/user/goals/{goal_id}` |
 | `GET` | `/v1/dev/user/goals/{goal_id}/history` |
 | `PATCH` | `/v1/dev/user/goals/{goal_id}/progress` |
+
+Two parameters are not obvious from the table:
+
+- `PATCH /v1/dev/user/goals/{goal_id}/progress` takes `current_value` as a **required query parameter** (e.g. `?current_value=42.5`) — a JSON body alone returns `422`.
+- `GET /v1/dev/user/goals/{goal_id}/history` takes an optional `days` query parameter (default `30`, max `365`).
