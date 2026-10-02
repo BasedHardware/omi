@@ -55,7 +55,11 @@ def identified_macos_build(headers: Mapping[str, str]) -> int | None:
         build = positive_build(raw_build)
         if platform != 'macos' or build is None or version_build != build:
             return None
-        if agent and (agent_build is None or agent_build != build):
+        if agent_build is not None and agent_build != build:
+            return None
+        # A generic transport UA supplies no app identity. A supplied Omi
+        # identity must parse and agree; it cannot be rescued by stale headers.
+        if agent.lower().startswith('omi') and agent_build is None:
             return None
         return build
     if 'x-app-version' in headers and (version_build is None or version_build != agent_build):

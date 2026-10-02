@@ -106,9 +106,9 @@ requires that full name/build/CFNetwork/Darwin structure with a positive integer
 build; other wire variants fail open. Explicit macOS platform + consistent
 version/build headers are also accepted: the audited `0.<minor>.<patch>` scheme
 maps to `minor * 1000 + patch`. Unknown/hotfix version shapes on this explicit
-path fail open; a UA without version headers does not need that mapping. If both
-identity forms are supplied they must agree. Conflicting or malformed supplied
-identity hints are served.
+path fail open; a UA without version headers does not need that mapping. A generic transport User-Agent supplies no competing app identity and does not
+invalidate explicit headers. If both app-identity forms are supplied they must
+agree; malformed Omi or conflicting Windows identities are served.
 
 The false-match surface is a client or intermediary deliberately copying an
 old Omi macOS identity together with its extraction tag and complete tool set.

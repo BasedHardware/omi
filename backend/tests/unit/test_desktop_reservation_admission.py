@@ -43,7 +43,8 @@ def app(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
-async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monkeypatch, stream):
+@pytest.mark.parametrize('identity', ['user_agent', 'explicit_headers'])
+async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monkeypatch, stream, identity):
     async def forbidden(*args, **kwargs):
         pytest.fail('refused requests must not be metered or dispatched')
 
@@ -53,12 +54,21 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
         'contents': [{'role': 'user', 'parts': [{'text': 'synthetic'}]}],
         'tools': [{'function_declarations': [{'name': n, 'parameters': {'type': 'object'}} for n in TASK_TOOLS]}],
     }
+    headers = {'X-Omi-Workload': 'extraction', 'User-Agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'}
+    if identity == 'explicit_headers':
+        # httpx supplies its ordinary transport UA; the explicit identity wins.
+        headers = {
+            'X-Omi-Workload': 'extraction',
+            'X-App-Platform': 'macos',
+            'X-App-Version': '0.12.402',
+            'X-App-Build': '12402',
+        }
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as client:
         action = 'streamGenerateContent' if stream else 'generateContent'
         response = await client.post(
             f'/proxy/gemini-2.5-flash/{action}',
             json=body,
-            headers={'X-Omi-Workload': 'extraction', 'User-Agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'},
+            headers=headers,
         )
     assert response.status_code == 200
     assert response.headers['x-omi-retryable'] == 'false'
@@ -298,3 +308,20 @@ def test_empty_explicit_identity_hint_is_not_overridden_by_user_agent(hint):
     from utils.llm.desktop_reservation_policy import identified_macos_build
 
     assert identified_macos_build({'user-agent': 'Omi/12402 CFNetwork/1 Darwin/1', hint: ''}) is None
+
+
+@pytest.mark.parametrize(
+    'agent', ['Omi/not-a-build CFNetwork/1 Darwin/1', 'Omi%20Beta/12403 CFNetwork/1 Darwin/1', 'Omi-windows/12402']
+)
+def test_explicit_headers_do_not_hide_conflicting_or_malformed_app_identity(agent):
+    from utils.llm.desktop_reservation_policy import desktop_lane
+
+    headers = {
+        'x-omi-workload': 'extraction',
+        'x-app-platform': 'macos',
+        'x-app-version': '0.12.402',
+        'x-app-build': '12402',
+        'user-agent': agent,
+    }
+    body = {'tools': [{'functionDeclarations': [{'name': n} for n in TASK_TOOLS]}]}
+    assert desktop_lane(headers, body) != 'macos_legacy_tasks'
