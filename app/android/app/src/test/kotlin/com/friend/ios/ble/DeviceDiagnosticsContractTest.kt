@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DeviceDiagnosticsContractTest {
+    @Test fun `local host termination during readiness keeps its status without a pairing claim`() {
+        assertEquals("gatt_status_22", BleDisconnectReason.connectionErrorFromStatus(0x16))
+    }
+
+    @Test fun `connection errors preserve bond loss clean disconnect and generic statuses`() {
+        assertEquals("pairing_lost", BleDisconnectReason.connectionErrorFromStatus(137))
+        assertNull(BleDisconnectReason.connectionErrorFromStatus(0))
+        for (status in listOf(-1, 8, 19, 34, 62, 133)) {
+            assertEquals("gatt_status_$status", BleDisconnectReason.connectionErrorFromStatus(status))
+        }
+    }
+
     @Test fun `local host termination does not claim another phone paired`() {
         // HCI 0x16 reports local termination, not the reason the host requested it.
         assertEquals("gatt_error_22", BleDisconnectReason.fromStatus(0x16))

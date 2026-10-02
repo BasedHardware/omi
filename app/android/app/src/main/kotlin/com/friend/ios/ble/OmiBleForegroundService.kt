@@ -552,12 +552,7 @@ class OmiBleForegroundService : Service() {
 
         val addr = address.uppercase()
 
-        val error = when {
-            status == 137 -> "pairing_lost"
-            status == 22 -> "paired_to_another_phone"
-            status != 0 -> "gatt_status_$status"
-            else -> null
-        }
+        val error = BleDisconnectReason.connectionErrorFromStatus(status)
 
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {

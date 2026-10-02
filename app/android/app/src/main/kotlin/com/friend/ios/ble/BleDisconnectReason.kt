@@ -2,6 +2,13 @@ package com.friend.ios.ble
 
 /** Maps native HCI statuses to the existing diagnostics/analytics reason vocabulary. */
 internal object BleDisconnectReason {
+    /** Error delivered to Flutter when a disconnect interrupts device readiness. */
+    fun connectionErrorFromStatus(status: Int): String? = when {
+        status == 137 -> "pairing_lost"
+        status != 0 -> "gatt_status_$status"
+        else -> null
+    }
+
     fun fromStatus(status: Int): String = when (status) {
         0 -> "clean_disconnect"
         8, 0x22 -> "connection_timeout" // 0x22: LMP/LL response timeout.
