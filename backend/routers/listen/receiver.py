@@ -1269,6 +1269,7 @@ class ListenReceiver(ReplayFilterMixin):
             raise
         if not self.host.state.active or socket_is_finishing(previous):
             hop.note_failure(None)
+            retire_window_replay_socket(self, raw)
             close_rejected_socket(raw)
             return False
         if rejected_sample is not None and window_ring is not None:
