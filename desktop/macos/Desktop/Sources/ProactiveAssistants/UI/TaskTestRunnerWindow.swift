@@ -535,8 +535,11 @@ struct TaskTestRunnerView: View {
 
           // Run extraction pipeline
           let analyzeStart = Date()
-          let (allResults, searchCount) = try await taskAssistant.testAnalyze(
-            jpegData: jpegData, appName: screenshot.appName)
+          let (allResults, searchCount) = try await DesktopLogPrivacy.$suppressContent.withValue(
+            ScreenTaskFeature.isEnabled
+          ) {
+            try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
+          }
           let duration = Date().timeIntervalSince(analyzeStart)
 
           // Pick the first task-bearing result for display; fall back to the first
