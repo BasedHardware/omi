@@ -215,6 +215,21 @@ account failures still quarantine their shared credential family.
 `live_target_connect.py` reuses the existing Modulate socket protocol
 for endpoint overrides; it does not change provider clients.
 
+Health alone cannot empty an eligible chain. If all capacity-available targets
+are degraded, order them by highest stage, lowest observed provider-error
+fraction, then cost (config order breaks ties), and expose `all_degraded`.
+This emergency chain may exceed trial admission shares because there is no
+healthy alternative. Otherwise the most expensive available target is not
+restricted by its health/trial share unless a cheaper stage-100 candidate can
+absorb this UID's traffic. Health-skipped trial/bench targets stay at the
+last-resort failover tail. Explicit registry ramps, actual engine/capability
+eligibility and account protection are never bypassed. If all candidates are
+capacity-blocked, propose the least-recently-refused chain and allow the
+existing one-dial-per-session capacity escape. Empty still means no eligible
+registered target (for example a withdrawn ramp or account-only quarantine),
+invalid config/cache error, or a legacy-only configured family; it restores
+configured order and must not be hidden by a misleading healthy proposal.
+
 The registry defaults to `parakeet-window` ($0.02/audio-hour),
 `modulate-velma-2` ($0.055), and `soniox` ($0.0754). These are routing estimates,
 not billing measurements. `STT_ROUTING_TARGETS_JSON` replaces the entire list
@@ -240,8 +255,7 @@ re-entry means 5% of sessions eligible under the configured ramp.
 `STT_ROUTING_DISRUPTION_GATE=0.08`, alternatives are 0.12, 0.16 and 0.60;
 for another gate g they are g + (1-g) times 1/23, 2/23 and 13/23.
 Each score updates as `max(0, score + log P_q(outcome)/P_g(outcome))`.
-Bench thresholds are 12, 11 and 10 respectively, with at least eight speech
-sessions. The rapid 60% alternative additionally needs eight failures in the
+Bench thresholds are 12, 11 and 10 respectively, with at least eight classified target/session outcomes. The rapid 60% alternative additionally needs eight failures in the
 last 32 sessions, so five failures after a long healthy history cannot alone
 trigger it. Scores continue across reporting-counter boundaries; there is no
 1,024-session test reset or repeated injection of fresh likelihood mass.
@@ -263,7 +277,7 @@ SHA-256 prefixes, never raw UIDs, labels, logs or content.
 Calibration uses 200 independent seeded runs of 20,000 sessions per baseline
 rate, resetting after false benches to count all episodes:
 
-| True disruption rate | False benches / 4,000,000 sessions | Runs with a bench / 200 | Episodes per 252,000 sessions (14 days at 18k/day) |
+| True provider-error rate | False benches / 4,000,000 sessions | Runs with a bench / 200 | Episodes per 252,000 sessions (14 days at 18k/day) |
 | --- | --- | --- | --- |
 | 3% | 0 | 0 | 0 observed |
 | 5% | 1 | 1 | 0.063 |
@@ -277,7 +291,7 @@ sensitivity. Independent synthetic outcomes are not production qualification.
 
 Across 200 seeded outage runs after 500 healthy sessions:
 
-| True disruption rate | Median sessions to bench | 95th percentile sessions | Median / 95th percentile failed sessions |
+| True provider-error rate | Median sessions to bench | 95th percentile sessions | Median / 95th percentile failed sessions |
 | --- | --- | --- | --- |
 | 60% | 13 | 21 | 8 / 10 |
 | 80% | 10 | 13 | 8 / 8 |
@@ -295,22 +309,64 @@ existing bench. A hard outage's wall time depends on completed speech-session
 volume: eight failures at 62 sessions/5 minutes take about 39 seconds at full
 traffic or 155 seconds at 25%, plus outcome and cache delays.
 
-A leg contributes once after at least one second of VAD-confirmed speech:
-no text by the existing deadline, death/failover after text, or successful
-completion. A known no-text or dead leg contributes immediately; successful
-legs wait until close so later failure cannot be hidden by first text.
-Intentional teardown does not count as a death. A healthy client close before
-the first-text deadline is censored if no text arrives during drain; legacy
-no-text diagnostics are preserved, but this is not provider failure evidence.
-Actual text during drain still counts as successful completion. Legacy first-text counters
-remain diagnostic and are not added to the session denominator. Target-global
-and bounded-language evidence run independently; a language bench can restrict
-that language, and sparse healthy languages inherit target-global health.
-The language view is used after 30 samples or a decisive failure test.
+The v4 gate measures provider-path availability, separate from transcript/audio
+quality. `live_signal.provider_observation` classifies one outcome per leg:
+
+- Completed text after at least one second of VAD speech is a non-failure.
+  Actual text received after the diagnostic deadline also qualifies.
+- Serving death/failover counts only for `modulate_serve_error`,
+  `connection_lost`, `send_failed`, `provider_5xx`, `provider_rate_limited`,
+  `provider_429`, or `timeout`. Provider transport availability includes the
+  backend-to-provider path; this is not proof of a vendor incident.
+- Connect errors with those reasons also count once per target attempt, even
+  before speech. Account/config/capacity failures retain their separate gates.
+- Plain `no_text`, `first_text_deadline`, `empty_streak`, VAD/client failure,
+  idle/rotation and account/capacity outcomes are **censored**: neither numerator
+  nor denominator, and they cannot advance a trial. Existing leg no-text and
+  conversation transcript counters remain diagnostic and unchanged in shadow.
+
+No-text deadlines no longer seal health evidence early. Completed text waits
+until close; later attributable death therefore wins, once. Intentional client
+teardown is censored. A deadline-only window failover is not a hard failure,
+regardless of its successor: aggregate data has no successor/session join,
+and adding a cross-leg adjudication is outside this calibration. This loses
+automatic gate detection of a recognizer that connects but silently returns
+no words; watch deadline and conversation transcript SLIs for that incident.
+The prior 5–7% VAD/no-word floor must not become provider-error evidence.
+
+At independent 5%, 7% and 10% no-text floors with zero provider errors, each of
+20 seeded 20,000-session replays observed **0 false benches / 400,000 sessions**.
+For this clean v4 state and correctly classified zero-error condition, the
+false-bench probability is exactly zero: censored outcomes do nothing and
+successful outcomes cannot increase a CUSUM score. This is a conditional
+classification guarantee, not a lifetime guarantee when real errors exist.
+The older calibration table above now concerns genuine provider-error inputs.
+
+With a 10% censored noise floor, after 500 healthy outcomes, 200 seeded runs
+measure these total speech-session and failed-session detection counts:
+
+| Attributable error fraction of speech sessions | Median / p95 total sessions | Median / p95 failures |
+| --- | --- | --- |
+| 100% hard outage | 8 / 8 | 8 / 8 |
+| 60% hard outage | 13 / 19 | 8 / 9 |
+| 40% Modulate-like brownout | 22 / 47 | 9 / 15 |
+
+The 100% case has no residual noise slots. Stochastic p95 is not a worst-case
+bound. Tests bound Modulate-like median at 30 and p95 at 50 sessions in this
+seeded model. At 62 speech sessions per five minutes, 47 sessions is about
+3.8 minutes at full traffic, before completion/cache lag. Low-volume targets
+or 5% trials require longer wall time. The gate remains 8%: after censoring,
+measured healthy provider errors are about 0.3–1%, not the 5–7% audio floor.
+A relative cross-provider baseline would add language/traffic-mix and fallback
+selection bias without resolving this attribution error.
+
+Target-global and bounded-language tests remain independent. A language bench
+can restrict that language; sparse healthy languages inherit global health.
+The language view is used after 30 classified samples or a decisive test.
 
 A bench waits 300 seconds initially. Failed trials double the wait up to
 four hours. A fleet lease starts a shared 5% trial when that target would be
-preferred over surviving targets. Trial promotion gives each observed user
+preferred over surviving targets. Trial promotion counts only classified outcomes and gives each observed user
 one vote: a user is failing when more than half of their speech sessions in
 the current window fail. Promote after at least 30 sessions at 5%, or 60 at
 25%, when the failing-user fraction is <= the configured gate (default 8%).
@@ -329,8 +385,8 @@ fingerprints, bounded outcome counts, and no content. Here is a deterministic
 coverage bound: with no more than two always-failing users and at least 23
 always-passing users observed within each stage's 120/240-session window
 (>=92% healthy observed users), the global and language trials reach 100%
-within **360 completed trial speech sessions**, regardless of how many of
-those sessions the two callers supply. If each 30/60-session prefix already
+within **360 classified trial outcomes**, regardless of how many of
+those sessions the two callers supply. Censored noise does not advance this bound. If each 30/60-outcome prefix already
 has that coverage, the bound is 90 sessions. Coverage concerns each sticky
 stage cohort; a target-wide healthy majority that never appears in the trial
 cannot establish recovery. There is no unconditional raw-session or wall-time
@@ -358,14 +414,14 @@ Local breakers are omitted from the replay, so their additional protection
 is not credited. Other providers' failures are outside this trial budget.
 
 `live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v3` Redis namespace. Compare-and-set updates preserve shared
+`omi:live-stt:cost-v4` Redis namespace. Compare-and-set updates preserve shared
 counts and transitions across pods; leases serialize trial starts. Fleet
 bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
 Redis-down local deadlines use the last known server offset and translate once
 on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
 skews and a ten-minute Redis outage with sixty successful connection decisions.
-The v3 namespace prevents old pods from decoding the new trial vote fields.
-It starts a new shadow evidence history; allow it to warm before raising on-percent.
+The v4 namespace prevents v3 audio/no-text evidence from being reinterpreted
+as provider errors. It starts fresh shadow history; warm it before raising on-percent.
 A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
 configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
@@ -437,22 +493,65 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,
 `omi_stt_cost_routing_benched{target}`, `omi_stt_cost_routing_stage{target}`,
 `omi_stt_cost_routing_shadow_total{agreement,static_primary,proposed_primary}`, and
-`omi_stt_cost_routing_events_total{target,event}`, and
+`omi_stt_cost_routing_events_total{target,event,scope}`, and
 `omi_stt_cost_routing_fail_open_total{reason}` with bounded
 `empty_proposal|engine_mismatch|cache_unavailable|router_error`. Primary and skip decisions count the proposed policy even in shadow;
 `failover` counts actual active backup attempts, and capacity admission refusals
-count actual overflow. Unused backup legs do not inflate failover counters. The event counter counts global fleet transitions. Language transitions and Redis-down
-transitions (the latter logged with `scope=local`) do not increment it again. Transition logs contain
-target, bounded language, scope, stage, n,
-failures, rate, CUSUM score and cooldown, never UID/content/endpoint/credentials. Gauges
-reflect global per-target state, independent of the last queried language.
-Use event logs for language diagnosis. Log n/failures/rate remain raw speech
-session counts; trial promotion uses the user vote rate described above.
-Shadow labels are validated registry IDs (maximum 16), plus fixed
-`unregistered`/`unavailable` sentinels; RNNT static primaries use `unregistered`
-because they are not window targets. Changing the shadow metric labels is an
-intentional monitoring-schema change; update queries after old pods drain.
+count actual overflow. Unused backup legs do not inflate failover counters.
+`omi_stt_cost_routing_all_degraded_total{target}` marks the emergency health
+selection, and `omi_stt_cost_routing_observations_total{target,outcome}` separates
+`success|provider_failure|censored`. No UID/content labels are added.
+Transition counters count successful CAS writers, separately for
+`scope=global|language`; Redis-down local transitions remain logs only.
+All target/event/scope counter series are initialised at zero before traffic,
+including custom registry IDs. This makes a first post-scrape increment visible
+to `increase()`. Events before a pod's first scrape are inherently unobservable
+as increases; counters are not a durable fleet event ledger.
+Transition logs contain target, bounded language, scope, stage, n, failures,
+rate, score and cooldown, never UID/content/endpoint/credentials. Their rate
+is classified session outcomes; trial promotion uses user votes.
+
+Stage/bench gauges are **pod views of global target state**, not a central
+fleet gauge. The old code published on selection/events only and refreshed
+only traffic-interest keys: an idle or Parakeet-ineligible pod could retain
+100 despite a remote trial. v3 already selected the global state, so the code
+provides no evidence of language-state leakage into that gauge. Every v4
+background refresh watches all registry global keys and republishes gauges,
+even without eligible sessions. Unknown health is NaN, with
+`omi_stt_cost_routing_state_known{target}=0`, not a claimed healthy 100.
+`omi_stt_cost_routing_snapshot_timestamp_seconds` uses Redis time for the
+last complete snapshot. Require freshness/known state and convergence before
+interpreting pod min/max; Redis faults can retain a local fallback view.
+Shadow pair labels are validated registry IDs (maximum 16), plus fixed
+`unregistered`/`unavailable` sentinels. Metrics schema changes require draining
+old pods before scope/freshness queries become authoritative.
+
 Add dashboard panels for proposed target share, shadow disagreement, maximum
 bench state, minimum recovery stage, transition counts, and dropped writes.
 Use traffic floors/dwell for alerts and the existing headline transcript SLI;
 no unvalidated Grafana rule changes are included here.
+
+### Aggregate shadow replay (2026-10-02)
+
+The uncommitted 48-hour, five-minute Prometheus export was replayed locally.
+During 19:00Z–03:00Z, Parakeet and Soniox remained 100 with zero transitions;
+Modulate first benched around 19:02Z, then cycled 0/5 with exponential backoff,
+never reaching 25/100 again. Empty proposals: **0**. Proposed primary shares:
+
+| Synthetic cohort/capability model | Parakeet | Modulate | Soniox |
+| --- | --- | --- | --- |
+| Existing static primary as eligibility proxy | 18.330% | 3.624% | 78.047% |
+| Independent sticky 25% cohort + observed language mix | 23.063% | 3.238% | 73.699% |
+| Full 48h export, independent cohort | 22.638% | 2.741% | 74.621% |
+
+Both 8h models keep healthy targets at 100 and Modulate unhealthy, with no
+empty proposal. Results use synthetic distinct callers, interpolated bucket
+ordering, and disjoint death/first-text observations that conservatively
+dilute error fractions. First-text counters are not completed-leg counters.
+No aggregate session join can reconstruct exact user repetition, language
+failure allocation, successor results, engine/cohort correlations or delayed
+completion generations. The 48h export has router proposals only after its
+rollout; re-entry cannot be inferred before that. These are diagnostic
+counterfactuals, not exact historical sessions or production qualification.
+The shipped synthetic 24h test independently covers measured 3–8% Soniox
+noise + 1% errors, 6–10% Parakeet noise + 0.3% errors, and 40% Modulate errors.

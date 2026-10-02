@@ -410,6 +410,7 @@ class LiveLegSocket(STTSocket):
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False
+        self._cost_text_seen = False
         self._cost_censored_no_text = False
         self._target_death_recorded = False
         self._closing_for_health = False
@@ -563,6 +564,8 @@ class LiveLegSocket(STTSocket):
         self._pending_selection = pending
 
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
+        if any(str(segment.get('text') or '').strip() for segment in segments):
+            self._cost_text_seen = True
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
@@ -585,17 +588,10 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
-        if outcome == 'no_text':
-            self._record_cost_outcome(False)
         health.record(self.service.value, self.session.receiver.host.language, outcome)
         if self._routing_active:
             if outcome == 'text':
                 self._health_success()
-            elif not self._cost_censored_no_text:
-                self._health_close()
-                circuit = target_circuit(self._routing_target_entry, st._circuit_for_primary(self.service))  # type: ignore[reportPrivateUsage]
-                circuit.record_serve_failure()
-                health.quarantine(self.service.value, 'selection', circuit.serve_error_bench_seconds)
             else:
                 self._health_close()
 
@@ -725,7 +721,7 @@ class LiveLegSocket(STTSocket):
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
             if audio and self.raw.send(audio) is not True:
-                self._record_cost_outcome(True)
+                self._record_cost_outcome(True, reason=self.typed_death_reason or 'send_failed')
                 self.finish()
                 self._dead = True
                 return False
@@ -801,11 +797,11 @@ class LiveLegSocket(STTSocket):
             self._record_cost_outcome(dead)
             self._release_open_gauge()
 
-    def _record_cost_outcome(self, dead: bool) -> None:
+    def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
         if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
             self._cost_recorded = True
-            outcome = 'failover' if dead else self._transcript_outcome or 'no_text'
-            if self._cost_censored_no_text and self._transcript_outcome != 'text':
+            outcome = 'failover' if dead else 'text' if self._cost_text_seen else 'no_text'
+            if self._cost_censored_no_text and not self._cost_text_seen:
                 return
             try:
                 health.record_session(
@@ -814,6 +810,7 @@ class LiveLegSocket(STTSocket):
                     outcome,
                     self._cost_generations,
                     getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
+                    (reason or self.typed_death_reason or self.death_reason or 'connection_lost') if dead else None,
                 )
             except Exception:
                 record_fallback(
