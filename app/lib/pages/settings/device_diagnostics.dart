@@ -202,6 +202,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'firmware_diagnostics_latest': (extended['firmware_diagnostics'] as List?)?.lastOrNull,
       'lifecycle_events': extended['lifecycle_events'] ?? [],
       'ble_log': extended['ble_log'] ?? [],
+      'capture_health': extended['capture_health'] ?? {},
+      'capture_health_history': extended['capture_health_history'] ?? [],
     };
   }
 

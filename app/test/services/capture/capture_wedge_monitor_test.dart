@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 
 void main() {
   late DateTime now;
@@ -49,6 +50,39 @@ void main() {
     events = [];
     retriedDevices = [];
     flagEnabled = true;
+  });
+
+  test('native recovery owns retries and only exhausted failure projects a banner', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    monitor.setNativeIngressOwner('dev-a', true);
+    CaptureIngressHealth health(String phase) => CaptureIngressHealth(
+          phase: phase,
+          generation: 'epoch-1',
+          reason: phase,
+          validUntilMs: 0,
+          subscriptionConfirmed: phase == 'quiet',
+          unverifiedSinceMs: 1234,
+        );
+    for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
+      monitor.observeIngressHealth('dev-a', health(phase));
+      zeroSession(monitor);
+      monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull);
+      expect(retriedDevices, isEmpty);
+    }
+    monitor.observeIngressHealth('dev-a', health('actionRequired'));
+    expect(monitor.visiblePrompt!.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+    monitor.onTranscriptObserved('dev-a');
+    expect(monitor.visiblePrompt, isNotNull, reason: 'cached transcripts do not prove current audio ingress');
+    monitor.retryVisibleEpisode();
+    await pumpEventQueue();
+    expect(retriedDevices, isEmpty, reason: 'banner must not bypass native persistent budget');
+    monitor.observeIngressHealth('dev-a', health('flowing'));
+    expect(monitor.visiblePrompt, isNull);
+    expect(forEvent('Capture Ingress Health').map((e) => e['phase']),
+        ['unverified', 'repairing', 'reconnecting', 'quiet', 'actionRequired', 'flowing']);
   });
 
   group('zero-byte session streak', () {

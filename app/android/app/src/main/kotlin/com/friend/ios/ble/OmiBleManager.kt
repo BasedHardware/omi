@@ -433,20 +433,33 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
-    fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String) {
-        val addr = address.uppercase()
-        val gatt = connectedGatts[addr] ?: return
-        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid) ?: return
+    private val subscriptionCompletions =
+        ConcurrentHashMap<BluetoothGattDescriptor, (Result<Unit>) -> Unit>()
 
-        val descriptor = characteristic.getDescriptor(CCCD_UUID)
+    fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String,
+                                completion: (Result<Unit>) -> Unit = {}) {
+        val gatt = connectedGatts[address.uppercase()]
+        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid)
+        val descriptor = characteristic?.getDescriptor(CCCD_UUID)
+        if (gatt == null || characteristic == null || descriptor == null) {
+            completion(Result.failure(IllegalStateException("Notification characteristic or CCCD not found")))
+            return
+        }
+        // Report the actual CCCD result; Dart owns the bounded wait and retry.
+        // Queue scheduling and GATT lifetime remain unchanged in this cut.
         enqueueCommand {
-            gatt.setCharacteristicNotification(characteristic, true)
-            if (descriptor != null) {
-                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-            } else {
+            subscriptionCompletions[descriptor] = completion
+            if (!gatt.setCharacteristicNotification(characteristic, true)) {
+                finishSubscription(descriptor, Result.failure(IllegalStateException("Notification enable failed")))
                 completeCommand()
+            } else if (!writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                finishSubscription(descriptor, Result.failure(IllegalStateException("CCCD write rejected")))
             }
         }
+    }
+
+    private fun finishSubscription(descriptor: BluetoothGattDescriptor, result: Result<Unit>) {
+        subscriptionCompletions.remove(descriptor)?.invoke(result)
     }
 
     fun unsubscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String) {
@@ -554,7 +567,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     @Suppress("deprecation")
-    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
+    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray): Boolean {
         val success = if (Build.VERSION.SDK_INT >= 33) {
             gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
         } else {
@@ -565,6 +578,7 @@ class OmiBleManager private constructor(private val application: Application) {
             Log.e(TAG, "writeDescriptor failed for ${descriptor.uuid}")
             completeCommand()
         }
+        return success
     }
 
     fun cleanupPeripheral(address: String) {
@@ -771,6 +785,8 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            finishSubscription(descriptor, if (status == BluetoothGatt.GATT_SUCCESS) Result.success(Unit)
+                else Result.failure(IllegalStateException("CCCD write failed: $status")))
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Descriptor write failed (status=$status) for ${descriptor.characteristic.uuid}")
             }

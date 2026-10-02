@@ -32,6 +32,11 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
       this.interrupted = false,
       this.callActive = false,
       this.readerPaused = false});
+  bool verified = true;
+  int? offlineElapsedOverride;
+  @override
+  bool get pendantCaptureVerified => verified;
+
   final _Live live;
   final bool failure;
   final bool batch;
@@ -83,7 +88,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get offlineMuted => false;
   @override
-  int? get offlineRecordingElapsedSeconds => batch ? 125 : null;
+  int? get offlineRecordingElapsedSeconds => offlineElapsedOverride ?? (batch ? 125 : null);
   @override
   bool get isPendantBatchRecording => live == _Live.pendantBatch;
   @override
@@ -374,6 +379,22 @@ void main() {
       expect(find.text(en.transcribeLaterStorageFull), findsOneWidget);
     });
 
+    testWidgets('unverified pendant batch keeps controls without claiming saved audio or elapsed time', (tester) async {
+      SharedPreferencesUtil().batchModeEnabled = true;
+      addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+      final capture = _Capture(_Live.pendantBatch)
+        ..verified = false
+        ..offlineElapsedOverride = 125;
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.captureSourcePendant), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.text(en.captureAudioSavedTranscribesLater), findsNothing);
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+      await tester.pump(const Duration(minutes: 1));
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('recording: the live card layout with a 0:14-style timer', (tester) async {
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
       expect(find.text(en.recording), findsOneWidget);
@@ -381,6 +402,38 @@ void main() {
       expect(find.text(en.pause), findsOneWidget);
       expect(find.text(en.transcribeLaterNote), findsNothing, reason: 'settings copy is not a status');
     });
+  });
+
+  testWidgets('unverified pendant keeps its transcript and controls without Listening or a timer', (tester) async {
+    final capture = _Capture(_Live.pendant)..verified = false;
+    await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+    expect(find.byType(LiveCaptureCard), findsOneWidget);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).onPauseToggle, isNotNull);
+    expect(find.text(en.captureSourcePendant), findsOneWidget);
+    expect(find.text(en.listening), findsNothing);
+    expect(find.textContaining('Keep the pendant flow as it is.'), findsOneWidget);
+    await tester.pump(const Duration(minutes: 1));
+    expect(find.byType(LiveCaptureCard), findsOneWidget);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).onPauseToggle, isNotNull);
+    expect(find.text(en.captureSourcePendant), findsOneWidget);
+    expect(find.text(en.listening), findsNothing);
+    expect(find.textContaining('Keep the pendant flow as it is.'), findsOneWidget);
+    capture.verified = true;
+    capture.notifyListeners();
+    await tester.pump();
+    expect(find.byType(LiveCaptureCard), findsOneWidget);
+    capture.verified = false;
+    capture.notifyListeners();
+    await tester.pump();
+    expect(find.byType(LiveCaptureCard), findsOneWidget);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).onPauseToggle, isNotNull);
+    expect(find.text(en.captureSourcePendant), findsOneWidget);
+    expect(find.text(en.listening), findsNothing);
+    expect(find.textContaining('Keep the pendant flow as it is.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   group('record-with-this-phone button', () {

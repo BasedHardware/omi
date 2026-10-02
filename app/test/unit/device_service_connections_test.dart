@@ -6,6 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
@@ -16,6 +17,15 @@ class _FakeTransport implements DeviceTransport {
   @override
   final String deviceId;
   bool disposed = false;
+  bool physicallyConnected = true;
+  int connects = 0;
+  @override
+  Future<bool> isConnected() async => physicallyConnected;
+  @override
+  Future<void> connect() async {
+    connects++;
+    physicallyConnected = true;
+  }
 
   @override
   Future<void> dispose() async => disposed = true;
@@ -81,6 +91,7 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
     }
     mockedChannels.clear();
+    BleBridge.instance.unregisterPeripheral(audioId);
   });
 
   setUp(() async {
@@ -119,6 +130,20 @@ void main() {
     expect(identical(first, second), isTrue);
     expect(service.connections.length, 1);
   });
+
+  for (final exit in ['cancel before disconnect', 'cancel during reconnect', 'failed reconnect']) {
+    test('$exit: Resume checks native link and reconnects the existing source', () async {
+      final connection = await service.ensureConnection(audioId, force: true);
+      final transport = built[audioId]!.transport;
+      transport.physicallyConnected = false;
+      BleBridge.instance.onPeripheralDisconnected(audioId, 'capture_recovery');
+      expect(await service.ensureConnection(audioId), isNull);
+      expect(await service.ensureConnection(audioId, force: true), same(connection));
+      expect(transport.connects, 1);
+      expect(transport.disposed, isFalse);
+      expect(built[audioId]!.disconnectCalled, isFalse);
+    });
+  }
 
   test('disconnecting one device leaves the other alone', () async {
     await service.ensureConnection(audioId, force: true);

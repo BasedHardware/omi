@@ -3,6 +3,7 @@
 require 'minitest/autorun'
 require 'open3'
 require 'tmpdir'
+require_relative 'omi_capture_health_test'
 
 class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
@@ -69,6 +70,41 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 precondition(OmiBleConnectionPolicy.discoveryFailureAction(
                     peripheralState: .disconnected, nativeReady: false, requestPending: true, retries: 0
                 ) == .ignore)
+
+                // A cached live link is never reused during a physical capture reset.
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected, nativeReady: true, hasCompleteServices: true,
+                    discoveryInFlight: false, captureResetInProgress: true
+                ) == .awaitCaptureReset)
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: false, alreadyReconnected: false, authorized: true, pairingLost: false
+                ))
+                precondition(OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: true, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: true, authorized: true, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: false, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: true, pairingLost: true
+                ))
+                for source in ["restore", "replay", "hydrate"] {
+                    precondition(!OmiBleConnectionPolicy.captureResetReady(
+                        disconnectObserved: true, freshConnection: true, source: source
+                    ))
+                }
+                precondition(!OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: false, freshConnection: true, source: "discovery"
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: true, freshConnection: false, source: "discovery"
+                ))
+                precondition(OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: true, freshConnection: true, source: "discovery"
+                ))
 
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,

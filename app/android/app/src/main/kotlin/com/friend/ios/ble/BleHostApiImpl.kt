@@ -88,8 +88,13 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.writeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, data, callback)
     }
 
-    override fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) {
-        bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid)
+    override fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
+                                         callback: (Result<Unit>) -> Unit) {
+        bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, callback)
+    }
+
+    override fun setCaptureAuthorized(uuid: String, authorized: Boolean) {
+        // Native ingress recovery is iOS-only in this cut.
     }
 
     override fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) {

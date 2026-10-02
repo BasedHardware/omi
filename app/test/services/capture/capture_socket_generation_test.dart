@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -31,6 +33,8 @@ import '../../spine/c1_location_completion_test.dart' show PhoneSpy, WalSpy;
 
 CaptureDependencies _deps({
   CaptureReplayWorld? world,
+  CaptureBleListeners? ble,
+  RecordingLifecycleTelemetry? telemetry,
   CaptureConversationSocketOpen? open,
   Future<BleAudioCodec> Function(String)? codec,
   ConversationLocationCapture? location,
@@ -54,7 +58,7 @@ CaptureDependencies _deps({
     now: clock.now,
     scheduling: world?.scheduler ?? ManualScheduler(clock: clock),
     preferences: SharedPreferencesUtil(),
-    ble: _NoopBle(),
+    ble: ble ?? _NoopBle(),
     openSocket: ({
       required codec,
       required sampleRate,
@@ -91,7 +95,8 @@ CaptureDependencies _deps({
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
     refreshConversation: () async {},
-    telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
+    telemetry:
+        telemetry ?? RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
 }
 
@@ -106,6 +111,25 @@ class _InertMic implements IMicRecorderService {
 }
 
 class _NoopBle implements CaptureBleListeners {
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) {}
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
+}
+
+class _IngressBle extends ChangeNotifier implements CaptureBleListeners, CaptureIngressPort {
+  CaptureIngressHealth? health;
+  final authorizations = <bool>[];
+  @override
+  bool get supportsIngressHealth => true;
+  @override
+  CaptureIngressHealth? ingressHealth(String deviceId) => health;
+  @override
+  void addIngressListener(VoidCallback listener) => addListener(listener);
+  @override
+  void removeIngressListener(VoidCallback listener) => removeListener(listener);
+  @override
+  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async => authorizations.add(authorized);
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) {}
   @override
@@ -145,6 +169,55 @@ class HeldStore implements LocalSegmentStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('real provider authorizes ingress but waits for audio before Recording Started and timer', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-ingress-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    final events = <String>[];
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        ble: ble,
+        telemetry: RecordingLifecycleTelemetry(
+          emitter: (event, _) => events.add(event),
+          clock: world.clock.now,
+          idFactory: () => 'ingress',
+        ),
+      ));
+      addTearDown(p.dispose);
+      final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      await p.streamDeviceRecording(device: device);
+      expect(ble.authorizations, contains(true));
+      expect(p.pendantCaptureVerified, isFalse);
+      world.deviceConnection!.emitSubscriptionFailure();
+      expect(events, contains('Recording Subscription Failed'));
+      expect(p.liveCaptureStartedAt, isNull);
+      expect(events, isNot(contains(RecordingLifecycleTelemetry.startedEvent)));
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(p.liveCaptureStartedAt, world.clock.now());
+      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+      ble.health = null; // ready replay invalidates proof
+      ble.notifyListeners();
+      expect(p.liveCaptureStartedAt, isNull);
+      await p.pauseCapture();
+      expect(ble.authorizations.last, isFalse);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
 
   test('real provider coalesces concurrent reconnects into one socket open', () async {
     final dir = await Directory.systemTemp.createTemp('c1-join-');

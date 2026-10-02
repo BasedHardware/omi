@@ -20,6 +20,7 @@ WHERE event IN (
     'Billing Subscription Churned',
     'Product Error'
     , 'Product Feedback Submitted'
+    , 'Recording Requested'
     , 'Recording Started'
     , 'Recording Completed'
     , 'Recording Start Failed'
