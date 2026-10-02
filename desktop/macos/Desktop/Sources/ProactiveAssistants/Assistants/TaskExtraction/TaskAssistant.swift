@@ -35,6 +35,7 @@ actor TaskAssistant: ProactiveAssistant {
 
   private let geminiClient: GeminiClient
   var screenTaskDedupe = ScreenTaskDedupe()
+  var screenTaskFrameOwners = ScreenTaskFrameOwners()
   private var isRunning = false
   private var previousTasks: [ExtractedTask] = []  // Last 10 extracted tasks for context
   private let maxPreviousTasks = 10
@@ -404,6 +405,9 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     // Store as latest frame (used by fallback timer and context switch)
+    if await ScreenTaskFeature.isEnabled {
+      screenTaskFrameOwners.record(frame, authorization: RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    }
     latestFrame = frame
 
     // Start fallback timer if not already running
@@ -894,6 +898,7 @@ actor TaskAssistant: ProactiveAssistant {
     triggerContinuation.finish()
     processingTask?.cancel()
     latestFrame = nil
+    screenTaskFrameOwners = ScreenTaskFrameOwners()
   }
 
   // MARK: - Single-Stage Analysis with Tool Calling

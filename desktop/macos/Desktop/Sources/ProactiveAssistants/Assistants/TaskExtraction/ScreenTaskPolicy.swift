@@ -4,6 +4,10 @@ enum ScreenTaskFeature {
   static let flagName = "screen_task_jev_gate"
   /// All bundles default off; Beta/dev must also have explicit consent and enablement.
   @MainActor static var isEnabled: Bool { PostHogManager.shared.isFeatureEnabled(flagName) }
+
+  static func enforceQuota() async throws {
+    guard await ManagedProactivityDecisionSource.current() != .planGated else { throw ScreenTaskFailure.planGated }
+  }
 }
 
 struct ScreenTaskDedupe {
@@ -61,4 +65,29 @@ enum ScreenTaskContext {
         return seen.insert(key).inserted
       }.prefix(max(0, min(limit, 8))))
   }
+}
+
+/// Capture authority at admission, before a queued frame can cross an account transition.
+struct ScreenTaskFrameOwners {
+  private struct Key: Hashable {
+    let app: String
+    let number: Int
+    let date: Date
+    init(_ frame: CapturedFrame) {
+      app = frame.appName
+      number = frame.frameNumber
+      date = frame.captureTime
+    }
+  }
+  private var owners: [Key: RuntimeOwnerAuthorizationSnapshot] = [:]
+
+  mutating func record(_ frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) {
+    let key = Key(frame)
+    if owners.count >= 64, let oldest = owners.keys.min(by: { $0.date < $1.date }) {
+      owners.removeValue(forKey: oldest)
+    }
+    owners[key] = authorization
+  }
+
+  func authorization(for frame: CapturedFrame) -> RuntimeOwnerAuthorizationSnapshot? { owners[Key(frame)] }
 }

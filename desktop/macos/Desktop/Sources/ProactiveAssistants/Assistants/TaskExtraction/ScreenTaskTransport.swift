@@ -23,7 +23,7 @@ extension APIClient {
     body: Data, authorization: RuntimeOwnerAuthorizationSnapshot,
     gateOutcome: String, auditSample: Bool
   ) async throws -> String {
-    try await GeminiClient.enforceManagedProactivity()
+    try await ScreenTaskFeature.enforceQuota()
     let policy = RequestAuthPolicy.ownerBound(authorization)
     try validateExpectedOwner(policy)
     let base = rustBackendURL.hasSuffix("/") ? rustBackendURL : rustBackendURL + "/"

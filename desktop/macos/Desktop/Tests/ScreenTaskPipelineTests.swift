@@ -130,6 +130,26 @@ final class ScreenTaskPipelineTests: XCTestCase {
     } catch is CancellationError {}
   }
 
+  func testQueuedFramesKeepTheirAdmissionOwnerAndAreBounded() throws {
+    let a = RuntimeOwnerAuthorizationAuthority()
+    let b = RuntimeOwnerAuthorizationAuthority()
+    let first = try XCTUnwrap(a.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
+    let second = try XCTUnwrap(b.capture(ownerID: "synthetic-b", expectedOwnerID: "synthetic-b"))
+    var owners = ScreenTaskFrameOwners()
+    func frame(_ number: Int) -> CapturedFrame {
+      CapturedFrame(
+        jpegData: Data(), appName: "Messages", frameNumber: number,
+        captureTime: Date(timeIntervalSince1970: Double(number)))
+    }
+    owners.record(frame(0), authorization: first)
+    owners.record(frame(1), authorization: second)
+    XCTAssertEqual(owners.authorization(for: frame(0)), first)
+    XCTAssertEqual(owners.authorization(for: frame(1)), second)
+    for number in 2..<65 { owners.record(frame(number), authorization: second) }
+    XCTAssertNil(owners.authorization(for: frame(0)))
+    XCTAssertEqual(owners.authorization(for: frame(64)), second)
+  }
+
   func testDatesDoNotInventOrRetainInvalidPastDeadlines() {
     XCTAssertNil(ScreenTaskResponse.deadline("", today: "2026-10-02"))
     XCTAssertNil(ScreenTaskResponse.deadline("2026-09-01", today: "2026-10-02"))

@@ -1,5 +1,7 @@
 import Foundation
 
+enum ScreenTaskFailure: Error { case invalidResponse, planGated }
+
 struct ScreenTaskResponse: Decodable {
   let screen_kind: String
   let context_summary: String
@@ -29,7 +31,7 @@ struct ScreenTaskResponse: Decodable {
   func results(app: String, context: [TaskSearchResult], today: String) throws -> [TaskExtractionResult] {
     guard ["open_conversation", "open_email_or_document", "list_or_overview", "other"].contains(screen_kind),
       tasks.count <= 8
-    else { throw GeminiClient.GeminiClientError.invalidResponse }
+    else { throw ScreenTaskFailure.invalidResponse }
     let ids = Set(context.filter { $0.status == "active" }.compactMap(\.taskID))
     if tasks.isEmpty {
       return [
@@ -49,7 +51,7 @@ struct ScreenTaskResponse: Decodable {
         TaskSourceClassification.from(category: item.source_category, subcategory: item.source_subcategory) != nil,
         item.relation == "new" ? item.related_id.isEmpty : ids.contains(item.related_id),
         item.relation != "completes" || item.capture_kind == "already_done"
-      else { throw GeminiClient.GeminiClientError.invalidResponse }
+      else { throw ScreenTaskFailure.invalidResponse }
       let deadline = Self.deadline(item.deadline, today: today)
       let task = ExtractedTask(
         title: title, description: item.description, priority: item.priority, sourceApp: app,
@@ -94,10 +96,10 @@ struct ScreenTaskGeminiResponse: Decodable {
   let candidates: [Candidate]
   func text() throws -> String {
     guard let candidate = candidates.first, candidate.finishReason == nil || candidate.finishReason == "STOP" else {
-      throw GeminiClient.GeminiClientError.invalidResponse
+      throw ScreenTaskFailure.invalidResponse
     }
     let text = candidate.content.parts.filter { $0.thought != true }.compactMap(\.text).joined()
-    guard !text.isEmpty else { throw GeminiClient.GeminiClientError.invalidResponse }
+    guard !text.isEmpty else { throw ScreenTaskFailure.invalidResponse }
     return text
   }
 }

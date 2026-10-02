@@ -33,7 +33,7 @@ deadlines and duplicate/refine/complete IDs map into the existing capture
 policy and staging path (INV-TASK-2). Only supplied active canonical IDs may
 be relation targets. Empty output preserves activity observations. Invalid
 or failed extraction returns to the legacy loop; revoked owners cannot apply
-late results. The flag is the kill switch.
+late results. Queued frames retain their admission owner in a 64-entry bounded map. The flag is the kill switch.
 
 Existing proxy terminal telemetry adds only bounded `gate_outcome` and
 `audit_sample`. The existing Task Extracted event records rejected audit

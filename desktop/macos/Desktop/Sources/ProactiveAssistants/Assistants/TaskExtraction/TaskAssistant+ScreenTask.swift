@@ -11,7 +11,7 @@ extension TaskAssistant {
     log("Task: Analyzing frame from \(frame.appName)...")
     do {
       let screenTaskEnabled = await ScreenTaskFeature.isEnabled
-      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      let authorization = screenTaskEnabled ? screenTaskFrameOwners.authorization(for: frame) : nil
       let (results, searchCount) =
         try await screenTaskEnabled
         ? extractScreenTasks(frame: frame, authorization: authorization)
@@ -50,14 +50,17 @@ extension TaskAssistant {
   func extractScreenTasks(frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws -> (
     [TaskExtractionResult], Int
   ) {
-    guard let authorization else { throw CancellationError() }
+    guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw CancellationError()
+    }
     do {
-      try await GeminiClient.enforceManagedProactivity()
       let ocr = try await RewindOCRService.shared.extractTextWithBounds(from: frame.jpegData)
       let lines = ScreenTaskDedupe.lines(ocr: ocr, app: frame.appName)
       let key = "\(authorization.ownerID):\(authorization.authorizationGeneration):\(frame.appName)"
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
       if screenTaskDedupe.shouldSkip(key: key, lines: lines, now: frame.captureTime) { return ([], 0) }
+      try await ScreenTaskFeature.enforceQuota()
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
       let text = String(ocr.fullText.prefix(12000))
       let keywords = await executeKeywordSearch(query: String(text.prefix(3000)))
       let context = ScreenTaskContext.select(keywords: keywords, query: text)
