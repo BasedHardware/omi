@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/schema.dart';
@@ -32,7 +33,11 @@ Future<ActionItemsResponse?> _items({
         const ActionItemWithMetadata(
             id: 'open', description: 'Draft the update', completed: false, conversationId: 'conv-1'),
         ActionItemWithMetadata(
-            id: 'done1', description: 'Reply to the review', completed: true, completedAt: DateTime(2026, 10, 1)),
+            id: 'done1',
+            description: 'Reply to the review',
+            completed: true,
+            completedAt: DateTime(2026, 10, 1),
+            indentLevel: 1),
         ActionItemWithMetadata(
             id: 'done2', description: 'Pay the invoice', completed: true, completedAt: DateTime(2026, 10, 2)),
         ActionItemWithMetadata(
@@ -83,6 +88,10 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Reply to the review')).dy));
     expect(tester.getTopLeft(find.text('Draft the update')).dy, lessThan(tester.getTopLeft(find.text('Completed')).dy));
     expect(tester.widget<Text>(find.text('Pay the invoice')).style?.decoration, TextDecoration.lineThrough);
+
+    // A nested task keeps its indent once done.
+    expect(tester.getTopLeft(find.text('Reply to the review')).dx,
+        greaterThan(tester.getTopLeft(find.text('Pay the invoice')).dx));
 
     // The ring on a done row brings it back.
     await tester.tap(find.bySemanticsLabel('Mark Incomplete').first);
@@ -146,6 +155,20 @@ void main() {
     expect(find.text('Mark Incomplete'), findsOneWidget);
     expect(find.text('Delete Task'), findsOneWidget);
     expect(find.text('Indent'), findsNothing);
+  });
+
+  testWidgets('the task page rows stay activatable for assistive tech', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpPage(tester);
+    await tester.tap(find.text('Draft the update'));
+    await tester.pumpAndSettle();
+
+    // The merged nodes keep their tap action: a screen reader can open the conversation and the rows.
+    bool tappable(String label) =>
+        tester.getSemantics(find.bySemanticsLabel(label)).getSemanticsData().hasAction(SemanticsAction.tap);
+    expect(tappable('Open conversation'), isTrue);
+    expect(tappable('Mark Complete'), isTrue);
+    handle.dispose();
   });
 
   testWidgets('tapping a task opens its page with the conversation line, and Save wakes up on an edit', (tester) async {
