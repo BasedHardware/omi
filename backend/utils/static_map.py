@@ -96,6 +96,7 @@ _LIGHT_STYLES = [
     'style=feature:poi.park%7Celement:labels%7Cvisibility:off',
     'style=feature:road%7Celement:geometry.fill%7Ccolor:0xffffff',
     'style=feature:road%7Celement:geometry.stroke%7Ccolor:0xdcdcdc',
+    # Highways keep the white road fill, as on Uber's light map; their darker edge sets them apart.
     'style=feature:road.highway%7Celement:geometry.stroke%7Ccolor:0xc9c9c9',
     'style=feature:road.local%7Celement:labels%7Cvisibility:off',
     'style=feature:transit%7Cvisibility:off',
@@ -191,7 +192,7 @@ def pin_pixels(
     """Where each pin lands in the render, in its ``scale=2`` pixels."""
     center_x, center_y = _world(*center)
     world_px = _TILE_PX * 2**zoom * _SCALE
-    points = []
+    points: List[Tuple[float, float]] = []
     for pin in pins:
         x, y = _world(*pin)
         points.append((width * _SCALE / 2 + (x - center_x) * world_px, height * _SCALE / 2 + (y - center_y) * world_px))
@@ -217,20 +218,29 @@ def _pin_sprite(theme: MapTheme) -> Image.Image:
     draw.ellipse(disc(outer), fill=ring)
     draw.ellipse(disc((_PIN_RADIUS - _PIN_RING / 2) * k), fill=ink)
     draw.ellipse(disc(_PIN_CENTER * k), fill=ring)
-    return sprite.resize((2 * half // supersample, 2 * half // supersample), Image.BOX)
+    return sprite.resize((2 * half // supersample, 2 * half // supersample), Image.Resampling.BOX)
 
 
 def draw_pins(image: bytes, pins: List[Tuple[float, float]], width: int, height: int, theme: MapTheme) -> bytes:
     """Draw each pin's dot onto a provider render (PNG in, PNG out)."""
     with Image.open(io.BytesIO(image)) as render:
         canvas = render.convert('RGB')
+    expected = (width * _SCALE, height * _SCALE)
+    if canvas.size != expected:
+        # Pins are placed in the frame's scale=2 pixels; on any other size they would land in the wrong place.
+        raise ValueError(f'render is {canvas.width}x{canvas.height}, expected {expected[0]}x{expected[1]}')
     sprite = _pin_sprite(theme)
     offset = sprite.width // 2
     center, zoom = frame_pins(pins, width, height)
     for x, y in pin_pixels(pins, center, zoom, width, height):
         canvas.paste(sprite, (round(x) - offset, round(y) - offset), sprite)
     out = io.BytesIO()
-    canvas.save(out, format='PNG')
+    # The provider sends an 8-bit palette PNG and the pins add only a few greys, so the result
+    # usually still fits 256 colours. Keep it 8-bit then: lossless, and about 40% smaller.
+    if canvas.getcolors(256) is not None:
+        canvas.quantize(256).save(out, format='PNG')
+    else:
+        canvas.save(out, format='PNG')
     return out.getvalue()
 
 

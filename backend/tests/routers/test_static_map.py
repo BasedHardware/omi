@@ -209,10 +209,14 @@ def test_light_theme_url_uses_the_light_styles():
 
 
 def test_worst_case_url_stays_well_inside_the_provider_limit():
-    # 16,384 characters is the Maps Static API URL limit; see build_static_map_url.
-    pins = [(i / 100, i / 100) for i in range(static_map_mod._MAX_PINS)]
-    for theme in ('light', 'dark'):
-        assert len(static_map_mod.build_static_map_url(pins, 640, 640, 'k' * 39, theme)) < 8000
+    # 16,384 characters is the Maps Static API URL limit; see build_static_map_url. Pins are
+    # not in the URL, so the longest one has the longest centre and zoom (one pin at the far
+    # corner, at street zoom) or the most pins (the cap, at the longest legal coordinates).
+    corner = [(-89.9999, -179.9999)]
+    capped = [(-89.9999, -179.9999 + i) for i in range(static_map_mod._MAX_PINS)]
+    for pins in (corner, capped):
+        for theme in ('light', 'dark'):
+            assert len(static_map_mod.build_static_map_url(pins, 640, 640, 'k' * 39, theme)) < 8000
 
 
 def test_each_theme_has_its_own_cache_entry():
@@ -489,7 +493,7 @@ def test_the_pin_is_a_dot_in_the_theme_ink_drawn_where_it_lands():
 
     pins = [(37.7749, -122.4194)]
     for theme, ink, ring in (('light', (0, 0, 0), (255, 255, 255)), ('dark', (255, 255, 255), (0, 0, 0))):
-        drawn = Image.open(io.BytesIO(static_map_mod.draw_pins(_render_png(), pins, 300, 150, theme)))
+        drawn = Image.open(io.BytesIO(static_map_mod.draw_pins(_render_png(), pins, 300, 150, theme))).convert('RGB')
         assert drawn.size == (600, 300)
         assert drawn.getpixel((300, 150)) == ring, f'{theme}: the centre dot'
         assert drawn.getpixel((300 + 11, 150)) == ink, f'{theme}: the disc'
@@ -500,6 +504,49 @@ def test_the_pin_is_a_dot_in_the_theme_ink_drawn_where_it_lands():
 def test_a_pin_near_the_edge_is_clipped_not_an_error():
     pins = [(37.7749, -122.4194), (37.7749, -122.3)]
     assert static_map_mod.draw_pins(_render_png(), pins, 300, 150, 'dark').startswith(b'\x89PNG')
+
+
+def test_a_render_of_another_size_is_refused_rather_than_pinned_in_the_wrong_place():
+    from PIL import Image
+
+    one_x = io.BytesIO()
+    Image.new('RGB', (300, 150), (234, 234, 234)).save(one_x, format='PNG')
+    with pytest.raises(ValueError):
+        static_map_mod.draw_pins(one_x.getvalue(), [(37.7749, -122.4194)], 300, 150, 'light')
+
+
+def test_the_drawn_render_stays_8_bit_without_changing_a_pixel():
+    from PIL import Image, ImageChops
+
+    # The provider's format=png is an 8-bit palette image; a grey ramp stands in for one.
+    render = Image.linear_gradient('L').resize((600, 300)).convert('RGB').quantize(64)
+    source = io.BytesIO()
+    render.save(source, format='PNG')
+    pins = [(37.7749, -122.4194), (37.7760, -122.4180)]
+
+    drawn = Image.open(io.BytesIO(static_map_mod.draw_pins(source.getvalue(), pins, 300, 150, 'light')))
+
+    assert drawn.mode == 'P'
+    expected = render.convert('RGB')
+    sprite = static_map_mod._pin_sprite('light')
+    center, zoom = static_map_mod.frame_pins(pins, 300, 150)
+    for x, y in static_map_mod.pin_pixels(pins, center, zoom, 300, 150):
+        expected.paste(sprite, (round(x) - sprite.width // 2, round(y) - sprite.width // 2), sprite)
+    assert ImageChops.difference(drawn.convert('RGB'), expected).getbbox() is None
+
+
+def test_a_render_with_more_than_256_colours_stays_24_bit():
+    from PIL import Image
+
+    noise = Image.merge('RGB', [Image.effect_noise((600, 300), 64) for _ in range(3)])
+    source = io.BytesIO()
+    noise.save(source, format='PNG')
+
+    drawn = Image.open(
+        io.BytesIO(static_map_mod.draw_pins(source.getvalue(), [(37.7749, -122.4194)], 300, 150, 'dark'))
+    )
+
+    assert drawn.mode == 'RGB'
 
 
 @pytest.mark.asyncio
@@ -526,5 +573,5 @@ async def test_the_render_path_draws_the_pins_on_the_provider_image(monkeypatch)
 
     from PIL import Image
 
-    assert Image.open(io.BytesIO(result)).getpixel((300 + 11, 150)) == (0, 0, 0)
+    assert Image.open(io.BytesIO(result)).convert('RGB').getpixel((300 + 11, 150)) == (0, 0, 0)
     assert redis.store[static_map_mod._cache_key(pins, 300, 150, 'light')] == result
