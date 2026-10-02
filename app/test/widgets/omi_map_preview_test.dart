@@ -86,6 +86,17 @@ void main() {
     expect(urlFor(Brightness.dark), endsWith('&theme=dark'));
   });
 
+  test('normalizeOmiMapPins quantizes to the server cell and drops pins in an included cell', () {
+    final pins = normalizeOmiMapPins(const [
+      OmiMapPin(latitude: 51.50721, longitude: -0.12763),
+      OmiMapPin(latitude: 51.50719, longitude: -0.12761), // same ~11m cell
+    ]);
+
+    expect(pins, hasLength(1));
+    expect(pins.single.latitude, 51.5072);
+    expect(pins.single.longitude, -0.1276);
+  });
+
   testWidgets('the proxy image follows the active palette', (tester) async {
     addTearDown(() => OmiColors.active = OmiPalette.light);
     for (final (palette, theme) in [(OmiPalette.light, 'light'), (OmiPalette.dark, 'dark')]) {
@@ -181,6 +192,59 @@ void main() {
 
     expect(find.byKey(const ValueKey('omi_map_preview_fallback')), findsOneWidget);
     expect(find.byType(CachedNetworkImage), findsNothing);
+  });
+
+  testWidgets('the fallback canvas paints the same pins as the map image', (tester) async {
+    Future<void> pumpPins(List<OmiMapPin> pins) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(width: 200, height: 100, child: OmiMapPreview(pins: pins)),
+            ),
+          ),
+        );
+    final canvas = find.byKey(const ValueKey('omi_map_preview_fallback'));
+
+    // Each pin paints a dot and its outline: two circles.
+    await pumpPins(const [
+      OmiMapPin(latitude: 51.50721, longitude: -0.12763),
+      OmiMapPin(latitude: 51.50719, longitude: -0.12761), // same ~11m cell
+      OmiMapPin(latitude: 51.5, longitude: -0.1),
+    ]);
+    expect(tester.renderObject(canvas), paintsExactlyCountTimes(#drawCircle, 4));
+
+    await pumpPins([for (var i = 0; i < 80; i++) OmiMapPin(latitude: i / 10, longitude: 0)]);
+    expect(tester.renderObject(canvas), paintsExactlyCountTimes(#drawCircle, 2 * kOmiMapPreviewMaxPins));
+  });
+
+  testWidgets('without a background the canvas is the map land color', (tester) async {
+    addTearDown(() => OmiColors.active = OmiPalette.light);
+    Future<void> pumpPreview({Color? backgroundColor}) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 200,
+                height: 100,
+                child: OmiMapPreview(
+                  pins: const [OmiMapPin(latitude: 37.7749, longitude: -122.4194)],
+                  backgroundColor: backgroundColor,
+                ),
+              ),
+            ),
+          ),
+        );
+    final canvas = find.byKey(const ValueKey('omi_map_preview_fallback'));
+
+    for (final (palette, land) in [
+      (OmiPalette.light, const Color(0xFFEAEAEA)),
+      (OmiPalette.dark, const Color(0xFF161616)),
+    ]) {
+      OmiColors.active = palette;
+      await pumpPreview();
+      expect(tester.renderObject(canvas), paints..rect(color: land));
+    }
+
+    await pumpPreview(backgroundColor: const Color(0xFF2C2C2E));
+    expect(tester.renderObject(canvas), paints..rect(color: const Color(0xFF2C2C2E)));
   });
 
   testWidgets('an injected test URL is used verbatim instead of the proxy URL', (tester) async {
