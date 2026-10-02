@@ -222,6 +222,8 @@ async def test_receiver_drain_releases_gauge_when_close_raises():
     receiver.stt_socket = socket
     receiver.stt_sockets_multi = []
     receiver._resilient_audio = None
+    receiver._replay_recovery_task = None
+    receiver._replay_delivery = None
     receiver._pending_live_failover = None
     track_live_stt_socket(socket, 'soniox')
     assert gauge._value.get() == before + 1

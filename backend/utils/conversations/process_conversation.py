@@ -3107,6 +3107,9 @@ def process_conversation(
                     'event': 'selfheal_guard',
                     'outcome': 'refused',
                     'reason': 'empty_structured',
+                    'structure_reason': (
+                        'no_enriched_structure' if recovery_transcript_decoded else 'transcript_decode_failed'
+                    ),
                     'relevance_verdict': relevance.verdict if relevance is not None else 'missing',
                     'uid': uid,
                     'conversation_id': conversation.id,
