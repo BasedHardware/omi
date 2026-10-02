@@ -76,6 +76,7 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'onboardingCompleted': true,
         SharedPreferencesUtil.appearanceModeKey: mode.name,
+        SharedPreferencesUtil.appearanceDefaultMigrationKey: mode == ThemeMode.light ? 'system' : 'light',
       });
       await SharedPreferencesUtil.init();
       await SharedPreferencesUtil.init();
@@ -116,6 +117,7 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'onboardingCompleted': true,
         SharedPreferencesUtil.appearanceModeKey: badValue,
+        SharedPreferencesUtil.appearanceDefaultMigrationKey: 'system',
       });
       await SharedPreferencesUtil.init();
       expect(AppearanceProvider.parse(SharedPreferencesUtil().appearanceMode), ThemeMode.light);
@@ -128,6 +130,21 @@ void main() {
 
       expect(AppearanceProvider.parse(SharedPreferencesUtil().appearanceMode), ThemeMode.light);
     });
+  }
+
+  for (final badDefault in <Object>['dark', true, 123]) {
+    for (final existingInstall in <bool>[false, true]) {
+      test('invalid migration decision $badDefault uses the original install classification $existingInstall',
+          () async {
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          if (existingInstall) 'onboardingCompleted': true,
+          SharedPreferencesUtil.appearanceDefaultMigrationKey: badDefault,
+        });
+        await SharedPreferencesUtil.init();
+
+        expect(SharedPreferencesUtil().appearanceMode, existingInstall ? 'system' : 'light');
+      });
+    }
   }
 
   for (final throwsOnWrite in <bool>[false, true]) {
@@ -147,15 +164,112 @@ void main() {
       expect(store.data['flutter.appearanceMode'], 'system');
       expect(store.appearanceWrites, 2);
     });
+
+    for (final initialValues in <String, Map<String, Object>>{
+      'fresh install': {},
+      'quarantined appearance': {'onboardingCompleted': true, SharedPreferencesUtil.appearanceModeKey: 123},
+    }.entries) {
+      test('${initialValues.key} keeps Light after a failed ${throwsOnWrite ? 'throwing' : 'false'} write', () async {
+        final store = _AppearancePreferencesStore(throwsOnWrite: throwsOnWrite, initialValues: initialValues.value);
+        SharedPreferences.resetStatic();
+        SharedPreferencesStorePlatform.instance = store;
+        await SharedPreferencesUtil.init();
+        final prefs = await SharedPreferences.getInstance();
+
+        expect(SharedPreferencesUtil().appearanceMode, 'light');
+        expect(store.data.containsKey('flutter.appearanceMode'), isFalse);
+        // These are written later in a successful first boot. None should turn
+        // a retry of the original Light decision into an upgrade to System.
+        await BootRecovery(prefs).fullBootSucceeded();
+        await prefs.setBool('onboardingCompleted', true);
+        await prefs.setString('lastKnownAppVersion', '1.0.553+1000');
+
+        store.failAppearanceWrite = false;
+        SharedPreferences.resetStatic();
+        await SharedPreferencesUtil.init();
+
+        expect(store.data['flutter.appearanceMode'], 'light');
+        expect(SharedPreferencesUtil().appearanceMode, 'light');
+      });
+    }
+
+    test('pending Light decision survives sign out after a failed ${throwsOnWrite ? 'throwing' : 'false'} write',
+        () async {
+      final store = _AppearancePreferencesStore(throwsOnWrite: throwsOnWrite, initialValues: {});
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = store;
+      await SharedPreferencesUtil.init();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lastKnownAppVersion', '1.0.553+1000');
+
+      if (throwsOnWrite) {
+        // Sign-out currently propagates a failed restoration. Its pending
+        // appearance decision must already be safe before that write occurs.
+        await expectLater(clearPreferencesForSignOut(), throwsStateError);
+      } else {
+        await clearPreferencesForSignOut();
+      }
+      expect(store.data['flutter.${SharedPreferencesUtil.appearanceDefaultMigrationKey}'], 'light');
+      expect(store.data.containsKey('flutter.appearanceMode'), isFalse);
+
+      store.failAppearanceWrite = false;
+      SharedPreferences.resetStatic();
+      await SharedPreferencesUtil.init();
+
+      expect(store.data['flutter.appearanceMode'], 'light');
+    });
+
+    test('failed decision ${throwsOnWrite ? 'exception' : 'result'} still attempts and saves appearance', () async {
+      final store = _AppearancePreferencesStore(
+        throwsOnWrite: throwsOnWrite,
+        initialValues: {},
+        failAppearanceWrite: false,
+        failMigrationWrite: true,
+      );
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = store;
+      await SharedPreferencesUtil.init();
+      final prefs = await SharedPreferences.getInstance();
+      await BootRecovery(prefs).fullBootSucceeded();
+
+      expect(store.data.containsKey('flutter.${SharedPreferencesUtil.appearanceDefaultMigrationKey}'), isFalse);
+      expect(store.data['flutter.appearanceMode'], 'light');
+      SharedPreferences.resetStatic();
+      await SharedPreferencesUtil.init();
+
+      expect(SharedPreferencesUtil().appearanceMode, 'light');
+    });
+
+    test('failure of both ${throwsOnWrite ? 'throwing' : 'false'} writes leaves this boot usable', () async {
+      final store = _AppearancePreferencesStore(
+        throwsOnWrite: throwsOnWrite,
+        initialValues: {},
+        failMigrationWrite: true,
+      );
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = store;
+      await SharedPreferencesUtil.init();
+
+      expect(SharedPreferencesUtil().appearanceMode, 'light');
+      expect(store.data.containsKey('flutter.${SharedPreferencesUtil.appearanceDefaultMigrationKey}'), isFalse);
+      expect(store.data.containsKey('flutter.appearanceMode'), isFalse);
+      expect(store.appearanceWrites, 1);
+    });
   }
 }
 
 class _AppearancePreferencesStore extends SharedPreferencesStorePlatform {
-  _AppearancePreferencesStore({required this.throwsOnWrite});
+  _AppearancePreferencesStore({
+    required this.throwsOnWrite,
+    Map<String, Object> initialValues = const {'onboardingCompleted': true},
+    this.failAppearanceWrite = true,
+    this.failMigrationWrite = false,
+  }) : data = {for (final entry in initialValues.entries) 'flutter.${entry.key}': entry.value};
 
   final bool throwsOnWrite;
-  final data = <String, Object>{'flutter.onboardingCompleted': true};
-  bool failAppearanceWrite = true;
+  final Map<String, Object> data;
+  bool failAppearanceWrite;
+  bool failMigrationWrite;
   int appearanceWrites = 0;
 
   @override
@@ -163,6 +277,10 @@ class _AppearancePreferencesStore extends SharedPreferencesStorePlatform {
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.${SharedPreferencesUtil.appearanceDefaultMigrationKey}' && failMigrationWrite) {
+      if (throwsOnWrite) throw StateError('Appearance migration storage unavailable');
+      return false;
+    }
     if (key == 'flutter.appearanceMode') {
       appearanceWrites++;
       if (failAppearanceWrite) {

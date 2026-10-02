@@ -76,6 +76,7 @@ class SharedPreferencesUtil {
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
   static const String appearanceModeKey = 'appearanceMode';
+  static const String appearanceDefaultMigrationKey = 'appearanceDefaultMigration';
 
   String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
 
@@ -127,17 +128,31 @@ class SharedPreferencesUtil {
     final existingInstall = prefs.get('onboardingCompleted') == true ||
         (lastVersion is String && lastVersion.trim().isNotEmpty) ||
         (bootSchema is int && bootSchema > 0);
-    final mode = !hadStoredAppearance && existingInstall ? 'system' : 'light';
+    final savedDefault = prefs.get(appearanceDefaultMigrationKey);
+    final String mode;
+    if (hadStoredAppearance) {
+      mode = 'light';
+    } else if (savedDefault is String && (savedDefault == 'light' || savedDefault == 'system')) {
+      mode = savedDefault;
+    } else {
+      mode = existingInstall ? 'system' : 'light';
+    }
 
-    // SharedPreferences caches the choice before writing, so this boot can still
-    // render it if storage fails. With no durable key, the next process retries.
-    try {
-      if (!await prefs.setString(appearanceModeKey, mode)) {
-        Logger.debug('Appearance default migration could not be persisted');
+    // Save the decision before attempting the appearance write. Later startup
+    // stages stamp boot/version/onboarding history, which must not change this
+    // decision if the appearance write fails and the next process retries it.
+    // Attempt each write independently: either durable value is sufficient.
+    // If both fail, the cached choice still works this boot, but no decision can
+    // survive a process restart without a successful storage write.
+    for (final key in [if (savedDefault != mode) appearanceDefaultMigrationKey, appearanceModeKey]) {
+      try {
+        if (!await prefs.setString(key, mode)) {
+          Logger.debug('Appearance default migration could not persist $key');
+        }
+      } catch (e, stack) {
+        Logger.debug('Appearance default migration failed for $key: $e');
+        Logger.debug('Stack: $stack');
       }
-    } catch (e, stack) {
-      Logger.debug('Appearance default migration failed: $e');
-      Logger.debug('Stack: $stack');
     }
   }
 
