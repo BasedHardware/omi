@@ -18,11 +18,12 @@ overlay:
         # otherwise Soniox is second after Modulate. Canary allocation follows the
         # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
         # rolled back to 0% on 2026-10-01 for a first-text latency regression;
-        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01).
+        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01;
+        # 50% on 2026-10-02 after the batch-pressure quorum fix #20208).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '25'
+          value: '50'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:

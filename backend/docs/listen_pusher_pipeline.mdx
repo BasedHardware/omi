@@ -90,6 +90,19 @@ and the known best-effort background-task limit.
 
 ## 1. Connection + Streaming + Transcription
 
+### Segment-upload processing shape
+
+Both `POST /v1/conversations/from-segments` and
+`POST /v1/dev/user/conversations/from-segments` accept conversation source
+provenance, including `workflow` and `external_integration`. Omitted or null
+source defaults to `phone`. A session-id upload builds a stored `Conversation`;
+an upload without a session id builds `CreateConversation`. Both summarize their
+transcript segments regardless of the source label. Only an
+`ExternalIntegrationCreateConversation` with integration provenance uses its
+`text`, `text_source`, and `text_source_spec` fields for text-based processing.
+Segment validation continues to return 422, and processing failures keep the
+existing privacy-safe 5xx / BYOK 429 contract.
+
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
 supports the requested mode wins: Parakeet's live RNNT model is English-only,
