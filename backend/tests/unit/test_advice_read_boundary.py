@@ -9,6 +9,13 @@ entire advice feed. The fix parses rows through the shared read boundary
 FC-malformed-doc-read, and drops malformed rows; ``update_advice``'s re-read uses
 the same boundary so a poisoned row surfaces as "not found" instead of a 500.
 
+Dropping rows must not skew pagination either: Firestore applies its own
+offset/limit to raw documents before the parser runs, so ``get_advice`` streams
+raw pages behind a ``start_after`` cursor and fills each request from VALID rows
+(skip ``offset`` valid rows, return up to ``limit`` valid rows). The document id
+is also made authoritative over any stored ``id`` — clients address advice by
+that id on PATCH/DELETE, so a corrupt-but-string stored id must not survive.
+
 Test isolation: the module imports cleanly (the Firestore client is lazy), so the
 tests monkeypatch ``database.advice.db`` with a MagicMock query chain and feed
 fake snapshots — plain objects exposing ``exists``/``id``/``to_dict``/
@@ -66,11 +73,24 @@ def _fake_db():
     return MagicMock()
 
 
-def _wire_query(monkeypatch, snapshots):
-    """Make db.collection(...)...stream() yield the given fake snapshots."""
+def _wire_query(monkeypatch, *pages):
+    """Make db.collection(...)...stream() yield one raw page per call.
+
+    Each positional argument is one page (a list of fake snapshots); a stream
+    call past the provided pages yields an empty page, matching an exhausted
+    Firestore query.
+    """
+    page_queue = iter(pages)
+
+    def _stream():
+        try:
+            return iter(next(page_queue))
+        except StopIteration:
+            return iter([])
+
     terminal = MagicMock()
-    terminal.stream.return_value = iter(snapshots)
-    for method in ('order_by', 'where', 'offset', 'limit'):
+    terminal.stream.side_effect = _stream
+    for method in ('order_by', 'where', 'offset', 'limit', 'start_after'):
         getattr(terminal, method).return_value = terminal
     fake_db = _fake_db()
     # _user_col walks db.collection('users').document(uid).collection('advice').
@@ -159,6 +179,15 @@ def test_get_advice_injects_document_id_into_payload(monkeypatch):
     assert rows[0].id == 'doc-id-1'
 
 
+def test_get_advice_overwrites_corrupt_stored_id_with_snapshot_id(monkeypatch):
+    # A corrupt-but-string stored id must not survive parsing: clients address
+    # advice by that id on PATCH/DELETE, so the snapshot id is authoritative.
+    _wire_query(monkeypatch, [_snapshot('real-doc-id', _valid_payload(advice_id='forged-id'))])
+
+    rows = advice_db.get_advice('u1')
+    assert rows[0].id == 'real-doc-id'
+
+
 def test_get_advice_all_valid_rows_survive_intact(monkeypatch):
     rows_in = [_snapshot(f'adv-{i}', _valid_payload()) for i in range(3)]
     _wire_query(monkeypatch, rows_in)
@@ -169,13 +198,41 @@ def test_get_advice_all_valid_rows_survive_intact(monkeypatch):
     assert rows[0].confidence == 0.8
 
 
-def test_get_advice_pagination_arguments_reach_the_query(monkeypatch):
+def test_get_advice_keeps_streaming_until_limit_filled_across_raw_pages(monkeypatch):
+    # A page of malformed rows must not end the response early: the cursor keeps
+    # reading raw pages until `limit` valid rows are collected.
+    page1 = [_snapshot('bad-1', {'id': 'bad-1'}), _snapshot('bad-2', {'id': 'bad-2'})]
+    page2 = [_snapshot('good-1', _valid_payload())]
+    terminal = _wire_query(monkeypatch, page1, page2)
+
+    rows = advice_db.get_advice('u1', limit=1)
+
+    assert [r.id for r in rows] == ['good-1']
+    # Raw pagination advances by cursor, never by re-streaming from the top.
+    terminal.start_after.assert_called_once_with(page1[-1])
+
+
+def test_get_advice_offset_counts_valid_rows_not_raw_documents(monkeypatch):
+    # `offset` skips VALID rows; a dropped raw document must not shift the window.
+    bad = _snapshot('bad-1', {'id': 'bad-1'})
+    _wire_query(
+        monkeypatch,
+        [bad, _snapshot('good-1', _valid_payload()), _snapshot('good-2', _valid_payload())],
+    )
+
+    rows = advice_db.get_advice('u1', offset=1, limit=5)
+    assert [r.id for r in rows] == ['good-2']
+
+
+def test_get_advice_streams_raw_pages_bounded_not_raw_offset(monkeypatch):
+    # The raw query is paged, never offset: a raw offset before the parser would
+    # re-introduce the short-page/hide-later-data bug the fill loop prevents.
     terminal = _wire_query(monkeypatch, [])
 
     advice_db.get_advice('u1', category='focus', limit=7, offset=3, include_dismissed=True)
 
-    terminal.offset.assert_called_once_with(3)
-    terminal.limit.assert_called_once_with(7)
+    terminal.offset.assert_not_called()
+    terminal.limit.assert_called_once_with(max(7, advice_db.RAW_ADVICE_STREAM_PAGE))
 
 
 # ============================================================================
@@ -197,14 +254,34 @@ def test_update_advice_returns_none_for_poisoned_document(monkeypatch):
 
 
 def test_update_advice_returns_parsed_model_for_valid_document(monkeypatch):
-    ref = _wire_document(monkeypatch, _snapshot('adv-1', _valid_payload(is_read=False))).document.return_value
-    ref.get.return_value = _snapshot('adv-1', _valid_payload(is_read=True))
+    # Drive the two reads with side_effect: the existence read returns the
+    # original (is_read=False) document, the post-update re-read returns the
+    # updated one — so the test fails if update_advice ever skips its re-read.
+    advice_col = _wire_document(monkeypatch, _snapshot('adv-1', _valid_payload(is_read=False)))
+    advice_col.document.return_value.get.side_effect = [
+        _snapshot('adv-1', _valid_payload(is_read=False)),
+        _snapshot('adv-1', _valid_payload(is_read=True)),
+    ]
 
     result = advice_db.update_advice('u1', 'adv-1', is_read=True)
 
     assert result is not None
     assert result.id == 'adv-1'
     assert result.is_read is True
+
+
+def test_update_advice_re_read_makes_snapshot_id_authoritative(monkeypatch):
+    # The PATCH response id comes from the re-read snapshot, not the stored field.
+    advice_col = _wire_document(monkeypatch, _snapshot('real-doc-id', _valid_payload(advice_id='forged-id')))
+    advice_col.document.return_value.get.side_effect = [
+        _snapshot('real-doc-id', _valid_payload(advice_id='forged-id')),
+        _snapshot('real-doc-id', _valid_payload(advice_id='forged-id')),
+    ]
+
+    result = advice_db.update_advice('u1', 'real-doc-id', is_read=True)
+
+    assert result is not None
+    assert result.id == 'real-doc-id'
 
 
 # ============================================================================
@@ -218,3 +295,8 @@ def test_advice_reads_go_through_the_shared_read_boundary():
     assert 'parse_snapshot_or_none' in source
     # The raw-dict passthrough that caused the poison page must be gone.
     assert "data['id'] = doc.id" not in source
+    # And pagination must fill from valid rows: a raw offset would apply before
+    # the parser and let dropped rows short or empty a page.
+    get_advice_body = source.split('def get_advice', 1)[1].split('def update_advice', 1)[0]
+    assert '.offset(' not in get_advice_body
+    assert 'start_after' in get_advice_body
