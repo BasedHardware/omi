@@ -190,15 +190,12 @@ Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
       url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
       method: 'GET',
     ),
-    // A syntactically valid but non-object body (e.g. `"ok"` or `[1]`) would
-    // otherwise throw a TypeError inside the cast, escaping executeApi's
-    // FormatException handling and surfacing as a transport/server failure.
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
     decode: (body) {
       final decoded = jsonDecode(body);
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Expected a JSON object for the app search response');
-      }
-      return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
     },
     send: send,
   );
