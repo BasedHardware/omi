@@ -560,12 +560,21 @@ def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
+    sig = ""
+
     if not uid:
         return templates.TemplateResponse("setup.html", {
             "request": request,
             "connected": False,
-            "error": "Missing user ID"
+            "error": "Missing user ID",
+            "disconnect_sig": sig,
         })
+
+    from hive_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
 
     credentials = get_hive_credentials(uid)
     connected = credentials is not None
@@ -643,8 +652,10 @@ async def set_default_project(uid: str, project_id: str, project_name: str):
 
 
 @app.get("/disconnect")
-async def disconnect_hive(uid: str):
+async def disconnect_hive(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Hive account."""
+    from hive_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_hive_credentials(uid)
     return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
