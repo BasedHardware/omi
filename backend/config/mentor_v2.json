@@ -3,7 +3,9 @@
     "prompt_version": "legacy-1",
     "prefilter_threshold": null,
     "dedupe_threshold": 0.525,
-    "safety_escalation": "suppress"
+    "safety_escalation": "suppress",
+    "usefulness_judge": "shadow",
+    "usefulness_threshold": 0.5
   },
   "prompts": {
     "legacy-1": {

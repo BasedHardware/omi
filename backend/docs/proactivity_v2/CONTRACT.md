@@ -74,7 +74,7 @@ Missing numeric targets still reject enablement; provisional rows obey the same
 
 | Name | Signal / event trigger | Identity | Initial safety ceilings | Estimate, target and kill criterion |
 | --- | --- | --- | --- | --- |
-| `conversation_mentor_v2` | Newly eligible conversation segment revision after existing deterministic debounce; existing mentor opt-in; no polling timer | conversation ID + eligible revision + producer version | 60 provider calls/user/UTC day, at most 3/item; text request <=32,768 bytes, output <=2,048 tokens/call | Provisional estimate 60000 micro-USD; 10% acted, 250000 micro-USD/acted; kill below configured acted rate OR above configured cost/acted after >=200 mature deliveries. |
+| `conversation_mentor_v2` | Newly eligible conversation segment revision after existing deterministic debounce; existing mentor opt-in; no polling timer | conversation ID + eligible revision + producer version | 60 provider calls/user/UTC day, at most 6/item (producer amendments below); text request <=32,768 bytes, output <=2,048 tokens/call | Provisional estimate 60000 micro-USD; 10% acted, 250000 micro-USD/acted; kill below configured acted rate OR above configured cost/acted after >=200 mature deliveries. |
 | `commitment_followup` | Due/overdue transition of an already-extracted, still-open action item, hooked by producer lane into `routers/action_items.py::_schedule_action_item_reminder`; a repeated scan is not a new event | action-item ID + due revision + transition kind + producer version | 9 calls/user/UTC day, exactly <=1/item; text request <=8,192 bytes, output <=512 tokens | Provisional estimate 2000 micro-USD; 10% acted, 250000 micro-USD/acted; same >=200 mature-delivery kill rule. |
 
 These call ceilings are proposed conservative engineering backstops, not measured
@@ -105,6 +105,7 @@ Fields (storage timestamps are Firestore UTC timestamps; amounts are integers):
 | Identity | `schema_version=1`, `item_id`, `producer`, `producer_version`, `source_kind`, `source_id`, `source_revision`, `source_event_id`, `source_surface` (`server`, `ios`, `android`, `macos`, `windows`), `account_generation` |
 | Lifecycle | `created_at`, `updated_at`, `expires_at`, `state` (`claimed`, `ready`, `silent`, `failed`, `suppressed`), bounded `terminal_reason`, `claim_token` |
 | Model attempts | bounded `attempts` map keyed by server call ID: step, request/attempt IDs, UTC budget day, reserved/charged/priced micro-USD, rate-card ID, state (`reserved`, `settled`, `unknown`, `released`), reservation token hash |
+| Mentor measurement | optional `usefulness_score`, one finite numeric Jev probability in [0,1]; no judge state, transcript, rationale, question or trace |
 | Item cost | `reserved_micro_usd`, `charged_micro_usd`, `estimated_cost_micro_usd`, `cost_status` (`pending`, `estimated`, `indeterminate`, `none`); numeric priced subtotal is never presented as a complete total when indeterminate |
 | Content | encrypted `content` containing bounded title (120 characters), body (1,000 characters), linked object kind and ID; no transcript, OCR, full prompt or model trace |
 | Delivery | `feed_available_at`, `delivered` boolean, `delivered_at`, `delivery_channel` (`none`, `feed`, `push`), `delivery_surface`, `push_state` (`not_earned`, `eligible`, `claimed`, `accepted`, `failed`, `unknown`, `suppressed`) |
@@ -136,6 +137,9 @@ For an item with N model attempts and O distinct first outcomes:
   each first outcome one item write (O). Repeats are read-only.
 - Optional push adds two item writes (claim + result) and one durable day-counter
   write, not one per device.
+- A successful mentor usefulness judge adds one first-score item write; identical
+  score retries are read-only. A first timeout adds one outcome write to retain its
+  event ID, with no exposure, action, dismissal or negative metric effect.
 - Existing gateway accounting adds one immutable attempt and one best-effort
   user-day rollup write per attempt (2N), already present today.
 - Total nominal spine writes: **3 + 4N + O** without push; add **3** for push and **2N** existing
@@ -288,7 +292,7 @@ await publish_item(item=item, content=content, target=target)
 identity; `publish_item` rechecks them and refuses pending/unknown cost, deleted
 sources, expired items or an already-terminal claim. A silent model result closes
 the same item with cost, without a card. Mentor step names are `gate`, `generate`,
-`critic` and `prefilter`; commitment uses `phrase`. Jev prefilter uses
+`critic`, `prefilter`, `usefulness` and `dedupe`; commitment uses `phrase`. Jev steps use
 `omi:auto:jev-decisions`, priced as provider `openrouter`, model `typesafe/jev-1.13`
 at 42000 micro-USD/M input tokens and zero output. Reserve the serialized Jev
 request UTF-8 byte length plus bounded chat framing as input; only text requests
@@ -397,8 +401,11 @@ First `shown`, or a valid positive action that implies exposure, sets delivery
 once. `opened` is sent after the linked object successfully opens, not a click
 on a missing object. `accepted`/`replied` are sent only after the underlying
 canonical action succeeds; this endpoint does not perform those actions.
-`timeout` is accepted as a no-write/no-value observation and never dismissal,
-negative feedback or engagement. Explicit `dismissed` hides a card but is not a
+`timeout` retains its first event ID and server timestamp in the same bounded
+per-action map: first receipt returns `recorded=true`, retries/other timeout IDs
+return `recorded=false`. Reusing the retained timeout UUID for another action (or
+another action's UUID for timeout) returns 409. It has no exposure or value effect
+and never records dismissal, negative feedback or engagement. Explicit `dismissed` hides a card but is not a
 negative metric. First positive action within [delivery, delivery+24h] makes
 `acted_24h=true` permanently. A later thumbs-down/disable also records a negative;
 never rewrite historical positive evidence. Outcomes can be both acted and negative.
@@ -696,12 +703,21 @@ A confirmed low acted rate at >=200 deliveries latches the kill even when cost u
 
 ### Producer integration extensions (2026-10-03)
 
-The producer lane needs up to five mentor attempts per item: optional prefilter,
-then gate/draft/critic/dedupe. The registry raises only that item ceiling from
-three to five; the 60/day and durable dollar caps stay unchanged. `dedupe` is a
-Jev step on the existing budgeted systemone route. Quality fail-open never bypasses
+The producer lane needs up to six mentor attempts per item: optional prefilter,
+then gate/draft/critic/usefulness/dedupe. The registry raises only that item ceiling
+from three to six (five before the draft-judge follow-up); the 60/day and durable
+dollar caps stay unchanged. `usefulness` and `dedupe` are Jev steps on the existing
+budgeted systemone route. Quality fail-open never bypasses
 typed gateway admission denial or an unsettled hold. Terminal reasons add
-`duplicate`, `safety_escalation`, and `source_changed`.
+`duplicate`, `safety_escalation`, `source_changed`, and `usefulness_judge`.
+
+Draft usefulness defaults to `shadow`, with threshold 0.5 for explicit `enforce`.
+The score is written once through `record_usefulness_score(item, score)` under the
+item's claim token and account-generation/deletion fence, before terminal publication.
+Identical score writes are read-only; changing an existing score conflicts.
+The only new measurement field is numeric `usefulness_score`. Outcome reducers
+preserve it so mature `acted_24h` and independent `negative` evidence join on the
+same item; no extra measurement ledger or public field is introduced.
 
 An optional internal publication `source_guard` checks the follow-up's observed
 open status/due revision inside the existing transaction; it never writes tasks.

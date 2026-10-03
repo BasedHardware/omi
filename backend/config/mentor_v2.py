@@ -14,6 +14,8 @@ class MentorV2Config(BaseModel):
     prefilter_threshold: float | None = Field(default=None, ge=0, le=1)
     dedupe_threshold: float = Field(default=0.525, ge=0, le=1)
     safety_escalation: Literal['suppress', 'allow'] = 'suppress'
+    usefulness_judge: Literal['off', 'shadow', 'enforce'] = 'shadow'
+    usefulness_threshold: float = Field(default=0.5, ge=0, le=1)
 
 
 @lru_cache(maxsize=1)

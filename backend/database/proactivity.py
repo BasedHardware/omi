@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import logging
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -224,6 +225,42 @@ def publish_item(
     transact(client.transaction())
 
 
+def record_usefulness_score(
+    *,
+    uid: str,
+    item_id: str,
+    claim_token: str,
+    score: float,
+    firestore_client: Any = None,
+    now: datetime | None = None,
+) -> None:
+    """Persist one content-free judge score under the existing claim/deletion fence."""
+    if type(score) not in {int, float} or not math.isfinite(score) or not 0 <= score <= 1:
+        raise ValueError('invalid usefulness score')
+    client = client_or_default(firestore_client)
+    ref = item_ref(client, uid, item_id)
+    now = now or utc_now()
+
+    @firestore.transactional
+    def transact(tx: Any):
+        _, generation = read_owner(client, uid, tx)
+        item = data_at(ref, tx)
+        if not item or item['account_generation'] != generation or item['expires_at'] <= now:
+            raise ProactivityDenied('not_found')
+        if item['producer'] != 'conversation_mentor_v2':
+            raise ProactivityDenied('invalid_producer')
+        if item['state'] != 'claimed' or item['claim_token'] != claim_token:
+            raise ProactivityDenied('duplicate')
+        if 'usefulness_score' in item:
+            if item['usefulness_score'] != score:
+                raise ProactivityDenied('score_conflict')
+            return
+        item.update(usefulness_score=float(score), updated_at=now)
+        tx.set(ref, item)
+
+    transact(client.transaction())
+
+
 def record_outcome(
     *,
     uid: str,
@@ -266,7 +303,7 @@ def record_outcome(
             if event['event_id'] == event_id and kind != action:
                 raise ProactivityDenied('event_conflict')
         response = dict(item_id=item_id, recorded=False, acted_24h=item['acted_24h'], negative=item['negative'])
-        if action == 'timeout' or action in events:
+        if action in events:
             return response
         # A mentor reply or client action can prove exposure; independent task completion cannot.
         confirms_exposure = action == 'shown' or (

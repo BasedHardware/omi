@@ -8,7 +8,7 @@
     "trigger": "eligible_segment",
     "dedupe_scope": "source_id:source_revision:source_event_id",
     "max_calls_per_user_utc_day": 60,
-    "max_calls_per_item": 5,
+    "max_calls_per_item": 6,
     "gateway_lane": "omi:auto:proactive-notification",
     "max_request_bytes": 32768,
     "max_output_tokens": 2048,

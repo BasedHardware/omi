@@ -142,6 +142,17 @@ async def publish_item(
     logger.info('proactivity_v2_item_terminal producer=%s state=ready', item['producer'])
 
 
+async def record_usefulness_score(*, item: dict[str, Any], score: float) -> None:
+    await run_blocking(
+        db_executor,
+        ledger.record_usefulness_score,
+        uid=item['uid'],
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        score=score,
+    )
+
+
 async def close_item(*, item: dict[str, Any], state: str, reason: str = '') -> None:
     # The reason vocabulary is kept content-free at this boundary.
     if reason not in {
@@ -153,6 +164,7 @@ async def close_item(*, item: dict[str, Any], state: str, reason: str = '') -> N
         'duplicate',
         'safety_escalation',
         'source_changed',
+        'usefulness_judge',
     }:
         raise ValueError('invalid terminal reason')
     await run_blocking(

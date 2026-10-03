@@ -804,9 +804,9 @@ async def run_proactivity_gateway(
     )
     payload = dict(request)
     payload['model'] = (
-        'omi:auto:jev-decisions' if step in {'prefilter', 'dedupe'} else 'omi:auto:proactive-notification'
+        'omi:auto:jev-decisions' if step in {'prefilter', 'dedupe', 'usefulness'} else 'omi:auto:proactive-notification'
     )
-    path = '/v1/systemone' if step in {'prefilter', 'dedupe'} else '/v1/chat/completions'
+    path = '/v1/systemone' if step in {'prefilter', 'dedupe', 'usefulness'} else '/v1/chat/completions'
     async with get_llm_gateway_semaphore():
         response = await get_llm_gateway_client().post(
             get_llm_gateway_base_url() + path,

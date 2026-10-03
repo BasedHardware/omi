@@ -9,6 +9,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, TypeVar
 
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from config.mentor_v2 import mentor_config
@@ -36,6 +37,14 @@ SAME_POINT_CRITERIA = [
     'Probably the same point or action',
     'Clearly the same point or action',
 ]
+USEFULNESS_QUESTION = {
+    'type': 'noul',
+    'instructions': 'Would the user find this proactive notification genuinely useful right now?',
+    'criteria': {
+        'true': 'It flags a consequential decision the user personally faces with a specific check to do first, or a concrete action the user is about to take that needs a specific fix now.',
+        'false': 'It is generic advice, a nitpick, an echo of what was just said, a lecture about other people, a misreading of a joke/lyric/idiom, factually doubtful, or about something the user is not deciding.',
+    },
+}
 
 
 class MentorCritic(legacy.ValidationResult):
@@ -166,11 +175,42 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
             language_instruction=legacy.language_instruction(context['output_language'], for_critic=True),
         )
         critic = await structured(item, 'critic', prompts['critic'].format(**fields), MentorCritic)
+        usefulness = None
+        if config.usefulness_judge != 'off':
+            try:
+                usefulness = await jev_score(
+                    item,
+                    step='usefulness',
+                    key='useful',
+                    state=json.dumps(
+                        {
+                            'user_name': context['user_name'],
+                            'user_goals': jsonable_encoder(context['goals']),
+                            'proposed_notification': draft.notification_text,
+                            'recent_conversation': [
+                                ('USER: ' if message.get('is_user') else 'OTHER: ') + message['text']
+                                for message in messages[-8:]
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    question=USEFULNESS_QUESTION,
+                )
+            except ProactivityDenied:
+                raise
+            except Exception:
+                _fail_open('mentor_usefulness')
+            if usefulness is not None:
+                # A failed score write cannot silently create an unmeasured successful judge call.
+                await spine.record_usefulness_score(item=item, score=usefulness)
         if critic.safety_escalation and config.safety_escalation == 'suppress':
             await spine.close_item(item=item, state='suppressed', reason='safety_escalation')
             return None
         if not critic.approved:
             await spine.close_item(item=item, state='silent', reason='model_silent')
+            return None
+        if config.usefulness_judge == 'enforce' and usefulness is not None and usefulness < config.usefulness_threshold:
+            await spine.close_item(item=item, state='suppressed', reason='usefulness_judge')
             return None
         text = draft.notification_text[:150]
         try:

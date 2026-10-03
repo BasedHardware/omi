@@ -19,6 +19,25 @@ structured `safety_escalation` boolean. Config defaults: prefilter disabled (`nu
 dedupe score threshold `0.525`, safety escalation `suppress`. The coordinator still
 needs David's ratification of the safety default and any prefilter threshold.
 
+`mentor_v2.usefulness_judge=off|shadow|enforce` defaults to `shadow`, with
+`mentor_v2.usefulness_threshold=0.5`. The judge runs after the draft and existing
+critic, including drafts the critic will reject, before those existing terminal
+decisions. It asks the exact `Q` question/criteria from the private
+`jev-pilots/mentor/clean_test.py` benchmark. Its state contains `user_name`, raw
+`user_goals`, `proposed_notification` and the last eight transcript entries labelled
+`USER:`/`OTHER:`. No private module is imported. In shadow, its score never changes
+the gate, critic, safety, dedupe, feed or push decision. Enforce suppresses strictly
+below the threshold with reason `usefulness_judge`; equality is kept. Off makes no
+judge call or score write. Successful shadow/enforce calls persist only numeric
+`usefulness_score` on the existing item. Jev errors/invalid probabilities fail open
+without retry; typed budget denial, unknown spend and score-storage failures still
+prevent publication. The historical transcript-only prefilter stays disabled.
+
+David's 49 labels ranked at AUC 0.72 for this contextual draft judge, versus 0.50
+for the transcript prefilter and 0.51 for draft-only; the Luna critic was at chance.
+These are offline label results supplied with the task, not live outcome evidence.
+Keep shadow enabled for live evaluation before selecting an enforced threshold.
+
 The prefilter checks P(worth telling) = 1 - Jev P(nothing worth saying). Dedupe
 uses the benchmark's same-point question and expected five-rung ordinal score,
 against the last five delivered v2/legacy mentor notifications in one call.
@@ -60,18 +79,57 @@ Initial enqueue failure is logged and never rolls back a saved task.
 
 Minimal spine extensions:
 
-- Mentor per-item call ceiling 3 -> 5 for optional prefilter, gate, draft, critic,
-  and dedupe; 60/day and dollar caps are unchanged. Follow-ups retain 1/item, 9/day.
-- `dedupe` is an authenticated Jev gateway step, with its own deterministic call ID.
+- Mentor per-item call ceiling 3 -> 6 (previously 5) for optional prefilter, gate,
+  draft, critic, usefulness and dedupe; 60/day and dollar caps are unchanged.
+  Follow-ups retain 1/item, 9/day.
+- `usefulness` and `dedupe` are authenticated Jev gateway steps with deterministic call IDs.
+- A claim/account-fenced first-score writer stores one finite numeric probability
+  on the item; one extra write for a successful judge, no second ledger.
 - Gateway admission errors carry a typed marker so quality fail-open cannot mask
   budget/call-limit denial.
-- Terminal reasons add `duplicate`, `safety_escalation`, and `source_changed`.
+- Terminal reasons add `duplicate`, `safety_escalation`, `source_changed`, and `usefulness_judge`.
 - Optional `publish_item(source_guard=...)` checks canonical task open status/due
   fields inside the existing publication transaction. It writes no source fields
   and leaves existing callers unchanged.
 - Three producer history/outcome indexes and real-query driver registrations.
+- First timeout event IDs now persist in the bounded outcome map. Replays are
+  read-only, cross-action UUID reuse conflicts with 409, and all metric flags remain unchanged.
 
 Both registry rows retain provisional G1 targets, estimates, >=200-delivery kill
 rules and push policy. New indexes and the callback queue must be provisioned by
 the integration owner before enablement. Hermetic verification is not rollout or
 notification-quality acceptance; real benchmark/client acceptance remains gated.
+
+## Live usefulness aggregate readout
+
+Join `usefulness_score`, `acted_24h` and `negative` directly on the same ledger item.
+Use the spine's seven complete UTC creation days ending at least 48 hours ago,
+one producer version and one known shadow-config interval. Include only confirmed
+deliveries whose full 24-hour opportunity has elapsed. Retain missing-score counts
+as judge coverage; do not treat failures as zero scores or undelivered/suppressed
+items as unacted deliveries. Acted and negative remain independent labels.
+
+The offline reader `backend/scripts/report_mentor_usefulness.py` accepts an already
+authorized content-free JSON array projection: `producer`, `producer_version`,
+`created_at`, `delivered`, `delivered_at`, `usefulness_score`, `acted_24h`, `negative`.
+Timestamp strings are timezone-aware ISO 8601. It never queries account stores and
+prints only aggregate JSON. Keep exports and generated reports outside Git.
+
+```sh
+backend/.venv/bin/python backend/scripts/report_mentor_usefulness.py /tmp/mentor-score-cohort.json \
+  --cohort-start 2026-10-04T00:00:00Z --cohort-end 2026-10-11T00:00:00Z \
+  --now 2026-10-13T00:00:00Z --producer-version 1 \
+  --threshold 0.25 --threshold 0.5 --threshold 0.75
+```
+
+Read `scored.deliveries`, `missing_score_deliveries`, `acted_auc`, `negative_auc`
+and each `by_threshold` entry's `kept`/`dropped` delivery counts, acted rates and
+negative rates. AUC is P(positive score > negative score), with ties worth 0.5;
+undefined single-class AUC and empty-group rates are `null`, never zero.
+Higher acted AUC is desirable; higher negative AUC means higher scores rank
+negative feedback, so lower is preferable for that independent readout.
+Threshold equality is kept, matching enforcement. Dropped rates in a shadow
+cohort are counterfactual selection statistics over actually delivered items.
+Enforce cohorts cannot reveal outcomes for suppressed drafts and must not be mixed
+with shadow to claim an unbiased full-score AUC. This report does not alter the
+existing kill-rule aggregate or automatically change thresholds/modes.

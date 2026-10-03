@@ -32,6 +32,8 @@ def lane(monkeypatch):
     monkeypatch.setattr(producers.spine, 'publish_item', publish)
     monkeypatch.setattr(producers.spine, 'push_item', push)
     monkeypatch.setattr(producers.spine, 'close_item', close)
+    score_write = AsyncMock()
+    monkeypatch.setattr(producers.spine, 'record_usefulness_score', score_write)
     history_fn = producers.mentor_delivery_history
     monkeypatch.setattr(producers, 'mentor_delivery_history', lambda uid: ['Earlier advice'])
     import database.chat as chat
@@ -57,6 +59,8 @@ def lane(monkeypatch):
             return {'answers': {'repeat': {'score': 0}}}
         if step == 'prefilter':
             return {'answers': {'nothing_worth_saying': {'noul': 0.1}}}
+        if step == 'usefulness':
+            return {'answers': {'useful': {'noul': 0.8}}}
         return {'choices': [{'message': {'content': json.dumps(outputs[step])}}]}
 
     model.side_effect = respond
@@ -78,6 +82,7 @@ def lane(monkeypatch):
         publish=publish,
         push=push,
         close=close,
+        score_write=score_write,
         config=config,
         prompts=prompts,
         context=context,
@@ -97,7 +102,14 @@ async def mentor(lane):
 @pytest.mark.asyncio
 async def test_default_prefilter_disabled_mentor_publishes_push_and_thread(lane):
     assert await mentor(lane)
-    assert [call.kwargs['step'] for call in lane.model.call_args_list] == ['gate', 'generate', 'critic', 'dedupe']
+    assert [call.kwargs['step'] for call in lane.model.call_args_list] == [
+        'gate',
+        'generate',
+        'critic',
+        'usefulness',
+        'dedupe',
+    ]
+    lane.score_write.assert_awaited_once_with(item=lane.item, score=0.8)
     lane.publish.assert_awaited_once()
     lane.push.assert_awaited_once()
     lane.chat_write.assert_called_once()
@@ -122,7 +134,7 @@ async def test_prefilter_enabled_correct_probability_orientation(lane, p_nothing
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('step', ['prefilter', 'dedupe'])
+@pytest.mark.parametrize('step', ['prefilter', 'dedupe', 'usefulness'])
 async def test_jev_failure_proceeds_without_retry(lane, step):
     lane.monkeypatch.setattr(
         producers, 'mentor_config', lambda: (lane.config.model_copy(update={'prefilter_threshold': 0.5}), lane.prompts)
@@ -189,7 +201,7 @@ async def test_claim_denial_free_user_makes_zero_model_calls(lane):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('step', ['gate', 'generate', 'critic', 'dedupe'])
+@pytest.mark.parametrize('step', ['gate', 'generate', 'critic', 'dedupe', 'usefulness'])
 async def test_budget_denial_stops_pipeline(lane, step):
     async def response(**kwargs):
         if kwargs['step'] == step:
@@ -253,6 +265,8 @@ async def test_followup_ineligible_task_no_claim(lane, change):
 def test_prompts_legacy_1_bytes_and_config_validation():
     config, prompts = mentor_config()
     assert config.prefilter_threshold is None
+    assert config.usefulness_judge == 'shadow'
+    assert config.usefulness_threshold == 0.5
     assert prompts == dict(
         gate=producers.legacy.GATE_PROMPT,
         generate=producers.legacy.GENERATE_PROMPT,
@@ -260,6 +274,9 @@ def test_prompts_legacy_1_bytes_and_config_validation():
     )
     with pytest.raises(ValueError):
         MentorV2Config(safety_escalation='typo')
+    for invalid in [{'usefulness_judge': 'typo'}, {'usefulness_threshold': -0.1}, {'usefulness_threshold': 1.1}]:
+        with pytest.raises(ValueError):
+            MentorV2Config(**invalid)
 
 
 @pytest.mark.asyncio
@@ -383,7 +400,8 @@ def test_due_worker_oidc_is_required_when_config_absent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gateway_dedupe_routing_and_typed_budget_denial(monkeypatch):
+@pytest.mark.parametrize('step', ['dedupe', 'usefulness'])
+async def test_gateway_jev_routing_and_typed_budget_denial(monkeypatch, step):
     import httpx
     from utils.llm import gateway_client as gateway
 
@@ -408,7 +426,7 @@ async def test_gateway_dedupe_routing_and_typed_budget_denial(monkeypatch):
             item_id='a' * 32,
             producer='conversation_mentor_v2',
             call_id='call',
-            step='dedupe',
+            step=step,
             request={'state': 'data', 'questions': {}},
         )
     assert client.post.call_args.args[0].endswith('/v1/systemone')
@@ -426,3 +444,121 @@ async def test_publication_due_race_closed_suppressed(lane):
     lane.publish.side_effect = ProactivityDenied('source_changed')
     await producers.produce_followup('u', 't', due.isoformat())
     lane.close.assert_awaited_once_with(item=lane.item, state='suppressed', reason='source_changed')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode,score,delivered',
+    [('off', 0.1, True), ('shadow', 0.1, True), ('enforce', 0.499, False), ('enforce', 0.5, True)],
+)
+async def test_usefulness_modes_and_threshold_boundary(lane, mode, score, delivered):
+    lane.monkeypatch.setattr(
+        producers, 'mentor_config', lambda: (lane.config.model_copy(update={'usefulness_judge': mode}), lane.prompts)
+    )
+
+    async def response(**kwargs):
+        if kwargs['step'] == 'usefulness':
+            return {'answers': {'useful': {'noul': score}}}
+        return await lane.respond(**kwargs)
+
+    lane.model.side_effect = response
+    assert bool(await mentor(lane)) == delivered
+    assert lane.publish.await_count == lane.push.await_count == lane.chat_write.call_count == int(delivered)
+    if mode == 'off':
+        lane.score_write.assert_not_awaited()
+        assert all(c.kwargs['step'] != 'usefulness' for c in lane.model.call_args_list)
+    else:
+        lane.score_write.assert_awaited_once_with(item=lane.item, score=score)
+    if not delivered:
+        lane.close.assert_awaited_once_with(item=lane.item, state='suppressed', reason='usefulness_judge')
+        assert all(c.kwargs['step'] != 'dedupe' for c in lane.model.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_usefulness_request_has_goals_draft_and_last_eight_speaker_lines(lane):
+    created_at = datetime(2026, 10, 3, tzinfo=timezone.utc)
+    lane.context['goals'] = [{'title': 'Ship the project', 'created_at': created_at}]
+    messages = [{'text': f'line {i}', 'is_user': i % 2 == 0, 'timestamp': i} for i in range(12)]
+    assert await producers.produce_mentor('u', 'c', messages, lane.context)
+    call = next(c for c in lane.model.call_args_list if c.kwargs['step'] == 'usefulness')
+    state = json.loads(call.kwargs['request']['state'])
+    assert state == {
+        'user_name': 'User',
+        'user_goals': [{'title': 'Ship the project', 'created_at': created_at.isoformat()}],
+        'proposed_notification': 'Call Alex about the Friday deadline',
+        'recent_conversation': [('USER: ' if i % 2 == 0 else 'OTHER: ') + f'line {i}' for i in range(4, 12)],
+    }
+    assert call.kwargs['request']['questions'] == {'useful': producers.USEFULNESS_QUESTION}
+    assert lane.context['goals'] == [{'title': 'Ship the project', 'created_at': created_at}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('approved,safety', [(False, False), (True, True)])
+async def test_shadow_scores_before_existing_critic_suppression(lane, approved, safety):
+    async def response(**kwargs):
+        if kwargs['step'] == 'critic':
+            return {
+                'choices': [
+                    {
+                        'message': {
+                            'content': json.dumps(
+                                {'approved': approved, 'reasoning': 'decision', 'safety_escalation': safety}
+                            )
+                        }
+                    }
+                ]
+            }
+        return await lane.respond(**kwargs)
+
+    lane.model.side_effect = response
+    assert await mentor(lane) is None
+    lane.score_write.assert_awaited_once_with(item=lane.item, score=0.8)
+    lane.publish.assert_not_awaited()
+    assert lane.close.call_args.kwargs['reason'] == ('safety_escalation' if safety else 'model_silent')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad_score', [True, -0.1, 1.1, float('nan'), float('inf')])
+async def test_usefulness_bad_probability_fails_open_in_enforce(lane, bad_score):
+    lane.monkeypatch.setattr(
+        producers,
+        'mentor_config',
+        lambda: (lane.config.model_copy(update={'usefulness_judge': 'enforce'}), lane.prompts),
+    )
+
+    async def response(**kwargs):
+        if kwargs['step'] == 'usefulness':
+            return {'answers': {'useful': {'noul': bad_score}}}
+        return await lane.respond(**kwargs)
+
+    lane.model.side_effect = response
+    assert await mentor(lane)
+    lane.score_write.assert_not_awaited()
+    lane.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_usefulness_score_storage_failure_denies_unmeasured_delivery(lane):
+    lane.score_write.side_effect = ConnectionError('offline')
+    assert await mentor(lane) is None
+    lane.publish.assert_not_awaited()
+    lane.close.assert_awaited_once_with(item=lane.item, state='failed', reason='generation_failed')
+
+
+@pytest.mark.asyncio
+async def test_usefulness_provider_error_fails_open_in_enforce(lane):
+    lane.monkeypatch.setattr(
+        producers,
+        'mentor_config',
+        lambda: (lane.config.model_copy(update={'usefulness_judge': 'enforce'}), lane.prompts),
+    )
+
+    async def response(**kwargs):
+        if kwargs['step'] == 'usefulness':
+            raise RuntimeError('Jev unavailable')
+        return await lane.respond(**kwargs)
+
+    lane.model.side_effect = response
+    assert await mentor(lane)
+    lane.score_write.assert_not_awaited()
+    lane.publish.assert_awaited_once()

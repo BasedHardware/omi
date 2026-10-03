@@ -72,7 +72,7 @@ def context_from_request(request: Any, caller: Any, accounting: AccountingContex
     except (ValueError, ProactivityDenied) as exc:
         raise GatewayInvalidRequestError('invalid proactivity identity') from exc
     if (
-        step not in {'gate', 'generate', 'critic', 'prefilter', 'dedupe', 'phrase'}
+        step not in {'gate', 'generate', 'critic', 'prefilter', 'dedupe', 'usefulness', 'phrase'}
         or accounting.request_id != call
         or accounting.feature != f'proactivity_v2_{producer}'
     ):
@@ -89,7 +89,7 @@ def envelope_for(
     jev = provider == 'openrouter' and model == 'typesafe/jev-1.13'
     if not jev and (provider, model) != ('openai', 'gpt-6-luna'):
         raise ProactivityDenied('unsupported_model')
-    if jev != (context.step in {'prefilter', 'dedupe'}):
+    if jev != (context.step in {'prefilter', 'dedupe', 'usefulness'}):
         raise ProactivityDenied('invalid_lane')
     payload = dict(request, model=model)
     if jev:

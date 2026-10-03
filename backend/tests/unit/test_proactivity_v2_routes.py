@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from models.proactivity import ProactivityFeedResponse, ProactivityOutcomeRequest
 from routers import proactivity as routes
 from utils.other import endpoints as auth
+from tests.unit.test_proactivity_v2_budget import store
 
 
 def test_outcome_wire_rejects_null_server_and_unknown_fields():
@@ -52,3 +53,25 @@ def test_mentor_push_keeps_released_client_chat_route():
     assert payload['navigate_to'] == '/chat/mentor'
     assert payload['item_id'] == 'item' and payload['target_id'] == 'source'
     assert payload['notification_type'] != 'plugin'  # Generic preview must not become a duplicate chat message.
+
+
+def test_timeout_first_id_conflicts_over_real_outcome_route(store, monkeypatch):
+    from tests.unit.test_proactivity_v2_ledger import ready
+    from tests.unit.test_proactivity_v2_budget import NOW
+
+    item = ready(store)
+    app = FastAPI()
+    app.include_router(routes.router)
+    for route in routes.router.routes:
+        for dep in route.dependant.dependencies:
+            app.dependency_overrides[dep.call] = lambda: 'u'
+    monkeypatch.setattr(routes.ledger, 'client_or_default', lambda client=None: store)
+    monkeypatch.setattr(routes.ledger, 'utc_now', lambda: NOW)
+    body = dict(event_id=str(uuid4()), action='timeout', surface='ios', channel='feed')
+    url = f"/v1/proactivity/items/{item['item_id']}/outcomes"
+    with TestClient(app) as client:
+        first = client.post(url, json=body)
+        assert first.status_code == 200 and first.json()['recorded']
+        assert not client.post(url, json=body).json()['recorded']
+        conflict = client.post(url, json=dict(body, action='opened'))
+        assert conflict.status_code == 409 and conflict.json()['detail'] == 'event_conflict'
