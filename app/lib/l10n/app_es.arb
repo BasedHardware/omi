@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "unos {count} por hora",
     "diagnosticsLongestGap": "Interrupción más larga",
     "diagnosticsSincePairingSummary": "Desde el emparejamiento: {drops} cortes, {failed} conexiones fallidas.",
-    "diagnosticsLastDuration": "Últimos {duration}"
+    "diagnosticsLastDuration": "Últimos {duration}",
+    "previousDay": "Día anterior",
+    "nextDay": "Día siguiente",
+    "noTasksOnDate": "No hay tareas el {date}"
 }

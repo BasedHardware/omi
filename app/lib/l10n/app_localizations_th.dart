@@ -12225,4 +12225,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration ล่าสุด';
   }
+
+  @override
+  String get previousDay => 'วันก่อนหน้า';
+
+  @override
+  String get nextDay => 'วันถัดไป';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'ไม่มีงานในวันที่ $date';
+  }
 }

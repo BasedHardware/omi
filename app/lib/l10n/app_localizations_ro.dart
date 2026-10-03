@@ -12346,4 +12346,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimele $duration';
   }
+
+  @override
+  String get previousDay => 'Ziua precedentă';
+
+  @override
+  String get nextDay => 'Ziua următoare';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nicio sarcină pe $date';
+  }
 }

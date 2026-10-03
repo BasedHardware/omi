@@ -12286,4 +12286,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get previousDay => 'Ngày trước';
+
+  @override
+  String get nextDay => 'Ngày sau';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Không có tác vụ vào $date';
+  }
 }

@@ -12339,4 +12339,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Utolsó $duration';
   }
+
+  @override
+  String get previousDay => 'Előző nap';
+
+  @override
+  String get nextDay => 'Következő nap';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nincsenek feladatok ezen a napon: $date';
+  }
 }

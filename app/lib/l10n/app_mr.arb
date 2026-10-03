@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
     "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
-    "diagnosticsLastDuration": "गेले {duration}"
+    "diagnosticsLastDuration": "गेले {duration}",
+    "previousDay": "मागील दिवस",
+    "nextDay": "पुढील दिवस",
+    "noTasksOnDate": "{date} रोजी कोणतीही कामे नाहीत"
 }

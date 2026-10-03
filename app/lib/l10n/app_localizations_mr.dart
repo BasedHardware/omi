@@ -12298,4 +12298,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'गेले $duration';
   }
+
+  @override
+  String get previousDay => 'मागील दिवस';
+
+  @override
+  String get nextDay => 'पुढील दिवस';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date रोजी कोणतीही कामे नाहीत';
+  }
 }

@@ -12285,4 +12285,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimased $duration';
   }
+
+  @override
+  String get previousDay => 'Eelmine päev';
+
+  @override
+  String get nextDay => 'Järgmine päev';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date pole ülesandeid';
+  }
 }

@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "околу {count} на час",
     "diagnosticsLongestGap": "Најдолг прекин",
     "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
-    "diagnosticsLastDuration": "Последните {duration}"
+    "diagnosticsLastDuration": "Последните {duration}",
+    "previousDay": "Претходен ден",
+    "nextDay": "Следен ден",
+    "noTasksOnDate": "Нема задачи на {date}"
 }

@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "otprilike {count} na sat",
     "diagnosticsLongestGap": "Najdulji prekid",
     "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspješnih veza {failed}.",
-    "diagnosticsLastDuration": "Posljednjih {duration}"
+    "diagnosticsLastDuration": "Posljednjih {duration}",
+    "previousDay": "Prethodni dan",
+    "nextDay": "Sljedeći dan",
+    "noTasksOnDate": "Nema zadataka za {date}"
 }

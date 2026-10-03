@@ -25,7 +25,8 @@ class _Source extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
       const ConversationSearchResult(
           items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 

@@ -12081,4 +12081,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '最近 $duration';
   }
+
+  @override
+  String get previousDay => '前一天';
+
+  @override
+  String get nextDay => '后一天';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date 没有任务';
+  }
 }

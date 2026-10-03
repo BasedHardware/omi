@@ -12295,4 +12295,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Posledních $duration';
   }
+
+  @override
+  String get previousDay => 'Předchozí den';
+
+  @override
+  String get nextDay => 'Následující den';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Žádné úkoly na $date';
+  }
 }

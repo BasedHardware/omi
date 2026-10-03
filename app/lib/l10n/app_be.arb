@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
-    "diagnosticsLastDuration": "Апошнія {duration}"
+    "diagnosticsLastDuration": "Апошнія {duration}",
+    "previousDay": "Папярэдні дзень",
+    "nextDay": "Наступны дзень",
+    "noTasksOnDate": "Няма задач на {date}"
 }

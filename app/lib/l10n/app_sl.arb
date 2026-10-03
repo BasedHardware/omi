@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "približno {count} na uro",
     "diagnosticsLongestGap": "Najdaljši premor",
     "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
-    "diagnosticsLastDuration": "Zadnjih {duration}"
+    "diagnosticsLastDuration": "Zadnjih {duration}",
+    "previousDay": "Prejšnji dan",
+    "nextDay": "Naslednji dan",
+    "noTasksOnDate": "Ni opravil za {date}"
 }

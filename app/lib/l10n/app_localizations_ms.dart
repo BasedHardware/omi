@@ -12322,4 +12322,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration lepas';
   }
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tiada tugas pada $date';
+  }
 }

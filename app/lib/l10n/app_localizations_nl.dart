@@ -12327,4 +12327,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Laatste $duration';
   }
+
+  @override
+  String get previousDay => 'Vorige dag';
+
+  @override
+  String get nextDay => 'Volgende dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Geen taken op $date';
+  }
 }

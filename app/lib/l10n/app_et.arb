@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "umbes {count} tunnis",
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
-    "diagnosticsLastDuration": "Viimased {duration}"
+    "diagnosticsLastDuration": "Viimased {duration}",
+    "previousDay": "Eelmine päev",
+    "nextDay": "Järgmine päev",
+    "noTasksOnDate": "{date} pole ülesandeid"
 }

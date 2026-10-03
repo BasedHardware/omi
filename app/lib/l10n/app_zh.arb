@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "约每小时 {count} 次",
     "diagnosticsLongestGap": "最长中断",
     "diagnosticsSincePairingSummary": "配对以来：断开 {drops} 次，连接失败 {failed} 次。",
-    "diagnosticsLastDuration": "最近 {duration}"
+    "diagnosticsLastDuration": "最近 {duration}",
+    "previousDay": "前一天",
+    "nextDay": "后一天",
+    "noTasksOnDate": "{date} 没有任务"
 }

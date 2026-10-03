@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
-    "diagnosticsLastDuration": "آخر {duration}"
+    "diagnosticsLastDuration": "آخر {duration}",
+    "previousDay": "اليوم السابق",
+    "nextDay": "اليوم التالي",
+    "noTasksOnDate": "لا توجد مهام في {date}"
 }

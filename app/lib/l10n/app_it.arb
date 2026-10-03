@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "circa {count} all'ora",
     "diagnosticsLongestGap": "Interruzione più lunga",
     "diagnosticsSincePairingSummary": "Dall'associazione: {drops} interruzioni, {failed} connessioni non riuscite.",
-    "diagnosticsLastDuration": "Ultimi {duration}"
+    "diagnosticsLastDuration": "Ultimi {duration}",
+    "previousDay": "Giorno precedente",
+    "nextDay": "Giorno successivo",
+    "noTasksOnDate": "Nessuna attività il {date}"
 }

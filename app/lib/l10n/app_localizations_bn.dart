@@ -12291,4 +12291,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'শেষ $duration';
   }
+
+  @override
+  String get previousDay => 'আগের দিন';
+
+  @override
+  String get nextDay => 'পরের দিন';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date-এ কোনো কাজ নেই';
+  }
 }

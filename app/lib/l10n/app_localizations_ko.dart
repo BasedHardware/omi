@@ -12106,4 +12106,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '최근 $duration';
   }
+
+  @override
+  String get previousDay => '이전 날';
+
+  @override
+  String get nextDay => '다음 날';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date에 할 일이 없습니다';
+  }
 }

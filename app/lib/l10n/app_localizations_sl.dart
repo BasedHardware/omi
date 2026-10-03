@@ -12321,4 +12321,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Zadnjih $duration';
   }
+
+  @override
+  String get previousDay => 'Prejšnji dan';
+
+  @override
+  String get nextDay => 'Naslednji dan';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ni opravil za $date';
+  }
 }

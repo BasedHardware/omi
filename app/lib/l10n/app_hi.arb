@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "लगभग {count} प्रति घंटा",
     "diagnosticsLongestGap": "सबसे लंबा अंतराल",
     "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
-    "diagnosticsLastDuration": "पिछले {duration}"
+    "diagnosticsLastDuration": "पिछले {duration}",
+    "previousDay": "पिछला दिन",
+    "nextDay": "अगला दिन",
+    "noTasksOnDate": "{date} को कोई कार्य नहीं"
 }

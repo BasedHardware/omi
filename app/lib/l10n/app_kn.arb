@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "ಗಂಟೆಗೆ ಸುಮಾರು {count}",
     "diagnosticsLongestGap": "ಅತಿ ದೀರ್ಘ ಅಂತರ",
     "diagnosticsSincePairingSummary": "ಜೋಡಿಯಾದಾಗಿನಿಂದ: {drops} ಕಡಿತಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
-    "diagnosticsLastDuration": "ಕಳೆದ {duration}"
+    "diagnosticsLastDuration": "ಕಳೆದ {duration}",
+    "previousDay": "ಹಿಂದಿನ ದಿನ",
+    "nextDay": "ಮುಂದಿನ ದಿನ",
+    "noTasksOnDate": "{date} ರಂದು ಯಾವುದೇ ಕಾರ್ಯಗಳಿಲ್ಲ"
 }

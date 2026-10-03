@@ -12279,4 +12279,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Seneste $duration';
   }
+
+  @override
+  String get previousDay => 'Forrige dag';
+
+  @override
+  String get nextDay => 'Næste dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ingen opgaver den $date';
+  }
 }

@@ -12319,4 +12319,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Останні $duration';
   }
+
+  @override
+  String get previousDay => 'Попередній день';
+
+  @override
+  String get nextDay => 'Наступний день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Немає завдань на $date';
+  }
 }

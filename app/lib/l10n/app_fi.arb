@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "noin {count} tunnissa",
     "diagnosticsLongestGap": "Pisin katko",
     "diagnosticsSincePairingSummary": "Parituksen jälkeen: katkoksia {drops}, epäonnistuneita yhteyksiä {failed}.",
-    "diagnosticsLastDuration": "Viimeiset {duration}"
+    "diagnosticsLastDuration": "Viimeiset {duration}",
+    "previousDay": "Edellinen päivä",
+    "nextDay": "Seuraava päivä",
+    "noTasksOnDate": "Ei tehtäviä {date}"
 }

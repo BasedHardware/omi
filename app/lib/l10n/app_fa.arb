@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "حدود {count} در ساعت",
     "diagnosticsLongestGap": "طولانی‌ترین وقفه",
     "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
-    "diagnosticsLastDuration": "{duration} گذشته"
+    "diagnosticsLastDuration": "{duration} گذشته",
+    "previousDay": "روز قبل",
+    "nextDay": "روز بعد",
+    "noTasksOnDate": "هیچ وظیفه‌ای در {date} نیست"
 }

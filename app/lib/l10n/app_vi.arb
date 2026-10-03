@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "khoảng {count} lần mỗi giờ",
     "diagnosticsLongestGap": "Lần gián đoạn lâu nhất",
     "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần ngắt, {failed} kết nối thất bại.",
-    "diagnosticsLastDuration": "{duration} gần nhất"
+    "diagnosticsLastDuration": "{duration} gần nhất",
+    "previousDay": "Ngày trước",
+    "nextDay": "Ngày sau",
+    "noTasksOnDate": "Không có tác vụ vào {date}"
 }

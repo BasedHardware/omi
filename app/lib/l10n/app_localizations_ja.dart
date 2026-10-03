@@ -12102,4 +12102,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '直近$duration';
   }
+
+  @override
+  String get previousDay => '前の日';
+
+  @override
+  String get nextDay => '次の日';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$dateのタスクはありません';
+  }
 }

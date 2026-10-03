@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "приблизно {count} на годину",
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
-    "diagnosticsLastDuration": "Останні {duration}"
+    "diagnosticsLastDuration": "Останні {duration}",
+    "previousDay": "Попередній день",
+    "nextDay": "Наступний день",
+    "noTasksOnDate": "Немає завдань на {date}"
 }

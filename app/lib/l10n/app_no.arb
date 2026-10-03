@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "omtrent {count} i timen",
     "diagnosticsLongestGap": "Lengste opphold",
     "diagnosticsSincePairingSummary": "Siden kobling: {drops} brudd, {failed} mislykkede tilkoblinger.",
-    "diagnosticsLastDuration": "Siste {duration}"
+    "diagnosticsLastDuration": "Siste {duration}",
+    "previousDay": "Forrige dag",
+    "nextDay": "Neste dag",
+    "noTasksOnDate": "Ingen oppgaver {date}"
 }

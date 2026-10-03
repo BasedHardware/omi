@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "maždaug {count} per valandą",
     "diagnosticsLongestGap": "Ilgiausia pertrauka",
     "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
-    "diagnosticsLastDuration": "Paskutinės {duration}"
+    "diagnosticsLastDuration": "Paskutinės {duration}",
+    "previousDay": "Ankstesnė diena",
+    "nextDay": "Kita diena",
+    "noTasksOnDate": "{date} nėra užduočių"
 }

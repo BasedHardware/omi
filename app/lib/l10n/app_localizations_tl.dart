@@ -12392,4 +12392,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Nakaraang $duration';
   }
+
+  @override
+  String get previousDay => 'Nakaraang araw';
+
+  @override
+  String get nextDay => 'Susunod na araw';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Walang gawain noong $date';
+  }
 }

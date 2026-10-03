@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "asi {count} za hodinu",
     "diagnosticsLongestGap": "Nejdelší výpadek",
     "diagnosticsSincePairingSummary": "Od spárování: výpadků {drops}, neúspěšných připojení {failed}.",
-    "diagnosticsLastDuration": "Posledních {duration}"
+    "diagnosticsLastDuration": "Posledních {duration}",
+    "previousDay": "Předchozí den",
+    "nextDay": "Následující den",
+    "noTasksOnDate": "Žádné úkoly na {date}"
 }

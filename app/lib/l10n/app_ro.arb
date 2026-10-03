@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "aproximativ {count} pe oră",
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
     "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
-    "diagnosticsLastDuration": "Ultimele {duration}"
+    "diagnosticsLastDuration": "Ultimele {duration}",
+    "previousDay": "Ziua precedentă",
+    "nextDay": "Ziua următoare",
+    "noTasksOnDate": "Nicio sarcină pe {date}"
 }

@@ -3835,5 +3835,8 @@
     "diagnosticsDropsPerHour": "saatte yaklaşık {count}",
     "diagnosticsLongestGap": "En uzun kesinti",
     "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
-    "diagnosticsLastDuration": "Son {duration}"
+    "diagnosticsLastDuration": "Son {duration}",
+    "previousDay": "Önceki gün",
+    "nextDay": "Sonraki gün",
+    "noTasksOnDate": "{date} için görev yok"
 }

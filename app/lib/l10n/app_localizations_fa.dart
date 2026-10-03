@@ -12289,4 +12289,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration گذشته';
   }
+
+  @override
+  String get previousDay => 'روز قبل';
+
+  @override
+  String get nextDay => 'روز بعد';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'هیچ وظیفه‌ای در $date نیست';
+  }
 }

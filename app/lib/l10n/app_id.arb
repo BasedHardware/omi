@@ -3835,5 +3835,8 @@
     "diagnosticsDropsPerHour": "sekitar {count} per jam",
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
-    "diagnosticsLastDuration": "{duration} terakhir"
+    "diagnosticsLastDuration": "{duration} terakhir",
+    "previousDay": "Hari sebelumnya",
+    "nextDay": "Hari berikutnya",
+    "noTasksOnDate": "Tidak ada tugas pada {date}"
 }

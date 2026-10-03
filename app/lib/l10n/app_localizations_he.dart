@@ -12200,4 +12200,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration אחרונות';
   }
+
+  @override
+  String get previousDay => 'היום הקודם';
+
+  @override
+  String get nextDay => 'היום הבא';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'אין משימות ב$date';
+  }
 }

@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "ঘণ্টায় প্রায় {count}",
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
     "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
-    "diagnosticsLastDuration": "শেষ {duration}"
+    "diagnosticsLastDuration": "শেষ {duration}",
+    "previousDay": "আগের দিন",
+    "nextDay": "পরের দিন",
+    "noTasksOnDate": "{date}-এ কোনো কাজ নেই"
 }

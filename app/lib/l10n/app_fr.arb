@@ -3835,5 +3835,8 @@
     "diagnosticsDropsPerHour": "environ {count} par heure",
     "diagnosticsLongestGap": "Plus longue interruption",
     "diagnosticsSincePairingSummary": "Depuis l'appairage : {drops} coupures, {failed} échecs de connexion.",
-    "diagnosticsLastDuration": "Dernières {duration}"
+    "diagnosticsLastDuration": "Dernières {duration}",
+    "previousDay": "Jour précédent",
+    "nextDay": "Jour suivant",
+    "noTasksOnDate": "Aucune tâche le {date}"
 }

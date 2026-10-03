@@ -12371,4 +12371,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Τελευταία $duration';
   }
+
+  @override
+  String get previousDay => 'Προηγούμενη ημέρα';
+
+  @override
+  String get nextDay => 'Επόμενη ημέρα';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Δεν υπάρχουν εργασίες στις $date';
+  }
 }

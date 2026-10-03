@@ -12333,4 +12333,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последние $duration';
   }
+
+  @override
+  String get previousDay => 'Предыдущий день';
+
+  @override
+  String get nextDay => 'Следующий день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нет задач на $date';
+  }
 }

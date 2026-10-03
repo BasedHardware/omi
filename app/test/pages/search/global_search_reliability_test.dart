@@ -33,7 +33,8 @@ class _ScriptedSource extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) =>
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
       onConversations?.call(query) ?? Future.value(_empty);
 
   @override
@@ -191,6 +192,46 @@ void main() {
 
     expect(find.text('Stale Answer'), findsNothing);
     expect(find.byType(OmiSpinner), findsNothing, reason: 'a cleared field is not still searching');
+  });
+
+  testWidgets('a source completing after the deadline cannot rewrite the committed state', (tester) async {
+    final lateTasks = Completer<ApiResult<List<ActionItemWithMetadata>>>();
+    final source = _ScriptedSource();
+    source.onConversations = (_) async => _conversations([_conversation('c1', 'Device Connection Troubleshooting')]);
+    source.onTasks = (_) => lateTasks.future;
+    await _pumpSearch(tester, source, initialQuery: 'bluetooth');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pump();
+
+    expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
+    expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget);
+
+    lateTasks.complete(const ApiSuccess(<ActionItemWithMetadata>[]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device Connection Troubleshooting'), findsOneWidget,
+        reason: 'a post-deadline completion must not rewrite settled rows');
+    expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget,
+        reason: 'the committed partial flag survives a late success');
+  });
+
+  testWidgets('a fresh query shows the searching state during the debounce window', (tester) async {
+    final source = _ScriptedSource();
+    await _pumpSearch(tester, source);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooth');
+    await tester.pump();
+
+    expect(find.byType(OmiSpinner), findsOneWidget,
+        reason: 'a pending debounced search already reads as searching, not empty');
+    expect(find.text('No results found'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
   });
 
   test('conversation search carries a 15s deadline with zero retries', () {

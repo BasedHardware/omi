@@ -12304,4 +12304,15 @@ class AppLocalizationsUr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'پچھلے $duration';
   }
+
+  @override
+  String get previousDay => 'پچھلا دن';
+
+  @override
+  String get nextDay => 'اگلا دن';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date کو کوئی کام نہیں';
+  }
 }

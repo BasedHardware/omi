@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "cirka {count} i timmen",
     "diagnosticsLongestGap": "Längsta uppehåll",
     "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
-    "diagnosticsLastDuration": "Senaste {duration}"
+    "diagnosticsLastDuration": "Senaste {duration}",
+    "previousDay": "Föregående dag",
+    "nextDay": "Nästa dag",
+    "noTasksOnDate": "Inga uppgifter {date}"
 }

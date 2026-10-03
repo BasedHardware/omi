@@ -3800,5 +3800,8 @@
     "diagnosticsDropsPerHour": "시간당 약 {count}회",
     "diagnosticsLongestGap": "가장 긴 끊김",
     "diagnosticsSincePairingSummary": "페어링 이후: 끊김 {drops}회, 실패한 연결 {failed}회.",
-    "diagnosticsLastDuration": "최근 {duration}"
+    "diagnosticsLastDuration": "최근 {duration}",
+    "previousDay": "이전 날",
+    "nextDay": "다음 날",
+    "noTasksOnDate": "{date}에 할 일이 없습니다"
 }

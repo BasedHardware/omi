@@ -11357,5 +11357,8 @@
     "diagnosticsDropsPerHour": "בערך {count} בשעה",
     "diagnosticsLongestGap": "הפער הארוך ביותר",
     "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
-    "diagnosticsLastDuration": "{duration} אחרונות"
+    "diagnosticsLastDuration": "{duration} אחרונות",
+    "previousDay": "היום הקודם",
+    "nextDay": "היום הבא",
+    "noTasksOnDate": "אין משימות ב{date}"
 }

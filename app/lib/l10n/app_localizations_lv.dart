@@ -12319,4 +12319,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Pēdējās $duration';
   }
+
+  @override
+  String get previousDay => 'Iepriekšējā diena';
+
+  @override
+  String get nextDay => 'Nākamā diena';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date nav uzdevumu';
+  }
 }

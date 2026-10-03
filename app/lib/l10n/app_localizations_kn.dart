@@ -12328,4 +12328,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'ಕಳೆದ $duration';
   }
+
+  @override
+  String get previousDay => 'ಹಿಂದಿನ ದಿನ';
+
+  @override
+  String get nextDay => 'ಮುಂದಿನ ದಿನ';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date ರಂದು ಯಾವುದೇ ಕಾರ್ಯಗಳಿಲ್ಲ';
+  }
 }

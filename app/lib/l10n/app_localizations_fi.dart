@@ -12295,4 +12295,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimeiset $duration';
   }
+
+  @override
+  String get previousDay => 'Edellinen päivä';
+
+  @override
+  String get nextDay => 'Seuraava päivä';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ei tehtäviä $date';
+  }
 }

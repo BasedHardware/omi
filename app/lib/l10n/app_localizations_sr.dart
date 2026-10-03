@@ -12303,4 +12303,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последњих $duration';
   }
+
+  @override
+  String get previousDay => 'Претходни дан';
+
+  @override
+  String get nextDay => 'Следећи дан';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нема задатака за $date';
+  }
 }

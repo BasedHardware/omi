@@ -3896,5 +3896,8 @@
     "diagnosticsDropsPerHour": "kb. {count} óránként",
     "diagnosticsLongestGap": "Leghosszabb kiesés",
     "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
-    "diagnosticsLastDuration": "Utolsó {duration}"
+    "diagnosticsLastDuration": "Utolsó {duration}",
+    "previousDay": "Előző nap",
+    "nextDay": "Következő nap",
+    "noTasksOnDate": "Nincsenek feladatok ezen a napon: {date}"
 }

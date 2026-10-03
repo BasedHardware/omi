@@ -12342,4 +12342,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'గత $duration';
   }
+
+  @override
+  String get previousDay => 'మునుపటి రోజు';
+
+  @override
+  String get nextDay => 'తదుపరి రోజు';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date నాటికి పనులు లేవు';
+  }
 }
