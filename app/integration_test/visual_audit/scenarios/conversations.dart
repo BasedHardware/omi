@@ -47,7 +47,8 @@ final conversationsScenarios = <AuditScenario>[
     id: 'conversations-locked-preview',
     title: 'Locked conversations with an upgrade action',
     page: _page,
-    state: 'An unlocked conversation followed by three locked previews; synthetic titles only',
+    state: 'An unlocked conversation followed by three consecutive locked previews, which share one '
+        'frosted card and one upgrade action; synthetic titles only',
     run: (a) async {
       final items = [
         auditConversation('unlocked', title: 'Design catch-up with Alex'),
@@ -63,7 +64,8 @@ final conversationsScenarios = <AuditScenario>[
       ];
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
       expect(find.byType(ConversationListItem), findsNWidgets(4));
-      expect(find.text('Upgrade to Unlimited'), findsNWidgets(3));
+      expect(find.byType(LockedConversationRun), findsOneWidget);
+      expect(find.text('Upgrade to Unlimited'), findsOneWidget);
       await a.shot('Conversation list with frosted locked previews');
     },
   ),

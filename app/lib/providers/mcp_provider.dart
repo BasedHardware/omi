@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/mcp_api.dart';
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/utils/logger.dart';
 
 class McpProvider with ChangeNotifier {
   List<McpApiKey> _keys = [];
@@ -26,6 +27,7 @@ class McpProvider with ChangeNotifier {
       _keys = keys;
     } catch (e) {
       if (generation != _sessionGeneration) return;
+      Logger.warning('MCP API keys failed to load: $e');
       _error = e.toString();
     } finally {
       if (generation == _sessionGeneration) {

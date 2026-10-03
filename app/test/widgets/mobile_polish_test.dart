@@ -90,6 +90,29 @@ void main() {
     expect(tester.widget<OmiButton>(save).onPressed, isNotNull);
   });
 
+  testWidgets('task character counter shows only in the last 10% of the limit', (tester) async {
+    final tasks = _Tasks();
+    addTearDown(tasks.dispose);
+    await tester.pumpWidget(ChangeNotifierProvider<ActionItemsProvider>.value(
+      value: tasks,
+      child: _app(Builder(
+          builder: (context) => TextButton(
+                onPressed: () => showModalBottomSheet(
+                    context: context, isScrollControlled: true, builder: (_) => const ActionItemFormSheet()),
+                child: const Text('Open'),
+              ))),
+    ));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('task_description'));
+    await tester.enterText(field, 'a' * 3685);
+    await tester.pump();
+    expect(find.byKey(const Key('task_character_count')), findsNothing);
+    await tester.enterText(field, 'a' * 3686);
+    await tester.pump();
+    expect(find.text('3686/4096'), findsOneWidget);
+  });
+
   testWidgets('task awaits save, prevents duplicates, retains a rejected draft and retries', (tester) async {
     final tasks = _Tasks();
     addTearDown(tasks.dispose);
@@ -108,7 +131,8 @@ void main() {
     expect(tester.widget<OmiButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const Key('task_description')), 'Send notes');
     await tester.pump();
-    expect(find.text('10/4096'), findsOneWidget);
+    // The counter stays out of the way until the last 10% of the limit.
+    expect(find.byKey(const Key('task_character_count')), findsNothing);
     await tester.tap(find.byKey(const Key('task_quick_date_1')));
     await tester.pump();
     await tester.tap(save);

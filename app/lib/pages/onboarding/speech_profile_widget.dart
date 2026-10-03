@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart' show AudioWavePainter;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -239,77 +240,68 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     return copy(['name', 'work', 'enjoy'][flow.promptIndex.clamp(0, 2)]);
   }
 
+  /// The prompt screen, before and while recording: a small "1 of 4", the sentence centred, then
+  /// either Try Another Prompt (before recording) or the live waveform (while recording).
   Widget _recording() {
     final ready = flow.stage == IntroductionStage.ready;
     final paused = flow.stage == IntroductionStage.paused;
     final transcribing = flow.stage == IntroductionStage.transcribing;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(children: [
-        Text('${flow.promptIndex + 1} / ${GuidedVoiceController.promptCount}',
-            style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
-        const SizedBox(width: 16),
-        Expanded(
-            child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  key: const Key('introduction_progress'),
-                  value: flow.progress,
-                  minHeight: 6,
-                  color: OmiColors.textPrimary,
-                  backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.24),
-                  semanticsLabel: copy('title'),
-                  semanticsValue: '${(flow.progress * 100).round()}%',
-                ))),
-      ]),
-      const SizedBox(height: 28),
-      Text(copy('hint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
-      const SizedBox(height: 20),
+    final position = (flow.promptIndex + 1).clamp(1, GuidedVoiceController.promptCount);
+    return Column(crossAxisAlignment: CrossAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+      Text(context.l10n.speakerTagPromptProgress(position, GuidedVoiceController.promptCount),
+          key: const Key('introduction_progress'),
+          textAlign: TextAlign.center,
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      const SizedBox(height: OmiSpacing.sm),
       Text(_prompt,
           key: const Key('introduction_prompt'),
+          textAlign: TextAlign.center,
           style: OmiType.title1.copyWith(height: 1.35, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 12),
+      const SizedBox(height: OmiSpacing.md),
       if (ready && !flow.isGoalPrompt)
-        Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              key: const Key('introduction_another'),
-              onPressed: ready && !flow.isGoalPrompt ? flow.changePrompt : null,
-              style: TextButton.styleFrom(foregroundColor: OmiColors.textPrimary.withValues(alpha: 0.7)),
-              child: Text(copy('another')),
-            )),
-      const SizedBox(height: 24),
+        TextButton(
+          key: const Key('introduction_another'),
+          onPressed: flow.changePrompt,
+          style: TextButton.styleFrom(
+              foregroundColor: OmiColors.textPrimary.withValues(alpha: 0.7), minimumSize: const Size(44, 44)),
+          child: Text(copy('another'), textAlign: TextAlign.center),
+        ),
       if (flow.active) ...[
-        _status(flow.level > 0.04 ? copy('audio') : context.l10n.listening),
-        const SizedBox(height: 12),
         Semantics(
-            label: context.l10n.microphone,
-            child: LinearProgressIndicator(
-              key: const Key('introduction_audio_level'),
-              value: flow.level,
-              minHeight: 8,
-              backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.12),
-              color: OmiColors.textPrimary,
-            )),
-        const SizedBox(height: 12),
-        Text(copy('silence'),
-            textAlign: TextAlign.center,
-            style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), height: 1.4)),
+          label: context.l10n.microphone,
+          liveRegion: true,
+          child: SizedBox(
+            key: const Key('introduction_audio_level'),
+            width: 200,
+            height: 44,
+            child: CustomPaint(painter: AudioWavePainter(levels: _waveform)),
+          ),
+        ),
+        // Only while the microphone hears nothing; speech coming through needs no instructions.
+        if (flow.quiet) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          Text(copy('silence'),
+              key: const Key('introduction_silence_hint'),
+              textAlign: TextAlign.center,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+        ],
       ] else if (flow.busy || _stoppingCapture)
         _status(transcribing ? context.l10n.transcribing : context.l10n.loading, loading: true)
       else if (paused)
         _status(context.l10n.recordingPaused),
-      const SizedBox(height: 20),
-      ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 58),
-          child: Text(
-            flow.transcript,
-            key: const Key('introduction_transcript'),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4),
-          )),
+      if (flow.transcript.isNotEmpty) ...[
+        const SizedBox(height: OmiSpacing.md),
+        Text(
+          flow.transcript,
+          key: const Key('introduction_transcript'),
+          textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4),
+        ),
+      ],
       if (flow.error == 'microphone') ...[
-        const SizedBox(height: 12),
+        const SizedBox(height: OmiSpacing.sm),
         OmiPermissionRow(
           key: const Key('introduction_microphone_permission'),
           leading: const FaIcon(FontAwesomeIcons.microphone),
@@ -319,14 +311,24 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           onAllow: _start,
         ),
       ] else if (flow.error != null) ...[
-        const SizedBox(height: 12),
-        Text(copy('transcriptionError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
+        const SizedBox(height: OmiSpacing.sm),
+        Text(copy('transcriptionError'),
+            textAlign: TextAlign.center, style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
       ],
     ]);
   }
 
+  /// A fixed number of bars, newest on the right; quiet bars draw as dots so the waveform still
+  /// reads as listening before the first word.
+  List<double> get _waveform {
+    final history = flow.levelHistory;
+    const length = GuidedVoiceController.levelHistoryLength;
+    return [for (var i = history.length; i < length; i++) 0.0, ...history];
+  }
+
   Widget _review() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(copy('review'), style: OmiType.title1.copyWith(fontWeight: FontWeight.w600)),
+        Semantics(
+            header: true, child: Text(copy('review'), style: OmiType.title1.copyWith(fontWeight: FontWeight.w600))),
         const SizedBox(height: 12),
         Text(copy('reviewHint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
         const SizedBox(height: 20),
@@ -426,11 +428,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                 : copy(_attemptedSave && flow.error != 'goalLong' ? 'retryRemaining' : 'saveFinish'),
             flow.busy ? null : () => unawaited(_saveAndFinish()),
             'introduction_save_all'),
-        if (!_attemptedSave && !editing) ...[
-          const SizedBox(height: 8),
-          Text(copy('saveHint'),
-              textAlign: TextAlign.center, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        ],
         if (flow.voiceError == 'short' && !editing)
           TextButton(
             key: const Key('introduction_add_sample'),
@@ -450,85 +447,100 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                   textAlign: TextAlign.center, style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)))),
       ];
     }
-    return [
-      if (flow.busy)
+    if (flow.busy) {
+      return [
         _button(flow.stage == IntroductionStage.transcribing ? context.l10n.transcribing : context.l10n.loading, null,
-            'introduction_wait')
-      else if (flow.active || (flow.stage == IntroductionStage.paused && flow.canFinish)) ...[
+            'introduction_wait'),
+      ];
+    }
+    if (flow.active || (flow.stage == IntroductionStage.paused && flow.canFinish)) {
+      // Recording: Next leads; pausing and skipping this one sentence are small. Leaving the whole
+      // step is offered before recording, not here (docs/ux-contract.md §11, one verb per meaning).
+      return [
         _button(
             flow.promptIndex == GuidedVoiceController.promptCount - 1 ? copy('reviewAnswers') : context.l10n.nextButton,
-            flow.canFinish && !flow.busy ? () => unawaited(flow.next()) : null,
+            flow.canFinish ? () => unawaited(flow.next()) : null,
             'introduction_next'),
-        const SizedBox(height: 8),
-        _button(
-            flow.active ? context.l10n.pauseRecording : context.l10n.continueRecording,
-            flow.busy
-                ? null
-                : () {
-                    if (flow.active) {
-                      unawaited(flow.pause());
-                    } else {
-                      unawaited(_start());
-                    }
-                  },
-            'introduction_pause',
-            secondary: true),
-      ] else
-        _button(
-            copy('start'), flow.busy || _stoppingCapture ? null : () => unawaited(_start()), 'speech_profile_start'),
-      const SizedBox(height: 8),
-      // "Skip Question" moves to the next prompt; "Skip" leaves the whole step (one verb per
-      // meaning, docs/ux-contract.md §11).
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(
-          child: _textAction(
-              copy('skipPrompt'), flow.busy ? null : () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
-        ),
-        Flexible(child: _textAction(context.l10n.skip, () => unawaited(_skip()), 'speech_profile_skip_intro')),
-      ]),
+        const SizedBox(height: OmiSpacing.xs),
+        Wrap(alignment: WrapAlignment.center, spacing: OmiSpacing.md, children: [
+          _textAction(flow.active ? context.l10n.pauseRecording : context.l10n.continueRecording, () {
+            if (flow.active) {
+              unawaited(flow.pause());
+            } else {
+              unawaited(_start());
+            }
+          }, 'introduction_pause'),
+          _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
+        ]),
+      ];
+    }
+    // Before recording: Start, then one way to leave the whole step.
+    return [
+      _button(copy('start'), _stoppingCapture ? null : () => unawaited(_start()), 'speech_profile_start'),
+      const SizedBox(height: OmiSpacing.xs),
+      Center(child: _textAction(context.l10n.skip, () => unawaited(_skip()), 'speech_profile_skip_intro')),
     ];
   }
+
+  Widget _title() => Semantics(
+        header: true,
+        child: Text(copy('title'), textAlign: TextAlign.center, style: OmiType.title2),
+      );
+
+  /// Before and while recording: the title at the top and the prompt centred in the space left,
+  /// scrolling instead when large text does not fit.
+  Widget _prompting() => CustomScrollView(
+        key: const Key('introduction_scroll'),
+        controller: _scrollController,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            sliver: SliverFillRemaining(
+              hasScrollBody: false,
+              child: Column(children: [
+                _title(),
+                const SizedBox(height: OmiSpacing.xl),
+                Expanded(child: Center(child: _recording())),
+              ]),
+            ),
+          ),
+        ],
+      );
+
+  /// Review and the saved receipt. Review carries its own heading ("Here is what I heard"), so the
+  /// step title is not repeated above it.
+  Widget _scrolling(bool done) => SingleChildScrollView(
+        key: const Key('introduction_scroll'),
+        controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (done) ...[
+            _title(),
+            const SizedBox(height: 28),
+            Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
+            const SizedBox(height: 24),
+            _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
+            if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],
+            if (flow.voiceSaved) ...[const SizedBox(height: 16), _status(copy('savedVoice'), success: true)],
+          ] else
+            _review(),
+        ]),
+      );
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
       animation: flow,
       builder: (context, _) {
         final done = flow.stage == IntroductionStage.done;
+        final reviewing = flow.promptIndex >= GuidedVoiceController.promptCount;
         return PopScope(
             canPop: !flow.saving,
             child: ColoredBox(
                 color: OmiColors.surface0,
                 child: SafeArea(
                     child: Column(children: [
-                  Expanded(
-                      child: SingleChildScrollView(
-                    key: const Key('introduction_scroll'),
-                    controller: _scrollController,
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text(copy('title'), style: OmiType.title2),
-                      if (flow.promptIndex == 0 && flow.stage == IntroductionStage.ready) ...[
-                        const SizedBox(height: 12),
-                        Text(copy('intro'),
-                            style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
-                      ],
-                      const SizedBox(height: 28),
-                      if (done) ...[
-                        Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
-                        const SizedBox(height: 24),
-                        _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
-                        if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],
-                        if (flow.voiceSaved) ...[
-                          const SizedBox(height: 16),
-                          _status(copy('savedVoice'), success: true)
-                        ],
-                      ] else if (flow.promptIndex >= GuidedVoiceController.promptCount)
-                        _review()
-                      else
-                        _recording(),
-                    ]),
-                  )),
+                  Expanded(child: done || reviewing ? _scrolling(done) : _prompting()),
                   Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
                       child: Column(
