@@ -222,6 +222,7 @@ async def test_receiver_drain_releases_gauge_when_close_raises():
     receiver.stt_socket = socket
     receiver.stt_sockets_multi = []
     receiver._resilient_audio = None
+    receiver._pending_live_failover = None
     track_live_stt_socket(socket, 'soniox')
     assert gauge._value.get() == before + 1
     await receiver._drain_stt_sockets()
@@ -238,6 +239,15 @@ def test_managed_socket_gauge_tracks_physical_close_not_death_latch():
     socket = LiveLegSocket.__new__(LiveLegSocket)
     socket.raw = FakeSocket(dead=True)
     socket._dead = False
+    socket._terminal_reason = None
+    socket._local_death_reason = None
+    socket._replay_failure_reason = None
+    socket._closing_for_health = False
+    from utils.stt.live_outcome import LiveLegOutcome
+
+    socket.leg_outcome = LiveLegOutcome('soniox', 'en', None, None, lambda *args: True)
+    socket._cost_text_seen = False
+    socket._routing_active = False
     socket._pending_selection = None
     socket._open_gauge_released = False
     socket._first_speech_at = None

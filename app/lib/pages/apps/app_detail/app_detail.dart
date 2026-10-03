@@ -602,7 +602,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                      // The header already shows the average and count, so this card holds only reviews.
+                      return (app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
                               key: _reviewsSectionKey,
                               onTap: () {
@@ -623,13 +624,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: OmiSpacing.xxs),
-                                    RatingDistributionWidget(
-                                      ratingAvg: app.ratingAvg ?? 0,
-                                      ratingCount: app.ratingCount,
-                                      reviews: app.reviews,
-                                    ),
-                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
@@ -925,7 +919,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }

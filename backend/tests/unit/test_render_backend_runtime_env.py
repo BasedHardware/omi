@@ -584,7 +584,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     ):
         assert flag in integration_flags, flag
         assert flag not in backend_flags, flag
-        assert flag not in sync_flags, flag
+        # backend-sync owns its own scale-out cap (see test_sync_two_lane.py);
+        # its value may legitimately equal integration's, so only the other
+        # integration-specific flags must stay off it.
+        if not flag.startswith('--max-instances='):
+            assert flag not in sync_flags, flag
 
 
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'

@@ -206,6 +206,10 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
         data_protection_level='standard',
     )
     row = _row(phrase_pre, phrase_post)
+    row['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {sid: {'generation': 1, 'is_user': True} for sid in ['seg-post-1', 'seg-post-2']},
+    }
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, conversation_id: dict(row))
 
     captured = {}
@@ -219,9 +223,13 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
             captured['pooled_pcm'] = handle.readframes(handle.getnframes())
         return np.ones((1, 4), dtype=np.float32)
 
-    def fake_pool_confirmation(uid, embedding, pool, *, conversation_id):
+    def fake_pool_confirmation(
+        uid, embedding, pool, *, conversation_id, expected_receipt_generation, segment_ids, card_generation
+    ):
         captured['pooled_embedding'] = embedding
         captured['pooled_conversation'] = conversation_id
+        captured['pooled_segments'] = segment_ids
+        captured['pooled_generation'] = expected_receipt_generation
         return 1
 
     monkeypatch.setattr(service_module, 'verify_and_transcribe_sample', fake_verify)
@@ -239,6 +247,10 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
     assert captured['pooled_pcm'] != phrase_pre
     assert captured['pooled_embedding'] == [1.0, 1.0, 1.0, 1.0]
     assert captured['pooled_conversation'] == CONV
+    # The publication-authority contract: only the authorized post-failover
+    # segments, at the receipt generation the card decision committed.
+    assert captured['pooled_segments'] == ['seg-post-1', 'seg-post-2']
+    assert captured['pooled_generation'] == 1
 
     # The outcome is attributable: one log line with the conversation id and
     # no uid anywhere on it.

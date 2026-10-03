@@ -6,11 +6,9 @@ import asyncio
 import logging
 import math
 import os
-import socket
 import threading
 import time
 from collections import deque
-from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Callable, cast
 
@@ -18,7 +16,7 @@ import httpx
 import numpy as np
 
 from utils.async_tasks import wait_for_event
-from utils.executors import start_background_task
+from utils.stt.batch_pressure import BatchPressure
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
@@ -34,8 +32,6 @@ from utils.stt.live_metrics import (
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
-    WINDOW_PRESSURE_REFRESH,
-    WINDOW_PRESSURE_REFUSAL,
     WINDOW_SESSION_OUTCOME,
     WINDOW_REPLAY_CUT_REQUESTS,
     WINDOW_REPLAY_CUT_PERFORMED,
@@ -236,6 +232,11 @@ class WindowAdmission:
         self.active = 0
         self._lock = threading.Lock()
 
+    def available(self) -> bool:
+        cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
+        with self._lock:
+            return self.active < cap
+
     def acquire(self) -> Callable[[], None]:
         cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
         with self._lock:
@@ -259,143 +260,6 @@ class WindowAdmission:
 
 
 admission = WindowAdmission()
-
-
-class BatchPressure:
-    """Poll the shared GPU batch queue off the session-start path."""
-
-    REFRESH_SECONDS = 5.0
-    STALE_SECONDS = 15.0
-    MAX_REPLICAS = 8
-    MAX_LIVE_PENDING_PER_REPLICA = 4
-    MAX_LIVE_OLDEST_SECONDS = 0.75
-
-    def __init__(self) -> None:
-        self._task: asyncio.Task[None] | None = None
-        self._observed_at = 0.0
-        self._busy = False
-
-    def start_from_env(self) -> None:
-        """Start one poller only on processes configured to serve window sessions."""
-        if os.getenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false').lower() != 'true':
-            return
-        try:
-            allocation = float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
-            min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
-        except ValueError:
-            return
-        pool_host = os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', '')
-        if not math.isfinite(allocation) or allocation <= 0 or not pool_host or min_replicas < 1:
-            return
-        self.start(pool_host, min_replicas)
-
-    def start(self, pool_host: str, min_replicas: int) -> None:
-        loop = asyncio.get_running_loop()
-        if self._task is not None and not self._task.done():
-            if self._task.get_loop() is not loop:
-                raise RuntimeError('Batch pressure poller belongs to another running event loop')
-            return
-        self._observed_at = 0.0
-        self._busy = False
-        self._task = start_background_task(self._refresh_forever(pool_host, min_replicas), name='window_batch_pressure')
-
-    async def stop(self) -> None:
-        task = self._task
-        if task is not None:
-            if task.get_loop() is not asyncio.get_running_loop():
-                raise RuntimeError('Batch pressure poller must stop on its owning event loop')
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-        self._task = None
-        self._observed_at = 0.0
-        self._busy = False
-
-    async def _refresh_forever(self, pool_host: str, min_replicas: int) -> None:
-        while True:
-            try:
-                limits = httpx.Limits(
-                    max_connections=self.MAX_REPLICAS,
-                    max_keepalive_connections=self.MAX_REPLICAS,
-                    keepalive_expiry=30.0,
-                )
-                async with httpx.AsyncClient(timeout=1.0, trust_env=False, limits=limits) as client:
-                    while True:
-                        try:
-                            await self._refresh(pool_host, min_replicas, client)
-                        except Exception:
-                            # Even an unexpected refresh fault invalidates the sample, then retries.
-                            self._observed_at = 0.0
-                            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
-                        await asyncio.sleep(self.REFRESH_SECONDS)
-            except Exception:
-                # Client construction/closure can also fail; retry with a fresh client.
-                self._observed_at = 0.0
-                WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
-                await asyncio.sleep(self.REFRESH_SECONDS)
-
-    def allows(self, pool_host: str, min_replicas: int) -> bool:
-        if not pool_host or min_replicas < 1:
-            WINDOW_PRESSURE_REFUSAL.labels(reason='unconfigured').inc()
-            return False
-        now = time.monotonic()
-        # Every listen process stands down when pool telemetry is missing/stale.
-        if self._observed_at <= 0:
-            WINDOW_PRESSURE_REFUSAL.labels(reason='missing').inc()
-            return False
-        if now - self._observed_at > self.STALE_SECONDS:
-            WINDOW_PRESSURE_REFUSAL.labels(reason='stale').inc()
-            return False
-        if self._busy:
-            WINDOW_PRESSURE_REFUSAL.labels(reason='pressure').inc()
-            return False
-        return True
-
-    async def _refresh(self, pool_host: str, min_replicas: int, client: httpx.AsyncClient) -> None:
-        try:
-            if not pool_host or min_replicas < 1:
-                raise ValueError('Parakeet batch pool discovery is not configured')
-            addresses = await asyncio.wait_for(
-                asyncio.get_running_loop().getaddrinfo(pool_host, 8080, family=socket.AF_INET, type=socket.SOCK_STREAM),
-                timeout=1.0,
-            )
-            ips = {address[4][0] for address in addresses}
-            if len(ips) > self.MAX_REPLICAS:
-                raise ValueError('Parakeet batch pool has more replicas than the poll cap')
-            if len(ips) < min_replicas:
-                raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
-            responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
-            busiest_live_replica = 0.0
-            oldest_live_wait = 0.0
-            for response in responses:
-                response.raise_for_status()
-                metrics = response.json()
-                # A mixed-revision pool lacks these fields. Stand down until
-                # every ready GPU replica reports the live lane explicitly.
-                pending = metrics['live_pending_requests']
-                oldest = metrics['live_oldest_pending_seconds']
-                if any(
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(value)
-                    or value < 0
-                    for value in (pending, oldest)
-                ):
-                    raise ValueError('Invalid Parakeet batch pressure sample')
-                if int(pending) != pending:
-                    raise ValueError('Invalid Parakeet live pending count')
-                busiest_live_replica = max(busiest_live_replica, pending)
-                oldest_live_wait = max(oldest_live_wait, oldest)
-            self._busy = (
-                busiest_live_replica >= self.MAX_LIVE_PENDING_PER_REPLICA
-                or oldest_live_wait >= self.MAX_LIVE_OLDEST_SECONDS
-            )
-            self._observed_at = time.monotonic()
-            WINDOW_PRESSURE_REFRESH.labels(outcome='pressure' if self._busy else 'healthy').inc()
-        except Exception:
-            # A failed replica query invalidates the fleet sample; admission stays local and nonblocking.
-            self._observed_at = 0.0
-            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
 
 
 batch_pressure = BatchPressure()
@@ -785,11 +649,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self._dead:
             return
-        self._dead, self._dead_reason = True, reason
+        self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
         if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
             self._typed_death_reason = reason
+        # Observers must see the root cause before they see the dead latch.
+        self._dead = True
         self.finish()
 
     def _shed_capacity(self) -> None:
@@ -1244,13 +1110,23 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         acquired = False
         try:
-            async with asyncio.timeout(self._post_timeout):
+            async with asyncio.timeout(self._post_timeout) as deadline:
                 async with get_stt_semaphore():
                     acquired = True
+                    when = deadline.when()
+                    remaining = (
+                        max(0.0, when - asyncio.get_running_loop().time()) if when is not None else self._post_timeout
+                    )
+                    remaining = math.floor(remaining * 1000) / 1000
+                    if remaining <= 0:
+                        raise TimeoutError('post budget exhausted at semaphore admission')
                     return await get_stt_client().post(
                         self._url,
                         files={'file': ('audio.wav', wav, 'audio/wav')},
-                        headers={'X-Omi-STT-Surface': 'live-window'},
+                        headers={
+                            'X-Omi-STT-Surface': 'live-window',
+                            'X-Omi-STT-Timeout-Seconds': f'{remaining:.3f}',
+                        },
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -1267,6 +1143,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 response = await self._post_window(pcm)
             finally:
                 self._post_in_flight = False
+            if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                outcome = 'queue_timeout'
+                self.fail('capacity_full', capacity_subtype='queue_timeout')
+                response.raise_for_status()
             if response.status_code >= 500:
                 st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
                 self.fail('provider_5xx')

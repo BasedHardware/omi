@@ -22,8 +22,11 @@ def system(monkeypatch):
     from utils.conversations import lifecycle
     from utils.sync import bridge
     from database import sync_bridges
+    from database import action_item_refresh
 
     store = StrictFirestore()
+    monkeypatch.setattr(action_item_refresh, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(action_item_refresh, 'bump_action_items_list_version', lambda uid: None)
     mark = sync_bridges.mark_sync_bridge_cleaned
     monkeypatch.setattr(bridge, 'mark_sync_bridge_cleaned', lambda *a: mark(*a, firestore_client=store))
     assign = db.assign_sync_conversation

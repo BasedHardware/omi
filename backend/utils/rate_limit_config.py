@@ -77,7 +77,7 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -128,6 +128,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # sync alone and 429 their conversation photo loads. Sized for several
     # devices plus reconnect bursts.
     "screen_activity:sync": (600, 3600),
+    "screen_task:gate": (30, 60),
+    "screen_task:gate_daily": (6000, 86400),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),
@@ -210,6 +212,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Dev API. Read limits are intentionally separate from write limits so a
     # polling client cannot consume the processing/write budget. Developer and
     # MCP API-key contexts are keyed by app/key identity when available.
+    "dev:key_read": (120, 3600),
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
     # Conversation reads are limited in two tiers. Every conversation read consumes

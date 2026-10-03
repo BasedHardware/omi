@@ -45,6 +45,7 @@ export function createDeepgramTranscriber(opts: {
   const url = deepgramWsUrl(opts.sampleRate ?? 16000);
   const ws = opts.createWebSocket(url);
   ws.binaryType = 'arraybuffer';
+  let stopped = false;
   ws.onmessage = (event: MessageEvent) => {
     try {
       const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
@@ -54,9 +55,12 @@ export function createDeepgramTranscriber(opts: {
   };
   return {
     appendPcm(chunk) {
+      if (stopped) return;
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
+      if (stopped) return;
+      stopped = true;
       let sentClose = false;
       try {
         if (ws.readyState === 1) {

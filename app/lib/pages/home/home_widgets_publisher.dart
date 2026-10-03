@@ -8,6 +8,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/home_widgets_service.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 
 /// Keeps the iOS Home Screen widgets in step with the app: the wearables (Devices), the next open
 /// tasks (Up next) and the latest conversation (Latest). Changes are gathered for a moment
@@ -18,6 +19,7 @@ class HomeWidgetsPublisher with WidgetsBindingObserver {
     required this.tasks,
     required this.conversations,
     required this.l10n,
+    required this.dates,
     HomeWidgetsService? service,
     this.delay = const Duration(milliseconds: 800),
   }) : service = service ?? HomeWidgetsService.instance;
@@ -26,6 +28,7 @@ class HomeWidgetsPublisher with WidgetsBindingObserver {
   final ActionItemsProvider tasks;
   final ConversationProvider conversations;
   final AppLocalizations Function() l10n;
+  final OmiDateFormat Function() dates;
   final HomeWidgetsService service;
   final Duration delay;
   Timer? _timer;
@@ -80,7 +83,10 @@ class HomeWidgetsPublisher with WidgetsBindingObserver {
     }
     final latest = HomeWidgetsPayload.latestOf(conversations.conversations);
     if (latest != null) {
-      unawaited(service.publish(HomeWidgetsService.latestKey, HomeWidgetsPayload.latest(latest, l10n())));
+      unawaited(service.publish(
+        HomeWidgetsService.latestKey,
+        HomeWidgetsPayload.latest(latest, l10n(), dates: dates()),
+      ));
     }
   }
 }

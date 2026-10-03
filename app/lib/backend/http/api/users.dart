@@ -1,11 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
@@ -16,6 +17,8 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:uuid/uuid.dart';
@@ -357,16 +360,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
-  var response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
+class PeopleListResponse {
+  const PeopleListResponse({required this.people, this.statsTruncated = false});
+
+  final List<Person> people;
+  final bool statsTruncated;
+
+  static PeopleListResponse? fromResponse(http.Response response) {
+    if (response.statusCode != 200) return null;
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
       return Person.fromGenerated(
@@ -376,9 +377,20 @@ Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool inclu
     }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
-    return people;
+    return PeopleListResponse(people: people, statsTruncated: isOmiListTruncated(response));
   }
-  return null;
+}
+
+Future<PeopleListResponse?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
+  var response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  return PeopleListResponse.fromResponse(response);
 }
 
 @visibleForTesting
@@ -966,49 +978,20 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
 /// the entire JSON into memory. Returns the file path on success, null on failure.
-Future<String?> exportUserDataToFile(String filePath) async {
-  final file = File(filePath);
-  IOSink? sink;
-  try {
-    final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
-    if (response.statusCode != 200) {
-      Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
-      return null;
-    }
-    final downloadSink = file.openWrite();
-    sink = downloadSink;
-    var bytesWritten = 0;
-    await for (final chunk in response.stream) {
-      downloadSink.add(chunk);
-      bytesWritten += chunk.length;
-    }
-    await downloadSink.flush();
-    await downloadSink.close();
-    sink = null;
-    if (bytesWritten == 0) {
-      Logger.debug('exportUserDataToFile failed: empty response body');
-      if (await file.exists()) {
-        await file.delete();
-      }
-      return null;
-    }
-    return filePath;
-  } catch (e) {
-    Logger.debug('exportUserDataToFile error: $e');
-    final openSink = sink;
-    if (openSink != null) {
-      try {
-        await openSink.close();
-      } catch (_) {}
-    }
-    if (await file.exists()) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-    return null;
-  }
-}
+Future<String?> exportUserDataToFile(
+  String filePath, {
+  void Function(int bytesReceived)? onProgress,
+  Future<void>? abortTrigger,
+  AuthSessionSnapshot? authorizationSnapshot,
+  AuthService? authService,
+}) =>
+    export_user_data.exportUserDataToFile(
+      filePath,
+      onProgress: onProgress,
+      abortTrigger: abortTrigger,
+      authorizationSnapshot: authorizationSnapshot,
+      authService: authService,
+    );
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');

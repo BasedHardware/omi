@@ -292,6 +292,8 @@ class CaptureReplayWorld {
   /// through the injected job-status fetcher.
   final Map<String, SyncJobFetch> jobStatuses = {};
 
+  final List<Map<String, Object?>> coverageEvents = [];
+
   _ReplayCaptureController? _controller;
 
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
@@ -360,6 +362,7 @@ class CaptureReplayWorld {
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,
       phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
+      phoneCoverageTelemetry: coverageEvents.add,
     );
     wal.start();
     await wal.syncs.phone.walReady;

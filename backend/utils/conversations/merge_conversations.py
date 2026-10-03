@@ -32,6 +32,7 @@ from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.smart_merge_audit import record_survivor_deleted
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -460,6 +461,9 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 gap = max(0, (curr_started - prev_finished).total_seconds())
 
             offset = cumulative_offset + gap
+            origin = conversations[0].get("started_at")
+            if origin is not None and curr_started is not None:
+                offset = (curr_started - origin).total_seconds()
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
@@ -475,6 +479,9 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
+    # Origin-based offsets interleave overlapping sources; keep the transcript chronological
+    # (stable, so equal starts keep their source order).
+    merged.sort(key=lambda seg: seg.get("start") or 0)
     return merged
 
 
@@ -690,6 +697,7 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
         if source_id != conversation_id:
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
+    record_survivor_deleted(uid, conversation_id, row)
 
     folder_id = row.get('folder_id')
     if folder_id:

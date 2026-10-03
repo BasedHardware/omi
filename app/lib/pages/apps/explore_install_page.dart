@@ -457,7 +457,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             SizedBox(
                                               height: 44,
                                               child: SearchBar(
-                                                hintText: context.l10n.searchAppsPlaceholder,
+                                                hintText: context.l10n.searchApps,
                                                 leading: Padding(
                                                   padding: const EdgeInsets.only(left: OmiSpacing.xs),
                                                   child: Icon(Icons.search, color: OmiColors.textSecondary, size: 20),

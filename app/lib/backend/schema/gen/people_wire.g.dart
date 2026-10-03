@@ -20,7 +20,10 @@ class GeneratedPerson {
   final int speechSamplesVersion;
   final double? talkSeconds;
   final DateTime? updatedAt;
+  final String voiceLearningState;
+  final double? voiceNeededSeconds;
   final String voiceReadiness;
+  final double? voiceSpeechSeconds;
 
   const GeneratedPerson({
     this.autoConversationCount,
@@ -40,7 +43,10 @@ class GeneratedPerson {
     this.speechSamplesVersion = 3,
     this.talkSeconds,
     this.updatedAt,
+    this.voiceLearningState = "unknown",
+    this.voiceNeededSeconds,
     this.voiceReadiness = "unknown",
+    this.voiceSpeechSeconds,
   });
 
   factory GeneratedPerson.fromJson(Map<String, dynamic> json) {
@@ -62,7 +68,10 @@ class GeneratedPerson {
       speechSamplesVersion: _required(_readFieldValue<int>(_readField(json, const ["speech_samples_version"]), "speech_samples_version", _readInt, requiredField: false, nullable: false, defaultValue: 3), "speech_samples_version"),
       talkSeconds: _readFieldValue<double>(_readField(json, const ["talk_seconds"]), "talk_seconds", _readDouble, requiredField: false, nullable: true),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      voiceLearningState: _required(_readFieldValue<String>(_readField(json, const ["voice_learning_state"]), "voice_learning_state", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "voice_learning_state"),
+      voiceNeededSeconds: _readFieldValue<double>(_readField(json, const ["voice_needed_seconds"]), "voice_needed_seconds", _readDouble, requiredField: false, nullable: true),
       voiceReadiness: _required(_readFieldValue<String>(_readField(json, const ["voice_readiness"]), "voice_readiness", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "voice_readiness"),
+      voiceSpeechSeconds: _readFieldValue<double>(_readField(json, const ["voice_speech_seconds"]), "voice_speech_seconds", _readDouble, requiredField: false, nullable: true),
     );
   }
 
@@ -85,7 +94,10 @@ class GeneratedPerson {
       'speech_samples_version': speechSamplesVersion,
       'talk_seconds': talkSeconds,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'voice_learning_state': voiceLearningState,
+      'voice_needed_seconds': voiceNeededSeconds,
       'voice_readiness': voiceReadiness,
+      'voice_speech_seconds': voiceSpeechSeconds,
     };
   }
 }
@@ -110,6 +122,78 @@ class GeneratedPersonConfidenceReason {
     return {
       'code': code,
       'count': count,
+    };
+  }
+}
+
+class GeneratedVoiceMatch {
+  final double clipEnd;
+  final double clipStart;
+  final String conversationId;
+  final String matchLevel;
+  final List<String> segmentIds;
+  final int speakerId;
+  final DateTime startedAt;
+  final double talkSeconds;
+  final String title;
+
+  const GeneratedVoiceMatch({
+    required this.clipEnd,
+    required this.clipStart,
+    required this.conversationId,
+    required this.matchLevel,
+    required this.segmentIds,
+    required this.speakerId,
+    required this.startedAt,
+    required this.talkSeconds,
+    required this.title,
+  });
+
+  factory GeneratedVoiceMatch.fromJson(Map<String, dynamic> json) {
+    return GeneratedVoiceMatch(
+      clipEnd: _required(_readFieldValue<double>(_readField(json, const ["clip_end"]), "clip_end", _readDouble, requiredField: true, nullable: false), "clip_end"),
+      clipStart: _required(_readFieldValue<double>(_readField(json, const ["clip_start"]), "clip_start", _readDouble, requiredField: true, nullable: false), "clip_start"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      matchLevel: _required(_readFieldValue<String>(_readField(json, const ["match_level"]), "match_level", _readString, requiredField: true, nullable: false), "match_level"),
+      segmentIds: _required(_readFieldValue<List<String>>(_readField(json, const ["segment_ids"]), "segment_ids", _readStringList, requiredField: true, nullable: false), "segment_ids"),
+      speakerId: _required(_readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: true, nullable: false), "speaker_id"),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
+      talkSeconds: _required(_readFieldValue<double>(_readField(json, const ["talk_seconds"]), "talk_seconds", _readDouble, requiredField: true, nullable: false), "talk_seconds"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'clip_end': clipEnd,
+      'clip_start': clipStart,
+      'conversation_id': conversationId,
+      'match_level': matchLevel,
+      'segment_ids': segmentIds,
+      'speaker_id': speakerId,
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'talk_seconds': talkSeconds,
+      'title': title,
+    };
+  }
+}
+
+class GeneratedVoiceMatchesResponse {
+  final List<GeneratedVoiceMatch>? matches;
+
+  const GeneratedVoiceMatchesResponse({
+    this.matches,
+  });
+
+  factory GeneratedVoiceMatchesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedVoiceMatchesResponse(
+      matches: _readFieldValue<List<GeneratedVoiceMatch>>(_readField(json, const ["matches"]), "matches", (value) => _readObjectList(value, GeneratedVoiceMatch.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'matches': matches?.map((value) => value.toJson()).toList(),
     };
   }
 }

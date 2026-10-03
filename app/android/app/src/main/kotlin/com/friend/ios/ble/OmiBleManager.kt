@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * Pure GATT wrapper — scanning, characteristic ops, and command queue.
  * Connection lifecycle (connect, retry, reconnect) is owned by OmiBleForegroundService.
  * Uses a serialized command queue (Android allows one pending GATT operation at a time).
- * GATT callbacks arrive on binder threads; Pigeon calls are posted to mainHandler.
+ * Queue callbacks and CCCD operations run on mainHandler; audio callbacks stay on binder threads.
  */
 @SuppressLint("MissingPermission")
 class OmiBleManager private constructor(private val application: Application) {
@@ -73,6 +73,12 @@ class OmiBleManager private constructor(private val application: Application) {
 
         /** CCCD UUID for enabling/disabling notifications. */
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        /** Bounds an accepted CCCD write that never produces onDescriptorWrite. */
+        private const val CCCD_ACK_TIMEOUT_MS = 15000L
+        /** Two fresh links may repair CCCD state; then stop battery-draining retries until an ACK. */
+        internal const val CCCD_TIMEOUT_RECONNECT_BUDGET = 2
+        internal const val CCCD_TIMEOUT_STATUS = -2
     }
 
     // ── Listener for the foreground service ──
@@ -433,36 +439,79 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
-    fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String) {
-        val addr = address.uppercase()
-        val gatt = connectedGatts[addr] ?: return
-        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid) ?: return
+    internal val cccdReconnectPolicy = CccdReconnectPolicy(
+        budget = CCCD_TIMEOUT_RECONNECT_BUDGET,
+        loadTimeouts = { application.getSharedPreferences("cccd_recovery", Application.MODE_PRIVATE).getInt(it, 0) },
+        saveTimeouts = { address, count ->
+            application.getSharedPreferences("cccd_recovery", Application.MODE_PRIVATE)
+                .edit().putInt(address, count).commit()
+        },
+    )
 
-        val descriptor = characteristic.getDescriptor(CCCD_UUID)
-        enqueueCommand {
-            gatt.setCharacteristicNotification(characteristic, true)
-            if (descriptor != null) {
-                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-            } else {
-                completeCommand()
+    private val cccdWrites = CccdWriteCoordinator<BluetoothGatt, BluetoothGattDescriptor>(
+        isConnected = { connectedGatts[it.device.address.uppercase()] === it },
+        ownsCommand = { ownsCommand(it) },
+        scheduleTimeout = { mainHandler.postDelayed(it, CCCD_ACK_TIMEOUT_MS) },
+        cancelTimeout = { mainHandler.removeCallbacks(it) },
+        completeCommand = { completeCommand(it) },
+        retireConnection = { retireGatt(it) },
+        onAcknowledged = {
+            val addr = it.device.address.uppercase()
+            if (cccdReconnectPolicy.onAcknowledged(addr)) flutterApi?.onCaptureHealth(addr, "null") {}
+        },
+    )
+
+    fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String,
+                                completion: (Result<Unit>) -> Unit = {}) {
+        mainHandler.post {
+            try {
+                enqueueDescriptorWrite(address, serviceUuid, characteristicUuid, true, completion)
+            } catch (e: Exception) {
+                completion(Result.failure(e))
             }
         }
     }
 
     fun unsubscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String) {
-        val addr = address.uppercase()
-        val gatt = connectedGatts[addr] ?: return
-        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid) ?: return
-
-        val descriptor = characteristic.getDescriptor(CCCD_UUID)
-        enqueueCommand {
-            gatt.setCharacteristicNotification(characteristic, false)
-            if (descriptor != null) {
-                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
-            } else {
-                completeCommand()
+        mainHandler.post {
+            try {
+                enqueueDescriptorWrite(address, serviceUuid, characteristicUuid, false) {}
+            } catch (e: Exception) {
+                Log.w(TAG, "Notification disable failed: ${e.message}")
             }
         }
+    }
+
+    private fun enqueueDescriptorWrite(address: String, serviceUuid: String, characteristicUuid: String,
+                                       enabled: Boolean, completion: (Result<Unit>) -> Unit) {
+        val gatt = connectedGatts[address.uppercase()]
+        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid)
+        val descriptor = characteristic?.getDescriptor(CCCD_UUID)
+        if (gatt == null || characteristic == null || descriptor == null) {
+            completion(Result.failure(IllegalStateException("Notification characteristic or CCCD not found")))
+            return
+        }
+        lateinit var write: CccdWriteCoordinator.Write<BluetoothGatt, BluetoothGattDescriptor>
+        val command = Runnable {
+            cccdWrites.start(write) {
+                gatt.setCharacteristicNotification(characteristic, enabled) &&
+                    writeDescriptorCompat(gatt, descriptor, if (enabled)
+                        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+            }
+        }
+        write = cccdWrites.register(gatt, descriptor, command, completion)
+        enqueueCommand(command)
+    }
+
+    private fun retireGatt(gatt: BluetoothGatt) {
+        val addr = gatt.device.address.uppercase()
+        if (!connectedGatts.remove(addr, gatt)) return
+        Log.w(TAG, "CCCD ACK timed out for $addr; retiring GATT")
+        cleanupPeripheral(addr)
+        try { gatt.disconnect() } catch (e: Exception) { Log.w(TAG, "GATT disconnect failed: ${e.message}") }
+        try { gatt.close() } catch (e: Exception) { Log.w(TAG, "GATT close failed: ${e.message}") }
+        // The managed service retains reconnect policy, including user-disconnect guards.
+        connectionListener?.onGattDisconnected(addr, gatt.hashCode(), CCCD_TIMEOUT_STATUS)
     }
 
     // ── RSSI keep-alive ──
@@ -534,15 +583,31 @@ class OmiBleManager private constructor(private val application: Application) {
         val cmd = gattQueue.peek() ?: return
         isProcessingCommand = true
         try {
-            mainHandler.post(cmd)
+            mainHandler.post {
+                if (ownsCommand(cmd)) cmd.run()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error posting command: ${e.message}")
-            completeCommand()
+            completeCommand(cmd)
         }
     }
 
     @Synchronized
+    private fun ownsCommand(command: Runnable): Boolean =
+        isProcessingCommand && gattQueue.peek() === command
+
+    @Synchronized
+    private fun completeCommand(command: Runnable) {
+        if (ownsCommand(command)) advanceCommand()
+    }
+
+    @Synchronized
     fun completeCommand() {
+        // An unrelated characteristic/MTU callback cannot release a CCCD owner.
+        if (!cccdWrites.tracksCommand(gattQueue.peek())) advanceCommand()
+    }
+
+    private fun advanceCommand() {
         gattQueue.poll()
         isProcessingCommand = false
         processNextCommand()
@@ -554,7 +619,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     @Suppress("deprecation")
-    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
+    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray): Boolean {
         val success = if (Build.VERSION.SDK_INT >= 33) {
             gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
         } else {
@@ -563,11 +628,14 @@ class OmiBleManager private constructor(private val application: Application) {
         }
         if (!success) {
             Log.e(TAG, "writeDescriptor failed for ${descriptor.uuid}")
-            completeCommand()
         }
+        return success
     }
 
     fun cleanupPeripheral(address: String) {
+        // Clear ownership before callbacks can enqueue work for a replacement link.
+        gattQueue.clear()
+        isProcessingCommand = false
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
@@ -584,8 +652,7 @@ class OmiBleManager private constructor(private val application: Application) {
             writeCompletions.remove(key)?.invoke(Result.failure(Exception("Peripheral disconnected")))
         }
 
-        gattQueue.clear()
-        isProcessingCommand = false
+        cccdWrites.failAll(Exception("Peripheral disconnected"))
     }
 
     // ── Battery history ──
@@ -625,9 +692,16 @@ class OmiBleManager private constructor(private val application: Application) {
 
     // ── GATT callback factory ──
 
+    private fun dispatchGattCallback(gatt: BluetoothGatt, callback: () -> Unit) {
+        mainHandler.post {
+            if (connectedGatts[gatt.device.address.uppercase()] !== gatt) return@post
+            callback()
+        }
+    }
+
     private fun createGattCallback() = object : BluetoothGattCallback() {
 
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) = dispatchGattCallback(gatt) {
             val address = gatt.device.address.uppercase()
             Log.i(TAG, "onConnectionStateChange: address=$address, status=$status, newState=$newState")
 
@@ -657,7 +731,7 @@ class OmiBleManager private constructor(private val application: Application) {
             }
         }
 
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) = dispatchGattCallback(gatt) {
             val address = gatt.device.address.uppercase()
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "MTU request failed for $address (status=$status)")
@@ -670,13 +744,13 @@ class OmiBleManager private constructor(private val application: Application) {
             connectionListener?.onMtuChanged(address, mtu, status)
         }
 
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) = dispatchGattCallback(gatt) {
             val address = gatt.device.address.uppercase()
 
             if (servicesDiscoveredFor.contains(address)) {
                 Log.i(TAG, "Ignoring duplicate onServicesDiscovered for $address")
                 completeCommand()
-                return
+                return@dispatchGattCallback
             }
 
             Log.i(TAG, "Services discovered for $address (status=$status)")
@@ -684,12 +758,12 @@ class OmiBleManager private constructor(private val application: Application) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Service discovery failed for $address (status=$status)")
                 completeCommand()
-                return
+                return@dispatchGattCallback
             }
 
             val services = gatt.services ?: run {
                 completeCommand()
-                return
+                return@dispatchGattCallback
             }
             val bleServices = services.map { svc ->
                 BleService(
@@ -710,6 +784,7 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            if (connectedGatts[gatt.device.address.uppercase()] !== gatt) return
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
@@ -721,6 +796,7 @@ class OmiBleManager private constructor(private val application: Application) {
             characteristicValueListener?.onCharacteristicValue(address, serviceUuid, charUuid, value.copyOf())
             if (isFlutterAlive) {
                 mainHandler.post {
+                    if (connectedGatts[gatt.device.address.uppercase()] !== gatt) return@post
                     flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
                 }
             }
@@ -732,7 +808,7 @@ class OmiBleManager private constructor(private val application: Application) {
             onCharacteristicChanged(gatt, characteristic, characteristic.value ?: return)
         }
 
-        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) = dispatchGattCallback(gatt) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
@@ -754,7 +830,7 @@ class OmiBleManager private constructor(private val application: Application) {
             onCharacteristicRead(gatt, characteristic, characteristic.value ?: ByteArray(0), status)
         }
 
-        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) = dispatchGattCallback(gatt) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
@@ -770,14 +846,14 @@ class OmiBleManager private constructor(private val application: Application) {
             completeCommand()
         }
 
-        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.e(TAG, "Descriptor write failed (status=$status) for ${descriptor.characteristic.uuid}")
-            }
-            completeCommand()
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) = dispatchGattCallback(gatt) {
+            cccdWrites.onDescriptorWrite(gatt, descriptor,
+                if (status == BluetoothGatt.GATT_SUCCESS) Result.success(Unit)
+                else Result.failure(IllegalStateException("CCCD write failed: $status")))
         }
 
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (connectedGatts[gatt.device.address.uppercase()] !== gatt) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.w(TAG, "RSSI read failed: status=$status for ${gatt.device.address}")
                 return

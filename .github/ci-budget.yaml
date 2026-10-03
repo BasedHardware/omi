@@ -201,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 66,
+      "expected_runs_per_day": 73,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 72 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -219,7 +219,7 @@
       "budget_p50_minutes": 9,
       "display_name": "Backend unit shard ${{ matrix.shard }}/4",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 108,
+      "expected_runs_per_day": 119,
       "if": null,
       "matrix": {
         "shard": [
@@ -232,7 +232,7 @@
       "matrix_size": 4,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 118 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -244,7 +244,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 106,
+      "expected_runs_per_day": 117,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -254,7 +254,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -266,13 +266,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 108,
+      "expected_runs_per_day": 119,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily label read until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -489,13 +489,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -507,13 +507,13 @@
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -525,13 +525,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2350,7 +2350,7 @@
       "runs_on": "windows-latest"
     },
     "release-eligibility.yml/release-eligibility": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "Release Eligibility",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2359,7 +2359,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2404,7 +2404,7 @@
       "runs_on": "ubuntu-latest"
     },
     "repo-checks.yml/hygiene": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 5,
       "display_name": "Hygiene",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 210,
@@ -2413,7 +2413,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2759,7 +2759,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run is budgeted conservatively",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2773,6 +2773,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2804,6 +2805,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2827,6 +2829,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2858,6 +2861,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2947,7 +2951,7 @@
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -2955,7 +2959,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         },
         "push": {
@@ -2964,7 +2969,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         }
       }

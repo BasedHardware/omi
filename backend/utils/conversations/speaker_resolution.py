@@ -31,12 +31,12 @@ import database.conversations as conversations_db
 import database.users as users_db
 from models.conversation import Conversation, ConversationSpeakers
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
-from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES
 from utils.observability.fallback import record_fallback
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.other.storage import (
     download_speaker_embedding_cache,
-    iter_audio_chunk_pcm,
     upload_speaker_embedding_cache,
 )
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
@@ -50,6 +50,7 @@ from utils.stt.conversation_speakers import (
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,15 @@ def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
         prints[OWNER_IDENTITY] = np.asarray(owner, dtype=np.float32)
+    # Owner recognition is plan-independent: an entitlement read failure fails
+    # closed for person prints only, never for the owner's own voiceprint.
+    try:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    except Exception as error:
+        logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        return prints
+    if not named_allowed:
+        return prints
     for person in users_db.get_people(uid) or []:
         embedding = usable_person_voiceprint(person)
         if embedding and person.get('id'):
@@ -154,6 +164,8 @@ def _manual_speakers(receipt: Mapping[str, Any]) -> Dict[int, Identity]:
             speakers[speaker_id] = Identity(is_user=False, person_id=str(entry['person_id']))
         else:
             speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
+    for speaker_id in manual_rejected_speakers(receipt):
+        speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
     return speakers
 
 
@@ -306,6 +318,7 @@ def apply_speaker_resolution(
                 SpeakerIdentityStatus.user if identity.is_user else SpeakerIdentityStatus.not_user
             )
             segment.speaker_match_source = MATCH_SOURCE
+            segment.speaker_label_source = 'auto'
         elif new_id in identity_statuses:
             if (
                 identity_statuses[new_id] == SpeakerIdentityStatus.unknown
@@ -321,6 +334,41 @@ def apply_speaker_resolution(
             segment.person_id = None
             segment.speaker_identity_status = identity_statuses[new_id]
             segment.speaker_match_source = MATCH_SOURCE
+            segment.speaker_label_source = None
+
+
+_IDENTITY_FIELDS = (
+    'id',
+    'speaker_id',
+    'speaker_id_scope',
+    'is_user',
+    'person_id',
+    'speaker_identity_status',
+    'speaker_match_source',
+    'speaker_label_source',
+)
+
+
+def _apply_receipt_overlay(conversation: Conversation, receipt: Mapping[str, Any]) -> bool:
+    """Replay the receipt onto the in-memory transcript; returns whether it bit."""
+    current = [
+        {field: getattr(segment, field) for field in _IDENTITY_FIELDS} for segment in conversation.transcript_segments
+    ]
+    speakers = receipt.get('speakers') or {}
+    overrides = receipt.get('segments') or {}
+    rejected = set(manual_rejected_speakers(receipt))
+    matched = any(
+        segment['id'] in overrides or str(segment['speaker_id']) in speakers or segment['speaker_id'] in rejected
+        for segment in current
+    )
+    labeled_segments = apply_manual_assignments(current, dict(receipt))
+    for segment, labeled in zip(conversation.transcript_segments, labeled_segments):
+        segment.is_user = labeled['is_user']
+        segment.person_id = labeled['person_id']
+        segment.speaker_identity_status = labeled['speaker_identity_status']
+        segment.speaker_match_source = labeled['speaker_match_source']
+        segment.speaker_label_source = labeled['speaker_label_source']
+    return matched
 
 
 def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
@@ -334,6 +382,14 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
     try:
         receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
         receipt_read = True
+        if receipt.get('speakers') or receipt.get('segments'):
+            try:
+                _apply_receipt_overlay(conversation, receipt)
+            except Exception as error:
+                logger.warning(
+                    'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
+                    type(error).__name__,
+                )
         if resolution_enabled():
             _resolve(uid, conversation, receipt=receipt, deadline=began + _budget_seconds())
     except Exception as error:
@@ -359,30 +415,7 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
         # fragments; apply the same authority to the in-memory transcript.
         if receipt_read and (receipt.get('speakers') or receipt.get('segments')):
             try:
-                identity_fields = (
-                    'id',
-                    'speaker_id',
-                    'is_user',
-                    'person_id',
-                    'speaker_identity_status',
-                    'speaker_match_source',
-                )
-                current = [
-                    {field: getattr(segment, field) for field in identity_fields}
-                    for segment in conversation.transcript_segments
-                ]
-                speakers = receipt.get('speakers') or {}
-                overrides = receipt.get('segments') or {}
-                matched = any(
-                    segment['id'] in overrides or str(segment['speaker_id']) in speakers for segment in current
-                )
-                labeled_segments = apply_manual_assignments(current, dict(receipt))
-                for segment, labeled in zip(conversation.transcript_segments, labeled_segments):
-                    segment.is_user = labeled['is_user']
-                    segment.person_id = labeled['person_id']
-                    segment.speaker_identity_status = labeled['speaker_identity_status']
-                    segment.speaker_match_source = labeled['speaker_match_source']
-                receipt_applied = matched
+                receipt_applied = _apply_receipt_overlay(conversation, receipt)
             except Exception as error:
                 logger.warning(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',

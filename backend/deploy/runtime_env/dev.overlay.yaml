@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -142,6 +145,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -428,6 +434,9 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:

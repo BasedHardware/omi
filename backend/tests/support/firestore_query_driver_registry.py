@@ -20,6 +20,7 @@ from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
     FROZEN_TODAY,
     SHAPE_UID,
+    CallerProfile,
     CoveredByEntry,
     DriverEntry,
     SkipEntry,
@@ -28,7 +29,14 @@ from tests.support.firestore_query_drivers import (
     ref_document,
     ref_transaction,
 )
-from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
+from tests.support.firestore_conversation_profiles import (
+    COUNT_PROFILES,
+    PHOTO_PROFILES,
+    RECIPE_PROFILES,
+    SCAN_PROFILES,
+    WITHOUT_PHOTOS_PROFILES,
+)
+from tests.support import firestore_outside_query_drivers as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -44,6 +52,7 @@ from models.task_recommendation import (
 )
 from models.workstream import TaskGoalLinkImportRequest
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
+from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
 
 UID = SHAPE_UID
@@ -67,6 +76,25 @@ def _seed(path: str, data: dict):
         client.documents[path] = dict(data)
 
     return apply
+
+
+def _queue_conversation_scan_pages(client, combo, trial):
+    """One full batch page then an empty one, forcing a ``start_after`` cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
+    client.queue_results([])
+
+
+def _queue_conversation_scan_page(client, combo, trial):
+    """One short page: the recipe batches (50/100) end the scan without a cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
 
 
 def _redis_noop(dotted: str):
@@ -428,8 +456,14 @@ _add(
     DriverEntry(
         'database.candidates.list_candidates',
         base={'uid': UID},
-        domains={'status': [None] + list(CandidateStatus), 'account_generation': [None, 1]},
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        profiles=(
+            CallerProfile(
+                'candidate-list',
+                {'status': [None] + list(CandidateStatus), 'account_generation': [0, 1]},
+            ),
+            CallerProfile('candidate-suggested', {'status': [None], 'account_generation': [0, 1]}),
+        ),
     )
 )
 
@@ -697,6 +731,65 @@ _add(
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
     )
 )
+_add(
+    DriverEntry(
+        'database.conversation_scan.iter_conversations',
+        base={'uid': UID},
+        profiles=SCAN_PROFILES,
+        neutrals={
+            'limit': (1000, 'visible-row work bound; fixed, not filter-affecting'),
+            'batch': (1, 'page size; fixed small so one queued row forces a cursor page'),
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_pages,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.people_stats_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[0],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.speaker_browse_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[1],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
 
 _add(
     CoveredByEntry(
@@ -826,6 +919,16 @@ _add(
         'database.dev_api_key.get_user_and_scopes_by_api_key',
         base={'api_key': _DEV_KEY},
         patchers=(_stub('database.redis_db.read_cached_dev_api_key_data', _CACHE_MISS),),
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.dev_api_key._get_api_key_auth_result',
+        covered_by=(
+            'database.dev_api_key.get_api_key_auth_result',
+            'database.dev_api_key.get_user_and_scopes_by_api_key',
+        ),
+        reason='hashed-key lookup shared by the public auth entry points; the revocation fence retries through it',
     )
 )
 _add(
@@ -1259,6 +1362,14 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.mcp_api_key._get_api_key_auth_result',
+        base={'hashed_key': 'a' * 64},
+        domains={'cache_available': [True, False]},
+        patchers=(_stub('database.redis_db.read_cached_mcp_api_key_auth_context', _CACHE_MISS),),
+    )
+)
+_add(
     CoveredByEntry(
         'database.mcp_auth_read.mcp_auth_stream',
         covered_by=(
@@ -1444,14 +1555,30 @@ _add(
     DriverEntry(
         'database.memories.get_memories',
         base={'uid': UID},
-        domains={
-            'categories': [[], ['one'], ['one', 'two']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'include_invalidated': [False, True],
-            'sort': ['scoring_desc', 'updated_desc', 'updated_at_desc', 'updated_or_created_desc'],
-        },
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        profiles=(
+            CallerProfile(
+                'legacy-scoring',
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                    'sort': ['scoring_desc'],
+                },
+            ),
+            CallerProfile(
+                'exploratory-updated-sorts',
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                    'sort': ['updated_desc', 'updated_at_desc', 'updated_or_created_desc'],
+                },
+                serving=False,
+            ),
+        ),
     )
 )
 _add(DriverEntry('database.memories.get_memories_to_migrate', base={'uid': UID, 'target_level': 'level-2'}))
@@ -1471,13 +1598,13 @@ _add(
     DriverEntry(
         'database.memories.list_memory_updated_or_created_index',
         base={'uid': UID},
-        domains={
-            'categories': [[], ['one'], ['one', 'two']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'include_invalidated': [False, True],
-        },
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        profiles=(
+            CallerProfile(
+                'historical-dual-window',
+                {'categories': [[]], 'start_date': [None], 'end_date': [None], 'include_invalidated': [False]},
+            ),
+        ),
     )
 )
 _add(
@@ -1592,8 +1719,8 @@ _add(
     DriverEntry(
         'database.memory_vector_repair_outbox_worker.lease_vector_repair_purge_outbox_records',
         base={'uid': UID, 'worker_id': 'worker-1'},
-        domains={'now': [None, T0]},
         neutrals={'limit': (25, 'lease bound; fixed'), 'lease_seconds': (300, 'lease ttl; payload')},
+        profiles=(CallerProfile('unwired-vector-repair-pending-and-expired', {'now': [None, T0]}, serving=False),),
     )
 )
 _add(
@@ -1606,7 +1733,7 @@ _add(
             'vector_deleter': noop,
             'vector_repairer': noop,
         },
-        domains={'now': [None, T0]},
+        profiles=(CallerProfile('unwired-vector-repair-pending-and-expired', {'now': [None, T0]}, serving=False),),
         neutrals={
             'telemetry_emitter': (None, 'optional telemetry callback; not filter-affecting'),
             'telemetry_config': (None, 'optional telemetry config; not filter-affecting'),
@@ -1629,17 +1756,22 @@ _add(
 
 
 def _seed_daily_summary_recipient(client, combo, trial):
-    """Queue one recipient so the per-user ``fcm_tokens`` stream executes.
-
-    The consume-once queues feed the recipients query (one matched user, whose
-    ``fcm_token`` legacy field doubles as the non-subcollection token source)
-    and then the nested ``users/{uid}/fcm_tokens`` stream.
-    """
+    """Queue a due owner; tokens are now resolved after generation guards."""
     client.queue_results([client.snapshot(f'users/{UID}', {'fcm_token': 'legacy-1'})])
+
+
+def _seed_notification_recipient_with_tokens(client, combo, trial):
+    _seed_daily_summary_recipient(client, combo, trial)
     client.queue_results([])
 
 
-_add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.notifications.get_all_tokens',
+        base={'uid': UID},
+        domains={'user_document_loaded': [False, True], 'legacy_token': [None, 'legacy-1']},
+    )
+)
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',
@@ -1651,14 +1783,14 @@ _add(
     DriverEntry(
         'database.notifications.get_users_id_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(
     DriverEntry(
         'database.notifications.get_users_token_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(DriverEntry('database.notifications.remove_bulk_tokens', base={'tokens': ['token-1', 'token-2']}))
@@ -2288,5 +2420,32 @@ _add(
         covered_by=('database.conversation_terminal_title.dead_letter_conversation_updates',),
         reason='photo-description probe streams the photos subcollection inside the caller transaction '
         'when a retryable failure row has no transcript text',
+    )
+)
+
+for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+    _add(entry)
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.task_refs',
+        base={'user': ref_document(f'users/{UID}'), 'conversation_id': 'conv-1', 'transaction': ref_transaction()},
+    )
+)
+
+
+def _refresh_seed(client, combo, trial):
+    client.documents[f'users/{UID}/conversations/conv-1'] = {'id': 'conv-1'}
+    client.documents[f'users/{UID}/conversations/donor-1'] = {'deleted': True, 'smart_merge': {'survivor_id': 'conv-1'}}
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.reconcile',
+        base={'uid': UID, 'conversation_id': 'conv-1', 'items': [], 'expected_revision': None},
+        domains={'donor_id': [None, 'donor-1']},
+        setup=_refresh_seed,
+        patchers=(_redis_noop('database.action_item_refresh.bump_action_items_list_version'),),
     )
 )
