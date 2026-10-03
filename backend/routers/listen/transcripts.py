@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 import uuid
 from collections import deque
@@ -27,12 +28,17 @@ from models.message_event import (
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
-from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, Translation
+from models.transcript_segment import (
+    SpeakerIdentityStatus,
+    TranscriptSegment,
+    Translation,
+    transcript_segment_for_client,
+)
 from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.conversations.factory import deserialize_conversation
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
+from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL, OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -452,6 +458,19 @@ class TranscriptProcessor:
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
+            if not getattr(self.host.state, 'capture_timeline_v2', False):
+                source_windows = {s.id: s.audio_capture_start for s in targets}
+                for sid in written.updated_ids:
+                    segment = by_id[sid]
+                    known = segment.audio_capture_start is not None and segment.audio_capture_end is not None
+                    reason = (
+                        'known_window'
+                        if known
+                        else ('merge_unavailable' if source_windows.get(sid) is not None else 'missing_window')
+                    )
+                    OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL.labels(
+                        outcome='persisted' if known else 'unavailable', reason=reason
+                    ).inc()
             conversation.transcript_segments = list(by_id.values())
             updated = [s for sid, s in by_id.items() if sid in written.updated_ids or speaker_dirty]
             removed = written.removed_ids
@@ -680,7 +699,9 @@ class TranscriptProcessor:
         still owes the session its final speaker-assignment flush.
         """
         try:
-            await self.host.request.websocket.send_json(client_segments)
+            await self.host.request.websocket.send_json(
+                [transcript_segment_for_client(segment) for segment in client_segments]
+            )
             return True
         except WebSocketDisconnect:
             self.host.state.active = False
@@ -707,12 +728,12 @@ class TranscriptProcessor:
         if delivered and client_segments:
             self.host.complete_live_transcription()
         if self.host.transcript_send is not None and self.host.user_has_credits:
-            self.host.transcript_send([segment.model_dump() for segment in new_segments])
+            self.host.transcript_send([transcript_segment_for_client(segment.model_dump()) for segment in new_segments])
         elif not self.host.pusher_enabled and self.host.user_has_credits:
             try:
                 await trigger_realtime_integrations(
                     self.host.request.uid,
-                    [segment.model_dump() for segment in new_segments],
+                    [transcript_segment_for_client(segment.model_dump()) for segment in new_segments],
                     conversation_id,
                     source=self.host.request.source,
                     client_kind=self.host.client_kind,
@@ -720,7 +741,9 @@ class TranscriptProcessor:
             except Exception as error:
                 logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
         if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
-            self.host.onboarding_handler.on_segments_received([segment.model_dump() for segment in new_segments])
+            self.host.onboarding_handler.on_segments_received(
+                [transcript_segment_for_client(segment.model_dump()) for segment in new_segments]
+            )
         await self._translate(updated, conversation.id, removed)
 
     def _requeue_legacy_persist(self, segments, photos) -> None:
@@ -834,10 +857,15 @@ class TranscriptProcessor:
             # time at zero.
             capture_windows: Dict[str, Tuple[float, float]] = {}
             for raw in raw_segments:
+                raw.pop('audio_capture_start', None)
+                raw.pop('audio_capture_end', None)
                 abs_start = raw.pop('_capture_abs_start', None)
                 abs_end = raw.pop('_capture_abs_end', None)
                 if abs_start is not None and abs_end is not None:
                     capture_windows[cast(str, raw.get('id'))] = (float(abs_start), float(abs_end))
+                    if math.isfinite(float(abs_start)) and math.isfinite(float(abs_end)) and abs_end > abs_start:
+                        raw['audio_capture_start'] = float(abs_start)
+                        raw['audio_capture_end'] = float(abs_end)
             missing_capture_windows = any(raw.get('_capture_window_unavailable') for raw in raw_segments)
             data = await self.cache.get(self.host.state.current_conversation_id)
             if not data:

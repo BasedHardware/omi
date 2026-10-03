@@ -489,6 +489,7 @@ async def test_synthetic_direct_proxy_call_lands_in_the_per_uid_per_feature_quer
 async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, ledger_client) -> None:
     """Attempt 1 (PT reservation) comes back full, attempt 2 (shared capacity) succeeds: two rows, one invocation."""
     statuses = iter([429, 200])
+    routed = []
 
     class Client:
         async def post(self, url, *, params, content, headers):
@@ -515,7 +516,16 @@ async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, 
             )
 
     async def route(path, model, _action, _query, request_type=None):
-        return desktop_proxy.UpstreamRoute('https://provider.invalid', {}, {}, 'vertex_ai', 'adc', 'us-central1')
+        capacity = request_type or 'dedicated'
+        routed.append((model, capacity))
+        return desktop_proxy.UpstreamRoute(
+            'https://provider.invalid',
+            {desktop_proxy.ptr.REQUEST_TYPE_HEADER: capacity},
+            {},
+            'vertex_ai',
+            'adc',
+            'us-central1',
+        )
 
     async def meter(_uid, path, _model, _action):
         return path
@@ -525,7 +535,6 @@ async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, 
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_proxy, '_meter_server_request', meter)
     monkeypatch.setattr(desktop_proxy, '_upstream', route)
-    monkeypatch.setattr(desktop_proxy, '_recovery_plan', lambda *_args, **_kwargs: [('gemini-2.5-flash', 'shared')])
     monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_client', lambda: Client())
     monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
     monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: False)
@@ -534,6 +543,7 @@ async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, 
     await ledger.drain_pending_writes()
 
     assert response.status_code == 200
+    assert routed == [('gemini-2.5-flash', 'dedicated'), ('gemini-3.1-flash-lite', 'shared')]
     rows = sorted(ledger_client.spend_rows(uid=UID, feature='desktop_proactivity'), key=lambda r: r['retry_ordinal'])
     assert [(r['retry_ordinal'], r['outcome'], r['error_class'], r['fallback_reason']) for r in rows] == [
         (1, 'error', 'provider_capacity', None),
@@ -989,3 +999,11 @@ async def test_two_open_responses_at_disconnect_are_two_distinct_rows(monkeypatc
         ('1', 'resp_a', 'cancelled'),
         ('2', 'resp_b', 'cancelled'),
     ]
+
+
+@pytest.fixture(autouse=True)
+def held_discovery_leases_for_request_matrix(monkeypatch):
+    """Keep synthetic discovery separate from customer-attempt/accounting fixtures."""
+    from utils.llm import vertex_reservation_state
+
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
