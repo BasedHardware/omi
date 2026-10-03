@@ -147,9 +147,18 @@
             ]
           },
           {
+            "group": "Goals and Answers",
+            "pages": [
+              "doc/developer/api/goals",
+              "doc/developer/api/ask",
+              "doc/developer/api/daily-summaries"
+            ]
+          },
+          {
             "group": "Authentication",
             "pages": [
               "doc/developer/api/keys",
+              "api-reference/endpoint/keys/current",
               "api-reference/endpoint/keys/list",
               "api-reference/endpoint/keys/create",
               "api-reference/endpoint/keys/revoke"
