@@ -2375,6 +2375,7 @@ _add(
     DriverEntry(
         'database.sync_recording_lineage.get_recording_generations',
         base={'uid': UID, 'origin_id': 'recording-1', 'started_before': T1, 'finished_after': T0},
+        domains={'include_capture_evidence': [False, True]},
         neutrals={'limit': _LIMIT},
     )
 )
@@ -2382,6 +2383,7 @@ _add(
     DriverEntry(
         'database.sync_recording_lineage.get_origin_generation',
         base={'uid': UID, 'origin_id': 'recording-1'},
+        domains={'include_capture_evidence': [False, True]},
         neutrals={'limit': _LIMIT},
     )
 )
