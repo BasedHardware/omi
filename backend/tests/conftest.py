@@ -105,8 +105,13 @@ def pytest_sessionstart(session):
     _firestore_construction_attempts.clear()
     _xdist_firestore_construction_attempts.clear()
     if not any('integration' in Path(str(arg)).parts for arg in session.config.args):
-        _firestore_constructor_guard.setattr(_GenuineFirestoreClient, '__init__', _deny_firestore_client)
-        _firestore_constructor_guard.setattr(_GenuineAsyncFirestoreClient, '__init__', _deny_firestore_client)
+        # Emulator suites (the listen/pusher and sync stack gauntlets) start a real local
+        # Firestore emulator and point the SDK at it; their clients never reach the cloud.
+        # 127.0.0.1:1 is the offline sentinel used by plain unit runs, not an emulator.
+        emulator = os.environ.get('FIRESTORE_EMULATOR_HOST', '').strip()
+        if not emulator or emulator == '127.0.0.1:1':
+            _firestore_constructor_guard.setattr(_GenuineFirestoreClient, '__init__', _deny_firestore_client)
+            _firestore_constructor_guard.setattr(_GenuineAsyncFirestoreClient, '__init__', _deny_firestore_client)
     session.config._backend_test_start_time = time.perf_counter()
 
 
