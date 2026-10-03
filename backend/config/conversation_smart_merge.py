@@ -32,6 +32,9 @@ from enum import Enum
 
 SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
 SMART_MERGE_UID_ALLOWLIST_ENV = 'CONVERSATION_SMART_MERGE_UID_ALLOWLIST'
+SMART_MERGE_AUDIT_ENV = 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'
+SMART_MERGE_FLATTEN_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'
+_ON = frozenset({'true', 'on', '1', 'yes'})
 
 
 class SmartMergeMode(str, Enum):
@@ -62,6 +65,29 @@ def smart_merge_uid_allowed(uid: str) -> bool:
     """An empty allowlist admits every user; a non-empty one admits only its members."""
     allowlist = {item.strip() for item in os.getenv(SMART_MERGE_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
     return not allowlist or uid in allowlist
+
+
+def smart_merge_audit_enabled() -> bool:
+    """Unset or blank is on; only an explicit on-value keeps it on, anything else is off.
+
+    Off restores the pre-audit absorb exactly (no gate read, no audit write). A
+    typo in the kill switch therefore turns the audit off, never the merge.
+    """
+    raw = os.getenv(SMART_MERGE_AUDIT_ENV, '').strip().lower()
+    return not raw or raw in _ON
+
+
+def smart_merge_flatten_enabled() -> bool:
+    """Unset or blank is on; only an explicit on-value keeps it on, anything else is off.
+
+    Off restores the pre-flatten absorb exactly: a donor carrying sync bridge
+    ancestry is ineligible again, no ancestor is read or re-pointed, and the
+    survivor/donor payloads keep their old shape. A typo therefore disables
+    flattening, never the merge. A committed flatten still finishes cleanup
+    after the flag is turned off: completing queued work is not new permission.
+    """
+    raw = os.getenv(SMART_MERGE_FLATTEN_ENV, '').strip().lower()
+    return not raw or raw in _ON
 
 
 # Sources the benchmark measured. Pendant pairs were 113 of 138; desktop recall

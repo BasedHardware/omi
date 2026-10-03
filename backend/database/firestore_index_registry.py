@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from .firestore_query_types import (
+    FieldIndexRequirement,
     FirestoreIndexField,
     FirestoreIndexRequirement,
     FirestoreQueryFilter,
@@ -33,6 +34,59 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    # I024: database.conversations.get_conversations_count; macOS
+    # LiveConversationRemoteDataSource.count builds folder + starred + day bounds
+    # on GET /v1/conversations/count. Reachability report 871737adf7e87104.
+    FirestoreIndexRequirement(
+        'conversations_discarded_folder_starred_status_created_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('starred'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # ADMIN-MESSAGES: web/admin/app/api/omi/stats/notifications/route.ts collectionGroup(messages)
+    # query for app_id + created_at bounds; GET /api/omi/stats/notifications.
+    # Reachability report 871737adf7e87104 (694 prod errors in September).
+    FirestoreIndexRequirement(
+        'admin_messages_app_created_at',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('app_id'), _asc('created_at'), _asc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=true.
+    # Reachability report 871737adf7e87104, suggestion I001.
+    FirestoreIndexRequirement(
+        'advice_category_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I002.
+    FirestoreIndexRequirement(
+        'advice_category_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, no category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I003.
+    FirestoreIndexRequirement(
+        'advice_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # I070 is declared by PR H as conversations (folder_id ASC, created_at DESC, __name__ DESC).
+    # database.folders.get_conversations_in_folder uses the identical COLLECTION index.
+    # Reachability report 871737adf7e87104, suggestion I070.
+    # database.frame_requests.enqueue_frame_request first transactional query via
+    # POST /v1/frame-requests. Reachability report 871737adf7e87104, suggestion I141.
+    FirestoreIndexRequirement(
+        'frame_requests_enqueue_dedupe_attempt',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'sync_backfill_pending_uid_sort',
         'sync_backfill_pending',
@@ -1976,6 +2030,55 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'live_transcript_replay_receipt'),
 )
 
+FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+    FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'fair_use_events_case_ref_group_both', 'fair_use_events', 'case_ref', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement(
+        'fcm_tokens_app_version_group_both', 'fcm_tokens', 'app_version', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement('fcm_tokens_token_group_ascending', 'fcm_tokens', 'token', ('ASCENDING',)),
+    FieldIndexRequirement('llm_usage_date_group_ascending', 'llm_usage', 'date', ('ASCENDING',)),
+    FieldIndexRequirement('memories_tags_group_contains', 'memories', 'tags', ('CONTAINS',)),
+    FieldIndexRequirement(
+        'processing_memories_created_at_group_ascending', 'processing_memories', 'created_at', ('ASCENDING',)
+    ),
+    FieldIndexRequirement(
+        'candidate_integration_outbox_status_group_ascending',
+        'candidate_integration_outbox',
+        'status',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_dead_letters_created_at_group_ascending',
+        'chat_first_dead_letters',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_created_at_group_ascending',
+        'chat_first_proactive_intents',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_delivery_state_group_ascending',
+        'chat_first_proactive_intents',
+        'delivery_state',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
+    ),
+)
+
+_FIELD_MODES = {'ASCENDING', 'DESCENDING', 'CONTAINS'}
+
 
 def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
     """Return Firebase's canonical composite-index manifest deterministically."""
@@ -1987,13 +2090,32 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    field_overrides = [
-        {
-            'collectionGroup': collection_group,
-            'fieldPath': field_path,
-            'ttl': False,
-            'indexes': [],
-        }
-        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
-    ]
+    additive_fields: set[tuple[str, str]] = set()
+    field_overrides: list[dict[str, Any]] = []
+    for requirement in FIELD_INDEX_REQUIREMENTS:
+        key = (requirement.collection_group, requirement.field_path)
+        if key in additive_fields:
+            raise ValueError(f'duplicate Firestore field index requirement: {requirement.identifier}')
+        additive_fields.add(key)
+        if not requirement.collection_group or '/' in requirement.collection_group:
+            raise ValueError(f'invalid collection group in Firestore field requirement: {requirement.identifier}')
+        if not requirement.field_path or '/' in requirement.field_path:
+            raise ValueError(f'invalid field path in Firestore field requirement: {requirement.identifier}')
+        modes = requirement.collection_group_modes
+        if not modes or any(mode not in _FIELD_MODES for mode in modes) or len(set(modes)) != len(modes):
+            raise ValueError(f'invalid modes in Firestore field requirement: {requirement.identifier}')
+        field_overrides.append(requirement.to_manifest())
+    for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS:
+        if (collection_group, field_path) in additive_fields:
+            raise ValueError(
+                f'Firestore field {collection_group}.{field_path} is both an additive requirement and an exemption'
+            )
+        field_overrides.append(
+            {
+                'collectionGroup': collection_group,
+                'fieldPath': field_path,
+                'ttl': False,
+                'indexes': [],
+            }
+        )
     return {'indexes': indexes, 'fieldOverrides': field_overrides}

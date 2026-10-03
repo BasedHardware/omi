@@ -24,6 +24,8 @@ APP_NOTIFICATION_RATE_LIMIT_POLICY = 'integration-notification'
 class NotificationKind(str, Enum):
     APP_INTEGRATION = 'app_integration'
     CAPTURE_RECOVERY = 'capture_recovery'
+    IMPORT_JOB = 'import_job'
+    ACTION_ITEM_REMINDER = 'action_item_reminder'
 
 
 class NotificationPolicy(str, Enum):
@@ -264,3 +266,28 @@ def dispatch_notification(intent: NotificationIntent) -> NotificationDispatchOut
 
 async def dispatch_notification_async(intent: NotificationIntent) -> NotificationDispatchOutcome:
     return await _dispatcher.dispatch_async(intent)
+
+
+def _action_item_reminder_delivery(
+    user_id: str, title: str, body: str, data: Optional[dict[str, Any]]
+) -> Optional[int]:
+    # Preserve the existing silent background scheduling transport, not a visible alert.
+    from utils.notifications import send_action_item_data_message
+
+    assert data is not None
+    send_action_item_data_message(user_id, data['action_item_id'], data['description'], data['due_at'])
+    return None
+
+
+def dispatch_action_item_reminder(
+    *, user_id: str, action_item_id: str, description: str, due_at: str
+) -> NotificationDispatchOutcome:
+    intent = NotificationIntent(
+        user_id=user_id,
+        title='',
+        body='',
+        source='action_item_refresh',
+        kind=NotificationKind.ACTION_ITEM_REMINDER,
+        data={'action_item_id': action_item_id, 'description': description, 'due_at': due_at},
+    )
+    return NotificationDispatcher(sync_delivery=_action_item_reminder_delivery).dispatch(intent)

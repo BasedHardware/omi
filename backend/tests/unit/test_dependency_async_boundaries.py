@@ -258,7 +258,7 @@ def test_mcp_scope_dependency_enforces_scope_and_rate_limits_by_key_identity() -
             rate_limit_calls.append(kwargs)
 
         dependencies._check_api_key_rate_limit_async = record_rate_limit
-        require_cleanup = dependencies.require_mcp_api_key_scope('people.cleanup')
+        require_cleanup = dependencies.require_mcp_scope('people.cleanup')
         allowed = dependencies.ApiKeyAuth(
             uid='user-1',
             scopes=['people.cleanup'],

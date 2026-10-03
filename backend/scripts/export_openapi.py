@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/phone',
     '/v1/mobile',
     '/v1/screen-activity',
+    '/v1/screen-task',
     '/v1/screen-frame-egress',
     '/v1/search',
     '/v1/speaker-tag-prompts',
@@ -225,6 +226,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'POST',
+        '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'DELETE',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -331,6 +336,13 @@ APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
     ): (
         'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
         'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
     ),
 }
 

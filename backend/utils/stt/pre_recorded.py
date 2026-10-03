@@ -34,6 +34,7 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
@@ -980,7 +981,7 @@ def _parakeet_assign_speaker_sync(
         counts.append(1)
         return f'SPEAKER_{best_i:02d}'
     except Exception as e:
-        logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
+        logger.warning('Parakeet batch diarization failed, defaulting to SPEAKER_00: %s', sanitize_provider_error(e))
         return 'SPEAKER_00'
 
 

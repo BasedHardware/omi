@@ -7,6 +7,7 @@ names, weights and the band mapping live in ``models.person_confidence``.
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import (
     AUTO_CONFIRMED,
     AUTO_CORRECTED,
@@ -19,6 +20,7 @@ from models.person_confidence import (
     WEIGHTS,
     evidence_count,
 )
+from utils.speaker_learning_policy import decision_authorizes_training, winning_receipt_decision
 
 
 def _auto(segment: Mapping[str, Any]) -> bool:
@@ -132,6 +134,8 @@ def person_updates_for_assignment(
     now: datetime,
     receipt: Dict[str, Any],
     after: Sequence[Mapping[str, Any]],
+    rejected_person_id: Optional[str] = None,
+    save_other_voice_profiles: bool = True,
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
     """Every person-document write one manual assignment makes, and the sample paths it retires.
 
@@ -143,7 +147,7 @@ def person_updates_for_assignment(
     if len(people) > 499:
         raise ValueError('Assignment affects too many people for one transaction')
     removed: List[str] = []
-    for pid in previous:
+    for pid in set(previous) | ({rejected_person_id} if rejected_person_id else set()):
         person = people.get(pid)
         if not person:
             continue
@@ -152,10 +156,39 @@ def person_updates_for_assignment(
         if taught.get('conversation_id') == conversation_id and set(taught.get('segment_ids', [])) & set(resolved):
             removed.extend(person.get('speech_samples', []))
             update.update(
-                speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
+                speech_samples=[],
+                speech_sample_transcripts=[],
+                speaker_embedding=None,
+                speech_sample_source=None,
+                voice_learning_state='pending' if save_other_voice_profiles else 'disabled',
+                voice_speech_seconds=None,
+                voice_needed_seconds=None,
             )
         updates[pid] = update
     earned = assignment_evidence(before, person_id=person_id, source=source)
+    if rejected_person_id:
+        earned[rejected_person_id] = AUTO_CORRECTED
+    target = people.get(person_id) if person_id else None
+    if person_id and target:
+        target_update = updates.setdefault(person_id, {})
+        target_update['updated_at'] = now
+        if not save_other_voice_profiles:
+            target_update.update(
+                voice_learning_state='disabled',
+                voice_learning_outcome='disabled',
+                voice_speech_seconds=target.get('voice_speech_seconds'),
+                voice_needed_seconds=None,
+            )
+        else:
+            authorized = any(
+                decision_authorizes_training(winning_receipt_decision(receipt, segment), person_id)
+                for segment in after
+                if segment.get('person_id') == person_id
+            )
+            if authorized or voice_readiness(target) != VoiceReadiness.ready:
+                target_update.update(
+                    voice_learning_state='pending', voice_speech_seconds=None, voice_needed_seconds=None
+                )
     ledger = dict(receipt.get('label_evidence') or {})
     for pid, person in people.items():
         if not person:

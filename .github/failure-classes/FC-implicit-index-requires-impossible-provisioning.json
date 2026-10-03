@@ -5,6 +5,9 @@
   "canonical_prevention": "Keep the query registered while exempting only key-only ranges whose declared index fields contain exactly one directional __name__ field. Test that adding another ordering field still generates a composite requirement and that a genuinely missing multi-field index still blocks readiness.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_firestore_query_contract.py",
+    "backend/tests/support/firestore_index_rules.py",
+    "backend/tests/unit/test_firestore_index_rules.py",
+    "backend/tests/unit/test_firestore_query_shapes.py",
     "backend/tests/unit/test_reconcile_firestore_indexes.py"
   ],
   "evidence_prs": [],

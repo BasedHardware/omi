@@ -41,6 +41,7 @@ def process_speaker_assigned_segments(
             else:
                 segment.is_user = False
                 segment.person_id = person_id
+            segment.speaker_label_source = 'auto'
 
 
 def update_speaker_assignment_maps(

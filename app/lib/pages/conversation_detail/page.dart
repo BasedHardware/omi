@@ -19,12 +19,14 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -33,7 +35,6 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
-import 'package:omi/widgets/home_bottom_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -44,11 +45,13 @@ import 'widgets/audio_download_progress_sheet.dart';
 import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
 import 'widgets/capture_recordings.dart';
+import 'widgets/conversation_activity_strip.dart';
 import 'widgets/conversation_detail_header.dart';
-import 'widgets/conversation_tasks_tab.dart';
+import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
 import 'widgets/summary_tab.dart';
 import 'widgets/share_to_contacts_sheet.dart';
+import 'widgets/summarized_apps_sheet.dart';
 import 'widgets/transcript_tab.dart';
 
 /// Offset of the floating bottom bar from the bottom of the screen.
@@ -59,25 +62,31 @@ import 'widgets/transcript_tab.dart';
 /// so the bar never sits lower than the inset the window reports.
 double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
+/// Height of the floating bottom bar (Ask Omi, or the player and Ask button).
+const double detailFloatingBarHeight = 56;
+
+/// How far above the safe area a toast must float to clear the floating bottom bar.
+double detailToastClearance(double bottomSystemInset) =>
+    detailFloatingBarBottom(bottomSystemInset) + detailFloatingBarHeight - bottomSystemInset;
+
 /// Chooses the first useful detail tab for a conversation.
 ///
 /// A caller-supplied tab is authoritative: search deep links use it to
 /// preserve the user's context. When no tab was requested, a completed
 /// conversation with transcript text but no generated summary opens on the
 /// transcript so retained fragment data is immediately visible.
-int conversationDetailInitialTabIndex(ServerConversation conversation, {int? requestedTabIndex}) {
-  if (requestedTabIndex != null) return requestedTabIndex;
-  if (conversation.status != ConversationStatus.completed) return 1;
+ConversationTab conversationDetailInitialTab(ServerConversation conversation, {ConversationTab? requested}) {
+  if (requested != null) return requested;
+  if (conversation.status != ConversationStatus.completed) return ConversationTab.summary;
 
   final hasTranscript = conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty);
   final hasSummary = ConversationSummarySelection.select(conversation).kind != ConversationSummaryKind.empty;
-  return hasTranscript && !hasSummary ? 0 : 1;
+  return hasTranscript && !hasSummary ? ConversationTab.transcript : ConversationTab.summary;
 }
 
-/// Tab indices of the detail page. The Tasks tab exists only while the conversation has tasks.
-const int _transcriptTabIndex = 0;
-const int _summaryTabIndex = 1;
-const int _tasksTabIndex = 2;
+/// Tab indices of the detail page, in the order the tab row shows them (v3: Summary, Transcript).
+const int _summaryTabIndex = 0;
+const int _transcriptTabIndex = 1;
 
 /// Whether the overflow menu shows developer tools (Copy Conversation ID, Test Prompt): debug
 /// builds, or Developer Settings → Conversation Developer Tools (`devModeEnabled`).
@@ -93,7 +102,7 @@ class ConversationDetailPage extends StatefulWidget {
 
   /// Null lets the page choose the first useful tab after detail hydration.
   /// A non-null value preserves an explicit deep link or navigation context.
-  final int? initialTabIndex;
+  final ConversationTab? initialTab;
 
   /// When set (e.g. from search match snippet), open transcript and play this moment.
   final double? initialSeekStart;
@@ -104,7 +113,7 @@ class ConversationDetailPage extends StatefulWidget {
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
-    this.initialTabIndex,
+    this.initialTab,
     this.initialSeekStart,
     this.initialSeekEnd,
   });
@@ -123,6 +132,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   // Callback to seek audio to transcript segment (start, end) in wall seconds
   Future<void> Function(double start, double end)? _seekToSegmentCallback;
+
+  // Page-owned playback state: the bar's player reports into it, the transcript
+  // highlights and follows from it.
+  late final ConversationPlaybackController _playbackController;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -208,33 +221,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     if (_isSearching && _searchQuery.isEmpty) _closeSearch();
   }
 
-  static ConversationTab _tabForIndex(int index) => switch (index) {
-        _transcriptTabIndex => ConversationTab.transcript,
-        _tasksTabIndex => ConversationTab.actionItems,
-        _ => ConversationTab.summary,
-      };
+  static ConversationTab _tabForIndex(int index) =>
+      index == _transcriptTabIndex ? ConversationTab.transcript : ConversationTab.summary;
 
   static int _indexForTab(ConversationTab tab) => switch (tab) {
         ConversationTab.transcript => _transcriptTabIndex,
         ConversationTab.summary => _summaryTabIndex,
-        ConversationTab.actionItems => _tasksTabIndex,
       };
 
-  void _createTabController({required int length, required int initialIndex}) {
-    _controller = TabController(length: length, vsync: this, initialIndex: initialIndex.clamp(0, length - 1));
+  void _createTabController({required int initialIndex}) {
+    _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     _controller!.addListener(_onTabChanged);
-  }
-
-  /// The Tasks tab exists only while there are tasks, so a swipe never lands on a tab the
-  /// bottom bar has no button for. Rebuilds the controller when that changes.
-  void _syncTabCount(bool hasTasks) {
-    final length = hasTasks ? 3 : 2;
-    final old = _controller;
-    if (old == null || old.length == length) return;
-    old.removeListener(_onTabChanged);
-    _createTabController(length: length, initialIndex: old.index);
-    selectedTab = _tabForIndex(_controller!.index);
-    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
   void _onTabChanged() {
@@ -245,7 +242,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PlatformManager.instance.analytics.conversationDetailTabChanged(switch (tab) {
         ConversationTab.transcript => 'Transcript',
         ConversationTab.summary => 'Summary',
-        ConversationTab.actionItems => 'Action Items',
       });
       if (_searchQuery.isNotEmpty) _updateSearchResults();
     });
@@ -261,8 +257,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
     // transcript only once the final summary state is known.
-    final initialTabIndex = widget.initialTabIndex ?? _summaryTabIndex;
-    _createTabController(length: 3, initialIndex: initialTabIndex);
+    _playbackController = ConversationPlaybackController()..updateSegments(widget.conversation.transcriptSegments);
+    _createTabController(initialIndex: _indexForTab(widget.initialTab ?? ConversationTab.summary));
     selectedTab = _tabForIndex(_controller!.index);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -288,7 +284,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
       await provider.initConversation();
       _recordResultViewed(provider, identityEpoch);
-      if (provider.conversation.appResults.isEmpty) {
+      if (_awaitsTranscript(provider.conversation)) {
+        // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
+        // full conversation and let the Transcript tab say it is loading, or offer Try Again.
+        unawaited(provider.refreshConversation(trackLoad: true).then((_) {
+          if (!mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+          _selectInitialTabIfNeeded(provider.conversation);
+          _recordResultViewed(provider, identityEpoch);
+        }));
+      } else if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
           // The initial list payload is enough to render the detail page. Fill
@@ -315,6 +319,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     });
   }
+
+  /// A conversation whose lines should exist but are not in the copy the page opened with.
+  static bool _awaitsTranscript(ServerConversation conversation) =>
+      conversation.transcriptSegments.isEmpty &&
+      conversation.photos.isEmpty &&
+      conversation.externalIntegration == null &&
+      !conversation.isLocked &&
+      !conversation.discarded;
 
   void _recordResultViewed(ConversationDetailProvider provider, int identityEpoch) {
     if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
@@ -344,8 +356,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     return switch (selectedTab) {
       ConversationTab.transcript => conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty),
       ConversationTab.summary => provider.getSummarySelection().content.trim().isNotEmpty,
-      ConversationTab.actionItems =>
-        conversation.structured.actionItems.any((item) => !item.deleted && item.description.trim().isNotEmpty),
     };
   }
 
@@ -373,18 +383,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   }
 
   void _selectInitialTabIfNeeded(ServerConversation conversation) {
-    if (!mounted ||
-        widget.initialTabIndex != null ||
-        _hasExplicitTabSelection ||
-        _controller?.index != _summaryTabIndex) {
+    if (!mounted || widget.initialTab != null || _hasExplicitTabSelection || _controller?.index != _summaryTabIndex) {
       return;
     }
-    final index = conversationDetailInitialTabIndex(conversation);
-    if (index == _summaryTabIndex) return;
+    if (conversationDetailInitialTab(conversation) != ConversationTab.transcript) return;
     setState(() {
       selectedTab = ConversationTab.transcript;
     });
-    _controller?.animateTo(index);
+    _controller?.animateTo(_transcriptTabIndex);
   }
 
   @override
@@ -397,6 +403,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _playbackController.dispose();
     super.dispose();
   }
 
@@ -438,8 +445,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         return context.l10n.transcriptTab;
       case ConversationTab.summary:
         return context.l10n.conversationTab;
-      case ConversationTab.actionItems:
-        return context.l10n.actionItemsTab;
     }
   }
 
@@ -493,7 +498,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         builder: (_) => ConversationDetailPage(
           conversation: target,
           isFromOnboarding: widget.isFromOnboarding,
-          initialTabIndex: _controller?.index,
+          initialTab: selectedTab,
         ),
       ),
     );
@@ -521,6 +526,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     'copy_conversation_id': ConversationActionAction.copyConversationId,
     'rename': ConversationActionAction.rename,
     'move_to_folder': ConversationActionAction.moveFolder,
+    'visibility': ConversationActionAction.visibility,
     'recordings': ConversationActionAction.recordingsOpen,
     'delete': ConversationActionAction.delete,
   };
@@ -550,9 +556,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (!provider.loadingReprocessConversation) {
-          await provider.reprocessConversation();
+        if (provider.loadingReprocessConversation) break;
+        if (!context.read<ConnectivityProvider>().isConnected) {
+          ConnectivityProvider.showNoInternetDialog(context);
+          break;
         }
+        await provider.reprocessConversation();
         break;
       case 'link_event':
         _handleLinkEvent(context, provider);
@@ -568,6 +577,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         break;
       case 'move_to_folder':
         await showConversationFolderSheet(context, provider.conversation, source: 'detail_page_menu');
+        break;
+      case 'visibility':
+        ConversationVisibilitySheet.show(context, provider.conversation);
         break;
       case 'recordings':
         final recordings = CaptureGroupPresentation.recordings(provider.conversation);
@@ -733,6 +745,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to toggle starred status: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToUpdateStarred);
     } finally {
       if (mounted) setState(() => _isTogglingStarred = false);
     }
@@ -781,6 +794,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to share conversation: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
     } finally {
       if (mounted && _isSharing) setState(() => _isSharing = false);
     }
@@ -791,8 +805,35 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     final showDeveloperTools = conversationDetailShowsDeveloperTools();
     final conversation = provider.conversation;
     final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
-    return [
-      // The conversation's own actions first; Star and Share live in the top bar; Delete stays last.
+    final summarySelection = provider.getSummarySelection();
+    final summaryApp =
+        summarySelection.isApp ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull : null;
+    // Grouped, with large dividers between groups: how the summary is written, then organising
+    // the conversation, then finding and copying its words; developer tools (when on) sit last
+    // before Delete. Star and Share live in the top bar.
+    final summaryGroup = <PullDownMenuEntry>[
+      if (!conversation.discarded) ...[
+        PullDownMenuItem(
+          title: l10n.summaryTemplate,
+          subtitle: summarySelection.isApp ? (summaryApp?.name ?? l10n.unknownApp) : null,
+          iconWidget: const FaIcon(FontAwesomeIcons.wandMagicSparkles, size: 16),
+          onTap: () {
+            PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
+              conversationId: conversation.id,
+              action: 'summary_template',
+            );
+            showSummarizedAppsSheet(context);
+          },
+        ),
+        PullDownMenuItem(
+          title: l10n.reprocessConversation,
+          iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+          onTap:
+              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
+        ),
+      ],
+    ];
+    final organizeGroup = <PullDownMenuEntry>[
       if (!conversation.discarded)
         PullDownMenuItem(
           title: l10n.renameConversation,
@@ -804,31 +845,51 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
         onTap: () => _handleMenuSelection(context, 'move_to_folder', provider),
       ),
+      PullDownMenuItem(
+        title: l10n.visibility,
+        iconWidget: FaIcon(
+          provider.conversation.visibility == ConversationVisibility.private_
+              ? FontAwesomeIcons.lock
+              : FontAwesomeIcons.globe,
+          size: 16,
+        ),
+        onTap: () => _handleMenuSelection(context, 'visibility', provider),
+      ),
+      if (provider.conversation.calendarEvent == null)
+        PullDownMenuItem(
+          title: l10n.linkEvent,
+          iconWidget: ClipRRect(
+            borderRadius: const BorderRadius.all(Radius.circular(4)),
+            child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 17, height: 17),
+          ),
+          onTap: () => _handleMenuSelection(context, 'link_event', provider),
+        ),
       if (hasRecordings)
         PullDownMenuItem(
           title: l10n.recordings,
           iconWidget: const FaIcon(FontAwesomeIcons.layerGroup, size: 16),
           onTap: () => _handleMenuSelection(context, 'recordings', provider),
         ),
-      const PullDownMenuDivider.large(),
-      if (selectedTab != ConversationTab.actionItems)
-        PullDownMenuItem(
-          title: l10n.search,
-          iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
-          onTap: () {
-            trackConversationAction(ConversationActionAction.search, ConversationActionSurface.overflow);
-            if (_isSearching) {
-              _closeSearch();
-            } else {
-              setState(() => _isSearching = true);
-              _searchFocusNode.requestFocus();
-              PlatformManager.instance.analytics.conversationDetailSearchClicked(
-                conversationId: provider.conversation.id,
-              );
-            }
-            HapticFeedback.mediumImpact();
-          },
-        ),
+    ];
+    // Search covers both tabs (summary and transcript), so it stays in the page menu.
+    final wordsGroup = <PullDownMenuEntry>[
+      PullDownMenuItem(
+        title: l10n.search,
+        iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
+        onTap: () {
+          trackConversationAction(ConversationActionAction.search, ConversationActionSurface.overflow);
+          if (_isSearching) {
+            _closeSearch();
+          } else {
+            setState(() => _isSearching = true);
+            _searchFocusNode.requestFocus();
+            PlatformManager.instance.analytics.conversationDetailSearchClicked(
+              conversationId: provider.conversation.id,
+            );
+          }
+          HapticFeedback.mediumImpact();
+        },
+      ),
       PullDownMenuItem(
         title: l10n.copyTranscript,
         iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
@@ -845,21 +906,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
           onTap: _isDownloadingAudio ? null : () => _handleMenuSelection(context, 'download_audio', provider),
         ),
-      if (provider.conversation.calendarEvent == null)
-        PullDownMenuItem(
-          title: l10n.linkEvent,
-          iconWidget: ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(4)),
-            child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 17, height: 17),
-          ),
-          onTap: () => _handleMenuSelection(context, 'link_event', provider),
-        ),
-      if (!provider.conversation.discarded)
-        PullDownMenuItem(
-          title: l10n.reprocessConversation,
-          iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap: () => _handleMenuSelection(context, 'reprocess', provider),
-        ),
+    ];
+    final developerGroup = <PullDownMenuEntry>[
       if (showDeveloperTools) ...[
         PullDownMenuItem(
           title: l10n.copyConversationId,
@@ -872,17 +920,40 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
         ),
       ],
+    ];
+    final deleteGroup = <PullDownMenuEntry>[
+      // "Delete": the menu is already about this conversation.
       PullDownMenuItem(
-        title: l10n.deleteConversation,
+        title: l10n.delete,
         isDestructive: true,
         iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];
+    final groups = [summaryGroup, organizeGroup, wordsGroup, developerGroup, deleteGroup].where((g) => g.isNotEmpty);
+    return [
+      for (final (index, group) in groups.indexed) ...[
+        if (index > 0) const PullDownMenuDivider.large(),
+        ...group,
+      ],
+    ];
   }
 
-  /// Header actions (David, 2026-09-24): Ask Omi as the primary, then Star and Share as 44pt icon
-  /// buttons, then one overflow holding Rename, Move to Folder, Recordings and the rest, Delete last.
+  /// Ask about this conversation (#4515), from the bottom bar's Ask button or Ask Omi bar. Chat is a
+  /// pushed page (D1).
+  void _openAskOmi(ConversationDetailProvider provider) {
+    trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.detailBody);
+    final convo = provider.conversation;
+    openChatSheet(
+      context,
+      ChatPage(
+        initialChatContext: ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
+      ),
+    );
+  }
+
+  /// Header actions: Star and Share as 44pt icon buttons, then one overflow holding the summary
+  /// template, Rename, Move to Folder, Recordings and the rest, Delete last. Ask Omi is the bottom bar.
   Widget _buildHeaderActions(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
     final starred = provider.conversation.starred;
@@ -891,29 +962,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Ask about this conversation (#4515). Chat is a pushed page (D1). Same fill and colours as the
-          // Star and Share circles beside it (David, 2026-09-24): one calm row, no white primary.
-          OmiButton.toolbar(
-            key: const Key('conversation_ask_omi'),
-            label: l10n.askOmi,
-            // The two-bubbles glyph (FontAwesome comments, regular) that marks Ask Omi everywhere.
-            leading: const FaIcon(kAskOmiGlyph),
-            size: OmiButtonSize.compact,
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.topBar);
-              final convo = provider.conversation;
-              openChatSheet(
-                context,
-                ChatPage(
-                  startFresh: true,
-                  initialChatContext:
-                      ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: OmiSpacing.xxs),
           OmiIconButton.filled(
             key: const Key('conversation_star'),
             icon: _isTogglingStarred
@@ -1002,14 +1050,45 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       return const Scaffold();
     }
 
-    final hasTasks = conversation.structured.actionItems.any((item) => !item.deleted);
-    if (_providerInitialized) _syncTabCount(hasTasks);
+    // The bottom bar (and its backdrop) shows once there is something to play or ask about.
+    final hasBar = conversation.transcriptSegments.isNotEmpty ||
+        conversation.photos.isNotEmpty ||
+        conversation.externalIntegration != null;
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
-        if (error == 'REPROCESS_FAILED') OmiFeedback.error(context, context.l10n.errorProcessingConversation);
+        switch (error) {
+          case 'REPROCESS_FAILED':
+            // The provider is shared: a reprocess started on another conversation can fail after
+            // the reader opened this one. Report only this page's own failure, and retry only it.
+            final failedId = detailProvider.lastFailedReprocessConversationId;
+            if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
+            final appId = detailProvider.lastFailedReprocessAppId;
+            OmiFeedback.error(
+              context,
+              context.l10n.errorProcessingConversation,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () {
+                if (detailProvider.conversationOrNull?.id == failedId) {
+                  detailProvider.reprocessConversation(appId: appId);
+                }
+              },
+            );
+          case 'SEGMENT_EDIT_FAILED':
+          case 'SUMMARY_EDIT_FAILED':
+            OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+        }
       },
-      showInfo: (info) {},
+      showInfo: (info) {
+        switch (info) {
+          case 'REPROCESS_STARTED':
+            OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
+          case 'REPROCESS_SUCCESS':
+            if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
+              OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
+            }
+        }
+      },
       child: Scaffold(
         key: scaffoldKey,
         extendBody: true,
@@ -1022,140 +1101,183 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           titleSpacing: 0,
           actions: [_buildHeaderActions(context, detailProvider)],
         ),
-        body: Stack(
-          children: [
-            GestureDetector(
-              excludeFromSemantics: true,
-              behavior: HitTestBehavior.translucent,
-              // Tapping content closes an empty search. There is deliberately no horizontal
-              // gesture here: a sideways swipe moves between the tabs, never to another
-              // conversation (D2), and the iOS edge swipe always goes back.
-              onTap: _closeSearchIfEmpty,
-              child: Column(
-                children: [
-                  // Title and facts, shared by every tab (#17297).
-                  ConversationDetailHeader(onOpenRecordings: _openRecordings),
-                  Expanded(
-                    // Each tab owns the page's side margin, so a section can scroll edge to edge
-                    // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                    child: TabBarView(
-                      controller: _controller,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                          child: TranscriptWidgets(
+        // Toasts float above the pinned Ask Omi bar instead of covering it.
+        body: OmiFeedbackClearance(
+          bottom: hasBar ? detailToastClearance(MediaQuery.viewPaddingOf(context).bottom) : 0,
+          child: Stack(
+            children: [
+              GestureDetector(
+                excludeFromSemantics: true,
+                behavior: HitTestBehavior.translucent,
+                // Tapping content closes an empty search. There is deliberately no horizontal
+                // gesture here: a sideways swipe moves between the tabs, never to another
+                // conversation (D2), and the iOS edge swipe always goes back.
+                onTap: _closeSearchIfEmpty,
+                child: Column(
+                  children: [
+                    // Title and facts, shared by both tabs (#17297), then the tab row (v3).
+                    ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                    ConversationDetailTabs(
+                      controller: _controller!,
+                      onTap: (_) => _hasExplicitTabSelection = true,
+                    ),
+                    const ConversationActivityStrip(),
+                    Expanded(
+                      // Each tab owns the page's side margin, so a section can scroll edge to edge
+                      // (the Summary tab's screenshot strip) instead of clipping at the margin.
+                      child: TabBarView(
+                        controller: _controller,
+                        children: [
+                          SummaryTab(
+                            reviewEnabled: !widget.isFromOnboarding &&
+                                widget.initialSeekStart == null &&
+                                selectedTab == ConversationTab.summary &&
+                                !_controller!.indexIsChanging &&
+                                !_isSearching &&
+                                !_isSharing &&
+                                !_isDownloadingAudio &&
+                                !_reviewInterrupted,
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onSegmentTap: (segment) async {
-                              if (selectedTab != ConversationTab.transcript) {
-                                setState(() {
-                                  selectedTab = ConversationTab.transcript;
-                                });
-                                _controller!.animateTo(_transcriptTabIndex);
-                              }
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                            child: TranscriptWidgets(
+                              searchQuery: _searchQuery,
+                              currentResultIndex: getCurrentResultIndexForHighlighting(),
+                              onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                              onSegmentTap: (segment) async {
+                                if (selectedTab != ConversationTab.transcript) {
+                                  setState(() {
+                                    selectedTab = ConversationTab.transcript;
+                                  });
+                                  _controller!.animateTo(_transcriptTabIndex);
+                                }
 
-                              // Seek to segment using callback (start + end for bounded play)
-                              if (_seekToSegmentCallback != null) {
-                                await _seekToSegmentCallback!(segment.start, segment.end);
-                                HapticFeedback.lightImpact();
-                              }
-                            },
+                                // Seek to segment start; playback keeps running past the segment end.
+                                if (_seekToSegmentCallback != null) {
+                                  await _seekToSegmentCallback!(segment.start, segment.end);
+                                }
+                              },
+                              playbackController: _playbackController,
+                            ),
                           ),
-                        ),
-                        SummaryTab(
-                          reviewEnabled: !widget.isFromOnboarding &&
-                              widget.initialSeekStart == null &&
-                              selectedTab == ConversationTab.summary &&
-                              !_controller!.indexIsChanging &&
-                              !_isSearching &&
-                              !_isSharing &&
-                              !_isDownloadingAudio &&
-                              !_reviewInterrupted,
-                          searchQuery: _searchQuery,
-                          currentResultIndex: getCurrentResultIndexForHighlighting(),
-                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                        ),
-                        if (_controller!.length > _tasksTabIndex)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                            child: ActionItemsTab(),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
+                  ],
+                ),
+              ),
+
+              // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
+              // colour fades in behind it so text never runs under the bar.
+              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
+                _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
+              if (MediaQuery.of(context).viewInsets.bottom == 0)
+                Positioned(
+                  // Stable key so the body Stack's collection-`if` diff matches
+                  // by identity, not by slot+type. Without it the surviving
+                  // search-overlay Positioned below was being reused into this
+                  // slot when the keyboard rose, tearing down the search
+                  // TextField subtree and dropping the IME mid-frame.
+                  key: const ValueKey('detail_floating_bottom_bar'),
+                  bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
+                  left: 0,
+                  right: 0,
+                  child: ConversationBottomBar(
+                    onAudioInteraction: () {
+                      if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+                    },
+                    mode: ConversationBottomBarMode.detail,
+                    onAskOmi: () => _openAskOmi(detailProvider),
+                    selectedTab: selectedTab,
+                    conversation: conversation,
+                    hasSegments: hasBar,
+                    playbackController: _playbackController,
+                    onSeekFunctionReady: (seekFunction) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            _seekToSegmentCallback = seekFunction;
+                          });
+                          _maybePlayInitialSeek();
+                        }
+                      });
+                    },
+                    onTabSelected: (tab) {
+                      _hasExplicitTabSelection = true;
+                      final index = _indexForTab(tab);
+                      if (index < _controller!.length) _controller!.animateTo(index);
+                    },
+                    onStopPressed: () {
+                      // Empty since we don't show the stop button in detail mode
+                    },
                   ),
-                ],
-              ),
+                ),
+
+              // Search bar over the content
+              if (_isSearching)
+                Positioned(
+                  // Stable key — same reason as the floating bottom bar above.
+                  // Without it the keyboard pop-up flickered closed because
+                  // the body Stack's diff was reusing this Positioned's
+                  // element into the bar's slot and remounting the TextField.
+                  key: const ValueKey('detail_search_overlay'),
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: DetailSearchBar(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    query: _searchQuery,
+                    currentIndex: _currentSearchIndex,
+                    totalResults: _totalSearchResults,
+                    onChanged: _onSearchChanged,
+                    onPrevious: () => _navigateSearch(false),
+                    onNext: () => _navigateSearch(true),
+                    onCancel: _closeSearch,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Solid page colour from the screen edge up through the floating bar, fading out above it. Paint
+/// only; a [Stack] child placed before the bar.
+class _DetailBarBackdrop extends StatelessWidget {
+  const _DetailBarBackdrop({required this.barBottom});
+
+  /// Distance from the screen edge to the bar's bottom.
+  final double barBottom;
+
+  static const double _barHeight = detailFloatingBarHeight;
+  static const double _fade = 28;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = barBottom + _barHeight + _fade;
+    final page = OmiColors.surface0;
+    return Positioned(
+      key: const ValueKey('detail_bar_backdrop'),
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: [0, _fade / height, 1],
+              colors: [page.withValues(alpha: 0), page, page],
             ),
-
-            // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
-            if (MediaQuery.of(context).viewInsets.bottom == 0)
-              Positioned(
-                // Stable key so the body Stack's collection-`if` diff matches
-                // by identity, not by slot+type. Without it the surviving
-                // search-overlay Positioned below was being reused into this
-                // slot when the keyboard rose, tearing down the search
-                // TextField subtree and dropping the IME mid-frame.
-                key: const ValueKey('detail_floating_bottom_bar'),
-                bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
-                left: 0,
-                right: 0,
-                child: ConversationBottomBar(
-                  onAudioInteraction: () {
-                    if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
-                  },
-                  mode: ConversationBottomBarMode.detail,
-                  selectedTab: selectedTab,
-                  conversation: conversation,
-                  hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                      conversation.photos.isNotEmpty ||
-                      conversation.externalIntegration != null,
-                  hasActionItems: hasTasks,
-                  onSeekFunctionReady: (seekFunction) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() {
-                          _seekToSegmentCallback = seekFunction;
-                        });
-                        _maybePlayInitialSeek();
-                      }
-                    });
-                  },
-                  onTabSelected: (tab) {
-                    _hasExplicitTabSelection = true;
-                    final index = _indexForTab(tab);
-                    if (index < _controller!.length) _controller!.animateTo(index);
-                  },
-                  onStopPressed: () {
-                    // Empty since we don't show the stop button in detail mode
-                  },
-                ),
-              ),
-
-            // Search bar over the content
-            if (_isSearching)
-              Positioned(
-                // Stable key — same reason as the floating bottom bar above.
-                // Without it the keyboard pop-up flickered closed because
-                // the body Stack's diff was reusing this Positioned's
-                // element into the bar's slot and remounting the TextField.
-                key: const ValueKey('detail_search_overlay'),
-                top: 0,
-                left: 0,
-                right: 0,
-                child: DetailSearchBar(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  query: _searchQuery,
-                  currentIndex: _currentSearchIndex,
-                  totalResults: _totalSearchResults,
-                  onChanged: _onSearchChanged,
-                  onPrevious: () => _navigateSearch(false),
-                  onNext: () => _navigateSearch(true),
-                  onCancel: _closeSearch,
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );

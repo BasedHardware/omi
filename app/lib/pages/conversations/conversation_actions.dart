@@ -29,7 +29,10 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Asks before deleting one conversation. The "Don't ask again" row is allowed because every
 /// conversation delete is backed by an Undo toast; once ticked, this returns `true` without asking.
 /// Offline it explains why the delete cannot happen and returns `false`.
-Future<bool> confirmConversationDelete(BuildContext context) async {
+///
+/// With an [anchor] (a swiped row's delete button) the question is a menu that pops from it;
+/// without one it is the dialog card.
+Future<bool> confirmConversationDelete(BuildContext context, {Rect? anchor}) async {
   final l10n = context.l10n;
   if (!context.read<ConnectivityProvider>().isConnected) {
     await showOmiAlert(
@@ -41,13 +44,23 @@ Future<bool> confirmConversationDelete(BuildContext context) async {
   }
   final prefs = SharedPreferencesUtil();
   if (!prefs.showConversationDeleteConfirmation) return true;
-  final result = await showOmiConfirmWithOptOut(
-    context,
-    title: l10n.deleteConversationTitle,
-    message: l10n.deleteConversationMessage,
-    confirmLabel: l10n.delete,
-    destructive: true,
-  );
+  final result = anchor != null
+      ? await showOmiConfirmMenu(
+          context,
+          anchor: anchor,
+          title: l10n.deleteConversationTitle,
+          message: l10n.deleteConversationMessage,
+          confirmLabel: l10n.deleteConversation,
+          confirmIcon: const FaIcon(FontAwesomeIcons.trashCan),
+          offerOptOut: true,
+        )
+      : await showOmiConfirmWithOptOut(
+          context,
+          title: l10n.deleteConversationTitle,
+          message: l10n.deleteConversationMessage,
+          confirmLabel: l10n.delete,
+          destructive: true,
+        );
   if (result.confirmed && result.dontAskAgain) prefs.showConversationDeleteConfirmation = false;
   return result.confirmed;
 }
@@ -229,7 +242,8 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   final l10n = context.l10n;
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.actions),
+    title: conversationDisplayTitle(conversation, l10n,
+        surface: ConversationUntitledRenderedSurface.actions, dates: OmiDateFormat.of(context)),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.

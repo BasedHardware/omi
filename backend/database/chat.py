@@ -22,6 +22,11 @@ CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
+from utils.other.portability_read import (
+    check_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
 from ._client import db, get_firestore_client
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
@@ -85,10 +90,12 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(chat_data)
 
     if 'text' in data and isinstance(data['text'], str):
+        raw_text = data['text']
         try:
-            data['text'] = encryption.decrypt(data['text'], uid)
+            data['text'] = encryption.decrypt(raw_text, uid)
         except Exception:
             pass
+        data['text'] = verified_encrypted_read(raw_text, data['text'])
 
     return data
 
@@ -570,8 +577,9 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch: List[Dict[str, Any]] = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg

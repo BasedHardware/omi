@@ -8,6 +8,9 @@ WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission 
 WINDOW_PRESSURE_REFRESH = Counter(
     'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
 )
+WINDOW_PRESSURE_REPLICAS = Gauge(
+    'omi_stt_window_batch_pressure_replicas', 'Fresh and DNS-ready GPU replicas for window admission', ['state']
+)
 WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
@@ -46,6 +49,14 @@ WINDOW_CANARY_OUTCOME = Counter(
     'Listen transcript outcome by stable window allocation arm',
     ['arm', 'outcome'],
 )
+COST_CANARY_OUTCOME = Counter(
+    'omi_stt_cost_routing_canary_outcome_total',
+    'Managed listen transcript outcome by router allocation at initialization',
+    ['arm', 'outcome'],
+)
+for _arm in ('on', 'control'):
+    for _outcome in ('transcribed', 'no_transcript', 'too_short'):
+        COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -101,3 +112,65 @@ ROUTING_DECISION_LATENCY = Histogram(
     'Time spent choosing the eligible live STT order without network operations',
     buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
 )
+
+COST_DECISION = Counter(
+    'omi_stt_cost_routing_decisions_total', 'Cost routing selections and skips', ['target', 'reason']
+)
+COST_BENCH = Gauge('omi_stt_cost_routing_benched', 'Fleet target health bench', ['target'])
+COST_STAGE = Gauge(
+    'omi_stt_cost_routing_stage', 'Pod view of global target stage: 0, 5, 25, 100; NaN unknown', ['target']
+)
+COST_SNAPSHOT_AT = Gauge(
+    'omi_stt_cost_routing_snapshot_timestamp_seconds', 'Last complete Redis cost snapshot on this pod'
+)
+# A never-refreshed pod is unknown, not a Unix-epoch/stale snapshot.
+COST_SNAPSHOT_AT.set(float('nan'))
+COST_STATE_KNOWN = Gauge(
+    'omi_stt_cost_routing_state_known', 'Whether this pod has evidence about global target health', ['target']
+)
+COST_EVENTS = Counter(
+    'omi_stt_cost_routing_events_total', 'CAS health transitions by state scope', ['target', 'event', 'scope']
+)
+COST_ALL_DEGRADED = Counter(
+    'omi_stt_cost_routing_all_degraded_total', 'Selections with every eligible target unhealthy', ['target']
+)
+COST_IGNORED_DEATHS = Counter(
+    'omi_stt_cost_routing_ignored_deaths_total',
+    'Claimed socket deaths excluded by client departure or owner teardown',
+    ['target', 'reason', 'boundary'],
+)
+COST_OBSERVATIONS = Counter(
+    'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome', 'reason']
+)
+COST_SETTLEMENTS = Counter(
+    'omi_stt_cost_routing_settlements_total',
+    'Serving decisions requiring matching health observations',
+    ['target', 'outcome', 'reason', 'path'],
+)
+COST_EVIDENCE_ERRORS = Counter(
+    'omi_stt_cost_routing_evidence_errors_total', 'Serving settlements whose health emission failed'
+)
+COST_EMISSION_ACK_ERRORS = Counter(
+    'omi_stt_cost_routing_emission_ack_errors_total',
+    'Emission acknowledgement errors only; does not validate classification, lifecycle coverage or Redis persistence',
+)
+MANAGED_LEGS_OPENED = Counter(
+    'omi_stt_managed_legs_opened_total', 'Managed connected legs handed off by the chain', ['target']
+)
+MANAGED_LEGS_SETTLED = Counter(
+    'omi_stt_managed_legs_settled_total', 'Handed-off managed legs reaching terminal settlement', ['target']
+)
+MANAGED_LEGS_OPEN = Gauge(
+    'omi_stt_managed_legs_open', 'Handed-off managed transports not yet released, independent of settlement', ['target']
+)
+COST_VOTES = Counter(
+    'omi_stt_cost_routing_votes_total',
+    'Settled evidence applied or excluded by the shared gate',
+    ['target', 'scope', 'result'],
+)
+COST_SHADOW = Counter(
+    'omi_stt_cost_routing_shadow_total',
+    'Proposed vs static primary',
+    ['agreement', 'static_primary', 'proposed_primary'],
+)
+COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])

@@ -11,9 +11,7 @@ from urllib.parse import quote
 
 import pytest
 from google.api_core.exceptions import FailedPrecondition, InvalidArgument, PermissionDenied
-from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore_admin_v1
-from google.cloud.firestore_v1 import Client
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from scripts import firestore_index_oracle as oracle
@@ -21,6 +19,7 @@ from tests.support import firestore_index_rules as rules
 from tests.support.firestore_query_driver_registry import DRIVERS
 from tests.support.firestore_query_drivers import run_driver
 from tests.support.firestore_shape_recorder import QueryFilter, QueryShape, _encode_value
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 NAMESPACE = "index-oracle-fixture"
 PROJECT = "based-hardware-dev"
@@ -78,10 +77,7 @@ def _field_index(fields, collection="conversations", scope="COLLECTION", state="
 
 
 def _field(name, config=None):
-    kwargs = {"name": name}
-    if config is not None:
-        kwargs["index_config"] = config
-    return firestore_admin_v1.Field(**kwargs)
+    return firestore_admin_v1.Field(name=name, **({"index_config": config} if config is not None else {}))
 
 
 def _index_config(indexes, uses_ancestor=False, ancestor=None, reverting=False):
@@ -505,7 +501,7 @@ def test_registry_cursor_driver_exports_snapshot_cursor(sdk_client, monkeypatch)
 
 
 def test_execute_query_real_sdk_query_propagates_iterator_failure_once(monkeypatch):
-    client = Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project=PROJECT, database=DATABASE)
     query = (
         client.collection("users/u/conversations")
         .where(filter=FieldFilter("discarded", "==", False))
@@ -770,7 +766,7 @@ def test_uncertain_error_or_mismatch_gives_no_resolution(observed):
 
 @pytest.fixture()
 def sdk_client():
-    return Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    return OfflineFirestoreClient(project=PROJECT, database=DATABASE)
 
 
 def test_hydration_uses_synthetic_collection_path_and_group_keeps_id(sdk_client):
@@ -1377,6 +1373,8 @@ def _argv(tmp_path, export_path, extra=()):
 
 
 def _install_factories(monkeypatch, tracked, admin, query_outcome):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+
     def client_factory(**kwargs):
         tracked["client_project"] = kwargs.get("project")
         tracked["client_database"] = kwargs.get("database")
@@ -1675,6 +1673,7 @@ def test_main_refuses_numeric_alias_and_emulator_before_clients(tmp_path, monkey
 
 
 def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatch):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     tracked = {}
     default_name = "projects/based-hardware/databases/jit-qa/collectionGroups/__default__/fields/*"
 
@@ -1742,3 +1741,172 @@ def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatc
     )
     assert code == 0
     assert tracked["client_project"] == "based-hardware"
+
+
+def test_hydration_preserves_root_collection_path(sdk_client):
+    shape = oracle.hydrate_shape(_encoded_shape(collection_path="conversations"), sdk_client, NAMESPACE)
+    assert shape.collection_path == "conversations"
+    pb = oracle.build_query(shape, sdk_client)._to_protobuf()
+    assert pb.from_[0].collection_id == "conversations"
+    assert pb.from_[0].all_descendants is False
+
+
+@pytest.mark.parametrize(
+    "collection_path",
+    [
+        None,
+        "",
+        "users/uid",
+        "users//conversations",
+        "users/uid/other",
+        "/conversations",
+        "conversations/",
+    ],
+)
+def test_hydration_fails_closed_on_malformed_collection_paths(sdk_client, collection_path):
+    with pytest.raises((ValueError, KeyError)):
+        oracle.hydrate_shape(
+            (
+                _encoded_shape(collection_path=collection_path)
+                if collection_path is not None
+                else {key: value for key, value in _encoded_shape().items() if key != "collection_path"}
+            ),
+            sdk_client,
+            NAMESPACE,
+        )
+
+
+def test_deduplicate_separates_root_and_nested_same_group():
+    root = _entry("root", _encoded_shape(collection_path="conversations"))
+    nested = _entry("nested", _encoded_shape(collection_path="users/uid/conversations"))
+    groups = oracle.deduplicate([root, nested])
+    assert len(groups) == 2
+
+
+def test_deduplicate_merges_nested_paths_with_different_uids():
+    one = _entry("one", _encoded_shape(collection_path="users/uid-a/conversations"))
+    two = _entry("two", _encoded_shape(collection_path="users/uid-b/conversations"))
+    groups = oracle.deduplicate([one, two])
+    assert len(groups) == 1
+
+
+def test_main_refuses_production_root_probe_even_with_prod_flag(tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(oracle, "Client", lambda **kw: built.append(1))
+    export_path = _write_export(tmp_path, [_entry("s1", _encoded_shape(collection_path="conversations"))])
+    for extra in ((), ("--allow-prod-read-only",)):
+        with pytest.raises(SystemExit):
+            oracle.main(
+                _argv(tmp_path, export_path, extra=("--project", "based-hardware", "--database", "(default)", *extra))
+            )
+    assert built == []
+
+
+def test_main_refuses_root_probe_on_other_dev_databases(tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(oracle, "Client", lambda **kw: built.append(1))
+    export_path = _write_export(tmp_path, [_entry("s1", _encoded_shape(collection_path="conversations"))])
+    with pytest.raises(SystemExit):
+        oracle.main(_argv(tmp_path, export_path, extra=("--project", "based-hardware-dev", "--database", "other-db")))
+    assert built == []
+
+
+def test_main_root_probe_allowed_on_dev_jit_qa(tmp_path, monkeypatch):
+    tracked = {}
+    export_path, _admin = _matching_main_setup(tmp_path, monkeypatch, tracked, [])
+    export = json.loads(export_path.read_text())
+    export["shapes"][0]["shape"]["collection_path"] = "conversations"
+    export_path.write_text(json.dumps(export))
+    code = oracle.main(_argv(tmp_path, export_path))
+    assert code == 0
+    assert tracked["collections"] == ["conversations"]
+
+
+def test_hydration_preserves_feedback_reports_root_collection_path(sdk_client):
+    shape = oracle.hydrate_shape(
+        _encoded_shape(collection_group="feedback_reports", collection_path="feedback_reports"),
+        sdk_client,
+        NAMESPACE,
+    )
+    assert shape.collection_path == "feedback_reports"
+    pb = oracle.build_query(shape, sdk_client)._to_protobuf()
+    assert pb.from_[0].collection_id == "feedback_reports"
+    assert pb.from_[0].all_descendants is False
+
+
+def test_signature_rejects_a_stale_path_template_that_conflates_root_and_nested():
+    nested = _encoded_shape(collection_path="users/uid/conversations")
+    nested["document_path_template"] = "conversations/{document_id}"
+    with pytest.raises(ValueError, match="document_path_template"):
+        oracle.query_signature(nested)
+
+
+def test_deduplicate_serving_entry_wins_group_metadata():
+    serving = _entry("serving", _encoded_shape())
+    nonserving = _entry("nonserving", {**_encoded_shape(), "serving": False})
+    groups = oracle.deduplicate([nonserving, serving])
+    assert len(groups) == 1
+    assert groups[0]["serving"] is True
+    assert sorted(groups[0]["entries"]) == ["nonserving", "serving"]
+
+
+def _result(result_id, serving, status, rule_bugs=()):
+    return {
+        "id": result_id,
+        "signature": f"sig-{result_id}",
+        "serving": serving,
+        "shape_ids": [result_id],
+        "calling_functions": ["database.a"],
+        "observed": {"status": status},
+        "predictions": [{"id": result_id, "rule_bugs": list(rule_bugs), "review_findings": [], "resolution": None}],
+    }
+
+
+def test_report_splits_serving_and_nonserving_outcomes():
+    export = {
+        "shapes": [
+            _entry("a", {**_encoded_shape(), "serving": True}),
+            _entry("b", {**_encoded_shape(), "serving": False}),
+        ]
+    }
+    results = [
+        _result("serving-unserved", True, "unserved", rule_bugs=("predicted_served_but_unserved",)),
+        _result("nonserving-unserved", False, "unserved"),
+        _result("serving-served", True, "served"),
+    ]
+    report = oracle.build_report(
+        "p",
+        "d",
+        NAMESPACE,
+        export,
+        {"manifest": {}},
+        {"verified": True},
+        results,
+        [],
+    )
+    counts = report["counts"]
+    assert counts["unserved"] == 2 and counts["served"] == 1
+    assert counts["serving_counts"] == {"served": 1, "unserved": 1, "error": 0, "rule_bugs": 1}
+    assert counts["nonserving_counts"] == {"served": 0, "unserved": 1, "error": 0, "rule_bugs": 0}
+    assert counts["serving_shapes"] == 1 and counts["nonserving_shapes"] == 1
+    markdown = oracle.markdown_report(report)
+    assert "nonserving_counts" in markdown and "serving_counts" in markdown
+
+
+def test_serving_origin_wins_when_signature_is_shared():
+    serving = _entry("serving", _encoded_shape())
+    nonserving = _entry("nonserving", {**_encoded_shape(), "serving": False})
+    groups = oracle.deduplicate([nonserving, serving])
+    result = _result("shared", groups[0]["serving"], "unserved")
+    report = oracle.build_report(
+        "p",
+        "d",
+        NAMESPACE,
+        {"shapes": [serving, nonserving]},
+        {"manifest": {}},
+        {"verified": True},
+        [result],
+        [],
+    )
+    assert report["counts"]["serving_counts"]["unserved"] == 1
+    assert report["counts"]["nonserving_counts"]["unserved"] == 0

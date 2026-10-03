@@ -143,9 +143,7 @@ if not isinstance(getattr(sys.modules['database._client'], '__file__', None), st
     sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
-sys.modules['dependencies'].require_mcp_api_key_scope = MagicMock(
-    side_effect=lambda scope: MagicMock(name=f"require_{scope}")
-)
+sys.modules['dependencies'].require_mcp_scope = MagicMock(side_effect=lambda scope: MagicMock(name=f"require_{scope}"))
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
 sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
     side_effect=lambda dependency, _policy: dependency
@@ -191,7 +189,7 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     )
     dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
     assert dependency_calls == [rest.get_mcp_memory_default_memory_read_context]
-    assert rest.get_uid_from_mcp_api_key not in dependency_calls
+    assert rest.get_uid_with_mcp_memories_read not in dependency_calls
 
     auth_context = SimpleNamespace(uid="auth-user")
     authorization = SimpleNamespace(allowed=True)
@@ -1003,9 +1001,9 @@ class TestPeople:
 
     def test_rest_people_routes_use_matching_scope_dependencies(self):
         expected = {
-            ('/v1/mcp/people', 'GET'): rest.get_mcp_people_read_uid,
-            ('/v1/mcp/people/{person_id}/name', 'PATCH'): rest.get_mcp_people_rename_uid,
-            ('/v1/mcp/people/{person_id}/dismiss', 'POST'): rest.get_mcp_people_cleanup_uid,
+            ('/v1/mcp/people', 'GET'): rest.get_uid_with_mcp_people_read,
+            ('/v1/mcp/people/{person_id}/name', 'PATCH'): rest.get_uid_with_mcp_people_rename,
+            ('/v1/mcp/people/{person_id}/dismiss', 'POST'): rest.get_uid_with_mcp_people_cleanup,
         }
         actual = {}
         for route in rest.router.routes:
@@ -1097,7 +1095,7 @@ class TestScreenActivity:
         monkeypatch.setattr(sse_other.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
         app = FastAPI()
         app.include_router(rest.router)
-        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+        app.dependency_overrides[rest.get_uid_with_mcp_screen_activity_read] = lambda: UID
         with TestClient(app) as client:
             response = client.get('/v1/mcp/screen-activity?summary=true')
         assert response.status_code == 200

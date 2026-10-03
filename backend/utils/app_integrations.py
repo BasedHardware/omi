@@ -42,6 +42,7 @@ from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
 from database.users import get_user_language_preference
 from utils.subscription import is_trial_paywalled
+from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -753,6 +754,10 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             if skip_reason:
                 logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
                 return None
+            # Resolve entitlement only after every cheap rejection. Free users
+            # consume neither a gate evaluation nor any context/model work.
+            if not mentor_plan_allows_evaluation(uid):
+                return None
             _record_mentor_gate_evaluation(
                 uid,
                 now=gate_now,
@@ -762,18 +767,20 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             )
         finally:
             mentor_gate_state.release(uid)
+    elif not mentor_plan_allows_evaluation(uid):
+        return None
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
     try:
         user_name, user_facts = get_prompt_memories(uid)
-    except Exception as e:
-        logger.error(f"mentor_proactive memories_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive memories_failed uid={uid} reason=operation_failed")
         user_name, user_facts = 'User', ''
 
     try:
         goals = get_user_goals(uid, limit=3)
-    except Exception as e:
-        logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive goals_failed uid={uid} reason=operation_failed")
         goals = []
 
     # The pipeline's date anchor: without it the prompts fall back to UTC, which is
@@ -783,8 +790,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     try:
         recent_notifications = get_app_messages(uid, 'mentor', limit=20)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive recent_notis_failed uid={uid} reason=operation_failed")
         recent_notifications = []
 
     # ── Step 1: Gate ─────────────────────────────────────────────────────
@@ -802,20 +809,19 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 # session and its facts/goals prefix does not change between them.
                 uid=uid,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive gate_failed uid={uid} reason=operation_failed")
         return None
 
     if not relevance.is_relevant or relevance.relevance_score < base_threshold:
         logger.info(
             f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
-            f"context={relevance.context_summary[:100]}"
+            f"reason={'not_relevant' if not relevance.is_relevant else 'below_threshold'}"
         )
         return None
 
     logger.info(
-        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} "
-        f"reason={relevance.reasoning[:100]}"
+        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} " f"threshold={base_threshold}"
     )
 
     # ── Gather full context (expensive: vector search + recent convos) ───
@@ -840,8 +846,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
                     all_past.extend([c for c in vector_convos if not c.get('is_locked')])
-    except Exception as e:
-        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} reason=operation_failed")
 
     # Also fetch recent conversations by time for additional context
     try:
@@ -851,21 +857,21 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             for rc in recent_convos:
                 if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} reason=operation_failed")
 
     try:
         if all_past:
             past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
-    except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} reason=operation_failed")
 
     # Resolve the user's output language once so the notification is generated in it, not English
     # (the daily summary already respects this setting) (#5214).
     try:
         output_language = get_user_language_preference(uid) or 'en'
-    except Exception as e:
-        logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive language_lookup_failed uid={uid} reason=operation_failed")
         output_language = 'en'
 
     # ── Step 2: Generate ─────────────────────────────────────────────────
@@ -883,8 +889,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 output_language=output_language,
                 current_date=current_date,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive generate_failed uid={uid} reason=operation_failed")
         return None
 
     notification_text = draft.notification_text
@@ -911,14 +917,13 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 output_language=output_language,
                 current_date=current_date,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive critic_failed uid={uid} reason=operation_failed")
         return None
 
     if not validation.approved:
         logger.info(
-            f"mentor_proactive critic_rejected uid={uid} "
-            f"notification={notification_text[:80]} reason={validation.reasoning[:100]}"
+            f"mentor_proactive critic_rejected uid={uid} " f"chars={len(notification_text)} reason=not_approved"
         )
         return None
 
@@ -928,7 +933,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     logger.info(
         f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
-        f"category={draft.category} reasoning={draft.reasoning[:100]}"
+        f"chars={len(notification_text)} reason=critic_approved"
     )
     send_app_notification(uid, 'Omi', 'mentor', notification_text)
 

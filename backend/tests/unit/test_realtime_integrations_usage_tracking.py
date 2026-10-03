@@ -234,6 +234,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_cached_developer=MagicMock(return_value=None),
             set_cached_developer=MagicMock(),
         ),
+        'utils.mentor_admission': _module(
+            'utils.mentor_admission',
+            mentor_plan_allows_evaluation=MagicMock(return_value=True),
+        ),
         'utils.subscription': _module(
             'utils.subscription',
             is_trial_paywalled=MagicMock(return_value=False),

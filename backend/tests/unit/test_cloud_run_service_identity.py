@@ -13,7 +13,7 @@ BACKEND = Path(__file__).resolve().parents[2]
 REPO = BACKEND.parent
 _RENDERER = runpy.run_path(str(BACKEND / 'scripts/render_backend_runtime_env.py'), run_name='identity_test_renderer')
 RUNTIME_SA = 'backend-runtime@based-hardware.iam.gserviceaccount.com'
-PINNED_PROD_SERVICES = ('backend-sync', 'backend-sync-backfill')
+PINNED_PROD_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
 def test_identity_flags_pin_the_account_and_drop_key_refs_in_the_same_deploy():
@@ -92,17 +92,15 @@ def test_workflow_validation_requires_the_key_removal_flag():
     assert [str(error) for error in errors if '--remove-secrets' in str(error)]
 
 
-def test_repo_prod_manifest_pins_only_the_cut_over_services():
+def test_repo_prod_manifest_pins_every_backend_service():
     manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     services = manifest['environments']['prod']['cloud_run']['services']
 
     for service in PINNED_PROD_SERVICES:
         assert services[service]['service_account'] == RUNTIME_SA
         assert not set(KEY_CREDENTIAL_ENV_NAMES) & set(services[service].get('secrets') or {})
-    # Each further service is pinned only after its own canary; `backend` moves with listen/pusher
-    # in its own reviewed cut-over (credential hygiene D4 phase 2).
-    assert 'service_account' not in services['backend']
-    assert 'service_account' not in services['backend-integration']
+    # Keyless custom tokens are signed as the runtime identity itself.
+    assert services['backend']['env']['FIREBASE_SIGNER_SERVICE_ACCOUNT']['value'] == RUNTIME_SA
 
 
 def test_backend_stack_deploys_pass_each_services_identity_flags():

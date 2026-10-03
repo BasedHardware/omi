@@ -40,6 +40,9 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_parakeet_admission_d
 tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_artifact_matches_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_declared_on_every_host
+tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_undeclared_in_chart
+tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-0-PARAKEET_STREAM_CAPACITY must be an integer >= 1]
 # Same group: each renders the desktop-backend compose contract end to end. Measured 0.10-0.13s
 # CPU on an idle host, i.e. already above the 0.1s target before any contention.
@@ -376,3 +379,9 @@ tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bound
 tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[False-enhanced]
 tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[True-standard]
 tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[True-enhanced]
+# First FastAPI TestClient request in the file pays the users-router dependency/response
+# graph into its call under file isolation (~0.32s CPU); later route tests stay under the limit.
+tests/unit/test_conversation_scan.py::test_people_route_returns_stats
+# Admits MAX_JOBS + 8 legacy receipt-named people through the real ledger transaction and byte
+# budget to prove the admission bound; ~1.1s CPU on CI runners, measured 2026-10-03.
+tests/unit/test_speaker_learning_round2.py::test_legacy_admission_bounds_candidates

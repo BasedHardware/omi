@@ -91,6 +91,14 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -188,13 +196,15 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "0"
+    value: "2"
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
+    value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "10"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
-  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
-    value: ""
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
@@ -400,8 +410,12 @@ env:
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
-  - name: STT_ROUTING_PROBE_PERCENT
-    value: "2"
+  - name: STT_ROUTING_ON_PERCENT
+    value: "0"
+  - name: STT_ROUTING_TARGETS_JSON
+    value: ""
+  - name: STT_ROUTING_DISRUPTION_GATE
+    value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
   - name: SONIOX_MONTHLY_CEILING_USD
@@ -417,9 +431,9 @@ env:
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "25"
+    value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
-    value: "8"
+    value: "16"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
