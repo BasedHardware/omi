@@ -138,7 +138,11 @@ class LiveCaptureCard extends StatelessWidget {
       // The pause control is a 44pt target around a 36pt circle. 2pt of pill padding leaves a
       // 48pt row, with the circle inset 6pt — the same inset as the approved pill.
       padding: const EdgeInsets.fromLTRB(12, 2, 2, 2),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        color: OmiColors.surface1,
+        // A pill, not a card corner. OmiRadius has no capsule token.
+        borderRadius: BorderRadius.circular(999), // omi-ux-allow: radius-literal -- capsule, not a card corner
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
