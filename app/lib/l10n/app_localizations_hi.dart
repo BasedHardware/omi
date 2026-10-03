@@ -5735,7 +5735,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String etaLabel(String time) {
-    return 'अनुमानित समय';
+    return 'अनुमानित समय: $time';
   }
 
   @override
@@ -5783,7 +5783,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return 'वार्तालाप बनाए गए';
+    return '$count वार्तालाप बनाए गए';
   }
 
   @override
@@ -6461,7 +6461,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'वक्ता टैग करें';
+    return 'वक्ता $speakerId टैग करें';
   }
 
   @override
@@ -6478,7 +6478,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'इस वक्ता के अन्य खंड टैग करें';
+    return 'इस वक्ता के अन्य खंड टैग करें ($selected/$total)';
   }
 
   @override
@@ -6579,7 +6579,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'डिवाइस पर संग्रहीत';
+    return '$deviceName पर संग्रहीत';
   }
 
   @override
@@ -6653,7 +6653,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String transferFailedMessage(String error) {
-    return 'ट्रांसफर विफल। कृपया पुनः प्रयास करें।';
+    return 'ट्रांसफर विफल: $error';
   }
 
   @override
@@ -6770,7 +6770,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'आपका डेटा अब सुरक्षित है। आप सेटिंग्स में डेटा सुरक्षा प्रबंधित कर सकते हैं।';
+    return 'आपका डेटा अब नई $level सेटिंग्स से सुरक्षित है।';
   }
 
   @override

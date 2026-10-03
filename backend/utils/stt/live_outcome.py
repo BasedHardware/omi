@@ -50,6 +50,7 @@ class LiveLegOutcome:
         self.reason: str | None = None
         self.path = 'close'
         self.owner_closing = False
+        self.recovery_enabled: bool | None = None
         self.pending: Any = None
         self.handed_off = False
         self.transport_released = False

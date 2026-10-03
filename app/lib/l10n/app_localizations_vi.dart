@@ -6013,12 +6013,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Kích thước ước tính';
+    return 'Kích thước ước tính: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Không gian khả dụng';
+    return 'Dung lượng khả dụng: $space';
   }
 
   @override
@@ -6029,7 +6029,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Lỗi tải xuống';
+    return 'Lỗi tải xuống: $error';
   }
 
   @override
@@ -6382,7 +6382,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String failedToSendReply(String error) {
-    return 'Không thể gửi phản hồi';
+    return 'Không thể gửi phản hồi: $error';
   }
 
   @override
@@ -6390,7 +6390,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String starFilter(int count) {
-    return 'Lọc theo sao';
+    return '$count sao';
   }
 
   @override

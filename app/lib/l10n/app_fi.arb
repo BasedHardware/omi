@@ -2138,7 +2138,7 @@
     "allObjectsMigratedFinalizing": "Kaikki kohteet siirretty. Viimeistellään…",
     "migrationErrorOccurred": "Siirron aikana tapahtui virhe. Yritä uudelleen.",
     "migrationComplete": "Siirto valmis!",
-    "dataProtectedWithSettings": "Tietosi on suojattu asetuksillasi",
+    "dataProtectedWithSettings": "Tietosi on nyt suojattu uusilla {level}-asetuksilla.",
     "chatsLowercase": "keskustelut",
     "dataLowercase": "tiedot",
     "fallNotificationTitle": "Auts",

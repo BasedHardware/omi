@@ -999,7 +999,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String minLabel(int count) {
-    return 'Min';
+    return '$count min';
   }
 
   @override
@@ -1305,22 +1305,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String appSettings(String appName) {
-    return 'App-indstillinger';
+    return '$appName-indstillinger';
   }
 
   @override
   String disconnectFromApp(String appName) {
-    return 'Frakobl fra app';
+    return 'Frakobl fra $appName?';
   }
 
   @override
   String disconnectFromAppDesc(String appName) {
-    return 'Frakobl fra denne app?';
+    return 'Dette fjerner din $appName-godkendelse. Du skal oprette forbindelse igen for at bruge den.';
   }
 
   @override
   String connectedToApp(String appName) {
-    return 'Forbundet til app';
+    return 'Forbundet til $appName';
   }
 
   @override
@@ -1351,7 +1351,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String failedToLoadRepos(String error) {
-    return 'Kunne ikke indlæse repositories';
+    return 'Kunne ikke indlæse repositories: $error';
   }
 
   @override
@@ -1374,7 +1374,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String updatedDate(String date) {
-    return 'Opdateret dato';
+    return 'Opdateret $date';
   }
 
   @override
@@ -1415,7 +1415,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String failedToStartAppAuth(String appName) {
-    return 'Kunne ikke starte app-godkendelse';
+    return 'Kunne ikke starte $appName-godkendelse';
   }
 
   @override
@@ -1425,7 +1425,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Godkend Omi til opgaver';
+    return 'Du skal give Omi tilladelse til at oprette opgaver på din $appName-konto. Dette åbner din browser til godkendelse.';
   }
 
   @override
@@ -1433,12 +1433,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String appIntegration(String appName) {
-    return 'App-integration';
+    return '$appName-integration';
   }
 
   @override
   String integrationComingSoon(String appName) {
-    return 'Integration kommer snart';
+    return 'Integration med $appName kommer snart! Vi arbejder hårdt på at give dig flere muligheder for opgavestyring.';
   }
 
   @override
@@ -1488,7 +1488,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String errorSaving(String error) {
-    return 'Fejl ved gemning';
+    return 'Fejl ved gemning: $error';
   }
 
   @override
@@ -1511,12 +1511,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String importedConfig(String providerName) {
-    return 'Importeret konfiguration';
+    return 'Importeret $providerName-konfiguration';
   }
 
   @override
   String invalidJson(String error) {
-    return 'Ugyldig JSON';
+    return 'Ugyldig JSON: $error';
   }
 
   @override
@@ -1720,7 +1720,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String errorConnectingAppleWatch(String error) {
-    return 'Fejl ved forbindelse til Apple Watch';
+    return 'Fejl ved forbindelse til Apple Watch: $error';
   }
 
   @override
@@ -1903,12 +1903,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String errorRequestingPermission(String error) {
-    return 'Fejl ved anmodning om tilladelse';
+    return 'Fejl ved anmodning om tilladelse: $error';
   }
 
   @override
   String errorStartingRecording(String error) {
-    return 'Fejl ved start af optagelse';
+    return 'Fejl ved start af optagelse: $error';
   }
 
   @override
@@ -3686,7 +3686,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String segmentsSingular(String count) {
-    return 'segment';
+    return '$count segment';
   }
 
   @override
@@ -5133,7 +5133,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String hints(String text) {
-    return 'Tips';
+    return 'Tips: $text';
   }
 
   @override
@@ -5747,7 +5747,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String etaLabel(String time) {
-    return 'Estimeret tid';
+    return 'Estimeret tid: $time';
   }
 
   @override
@@ -5795,7 +5795,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return 'Samtaler oprettet';
+    return '$count samtaler oprettet';
   }
 
   @override
@@ -6117,7 +6117,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String modelNameWithFile(String model) {
-    return 'Modelnavn med fil';
+    return 'Model: $model';
   }
 
   @override
@@ -6472,7 +6472,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Markér taler';
+    return 'Markér taler $speakerId';
   }
 
   @override
@@ -6489,7 +6489,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Markér andre segmenter fra denne taler';
+    return 'Markér andre segmenter fra denne taler ($selected/$total)';
   }
 
   @override
@@ -6589,7 +6589,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Gemt på enhed';
+    return 'Gemt på $deviceName';
   }
 
   @override
@@ -6663,7 +6663,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String transferFailedMessage(String error) {
-    return 'Overførsel mislykkedes. Prøv venligst igen.';
+    return 'Overførsel mislykkedes: $error';
   }
 
   @override
@@ -6780,7 +6780,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Data beskyttet med indstillinger';
+    return 'Dine data er nu beskyttet med de nye $level-indstillinger.';
   }
 
   @override
