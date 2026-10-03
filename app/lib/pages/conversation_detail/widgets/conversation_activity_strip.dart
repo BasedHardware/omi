@@ -39,9 +39,8 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
   }
 
   void _syncPolling(ConversationDetailProvider provider, ServerConversation? conversation) {
-    final processingId = conversation != null && conversation.status == ConversationStatus.processing
-        ? conversation.id
-        : null;
+    final processingId =
+        conversation != null && conversation.status == ConversationStatus.processing ? conversation.id : null;
     if (processingId == _pollingId) return;
     _poll?.cancel();
     _poll = null;
