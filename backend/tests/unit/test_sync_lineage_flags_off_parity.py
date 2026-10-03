@@ -16,7 +16,7 @@ import pytest
 
 from tests.unit import test_sync_lineage_dedupe_replay as helpers
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from tests.unit.test_sync_lineage_overlap import overlap_rows
+from tests.unit.test_sync_lineage_overlap import overlap_rows, straddling_rows
 from tests.unit.test_sync_recording_lineage import ORIGIN, spans, sync_chunk
 from utils.sync import assignment, recording_lineage
 
@@ -189,13 +189,15 @@ def test_assignment_payload_result_and_survivors_are_byte_identical_to_main(froz
 
 
 @pytest.mark.parametrize('stamp', [None, 'GEN-A', 'GEN-B', 'UNRELATED'])
-def test_overlap_targets_counts_and_log_bytes_match_main(frozen, stamp, caplog):
+@pytest.mark.parametrize('kind', ['strict', 'tolerant'])
+def test_overlap_targets_counts_and_log_bytes_match_main(frozen, stamp, caplog, kind):
     _, old = frozen
-    chunk = sync_chunk(44300, 44330, 'synthetic buffered speech before creation')
+    rows, span = (overlap_rows(), (44300, 44330)) if kind == 'strict' else (straddling_rows(), (44399, 44410))
+    chunk = sync_chunk(span[0], span[1], 'synthetic buffered speech before creation')
     output, messages = [], []
     for module in (old, recording_lineage):
         plan = module.select_segment_targets(
-            overlap_rows(),
+            rows,
             ORIGIN,
             spans([chunk]),
             stamped_target=stamp,

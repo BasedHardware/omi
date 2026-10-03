@@ -879,6 +879,54 @@ def test_pending_plan_output_defers_through_real_process_segment(pipeline_module
     assert store.rows == before
 
 
+@pytest.mark.parametrize('stamp', [None, 'UNRELATED'])
+def test_tolerant_pending_plan_output_defers_through_real_process_segment(pipeline_module, monkeypatch, stamp):
+    """A straddling segment that only tolerantly overlaps two generations defers whole."""
+    pipeline = pipeline_module
+    rows = [
+        live_row(id='GEN-A', started_at=at(43200), finished_at=at(44400)),
+        live_row(id='GEN-B', started_at=at(44403), finished_at=at(45000)),
+    ]
+    store = seeded_store(rows)
+    before = deepcopy(store.rows)
+    segment_plan = select_segment_targets(
+        rows,
+        ORIGIN,
+        {'wal': (44399, 44410)},
+        stamped_target=stamp,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+    )
+    assert segment_plan.targets == {'wal': None}
+    assert segment_plan.binding_reasons == {'wal': 'ambiguous_pending'}
+    errors, deferred = [], {}
+    response = {'new_memories': set(), 'updated_memories': set()}
+    signed_url, prerecorded_call, turnstile = MagicMock(), MagicMock(), MagicMock()
+    ok, response, finish = _drive_process_segment(
+        pipeline,
+        monkeypatch,
+        store,
+        NEW,
+        target=segment_plan.targets['wal'],
+        lineage_binding=segment_plan.binding_reasons['wal'],
+        response=response,
+        errors=errors,
+        deferred_outcome=deferred,
+        signed_url_impl=signed_url,
+        prerecorded_impl=prerecorded_call,
+        turnstile=turnstile,
+    )
+    assert ok is False and errors == ['sync_persistence_failed']
+    assert deferred['retryable'] is True
+    signed_url.assert_not_called()
+    prerecorded_call.assert_not_called()
+    turnstile.complete.assert_called_once_with('/tmp/wal.wav')
+    finish.assert_not_called()
+    assert store.rows == before
+    assert response == {'new_memories': set(), 'updated_memories': set()}
+
+
 def test_pending_token_is_inert_when_safe_overlap_is_off(pipeline_module, monkeypatch):
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     pipeline = pipeline_module

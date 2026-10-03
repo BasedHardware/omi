@@ -15,10 +15,10 @@ it is the unique canonical row whose interval holds the segment: strictly
 first, then with the bounded edge allowance of ``recording_session_target``
 (overlapping it, starting at most 5 s before it and ending at most 60 s after
 its last word). Smart-merge donor tombstones stay
-in the lineage and canonicalize to their survivor. When several strict matches
+in the lineage and canonicalize to their survivor. When several matches
 canonicalize differently there is no reliable local clock ordering, so under
 the safe-overlap gate the segment stays unbound with the ``ambiguous_pending``
-token unless the phone's stamp names exactly one strict canonical; without the
+token unless the phone's stamp names exactly one compatible canonical; without the
 gate, or with no unique generation and no overlap, the segment keeps the
 phone's stamp if it has one (the pre-#19424 behavior) and otherwise stays
 unbound for temporal assignment, which never adopts live rows. A different
@@ -267,7 +267,7 @@ def _bind(
     stamp: Optional[str] = None,
     safe_overlap: bool = False,
 ) -> tuple[Optional[str], bool]:
-    """The explicit target, plus whether several strict canonicals stayed undecidable."""
+    """The explicit target, plus whether several distinct canonicals stayed undecidable."""
     strict = [g for g in generations if g.start <= start and end <= g.end]
     if strict:
         unique = _unique(strict)
@@ -275,7 +275,7 @@ def _bind(
             return unique, False
         if not safe_overlap:
             return None, False
-        pick = pick_overlapping(strict, start, end, stamp)
+        pick = pick_overlapping(strict, stamp)
         return (_unique([pick]) if pick is not None else None), pick is None
     tolerant = [
         g
@@ -285,7 +285,15 @@ def _bind(
         and start >= g.start - START_SKEW_SECONDS
         and end <= g.end + TRAILING_AUDIO_SECONDS
     ]
-    return (_unique(tolerant) if tolerant else None), False
+    if not tolerant:
+        return None, False
+    unique = _unique(tolerant)
+    if unique is not None:
+        return unique, False
+    if not safe_overlap:
+        return None, False
+    pick = pick_overlapping(tolerant, stamp)
+    return (_unique([pick]) if pick is not None else None), pick is None
 
 
 def ambiguous_binding_pending(uid: Optional[str], binding: Optional[str]) -> bool:

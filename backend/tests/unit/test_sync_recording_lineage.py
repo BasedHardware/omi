@@ -416,7 +416,8 @@ def test_adjacent_generations_inside_the_edge_allowance_are_ambiguous():
     result = select_segment_targets(
         rows, ORIGIN, spans([chunk]), stamped_target=None, source='omi', client_device_id='pendant', is_locked=False
     )
-    assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'} and result.reason == 'ambiguous_overlap'
 
 
 def test_trailing_allowance_does_not_exceed_sixty_seconds():

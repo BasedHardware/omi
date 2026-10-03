@@ -154,11 +154,74 @@ def test_an_incomplete_overlap_set_still_binds_nothing():
     assert result.targets == {chunk['id']: None} and result.reason == 'truncated'
 
 
+def straddling_rows():
+    """GEN-A 12:00-12:20 and GEN-B 12:20:03-12:30: a chunk can tolerate both."""
+    return [backdated('GEN-A', 43200, 44400, 43200), backdated('GEN-B', 44403, 45000, 44403)]
+
+
 def test_tolerant_only_overlap_stays_ambiguous():
-    rows = [backdated('GEN-A', 43200, 44400, 43200), backdated('GEN-B', 44403, 45000, 44403)]
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
+    result = select(straddling_rows(), chunk)
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+    assert result.reason == 'ambiguous_overlap'
+
+
+@pytest.mark.parametrize('stamp', [None, 'STAMP', 'GEN-UNRELATED'])
+def test_tolerant_overlap_without_a_compatible_stamp_stays_pending(stamp):
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
+    result = select(straddling_rows(), chunk, stamp=stamp)
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+    assert result.reason == 'ambiguous_overlap' and result.outcome == 'interval_miss'
+    assert result.counts['unbound'] == 1
+
+
+@pytest.mark.parametrize('stamp', ['GEN-A', 'GEN-B'])
+def test_tolerant_overlap_binds_the_compatible_stamp(stamp):
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
+    result = select(straddling_rows(), chunk, stamp=stamp)
+    assert result.targets == {chunk['id']: stamp}
+    assert result.binding_reasons == {chunk['id']: 'bound'}
+    assert result.counts['bound'] == 1
+
+
+def test_tolerant_overlap_sharing_a_canonical_binds_without_a_stamp():
+    donor = backdated(
+        'GEN-DONOR',
+        43100,
+        44405,
+        43100,
+        deleted=True,
+        discarded=True,
+        sync_merged_into='GEN-A',
+        smart_merge={'role': 'donor'},
+    )
+    rows = [backdated('GEN-A', 43200, 44400, 43200), donor]
     chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
     result = select(rows, chunk)
-    assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
+    assert result.targets == {chunk['id']: 'GEN-A'}
+    assert result.binding_reasons == {chunk['id']: 'bound'}
+
+
+def test_a_stamp_naming_a_row_outside_the_tolerant_set_stays_pending():
+    rows = straddling_rows() + [backdated('GEN-C', 40000, 41000, 40000)]
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
+    result = select(rows, chunk, stamp='GEN-C')
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+
+
+def test_tolerant_overlap_without_safe_handling_keeps_the_legacy_miss():
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
+    unstamped = select(straddling_rows(), chunk, safe_overlap=False)
+    assert unstamped.targets == {chunk['id']: None}
+    assert unstamped.binding_reasons == {chunk['id']: 'unbound'}
+    assert unstamped.reason == 'interval_miss'
+    stamped = select(straddling_rows(), chunk, stamp='STAMP', safe_overlap=False)
+    assert stamped.targets == {chunk['id']: 'STAMP'}
+    assert stamped.binding_reasons == {chunk['id']: 'stamp_fallback'}
+    assert stamped.reason == 'interval_miss'
 
 
 def test_new_speech_lands_on_the_stamped_row_without_new_conversations():
