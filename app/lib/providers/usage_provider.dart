@@ -133,6 +133,12 @@ class UsageProvider with ChangeNotifier {
   }
 
   @visibleForTesting
+  void debugSetAvailablePlans(Map<String, dynamic>? value) {
+    _availablePlans = value;
+    notifyListeners();
+  }
+
+  @visibleForTesting
   void debugSetUsage(String period, UsageStats stats, List<UsageHistoryPoint> history) {
     switch (period) {
       case 'today':

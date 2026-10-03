@@ -12153,6 +12153,24 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'الصوت';
+
+  @override
+  String get assistantVoice => 'صوت المساعد';
+
+  @override
+  String get voiceSharedAcrossDevices => 'اختيارك للصوت مشترك بين الجوال وسطح المكتب.';
+
+  @override
+  String get readChatRepliesAloud => 'قراءة ردود الدردشة بصوت عالٍ';
+
+  @override
+  String get readChatRepliesAloudDescription => 'يتحدث فقط عندما يسمح إعداد \"الرد الصوتي\" بذلك.';
+
+  @override
+  String get voicePreviewSample => 'مرحباً، أنا Omi. هذا صوتي.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }

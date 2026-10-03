@@ -89,6 +89,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private let stableCacheIdentity: String
   private let dynamicContextIdentity: String
   private let contextCacheReplaced: Bool
+
+  let assistantVoiceID: String
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -214,6 +216,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
     contextCacheReplaced: Bool = false,
+    assistantVoiceID: String = "Charon",
     rawWebSocketFactory: @escaping (URL, DispatchQueue) -> RealtimeRawWebSocketTransport = {
       RawWebSocket(url: $0, queue: $1)
     },
@@ -227,6 +230,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     self.stableCacheIdentity = stableCacheIdentity
     self.dynamicContextIdentity = dynamicContextIdentity
     self.contextCacheReplaced = contextCacheReplaced
+    self.assistantVoiceID = assistantVoiceID
     self.rawWebSocketFactory = rawWebSocketFactory
     self.delegate = delegate
     super.init()
@@ -1205,7 +1209,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
-            "speechConfig": Self.geminiSpeechConfig(),
+            "speechConfig": Self.geminiSpeechConfig(voiceID: assistantVoiceID),
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [

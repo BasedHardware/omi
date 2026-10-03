@@ -5788,7 +5788,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Spracovávajú sa súbory z SD karty';
+    return 'Počet nahrávok na spracovanie: $count. Súbory sa potom odstránia z SD karty.';
   }
 
   @override
@@ -6484,7 +6484,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Označiť rečníka';
+    return 'Označiť rečníka $speakerId';
   }
 
   @override
@@ -6676,7 +6676,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String transferFailedMessage(String error) {
-    return 'Prenos zlyhal. Skúste to prosím znova.';
+    return 'Prenos zlyhal: $error';
   }
 
   @override
@@ -6794,7 +6794,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Vaše údaje sú chránené vašimi nastaveniami';
+    return 'Vaše údaje sú teraz chránené novými nastaveniami $level.';
   }
 
   @override
@@ -7123,7 +7123,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String failedToConnectServiceWithError(String serviceName, String error) {
-    return 'Nepodarilo sa pripojiť k službe: $error';
+    return 'Nepodarilo sa pripojiť k $serviceName: $error';
   }
 
   @override
@@ -12218,6 +12218,24 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výber hlasu je zdieľaný medzi mobilnou a desktopovou aplikáciou.';
+
+  @override
+  String get readChatRepliesAloud => 'Čítať odpovede četu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hovorí iba vtedy, keď to povolí \"Hlasová odpoveď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, som Omi. Toto je môj hlas.';
 
   @override
   String speakerLabelTalkTime(String duration) {
