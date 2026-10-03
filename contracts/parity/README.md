@@ -91,41 +91,11 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
-5. JIT empty watchlist — **routing converged; ambient pacing missing on Windows**.
-   macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
-   `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
-   routes a complete _empty_ watchlist to the bounded ambient lane (owner decision
-   2026-09-01: an account with no standing trigger must not go silent). Windows
-   (`desktop/windows/src/shared/jitTriggerRuntime.ts` `evaluateJitWatchlist`,
-   `desktop/windows/src/main/jit/jitRuntime.ts`) now routes the same way: an empty
-   complete watchlist evaluates to `ambient_fallback` and admits as
-   `no_eligible_planned_trigger`, the one planned outcome `WindowsJitAssistant` hands
-   to `admitAmbient`; the `empty_watchlist` suppression reason is retired on both
-   platforms. **Routing is not the whole item**: what the two platforms then spend in
-   the ambient lane still differs, so item 5 is NOT converged. Open on Windows and
-   tracked as the JIT client floor (decision 19):
-   - No ambient pacing. macOS gates every ambient nano spend on
-     `JITAmbientPacingPolicy` (`desktop/macos/.../JITAmbientPacingPolicy.swift`:
-     burst 2, then one per `activeDaySeconds / budget` — two hours at the default
-     eight — with 2 triages reserved for derived-intent matches), reached from
-     `JITProactivityRuntime.swift:640-670`. Windows `admitAmbient`
-     (`desktop/windows/src/main/jit/jitRuntime.ts`) has no pacing at all: the local
-     nano claim passes `budget: null`, so the whole daily allowance can be consumed
-     in the first minutes after local midnight — the exact failure measured on the
-     owner account 2026-08-30/31 that produced the macOS policy.
-   - No `ambient_server_denied` backoff. macOS records a per-budget-day denial and
-     suppresses for `ambientServerDenialBackoff` after the server refuses; Windows
-     returns `reservation_already_consumed` and retries on the next settled context.
-   - No local per-day nano usage read before spend (macOS `readAmbientNanoUsage`);
-     Windows learns its position in the budget only from the server's answer.
-   - Ambient context cooldown keys on an OCR-derived semantic fingerprint
-     (`WindowsJitAssistant.analyze` hashes app + window title + OCR text), so a
-     context whose text keeps changing produces a new fingerprint each frame and the
-     `reserveProactivity` RPCs are unbounded per settled context — they continue
-     after the server answers `reserved: false`. Pre-existing, not introduced by the
-     routing change; it is what makes the missing pacing cost real money.
-   - Budget day is `localBudgetDay(now)` rather than the server's `budget_timezone`
-     (macOS #12798).
+5. JIT proactivity watchlist/ambient parity is retired as of 2026-10-03: both
+   desktop producers are deleted and reservations return a static 410. Shared
+   rollout authority and canonical mirrors remain. See
+   [`backend/docs/proactivity-v2-retirement.md`](../../backend/docs/proactivity-v2-retirement.md).
+
 6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
    vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS
    (`ServerConversation.durationInSeconds`) validate each segment — empty text,

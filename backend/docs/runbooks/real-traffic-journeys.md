@@ -95,12 +95,11 @@ Desktop call sites use these boundaries:
   response succeeds only with nonempty assistant content or a tool call. In-band
   `error` frames, empty answers, provider errors, and incomplete streams are not
   successes.
-- `desktop_proactivity` covers the strict `/v1/desktop/proactivity/completions`
-  facade and generative calls through the legacy desktop Gemini proxy. The strict
-  facade succeeds only after its requested JSON schema validates. A legacy Gemini
-  stream needs nonempty candidate text plus a terminal `finishReason`; a normal
-  response needs nonempty candidate text. Per-user Redis caps are `degraded` with
-  `quota_capped`, while provider and invalid-response shapes are failures.
+- `desktop_proactivity` continues to cover generative calls through the desktop
+  Gemini proxy, including retained assistants and lane attribution. A stream
+  needs nonempty candidate text plus a terminal `finishReason`; a normal response
+  needs nonempty candidate text. The retired strict completion facade returns a
+  static 429 without telemetry, quota, or provider work.
 
 Client journey metric writes are fail-open. Collector or registry exceptions are
 swallowed at the observability boundary and cannot change the product response.
