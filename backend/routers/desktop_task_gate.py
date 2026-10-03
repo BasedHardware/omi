@@ -3,14 +3,18 @@
 import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm.screen_task_gate import decide_screen_task
 from utils.other.endpoints import get_current_user_uid
 from utils.managed_compute import authorize_managed_compute
-from utils.llm.screen_task_admission import screen_task_stopped, check_screen_task_limit
+from utils.llm.screen_task_admission import (
+    check_screen_task_limit,
+    screen_task_build_floor_refusal,
+    screen_task_stopped,
+)
 from utils.subscription import is_desktop_trial_paywalled
 from utils.metrics import SCREEN_TASK_GATE_FRAMES_TOTAL
 
@@ -35,6 +39,7 @@ class ScreenTaskGateResponse(BaseModel):
 @router.post('/v1/screen-task/gate', response_model=ScreenTaskGateResponse)
 async def screen_task_gate(
     body: ScreenTaskGateRequest,
+    request: Request,
     uid: str = Depends(get_current_user_uid),
 ) -> ScreenTaskGateResponse:
     if screen_task_stopped():
@@ -42,6 +47,11 @@ async def screen_task_gate(
         raise HTTPException(
             status_code=409, detail={'error': 'screen_task_stopped'}, headers={'X-Omi-Retryable': 'false'}
         )
+    # Below-floor clients fail open on this error into flagged extraction.
+    # The proxy refusal is what moves that frame onto the legacy loop.
+    build_floor = screen_task_build_floor_refusal(request.headers, 'gate')
+    if build_floor is not None:
+        raise build_floor
     # Separate burst and daily budgets, fail closed when Redis admission is unavailable.
     try:
         await run_blocking(db_executor, check_screen_task_limit, uid, 'screen_task:gate')
@@ -91,6 +101,11 @@ class ScreenTaskAdmissionResponse(BaseModel):
 
 
 @router.get('/v1/screen-task/admission', response_model=ScreenTaskAdmissionResponse)
-def screen_task_admission(uid: str = Depends(get_current_user_uid)) -> ScreenTaskAdmissionResponse:
+def screen_task_admission(request: Request, uid: str = Depends(get_current_user_uid)) -> ScreenTaskAdmissionResponse:
     # No provider work; a running client polls every 30 seconds. Failure expires its lease.
-    return ScreenTaskAdmissionResponse(enabled=not screen_task_stopped())
+    if screen_task_stopped():
+        return ScreenTaskAdmissionResponse(enabled=False)
+    build_floor = screen_task_build_floor_refusal(request.headers, 'admission')
+    if build_floor is not None:
+        raise build_floor
+    return ScreenTaskAdmissionResponse(enabled=True)
