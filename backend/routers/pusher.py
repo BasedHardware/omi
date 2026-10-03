@@ -60,7 +60,7 @@ from utils.metrics import (
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_learning_jobs import run_authorized_person_learning, schedule_person_voice_learning_retry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -340,6 +340,7 @@ async def _websocket_util_trigger(
                             {'audio_files': files_payload},
                         )
                         if applied:
+                            schedule_person_voice_learning_retry(uid, conv_id)
                             # Rebuild the conversation playback artifact if a stamped one
                             # went stale. No stamp (the live-conversation common case) → no-op.
                             if is_audio_merge_dispatch_enabled():
@@ -472,7 +473,7 @@ async def _websocket_util_trigger(
                 segment_ids = request['segment_ids']
 
                 try:
-                    await extract_speaker_samples(
+                    await run_authorized_person_learning(
                         uid=uid,
                         person_id=person_id,
                         conversation_id=conv_id,

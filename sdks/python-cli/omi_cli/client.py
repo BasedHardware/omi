@@ -18,6 +18,7 @@ loop here would buy nothing.
 from __future__ import annotations
 
 import json
+import math
 import re
 import urllib.parse
 from datetime import datetime, timezone
@@ -379,9 +380,14 @@ def _parse_retry_after(value: Optional[str]) -> Optional[float]:
         return None
     cleaned = value.strip()
     try:
-        return max(0.0, float(cleaned))
-    except ValueError:
-        pass
+        parsed = float(cleaned)
+    except (ValueError, OverflowError):
+        parsed = None
+    else:
+        # float() accepts inf, nan, and exponent overflow. Those are not
+        # delay-seconds and must not become an infinite cooldown.
+        if math.isfinite(parsed):
+            return max(0.0, parsed)
 
     try:
         dt = parsedate_to_datetime(cleaned)

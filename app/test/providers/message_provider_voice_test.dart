@@ -83,6 +83,25 @@ void main() {
     provider.dispose();
   });
 
+  test('pendant reply cannot append to an explicitly selected past thread', () async {
+    final provider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) async* {
+        yield ServerMessageChunk('voice', 'Pendant answer', MessageChunkType.data);
+      },
+    );
+    final prior = ServerMessage.empty()..text = 'Past thread';
+    provider.chatSessionId = 'past';
+    provider.messages = [prior];
+    await provider.sendVoiceMessageStreamToServer([
+      <int>[1]
+    ], codec: BleAudioCodec.opus);
+    expect(provider.messages, [prior]);
+    expect(provider.messages.single.text, 'Past thread');
+    expect(provider.canSwitchChat, isTrue);
+    provider.dispose();
+  });
+
   test('voice reply timeout clears the re-entry guard for the next question', () async {
     var streamCalls = 0;
     final stalled = StreamController<ServerMessageChunk>();

@@ -48,7 +48,7 @@ SCREEN_FRAME_PURPOSES: dict[ScreenFrameEgressPurpose, ScreenFramePurposePolicy] 
         share_default=True,
         model="gemini-2.5-flash-lite",
         policy_version="meeting_note_privacy.v1",
-        prompt_version="meeting_note_frame_judge.v1",
+        prompt_version="meeting_note_frame_judge.v2",
     )
 }
 

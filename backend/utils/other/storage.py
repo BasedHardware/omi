@@ -23,7 +23,12 @@ else:
     _opus_import_error = None
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
-from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
+from database.redis_db import (
+    cache_signed_url,
+    get_cached_signed_url,
+    get_cached_signed_url_ttl,
+    delete_cached_signed_url,
+)
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -87,6 +92,10 @@ screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 
 def get_private_cloud_sync_bucket() -> Any:
     return _get_storage_client().bucket(private_cloud_sync_bucket)
+
+
+def get_storage_chunk_semaphore() -> threading.BoundedSemaphore:
+    return _STORAGE_CHUNK_SEM
 
 
 _did_warn_missing_speech_profiles_bucket = False
@@ -926,7 +935,14 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
                 deleted_batch_paths.add(blob.name)
 
 
-def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
+def list_audio_chunks(
+    uid: str,
+    conversation_id: str,
+    *,
+    timeout: Optional[float] = None,
+    retry: Any = None,
+    deadline: Optional[float] = None,
+) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
 
@@ -935,10 +951,16 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
-    blobs = bucket.list_blobs(prefix=prefix)
+    blobs = (
+        bucket.list_blobs(prefix=prefix)
+        if timeout is None
+        else bucket.list_blobs(prefix=prefix, timeout=timeout, retry=retry, page_size=1000)
+    )
 
     chunks: List[Dict[str, Any]] = []
-    for blob in blobs:
+    for index, blob in enumerate(blobs):
+        if deadline is not None and (time.monotonic() >= deadline or index >= 10000):
+            raise TimeoutError('speaker audio listing budget exhausted')
         # Extract timestamp from filename
         # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
         # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
@@ -1017,15 +1039,25 @@ def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
     return pcm_data[:-remainder]
 
 
-def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
+def download_and_decode_chunk_blob(
+    bucket: Any,
+    path: str,
+    uid: str,
+    sample_rate: int,
+    *,
+    download_kwargs: Optional[Dict[str, Any]] = None,
+    on_failure: Optional[Callable[[str], None]] = None,
+) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     ext = _get_extension_for_path(path)
     encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
     is_opus = ext in ('opus.enc', 'opus')
 
     try:
-        chunk_data = bucket.blob(path).download_as_bytes()
+        chunk_data = bucket.blob(path).download_as_bytes(**(download_kwargs or {}))
     except NotFound:
+        if on_failure:
+            on_failure('missing_blob')
         return None
 
     try:
@@ -1042,32 +1074,10 @@ def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rat
 
         return _align_pcm16_frames(pcm_data, path)
     except Exception as e:
+        if on_failure:
+            on_failure('decode_failed')
         logger.warning(f"Failed to decode/decrypt {path}: {e}")
         return None
-
-
-def iter_audio_chunk_pcm(
-    uid: str,
-    conversation_id: str,
-    wanted: Callable[[float, Optional[float]], bool],
-    sample_rate: int = 16000,
-) -> Any:
-    """Yield ``(start_timestamp, pcm16)`` for each stored chunk blob, oldest first.
-
-    One listing serves the whole pass, and each blob is decoded on its own so a
-    caller can place audio by the blob's own start: merging several chunks drifts
-    wherever stored chunks overlap. ``wanted(start, next_start)`` skips a blob
-    before it is downloaded; ``next_start`` is None for the last blob.
-    """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-    chunks = list_audio_chunks(uid, conversation_id)
-    for index, chunk in enumerate(chunks):
-        next_start = chunks[index + 1]['timestamp'] if index + 1 < len(chunks) else None
-        if not wanted(chunk['timestamp'], next_start):
-            continue
-        pcm = _download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
-        if pcm:
-            yield chunk['timestamp'], pcm
 
 
 def download_audio_chunks_and_merge(
@@ -1076,36 +1086,22 @@ def download_audio_chunks_and_merge(
     timestamps: List[float],
     fill_gaps: bool = True,
     sample_rate: int = 16000,
+    *,
+    listed_chunks: Optional[List[Dict[str, Any]]] = None,
+    chunk_loader: Optional[Callable[[str], bytes | None]] = None,
 ) -> bytes:
-    """
-    Download and merge audio chunks on-demand, handling mixed encryption states.
-    Downloads chunks in parallel.
-    Normalizes all chunks to unencrypted PCM format for consistent merging.
-    Supports both single-chunk blobs and batch blobs (from upload_audio_chunks_batch).
+    """Merge selected timestamps with main's format priority and gap semantics.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        timestamps: List of chunk timestamps to merge
-        fill_gaps: If True, insert silence (zero bytes) between chunks to maintain
-                   continuous time-aligned audio. Default True.
-        sample_rate: Audio sample rate in Hz (default 16000)
-
-    Returns:
-        Merged audio bytes (PCM16)
+    Batch ranges resolve selected timestamps. A supplied listing avoids repeated
+    I/O; a supplied loader owns the shared semaphore and invocation budget.
     """
 
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
-    # Resolve actual GCS paths — needed to find batch blobs whose filenames
-    # contain timestamp ranges instead of single timestamps
-    actual_chunks = list_audio_chunks(uid, conversation_id)
-    ts_set = {round(ts, 3) for ts in timestamps}
+    actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
 
-    # Build batch blob map: for batch blobs, track which timestamps they cover
-    batch_paths: Dict[str, Dict[str, Any]] = {}  # path -> chunk_info (deduplicate downloads)
-    ts_to_batch_path: Dict[float, str] = {}  # timestamp -> batch_path (for timestamps inside batch range)
-    single_chunk_timestamps: List[float] = []  # timestamps that have individual blobs
+    batch_paths: Dict[str, Dict[str, Any]] = {}
+    ts_to_batch_path: Dict[float, str] = {}
 
     for chunk in actual_chunks:
         if chunk.get('is_batch'):
@@ -1126,11 +1122,11 @@ def download_audio_chunks_and_merge(
             for ts in timestamps:
                 if batch_start <= round(ts, 3) <= batch_end:
                     ts_to_batch_path[round(ts, 3)] = path
-        elif round(chunk['timestamp'], 3) in ts_set:
-            single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
-        return _download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
+        if chunk_loader is not None:
+            return chunk_loader(path)
+        return download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""
@@ -1145,6 +1141,11 @@ def download_audio_chunks_and_merge(
 
         for ext, encrypted, opus in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
+            if chunk_loader is not None:
+                pcm_data = chunk_loader(chunk_path)
+                if pcm_data is not None:
+                    return timestamp, pcm_data
+                continue
             try:
                 chunk_data = bucket.blob(chunk_path).download_as_bytes()
             except NotFound:
@@ -1172,7 +1173,6 @@ def download_audio_chunks_and_merge(
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
 
-    # Download data with bounded concurrency (sliding window + global semaphore, #7387)
     chunk_results: Dict[float, bytes] = {}
 
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
@@ -1183,16 +1183,21 @@ def download_audio_chunks_and_merge(
 
     def _submit_job(job: Tuple[str, Any]) -> Tuple[Any, str, Any]:
         kind, key = job
-        _STORAGE_CHUNK_SEM.acquire()
+        # A supplied loader owns its shared download semaphore and invocation
+        # budget. Do not acquire the same semaphore twice around its leaf I/O.
+        if chunk_loader is None:
+            _STORAGE_CHUNK_SEM.acquire()
         try:
             if kind == 'individual':
                 f = storage_executor.submit(download_single_chunk, key)
             else:
                 f = storage_executor.submit(_download_and_decode_blob, key)
-            f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
+            if chunk_loader is None:
+                f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
             return (f, kind, key)
         except Exception:
-            _STORAGE_CHUNK_SEM.release()
+            if chunk_loader is None:
+                _STORAGE_CHUNK_SEM.release()
             raise
 
     # Sliding window: at most _CHUNK_WINDOW_SIZE in-flight per call
@@ -1943,6 +1948,23 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
 # deploy prerequisite; not something this change provisions).
 
 SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+# A cached URL is reused only with this much life left, so a client that renews
+# at the reported expiry never holds a URL that is about to die.
+SCREEN_FRAME_MIN_REUSE_SECONDS = 15 * 60
+
+
+def _screen_frame_signed_url(blob: Any) -> Tuple[str, datetime.datetime]:
+    """A signed URL and its TRUE expiry: a cache hit reports the cached signature's remaining life."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cached = get_cached_signed_url(blob.name)
+    remaining = get_cached_signed_url_ttl(blob.name) if cached else 0
+    if cached and remaining >= SCREEN_FRAME_MIN_REUSE_SECONDS:
+        return cached, now + datetime.timedelta(seconds=remaining)
+    signer = iam_signing_kwargs(getattr(blob, "client", None))
+    lifetime = datetime.timedelta(minutes=SCREEN_FRAME_SIGNED_URL_MINUTES)
+    signed_url: str = blob.generate_signed_url(version="v4", expiration=lifetime, method="GET", **signer)
+    cache_signed_url(blob.name, signed_url, SCREEN_FRAME_SIGNED_URL_MINUTES * 60)
+    return signed_url, now + lifetime
 
 
 def _screen_frame_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
@@ -1953,10 +1975,16 @@ def _screen_frame_thumbnail_blob_path(uid: str, conversation_id: str, frame_id: 
     return f'{uid}/{conversation_id}/{frame_id}_thumb.jpg'
 
 
+def configured_screen_frames_bucket() -> Optional[str]:
+    """This environment's frame bucket; frame docs in the shared Firestore record theirs."""
+    return (os.getenv('BUCKET_SCREEN_FRAMES') or '').strip() or screen_frames_bucket or None
+
+
 def _require_screen_frames_bucket() -> str:
-    if not screen_frames_bucket:
+    bucket = configured_screen_frames_bucket()
+    if not bucket:
         raise RuntimeError('BUCKET_SCREEN_FRAMES is not configured')
-    return screen_frames_bucket
+    return bucket
 
 
 def upload_screen_frame_blobs(
@@ -1974,19 +2002,27 @@ def upload_screen_frame_blobs(
     thumb_blob.upload_from_string(thumbnail_jpeg_bytes, content_type='image/jpeg')
 
 
-def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> Tuple[str, datetime.datetime]:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id)))
+
+
+def get_screen_frame_thumbnail_signed_url(
+    uid: str, conversation_id: str, frame_id: str
+) -> Tuple[str, datetime.datetime]:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)))
+
+
+def download_screen_frame_bytes(uid: str, conversation_id: str, frame_id: str, *, timeout: float) -> bytes:
+    """Read one canonical frame from this environment's bucket, bounded by ``timeout`` seconds."""
     bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
     blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+    # retry=None: the library's default retry runs to a 120 s deadline, far past the caller's budget.
+    return blob.download_as_bytes(timeout=timeout, retry=None)
 
 
-def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
-    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
-    blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
-
-
-def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> None:
+def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str, *, bucket: Optional[str] = None) -> None:
     """Delete both GCS objects for a frame and their cached signed URLs.
 
     A delete that leaves bytes in the bucket, or a still-live cached signed
@@ -1996,8 +2032,18 @@ def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> 
     """
     content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
     thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
-    bucket_name = _require_screen_frames_bucket()
-    delete_blob(bucket_name, content_path)
-    delete_blob(bucket_name, thumb_path)
-    delete_cached_signed_url(content_path)
-    delete_cached_signed_url(thumb_path)
+    try:
+        bucket_name = bucket or _require_screen_frames_bucket()
+        delete_blob(bucket_name, content_path)
+        delete_blob(bucket_name, thumb_path)
+    finally:
+        # A signed URL must stop being handed out even when the object delete failed.
+        delete_cached_signed_url(content_path)
+        delete_cached_signed_url(thumb_path)
+
+
+def screen_frame_object_paths(uid: str, conversation_id: str, frame_id: str) -> List[str]:
+    return [
+        _screen_frame_blob_path(uid, conversation_id, frame_id),
+        _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id),
+    ]

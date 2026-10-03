@@ -19,6 +19,13 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
+    'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
+)
+SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
+    'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
+)
+
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
     'omi_listen_stt_unavailable_total',
     'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
@@ -127,6 +134,11 @@ OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
     'Live transcript segments by audio-timeline mapping outcome',
     ['mode', 'outcome'],
+)
+OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
+    'omi_live_audio_capture_windows_total',
+    'Committed legacy live segment versions by capture-window availability',
+    ['outcome', 'reason'],
 )
 # Keep the established outcome metric stable for existing dashboards. This
 # companion metric exposes a fixed reason vocabulary for every rejected
@@ -253,6 +265,39 @@ OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
 )
 for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
+
+OMI_SPEAKER_CLIP_COVERAGE_TOTAL = Counter(
+    'omi_speaker_clip_coverage_total',
+    'Legacy speaker clip extraction by bounded coverage, reason and caller',
+    ['outcome', 'reason', 'caller'],
+)
+
+OMI_PERSON_VOICE_LEARNING_TOTAL = Counter(
+    'omi_person_voice_learning_total',
+    'Person voice-learning attempts by bounded outcome',
+    ['outcome'],
+)
+for _outcome in (
+    'stored',
+    'disabled',
+    'person_missing',
+    'conversation_missing',
+    'no_audio',
+    'no_chunks',
+    'no_authorized_segments',
+    'contaminated',
+    'insufficient_speech',
+    'uncovered_audio',
+    'transcription_failed',
+    'insufficient_words',
+    'multi_speaker',
+    'text_mismatch',
+    'embedding_failed',
+    'stale_assignment',
+    'timeout',
+    'error',
+):
+    OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=_outcome)
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
@@ -388,7 +433,16 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # and `reason="model_error"` is the model tier failing open to keep.
 CONVERSATION_RELEVANCE_LABELS = {
     'trigger': frozenset(
-        {'capture_end', 'client_finalize', 'sync_update', 'first_open', 'user_reprocess', 'merge', 'sync_intake'}
+        {
+            'capture_end',
+            'client_finalize',
+            'sync_update',
+            'first_open',
+            'user_reprocess',
+            'merge',
+            'sync_intake',
+            'smart_merge',
+        }
     ),
     'verdict': frozenset({'keep', 'discard'}),
     'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
@@ -426,8 +480,19 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
 # decision, never a user; every non-success outcome means the caller kept its
 # safe default.
 JEV_DECISION_LABELS = {
-    'lane': frozenset({'conversation_relevance', 'memory_owner', 'capture_same_scene', 'capture_resummary'}),
-    'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
+    'lane': frozenset(
+        {
+            'conversation_relevance',
+            'memory_owner',
+            'screen_task',
+            'capture_same_scene',
+            'capture_resummary',
+            'conversation_smart_merge',
+        }
+    ),
+    'outcome': frozenset(
+        {'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'http_429', 'malformed'}
+    ),
 }
 
 JEV_DECISION_TOTAL = Counter(
@@ -471,6 +536,38 @@ CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
     ['category', 'agreement'],
 )
 
+# EXP-004: no identifiers or arbitrary strings may become labels.
+JEV_SHADOW_OUTCOMES = frozenset(
+    {'ok', 'jev_failed', 'http_429', 'timeout', 'deduped', 'cap', 'cohort', 'dropped', 'redis_unavailable'}
+)
+JEV_SHADOW_TOTAL = Counter('omi_jev_shadow_total', 'Relevance and owner shadow outcomes.', ['lane', 'outcome'])
+JEV_SHADOW_LATENCY = Histogram(
+    'omi_jev_shadow_latency_seconds',
+    'Shadow question latency including queue time.',
+    ['lane'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 5),
+)
+RELEVANCE_JEV_SHADOW_SCORE = Histogram(
+    'omi_relevance_jev_shadow_p_discard', 'Shadow P(discard).', buckets=(0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99)
+)
+RELEVANCE_JEV_SHADOW_AGREEMENT = Counter(
+    'omi_relevance_jev_shadow_agreement_total',
+    'Nano verdict versus Jev discard strictly above 0.95; none means nano did not answer.',
+    ['nano_verdict', 'jev_would_discard'],
+)
+OWNER_JEV_SHADOW_SCORE = Histogram('omi_owner_jev_shadow_p_user', 'Shadow P(user).', buckets=(0.5, 0.7, 0.8, 0.9, 0.95))
+
+
+def record_jev_shadow_outcome(lane: str, outcome: str) -> None:
+    try:
+        JEV_SHADOW_TOTAL.labels(
+            lane=lane if lane in {'relevance', 'owner'} else 'other',
+            outcome=outcome if outcome in JEV_SHADOW_OUTCOMES else 'jev_failed',
+        ).inc()
+    except Exception:
+        pass
+
+
 # Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
 # `flipped` re-attributed a third-party candidate to the user; `kept_third_party`
 # asked and stayed below the threshold; `unavailable` got no answer.
@@ -503,6 +600,25 @@ def record_memory_owner_jev(outcome: str) -> None:
     except Exception:
         pass
 
+
+from utils.metrics_smart_merge import (  # noqa: E402
+    CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES as CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES,
+    CONVERSATION_SMART_MERGE_AUDIT_TOTAL as CONVERSATION_SMART_MERGE_AUDIT_TOTAL,
+    CONVERSATION_SMART_MERGE_DECISION_TOTAL as CONVERSATION_SMART_MERGE_DECISION_TOTAL,
+    CONVERSATION_SMART_MERGE_LABELS as CONVERSATION_SMART_MERGE_LABELS,
+    CONVERSATION_SMART_MERGE_REASONS as CONVERSATION_SMART_MERGE_REASONS,
+    CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES as CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES,
+    CONVERSATION_SMART_MERGE_REFRESH_TOTAL as CONVERSATION_SMART_MERGE_REFRESH_TOTAL,
+    CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
+    CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
+    CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
+    OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
+    record_conversation_smart_merge as record_conversation_smart_merge,
+    record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
+    record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
+    record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
+    record_smart_merge_flatten as record_smart_merge_flatten,
+)
 
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
@@ -588,6 +704,12 @@ LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     'Global authoritative Firestore finalization jobs by closed durable lifecycle '
     'state; replicated per process, aggregate with max() not sum()',
     ['state'],
+)
+
+MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
+    'meeting_notes_evidence_wait_total',
+    'Desktop meeting finalizations by screen-evidence admission outcome',
+    ['outcome'],
 )
 
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
@@ -951,6 +1073,34 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
     'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
+)
+
+# One decision per safety-WAL upload that carries a recording id and audio
+# bounds (utils/sync/recording_lineage.py). Emitted from backend-sync, so the
+# matching `event=sync_lineage_resolve` log line is the queryable backup.
+OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
+    'omi_sync_lineage_resolve_total',
+    (
+        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
+        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+    ),
+    ['outcome'],
+)
+
+# Per task written by a conversation's action-item replace
+# (utils/conversations/action_item_identity.py). Emitted from every processing host,
+# several unscraped, so the `event=action_item_identity` log line is the backup.
+OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
+    'omi_action_item_identity_total',
+    'Task identity on a conversation task replace. outcome is a closed set: '
+    'reused_identity|new|skipped_already_exported|disabled',
+    ['outcome'],
+)
+
+OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
+    'omi_action_item_refresh_total',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
     ['outcome'],
 )
 

@@ -187,7 +187,7 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     )
     dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
     assert dependency_calls == [rest.get_mcp_memory_default_memory_read_context]
-    assert rest.get_uid_from_mcp_api_key not in dependency_calls
+    assert rest.get_uid_with_mcp_memories_read not in dependency_calls
 
     auth_context = SimpleNamespace(uid="auth-user")
     authorization = SimpleNamespace(allowed=True)
@@ -933,7 +933,7 @@ class TestScreenActivity:
         monkeypatch.setattr(sse_other.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
         app = FastAPI()
         app.include_router(rest.router)
-        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+        app.dependency_overrides[rest.get_uid_with_mcp_screen_activity_read] = lambda: UID
         with TestClient(app) as client:
             response = client.get('/v1/mcp/screen-activity?summary=true')
         assert response.status_code == 200

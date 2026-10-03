@@ -242,7 +242,6 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         // Capture modes: two-state settings, so inline switches that apply immediately.
         OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta, OmiColors.warning)),
         OmiSettingsGroup(
-          footer: l10n.transcribeLaterNote,
           children: [
             OmiSettingsRow.toggle(
               key: const ValueKey('settings_row_transcribeLater'),
@@ -319,7 +318,6 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
-            row(SettingsDestination.homeScreen, icon: FontAwesomeIcons.house, title: l10n.homeScreen),
             row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
             OmiSettingsRow(
               key: const ValueKey('settings_row_appearance'),
@@ -338,7 +336,7 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
 // -----------------------------------------------------------------------------------------------
 // Privacy & Data
 
-/// Privacy & Data: data protection, memories, and exporting or importing data.
+/// Privacy & Data: data protection, and exporting or importing data.
 class PrivacyDataGroupPage extends StatefulWidget {
   const PrivacyDataGroupPage({super.key});
 
@@ -357,7 +355,6 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.dataPrivacy, icon: FontAwesomeIcons.shield, title: l10n.dataProtection),
-            row(SettingsDestination.memories, icon: FontAwesomeIcons.brain, title: l10n.memories),
             ValueListenableBuilder<bool>(
               valueListenable: DataExport.exportInProgress,
               builder: (context, exporting, _) => OmiSettingsRow(

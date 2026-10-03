@@ -258,7 +258,7 @@ extension AppState {
       speakerSegments = []
       totalSegmentCount = 0
       totalWordCount = 0
-      liveSpeakerPersonMap = [:]
+      (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
       LiveTranscriptMonitor.shared.clear()
       recordingStartTime = Date()
       currentBackendConversationId = nil
@@ -1159,7 +1159,7 @@ extension AppState {
     speakerSegments = []
     totalSegmentCount = 0
     totalWordCount = 0
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.endSession()
     LiveNotesMonitor.shared.clear()
@@ -1488,7 +1488,7 @@ extension AppState {
 
     // Clear segments after finalization
     speakerSegments = []
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
@@ -1734,7 +1734,7 @@ extension AppState {
     // can't leave `automationCaptureTestSessionActive` stuck true (which made a
     // retried stop silently report "already_stopped" without ever finalizing).
     speakerSegments = []
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil

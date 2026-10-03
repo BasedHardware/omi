@@ -63,7 +63,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       final provider = context.read<CaptureProvider>();
       if (provider.offlineRecordingStartedAt != null ||
           provider.customSttBufferingDuration != null ||
-          provider.liveCaptureStartedAt != null ||
+          provider.liveCaptureSource != null ||
           (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
         setState(() {}); // the elapsed time on the card
       }
@@ -180,10 +180,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 12, 8, 14);
+  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
   Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         width: double.maxFinite,
         padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
@@ -251,12 +251,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // over from is not "device recording".
     final liveSource = provider.liveCaptureSource;
     bool isDeviceRecording = liveSource != null && liveSource != 'phone';
+    // Keep automatic repair and legitimate pendant sleep quiet. In particular,
+    // never animate a Listening timer solely because a restored link is ready.
+    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
     // "Listening" + transcript UI.
     if ((isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) || provider.isPhoneMicBatchRecording) {
-      return _buildBatchRecordingUI(provider);
+      return _buildBatchRecordingUI(provider, unverified: unverified);
     }
 
     // A phone-mic batch session reports RecordingState.record too; exclude it here so
@@ -303,9 +306,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final starting = isPhoneRecording &&
         provider.recordingState == RecordingState.initialising &&
         displayState == CaptureDisplayState.listening;
-    final copy = starting
-        ? CaptureCardCopy(context.l10n.captureStarting)
-        : captureCardCopy(context.l10n, displayState, micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+    final copy = unverified
+        ? CaptureCardCopy(context.l10n.captureSourcePendant)
+        : starting
+            ? CaptureCardCopy(context.l10n.captureStarting)
+            : captureCardCopy(context.l10n, displayState,
+                micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
@@ -318,7 +324,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
         paused: isPaused,
-        elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
+        elapsed: unverified || startedAt == null ? null : DateTime.now().difference(startedAt),
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
@@ -357,7 +363,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// the time with its consequence, then the controls. There is no live transcript. Storage running
   /// out is a problem (warning glyph, details sheet); a pendant that records on its own (Limitless)
   /// shows the minutes it holds and has no controls, since it records without the phone.
-  Widget _buildBatchRecordingUI(CaptureProvider provider) {
+  Widget _buildBatchRecordingUI(CaptureProvider provider, {bool unverified = false}) {
     final l10n = context.l10n;
     final isLimitless = provider.recordingDevice?.type == DeviceType.limitless;
     final prefs = SharedPreferencesUtil();
@@ -387,6 +393,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
     } else if (muted) {
       copy = CaptureCardCopy(l10n.paused);
+    } else if (unverified) {
+      copy = CaptureCardCopy(l10n.captureSourcePendant);
     } else {
       copy = CaptureCardCopy(l10n.recording, detail: l10n.captureAudioSavedTranscribesLater);
     }
@@ -434,7 +442,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           status: copy.status,
           detail: copy.detail,
           explanation: copy.explanation,
-          elapsed: isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
+          elapsed: unverified || isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
           note: note,
         ),
         if (actions.isNotEmpty) ...[
@@ -638,21 +646,15 @@ getPhoneMicRecordingButton(
   );
 }
 
-Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // Only show at most 1 processing widget on homepage
-  if (conversations.isEmpty) {
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
-  }
+ServerConversation? newestProcessingConversation(List<ServerConversation> conversations) {
+  if (conversations.isEmpty) return null;
   // Live events append new IDs; list position is not recency. Processing begins
   // at capture end, while the optimistic Process Now row has only createdAt.
-  final newest = conversations.reduce((a, b) {
+  return conversations.reduce((a, b) {
     final aTime = a.finishedAt ?? a.createdAt;
     final bTime = b.finishedAt ?? b.createdAt;
     return bTime.isAfter(aTime) ? b : a;
   });
-  return SliverToBoxAdapter(
-    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
-  );
 }
 
 // PROCESSING CONVERSATION

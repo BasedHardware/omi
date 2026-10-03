@@ -338,7 +338,7 @@ Memories and action items are extracted asynchronously. Use the GET endpoints to
     | Parameter | Type | Required | Description |
     |-----------|------|----------|-------------|
     | `transcript_segments` | array | **Yes** | List of transcript segments (1-500 segments) |
-    | `source` | string | No | Source of conversation (default: `external_integration`) |
+    | `source` | string | No | Source of conversation (default: `phone`); segments use transcript processing for every source |
     | `started_at` | datetime | No | When conversation started (defaults to now) |
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |
     | `language` | string | No | Language code (default: 'en') |

@@ -1174,6 +1174,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     IntegrationNudgeCoordinator.shared.noteConnected(route: .importConnector(connectorID))
   }
 
+  func markDisconnected(connectorID: String) {
+    clearStoredMetrics(for: connectorID)
+  }
+
   private func clearStoredMetrics(for connectorID: String) {
     defaults.removeObject(forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: connectorID))
     defaults.removeObject(forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
@@ -1700,6 +1704,13 @@ struct ImportConnectorSheet: View {
   /// only ever wipe the text the run actually imported, never a newer paste.
   @State private var submittedDraft: String?
   @FocusState private var draftFocused: Bool
+  @State private var isDisconnecting = false
+  @State private var showingDisconnectConfirmation = false
+  @State private var disconnectStatusMessage: String?
+  @State private var disconnectErrorMessage: String?
+  @State private var calendarGrantConnected = false
+  @State private var calendarGrantProbeGeneration = 0
+  @State private var disconnectAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
 
   private var snapshot: ImportConnectorStatusStore.Snapshot {
     statusStore.snapshot(for: connector)
@@ -1769,12 +1780,26 @@ struct ImportConnectorSheet: View {
         }
         submittedDraft = nil
       }
+      if connector.id == "calendar", newPhase == .succeeded || newPhase == .failed {
+        Task { await refreshCalendarGrantState() }
+      }
+    }
+    .task(id: "\(connector.id):\(RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out")") {
+      await refreshCalendarGrantState()
     }
     .onDisappear {
       // A seen success is done with: clear it so the next open shows
       // the persisted snapshot status instead of stale success text.
       // Failures stay until the next start so they can't be missed.
       runner.acknowledgeSuccess(connectorID: connector.id)
+    }
+    .shellConfirmation(
+      isPresented: $showingDisconnectConfirmation,
+      title: "Disconnect Google Calendar?",
+      message: "Omi will stop syncing and using your Google Calendar. Memories already imported into Omi will remain.",
+      confirmTitle: "Disconnect"
+    ) {
+      disconnectCalendar()
     }
   }
 
@@ -1791,11 +1816,22 @@ struct ImportConnectorSheet: View {
       } label: {
         ConnectionModalActionButton(
           title: primaryActionTitle,
-          isConnected: snapshot.isConnected
+          isConnected: connector.id == "calendar" ? calendarHasRevocableGrant : snapshot.isConnected
         )
       }
       .buttonStyle(.plain)
-      .disabled(isRunning)
+      .disabled(isRunning || isDisconnecting)
+
+      if connector.id == "calendar", calendarHasRevocableGrant {
+        Button {
+          beginCalendarDisconnectConfirmation()
+        } label: {
+          Text("Disconnect…")
+        }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isRunning || isDisconnecting)
+        .accessibilityIdentifier("calendar-import-disconnect")
+      }
 
       if connector.id == "local-files" {
         Text("Local files are indexed on-device and used to build your memory graph.")
@@ -1879,7 +1915,7 @@ struct ImportConnectorSheet: View {
   private var primaryActionTitle: String {
     switch connector.id {
     case "calendar":
-      return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
+      return isRunning ? "Importing…" : (calendarHasRevocableGrant ? "Sync now" : "Connect Calendar")
     case "email":
       return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
     case "apple-notes":
@@ -1894,6 +1930,8 @@ struct ImportConnectorSheet: View {
   }
 
   private func startConnectorImport() {
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
     switch connector.id {
     case "calendar":
       startRun(
@@ -1935,6 +1973,106 @@ struct ImportConnectorSheet: View {
       }
     default:
       break
+    }
+  }
+
+  private func disconnectCalendar() {
+    guard connector.id == "calendar", !isRunning, !isDisconnecting,
+      let authorizationSnapshot = disconnectAuthorizationSnapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      disconnectErrorMessage = "Your account changed. Reopen Calendar and try again."
+      return
+    }
+    isDisconnecting = true
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
+    let connectorID = connector.id
+    let statusStore = statusStore
+    let startedAt = Date()
+    calendarGrantProbeGeneration &+= 1
+    AnalyticsManager.shared.integrationConnectAttempted(
+      integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+      connectorID: connectorID,
+      surface: .apps,
+      stage: "disconnect")
+
+    Task { @MainActor in
+      let outcome = await ConnectorImportOperations.disconnectCalendar {
+        try await APIClient.shared.disconnectGoogleCalendarGrant(
+          authorizationSnapshot: authorizationSnapshot)
+      }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        isDisconnecting = false
+        disconnectAuthorizationSnapshot = nil
+        return
+      }
+      let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+      switch outcome {
+      case .success(_, let message):
+        runner.acknowledgeSuccess(connectorID: connectorID)
+        statusStore.markDisconnected(connectorID: connectorID)
+        calendarGrantConnected = false
+        disconnectStatusMessage = message
+        AnalyticsManager.shared.integrationConnectSucceeded(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          durationMs: durationMs)
+      case .failure(let message, let failureClass):
+        disconnectErrorMessage = message
+        AnalyticsManager.shared.integrationConnectFailed(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          errorClass: failureClass ?? .unknown,
+          durationMs: durationMs)
+      }
+      isDisconnecting = false
+      disconnectAuthorizationSnapshot = nil
+    }
+  }
+
+  private var calendarHasRevocableGrant: Bool {
+    Self.shouldShowCalendarDisconnect(
+      localSyncConnected: snapshot.isConnected,
+      backendGrantConnected: calendarGrantConnected)
+  }
+
+  static func shouldShowCalendarDisconnect(
+    localSyncConnected: Bool,
+    backendGrantConnected: Bool
+  ) -> Bool {
+    localSyncConnected || backendGrantConnected
+  }
+
+  private func beginCalendarDisconnectConfirmation() {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      disconnectErrorMessage = "Your session changed. Sign in again before disconnecting Calendar."
+      return
+    }
+    disconnectAuthorizationSnapshot = authorizationSnapshot
+    showingDisconnectConfirmation = true
+  }
+
+  private func refreshCalendarGrantState() async {
+    guard connector.id == "calendar",
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return }
+    calendarGrantProbeGeneration &+= 1
+    let generation = calendarGrantProbeGeneration
+    do {
+      let connected = try await APIClient.shared.googleCalendarGrantConnected(
+        authorizationSnapshot: authorizationSnapshot)
+      guard generation == calendarGrantProbeGeneration,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else { return }
+      calendarGrantConnected = connected
+    } catch {
+      // Local successful-sync evidence remains a safe fallback when the grant
+      // probe is temporarily unavailable; never overwrite it with a failed read.
     }
   }
 
@@ -2025,7 +2163,34 @@ struct ImportConnectorSheet: View {
 
   @ViewBuilder
   private var statusSection: some View {
-    if let run = runState, run.phase == .running {
+    if isDisconnecting {
+      statusCard {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .padding(.top, OmiSpacing.hairline)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Disconnecting Google Calendar")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Revoking Omi's future Calendar access. Imported memories will remain.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    } else if let disconnectStatusMessage {
+      Text(disconnectStatusMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.primary)
+    } else if let disconnectErrorMessage {
+      Text(disconnectErrorMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(SettingsInk.notice)
+    } else if let run = runState, run.phase == .running {
       statusCard {
         HStack(alignment: .top, spacing: OmiSpacing.md) {
           ProgressView()

@@ -2,6 +2,148 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.437",
+      "date": "2026-10-03",
+      "changes": [
+        "Connection keys are no longer created automatically. Generate one yourself when you want to connect a tool."
+      ]
+    },
+    {
+      "version": "0.12.436",
+      "date": "2026-10-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.435",
+      "date": "2026-10-02",
+      "changes": [
+        "Fixed screen task suggestions across context switches, account changes, privacy exclusions and service limits"
+      ]
+    },
+    {
+      "version": "0.12.434",
+      "date": "2026-10-02",
+      "changes": [
+        "Web Search on the floating typed chat uses the same public-web lookup as the main chat window."
+      ]
+    },
+    {
+      "version": "0.12.433",
+      "date": "2026-10-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.432",
+      "date": "2026-10-02",
+      "changes": [
+        "Added an Export All Data action in Settings > Data Controls that saves a verified JSON copy of your account data"
+      ]
+    },
+    {
+      "version": "0.12.431",
+      "date": "2026-10-01",
+      "changes": [
+        "Naming a speaker during a live recording now actually saves — the label is stored before the sheet closes and the sheet shows an error instead of silently dismissing when the save fails."
+      ]
+    },
+    {
+      "version": "0.12.430",
+      "date": "2026-10-01",
+      "changes": [
+        "Added a way to disconnect Google Calendar from the Calendar import while keeping previously imported memories"
+      ]
+    },
+    {
+      "version": "0.12.429",
+      "date": "2026-10-01",
+      "changes": [
+        "Ask Omi with Siri using more phrases, and hear answers without opening chat"
+      ]
+    },
+    {
+      "version": "0.12.428",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.427",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.426",
+      "date": "2026-09-30",
+      "changes": [
+        "Meeting notes now name the people shown on video call tiles, and meeting screenshots are chosen when the meeting ends instead of when you first open the note"
+      ]
+    },
+    {
+      "version": "0.12.425",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.424",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.423",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.422",
+      "date": "2026-09-29",
+      "changes": [
+        "Fixed \"Summarize with an app\" being unreachable on a conversation that has no summary yet"
+      ]
+    },
+    {
+      "version": "0.12.421",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.420",
+      "date": "2026-09-29",
+      "changes": [
+        "Ask Omi a full question with Siri in one breath and get an answer"
+      ]
+    },
+    {
+      "version": "0.12.419",
+      "date": "2026-09-29",
+      "changes": [
+        "Proactive Insights now always skip apps you excluded from Rewind and can only read, never change, your local screen history and tasks",
+        "Conversations transcribed on-device now finish uploading once you are back online, even after a long outage or backend errors, instead of getting stuck on this Mac",
+        "Fixed the app getting stuck on \"Preparing your data…\" after the local Rewind database was corrupted"
+      ]
+    },
+    {
+      "version": "0.12.418",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.417",
       "date": "2026-09-29",
       "changes": [

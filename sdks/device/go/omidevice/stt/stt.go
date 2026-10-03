@@ -66,8 +66,11 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 				continue
 			}
 			k, _, _ := strings.Cut(part, "=")
-			if k == "sample_rate" {
-				newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+			key, err := url.QueryUnescape(k)
+			if err == nil && key == "sample_rate" {
+				if !foundSampleRate {
+					newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+				}
 				foundSampleRate = true
 			} else {
 				newParts = append(newParts, part)

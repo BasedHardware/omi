@@ -116,6 +116,31 @@ void main() {
     expect((shownSnackBar(tester).margin as EdgeInsets).bottom, 12);
   });
 
+  testWidgets('a page clearance lifts its own toasts above its pinned bottom action', (tester) async {
+    late BuildContext captured;
+    await tester.pumpWidget(feedbackHarness((context) => captured = context));
+    await tapTrigger(tester);
+
+    late BuildContext inside;
+    Navigator.of(captured).push(MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        body: OmiFeedbackClearance(
+          bottom: 88,
+          child: Builder(builder: (context) => (inside = context, const SizedBox()).$2),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    OmiFeedback.confirm(inside, 'Label removed');
+    await tester.pumpAndSettle();
+    expect((shownSnackBar(tester).margin as EdgeInsets).bottom, 12 + 88);
+
+    // Outside the clearance (a pushed page without a pinned action) nothing changes.
+    OmiFeedback.confirm(captured, 'Elsewhere');
+    await tester.pumpAndSettle();
+    expect((shownSnackBar(tester).margin as EdgeInsets).bottom, 12);
+  });
+
   testWidgets('AppSnackbar routes through OmiFeedback on the global navigator', (tester) async {
     await tester.pumpWidget(feedbackHarness((_) {}, navigatorKey: globalNavigatorKey));
     AppSnackbar.showSnackbarError('Upload failed', duration: const Duration(milliseconds: 200));

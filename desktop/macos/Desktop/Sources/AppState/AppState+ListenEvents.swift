@@ -48,14 +48,21 @@ extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
     var segmentsToPersist = [TranscriptionService.BackendSegment]()
 
-    for segment in segments {
-      guard !segment.text.isEmpty else { continue }
+    for incomingSegment in segments {
+      guard !incomingSegment.text.isEmpty else { continue }
       UpdateInstallActivity.markTranscriptActivity()
 
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0). Keep an
       // unattributed segment unknown: coercing nil to speaker 0 granted it the
       // primary-user fallback used by wake word and barge-in admission.
-      let speakerId = segment.speaker_id ?? -1
+      let speakerId = incomingSegment.speaker_id ?? -1
+
+      var segment: TranscriptionService.BackendSegment
+      if sttSession.useLocalSTT, let manualPersonId = liveManualSpeakerPersonMap[speakerId] {
+        segment = segmentWithPersonId(incomingSegment, personId: manualPersonId)
+      } else {
+        segment = incomingSegment
+      }
 
       // Omi speaks into a room Omi is also recording, so ambient capture returns the
       // assistant's own voice attributed to the primary speaker. Every consumer below
@@ -64,7 +71,6 @@ extension AppState {
       // long answer stops partway), the wake word can be commanded by an answer carrying
       // the wake phrase, and the conversation record and memory extraction gain speech
       // nobody said. One guard here, where all of them route through.
-      var segment = segment
       switch VoicePlaybackEchoPolicy.classify(
         transcript: segment.text,
         spokenWords: FloatingBarVoicePlaybackService.shared.recentlySpokenWords
@@ -213,6 +219,23 @@ extension AppState {
     segmentsToPersist.append(segment)
     log(
       "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
+    )
+  }
+
+  private func segmentWithPersonId(
+    _ segment: TranscriptionService.BackendSegment,
+    personId: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: segment.id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: false,
+      person_id: personId,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
     )
   }
 

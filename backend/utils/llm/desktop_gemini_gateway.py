@@ -178,6 +178,9 @@ def gemini_body_to_openai_chat(
                             'function': {'name': name, 'arguments': json.dumps(dict(arguments))},
                         }
                     )
+                    signature = part.get('thoughtSignature') or part.get('thought_signature')
+                    if isinstance(signature, str) and signature:
+                        tool_calls[-1]['extra_content'] = {'google': {'thought_signature': signature}}
                 text_parts = [p.get('text') for p in parts if isinstance(p, Mapping) and isinstance(p.get('text'), str)]
                 messages.append(
                     {
@@ -212,11 +215,13 @@ def gemini_body_to_openai_chat(
         if isinstance(stop, list) and stop:
             request['stop'] = stop
         thinking = config.get('thinkingConfig') or config.get('thinking_config')
-        if isinstance(thinking, Mapping) and isinstance(
-            thinking.get('thinkingBudget') or thinking.get('thinking_budget'), int
-        ):
-            budget = thinking.get('thinkingBudget') or thinking.get('thinking_budget')
-            request['google'] = {'thinking_config': {'thinking_budget': budget}}
+        if isinstance(thinking, Mapping):
+            level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
+            budget = thinking.get('thinkingBudget', thinking.get('thinking_budget'))
+            if level in {'minimal', 'low', 'medium', 'high'}:
+                request['google'] = {'thinking_config': {'thinking_level': level}}
+            elif isinstance(budget, int):
+                request['google'] = {'thinking_config': {'thinking_budget': budget}}
         response_schema = config.get('responseSchema') or config.get('response_schema')
         mime = config.get('responseMimeType') or config.get('response_mime_type')
         if isinstance(response_schema, Mapping):
@@ -307,7 +312,13 @@ def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
             arguments = {}
         if not isinstance(arguments, Mapping):
             arguments = {}
-        parts.append({'functionCall': {'name': function.get('name'), 'args': dict(arguments)}})
+        part: dict[str, Any] = {'functionCall': {'name': function.get('name'), 'args': dict(arguments)}}
+        extra = call.get('extra_content')
+        google = extra.get('google') if isinstance(extra, Mapping) else None
+        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
+        if isinstance(signature, str) and signature:
+            part['thoughtSignature'] = signature
+        parts.append(part)
     if not parts:
         parts = [{'text': ''}]
     candidate: dict[str, Any] = {
@@ -353,6 +364,11 @@ def openai_sse_payload_to_gemini_event(
         raw_index = call.get('index')
         index = raw_index if isinstance(raw_index, int) else 0
         accumulated = pending_tool_calls.setdefault(index, {'name': '', 'arguments': ''})
+        extra = call.get('extra_content')
+        google = extra.get('google') if isinstance(extra, Mapping) else None
+        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
+        if isinstance(signature, str) and signature:
+            accumulated['thoughtSignature'] = signature
         function = call.get('function')
         if isinstance(function, Mapping):
             if isinstance(function.get('name'), str) and function['name']:
@@ -368,7 +384,10 @@ def openai_sse_payload_to_gemini_event(
                 arguments = {}
             if not isinstance(arguments, Mapping):
                 arguments = {}
-            parts.append({'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}})
+            part = {'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}}
+            if 'thoughtSignature' in accumulated:
+                part['thoughtSignature'] = accumulated['thoughtSignature']
+            parts.append(part)
         pending_tool_calls.clear()
         return {
             'candidates': [
@@ -613,8 +632,14 @@ async def proxy_company_paid_via_gateway(
                         yield chunk
                     telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
                 except DesktopGeminiGatewayError as error:
-                    status_code = 429 if error.status_code == 429 else 503 if error.status_code >= 500 else 502
-                    telemetry.complete(outcome=error.code, status_code=status_code, retryable=True, phase='gateway')
+                    status_code = 503 if error.status_code >= 500 else error.status_code
+                    telemetry.complete(
+                        outcome=error.code,
+                        status_code=status_code,
+                        retryable=error.status_code == 429 or error.status_code >= 500,
+                        upstream_status=error.status_code,
+                        phase='gateway',
+                    )
                     yield envelope.stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
                 except (httpx.TimeoutException, TimeoutError):
                     telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')

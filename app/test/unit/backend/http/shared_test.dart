@@ -67,6 +67,66 @@ void main() {
       expect(headers['Authorization'], equals('Bearer fresh-token'));
     });
 
+    test('snapshot refresh transient failure reuses a still-valid stored token', () async {
+      final service = AuthService.forTesting(
+        tokenGateway: _SnapshotAuthTokenGateway(onRefresh: () => throw StateError('temporary outage')),
+        refreshDelay: (_) async {},
+      );
+      final snapshot = service.captureSessionSnapshot()!;
+      final storedToken = _tokenWithExpiry(DateTime.now().add(const Duration(hours: 1)));
+      SharedPreferencesUtil().authToken = storedToken;
+      http.Request? sentRequest;
+
+      final response = await makeRawApiCall(
+        url: 'https://api.omi.me/v1/users/me/export',
+        method: 'GET',
+        sessionSnapshot: snapshot,
+        authService: service,
+        sendStreaming: (request) async {
+          sentRequest = request;
+          return http.StreamedResponse(const Stream<List<int>>.empty(), HttpStatus.ok);
+        },
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(sentRequest?.headers['Authorization'], 'Bearer $storedToken');
+    });
+
+    test('snapshot refresh transient failure rejects an expired stored token', () async {
+      final service = AuthService.forTesting(
+        tokenGateway: _SnapshotAuthTokenGateway(onRefresh: () => throw StateError('temporary outage')),
+        refreshDelay: (_) async {},
+      );
+      final snapshot = service.captureSessionSnapshot()!;
+      SharedPreferencesUtil().authToken = _tokenWithExpiry(DateTime.now().subtract(const Duration(minutes: 1)));
+
+      await expectLater(
+        getAuthHeader(sessionSnapshot: snapshot, authService: service),
+        throwsA(
+          isA<AuthTokenUnavailableException>().having(
+            (error) => error.result,
+            'result',
+            isA<AuthTokenTransientFailure>(),
+          ),
+        ),
+      );
+    });
+
+    test('stale snapshot rejects before using its stored token', () async {
+      final gateway = _SnapshotAuthTokenGateway();
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final snapshot = service.captureSessionSnapshot()!;
+      final storedToken = _tokenWithExpiry(DateTime.now().add(const Duration(hours: 1)));
+      SharedPreferencesUtil().authToken = storedToken;
+      gateway.uid = 'different-user';
+
+      await expectLater(
+        getAuthHeader(sessionSnapshot: snapshot, authService: service),
+        throwsA(isA<AuthTokenUnavailableException>()),
+      );
+      expect(gateway.refreshCalls, 0);
+    });
+
     test('_drainStreamedResponse suppresses exceptions from aborted streams before replaying', () async {
       var replayCount = 0;
       final service = AuthService.forTesting(tokenGateway: _TestAuthTokenGateway(), refreshDelay: (_) async {});
@@ -150,6 +210,11 @@ void main() {
   });
 }
 
+String _tokenWithExpiry(DateTime expiry) {
+  final payload = base64Url.encode(utf8.encode(jsonEncode({'exp': expiry.millisecondsSinceEpoch ~/ 1000})));
+  return 'header.${base64Url.normalize(payload)}.signature';
+}
+
 Stream<List<int>> _abortedResponseBody() async* {
   yield [1, 2, 3];
   throw StateError('aborted response');
@@ -162,6 +227,28 @@ final class _TestAuthTokenGateway implements AuthTokenGateway {
   @override
   Future<RefreshedAuthToken?> forceRefresh() async =>
       RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+
+  @override
+  Future<void> signOut() async {}
+}
+
+final class _SnapshotAuthTokenGateway implements AuthTokenGateway {
+  _SnapshotAuthTokenGateway({this.onRefresh});
+
+  String uid = 'snapshot-user';
+  final Future<RefreshedAuthToken?> Function()? onRefresh;
+  int refreshCalls = 0;
+
+  @override
+  AuthUserSnapshot? get currentUser => AuthUserSnapshot(uid: uid);
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async {
+    refreshCalls++;
+    final refresh = onRefresh;
+    if (refresh != null) return refresh();
+    return RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+  }
 
   @override
   Future<void> signOut() async {}

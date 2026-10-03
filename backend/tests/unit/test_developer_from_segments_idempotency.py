@@ -302,6 +302,47 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     persisted.assert_called_once()
 
 
+@pytest.mark.parametrize('source', ['workflow', 'external_integration', None])
+@pytest.mark.parametrize('client_session_id', [None, 'integration-segments-session'])
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatch, source, client_session_id, path):
+    captured = []
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+
+    def process(_uid, _language, conversation):
+        captured.append(conversation)
+        return Conversation(
+            **conversation.model_dump(exclude={'id', 'created_at', 'structured', 'status'}),
+            id='integration-segments-result',
+            created_at=NOW,
+            structured={'title': 'Synthetic summary'},
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    response = TestClient(app).post(
+        path, json=_request(source=source, client_session_id=client_session_id).model_dump(mode='json')
+    )
+
+    assert response.status_code == 200
+    assert len(captured) == 1
+    conversation = captured[0]
+    assert isinstance(conversation, Conversation if client_session_id else CreateConversation)
+    assert conversation.source.value == (source or 'phone')
+    assert conversation.transcript_segments[0].text == _segment()['text']
+    assert not hasattr(conversation, 'text_source')
+
+
 def test_client_session_id_persists_when_processor_returns_without_saving(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))

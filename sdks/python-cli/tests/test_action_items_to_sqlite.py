@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from action_items_to_sqlite import load, SCHEMA, boolean_to_int, utc_stamp
+from action_items_to_sqlite import load, SCHEMA, boolean_to_int, utc_stamp, validate_db_path
 
 
 class TestActionItemsToSqlite(unittest.TestCase):
@@ -32,8 +32,45 @@ class TestActionItemsToSqlite(unittest.TestCase):
         self.assertEqual(boolean_to_int(False), 0)
         self.assertEqual(boolean_to_int("true"), 1)
         self.assertEqual(boolean_to_int("1"), 1)
+        self.assertEqual(boolean_to_int("yes"), 1)
+        self.assertEqual(boolean_to_int("done"), 1)
+        self.assertEqual(boolean_to_int("completed"), 1)
         self.assertEqual(boolean_to_int("false"), 0)
+        self.assertEqual(boolean_to_int("no"), 0)
+        self.assertEqual(boolean_to_int("0"), 0)
         self.assertEqual(boolean_to_int(None), 0)
+
+    def test_path_traversal_rejected(self):
+        """Paths containing '..' must be rejected before any DB is opened."""
+        sample_tasks = [{"id": "t1", "description": "task", "completed": False}]
+        json_file = self.dir_path / "tasks.json"
+        json_file.write_text(json.dumps(sample_tasks), encoding="utf-8")
+
+        escape = self.dir_path.parent / "escape.sqlite"
+        existed = escape.exists()
+        try:
+            with self.assertRaises(ValueError, msg="Expected ValueError for '..' in path"):
+                load(str(self.dir_path / ".." / "escape.sqlite"), [str(json_file)])
+            if not existed:
+                self.assertFalse(escape.exists())
+        finally:
+            if not existed and escape.exists():
+                escape.unlink()
+
+    def test_non_sqlite_file_rejected(self):
+        """Overwriting an existing file that is not a SQLite database must raise ValueError."""
+        not_a_db = self.dir_path / "output.sqlite"
+        original = b"This is not a SQLite file at all"
+        not_a_db.write_bytes(original)
+
+        sample_tasks = [{"id": "t1", "description": "task", "completed": False}]
+        json_file = self.dir_path / "tasks.json"
+        json_file.write_text(json.dumps(sample_tasks), encoding="utf-8")
+
+        with self.assertRaises(ValueError, msg="Expected ValueError when output is not SQLite"):
+            load(str(not_a_db), [str(json_file)])
+
+        self.assertEqual(not_a_db.read_bytes(), original)
 
     def test_load_and_query(self):
         sample_tasks = [
@@ -49,7 +86,7 @@ class TestActionItemsToSqlite(unittest.TestCase):
             {
                 "id": "task_2",
                 "description": "Review PR #15129",
-                "completed": True,
+                "completed": "done",
                 "due_at": None,
                 "created_at": "2026-09-20T09:00:00Z",
                 "updated_at": "2026-09-20T09:30:00Z",
@@ -70,6 +107,10 @@ class TestActionItemsToSqlite(unittest.TestCase):
 
         # Check count of open tasks
         cursor.execute("SELECT COUNT(*) FROM action_items WHERE completed = 0")
+        self.assertEqual(cursor.fetchone()[0], 1)
+
+        # Check completed status coerced from 'done'
+        cursor.execute("SELECT completed FROM action_items WHERE id = 'task_2'")
         self.assertEqual(cursor.fetchone()[0], 1)
 
         # Check raw json extraction

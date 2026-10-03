@@ -189,4 +189,14 @@ describe('HubAskBar — whole-pill hit target (Mac contentShape parity)', () => 
     await flushFocusFrame()
     expect(document.activeElement).not.toBe(input)
   })
+
+  // Regression for #20218: clicking Send moves focus to the button (Enter never
+  // does), so without this the user had to click the input again before typing
+  // the next message.
+  it('returns focus to the input after a mouse-click Send', async () => {
+    renderBar({ value: 'hello' })
+    const input = screen.getByLabelText('Ask omi anything')
+    fireEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(document.activeElement).toBe(input))
+  })
 })

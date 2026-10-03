@@ -141,16 +141,21 @@ class _FolderListItem extends StatelessWidget {
 
 /// Shows the Move to Folder sheet for one conversation and moves it.
 /// Returns the new folder ID if moved, null if dismissed.
+///
+/// With [move] false the sheet only picks: the caller moves the conversation itself, so it can
+/// report a failed move and put the old folder back.
 Future<String?> showMoveToFolderSheet(
   BuildContext context, {
   required String conversationId,
   String? currentFolderId,
+  bool move = true,
 }) {
   return showOmiSheet<String?>(
     context: context,
     title: context.l10n.moveToFolder,
     useRootNavigator: true,
-    builder: (context) => MoveToFolderSheet(conversationId: conversationId, currentFolderId: currentFolderId),
+    builder: (context) =>
+        MoveToFolderSheet(conversationId: move ? conversationId : null, currentFolderId: currentFolderId),
   );
 }
 

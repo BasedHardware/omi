@@ -258,7 +258,7 @@ class CaptureTimeline:
         # strict readers must refuse them instead of extrapolating across the
         # dropped hiatuses.
         oldest_retained_interior = self.anchors[1][0]
-        if self.compacted_below_sample is None or self.compacted_below_sample > oldest_retained_interior:
+        if self.compacted_below_sample is None or self.compacted_below_sample < oldest_retained_interior:
             self.compacted_below_sample = oldest_retained_interior
 
     def wall(self, sample: int) -> float:
@@ -324,6 +324,10 @@ class SendMap:
         if not self._spans:
             return None
         return self._spans[-1][0] + self._spans[-1][2]
+
+    def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
+        """Count accepted VAD output in a capture interval, excluding gated gaps."""
+        return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
 
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.

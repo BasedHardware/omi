@@ -144,7 +144,9 @@ environments:
         owner: .github/workflows/gcp_day3_reengagement_email_job.yml
       - name: notifications-job-scheduler-trigger
         region: us-central1
-        schedule: "*/1 * * * *"
+        # Local delivery is configured by hour. Include :15/:30/:45 UTC for
+        # quarter-/half-hour offsets and give the bounded sweep tail retries.
+        schedule: "*/15 * * * *"
         time_zone: Etc/UTC
         state: ENABLED
         target:
@@ -199,7 +201,7 @@ environments:
           max_retry: 0s
           min_backoff: 5s
         attempt_deadline: 1800s
-        owner: .github/workflows/gcp_admin.yml
+        owner: .github/workflows/gcp_scheduler_reconcile.yml
       - name: sentry-feedback-poll
         region: us-central1
         schedule: "*/5 * * * *"

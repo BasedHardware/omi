@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -24,7 +25,6 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -63,10 +63,8 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
-        'action-items' || 'task' => 2,
-        'apps' => 3,
-        'memories' || 'facts' || 'memory' => 0,
-        'search' || 'conversations' || 'conversation' => 1,
+        'action-items' || 'task' => HomeProvider.tasksTab,
+        'memories' || 'facts' || 'memory' || 'search' || 'conversations' || 'conversation' => HomeProvider.homeTab,
         _ => null,
       };
 }
@@ -74,28 +72,32 @@ class HomeDeepLink {
 /// Opens [link] on top of the home shell whose [context] is given: parent first (the tab, or the
 /// Settings sheet), then the child page; a link to something that no longer exists says so instead
 /// of doing nothing (nav #18). [openSettings] shows the Settings sheet and resolves when it closes.
+/// [openSearch] shows the search overlay, with a query when the link carries one.
 /// Resolves once the destination is on screen (pushed), not when it is closed.
 Future<void> openHomeDeepLink(
   BuildContext context,
   HomeDeepLink link, {
   required Future<void> Function() openSettings,
+  Future<void> Function({String? query})? openSearch,
   Future<ActionItemWithMetadata?> Function(String)? taskById,
   void Function(ActionItemWithMetadata)? onTaskOpened,
   Future<Memory?> Function(String)? memoryById,
   void Function(Memory)? onMemoryOpened,
   void Function()? onItemUnavailable,
+  bool Function()? canOpen,
 }) async {
+  if (canOpen != null && !canOpen()) return;
   final id = link.id;
   switch (link.alias) {
     case 'conversations':
-      context.read<HomeProvider>().setIndex(1);
+      context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
     case 'action-items':
-      context.read<HomeProvider>().setIndex(2);
+      context.read<HomeProvider>().setIndex(HomeProvider.tasksTab);
     case 'memory':
       if (id == null) return;
       final provider = context.read<MemoriesProvider>();
       final memory = await (memoryById?.call(id) ?? _resolveIndexedMemoryById(id));
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (memory == null) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -120,7 +122,7 @@ Future<void> openHomeDeepLink(
             ? result.data
             : null;
       }
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (task == null || !siriTaskIsIndexable(task, DateTime.now())) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -134,14 +136,13 @@ Future<void> openHomeDeepLink(
       }
     case 'search':
       final query = link.query['q']?.trim() ?? '';
-      final home = context.read<HomeProvider>();
-      home.setIndex(1);
-      if (!home.showConvoSearchBar) home.toggleConvoSearchBar();
-      if (query.isNotEmpty) await context.read<ConversationProvider>().searchConversations(query);
+      context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
+      // Pushed, not awaited: the overlay is on screen when this resolves.
+      unawaited(openSearch?.call(query: query.isEmpty ? null : query));
     case 'apps':
       if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (app == null) {
         OmiFeedback.info(context, context.l10n.appNotFoundOrRemoved);
         return;
@@ -149,9 +150,10 @@ Future<void> openHomeDeepLink(
       unawaited(routeToPage(context, AppDetailPage(app: app)));
     case 'chat':
       await _prepareChat(context, id);
-      if (!context.mounted) return;
-      // D1: chat is a normal pushed page everywhere.
-      unawaited(routeToPage(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])));
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      unawaited(
+        openChatSheet(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])),
+      );
     case 'settings':
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.
       unawaited(openSettings());
@@ -165,7 +167,7 @@ Future<void> openHomeDeepLink(
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
       final conversation = await getConversationById(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
         Logger.debug('Conversation not found: $id');
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);

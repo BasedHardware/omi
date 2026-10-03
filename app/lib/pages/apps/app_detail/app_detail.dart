@@ -21,6 +21,7 @@ import 'package:omi/pages/apps/app_detail/app_summary.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -601,7 +602,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                      // The header already shows the average and count, so this card holds only reviews.
+                      return (app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
                               key: _reviewsSectionKey,
                               onTap: () {
@@ -622,13 +624,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: OmiSpacing.xxs),
-                                    RatingDistributionWidget(
-                                      ratingAvg: app.ratingAvg ?? 0,
-                                      ratingCount: app.ratingCount,
-                                      reviews: app.reviews,
-                                    ),
-                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
@@ -924,7 +919,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await routeToPage(context, const ChatPage(isPivotBottom: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }

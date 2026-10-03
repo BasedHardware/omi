@@ -236,6 +236,49 @@ class PostHogManager {
   /// compile-checked symbol instead of a raw notification-name string.
   static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
 
+  func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
+    guard isInitialized else { return }
+    // A revocation outcome still belongs to its capture owner, never the account current at terminal time.
+    PostHogSDK.shared.capture(
+      "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
+  }
+
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
+  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
+  /// return cached values on quota/failure, so they cannot renew an upload lease.
+  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
+    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+      let url = URL(string: host + "/flags/?v=2")
+    else { throw ScreenTaskFailure.stopped }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 5
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: [
+      "token": apiKey, "distinct_id": authorization.ownerID,
+      "person_properties": [
+        "platform": "macos",
+        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+        "update_channel": AppBuild.currentUpdateChannel,
+      ],
+    ])
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+      throw ScreenTaskFailure.stopped
+    }
+    return try ScreenTaskFreshFlagResponse.enabled(data)
+  }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -886,12 +929,18 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(
+    taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0,
+    extractor: String? = nil
+  ) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {

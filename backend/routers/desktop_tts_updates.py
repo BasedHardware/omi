@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from database import redis_db
 from database._client import get_firestore_client
+from database.serving_query_reads import list_desktop_release_snapshots
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
@@ -132,14 +133,8 @@ def _appcast_xml(releases: list[ReleaseInfo], platform: str) -> str:
 
 
 def _release_models() -> list[tuple[str, ReleaseInfo]]:
-    snapshots = (
-        get_firestore_client()
-        .collection(_RELEASES_COLLECTION)
-        .order_by("build_number", direction="DESCENDING")
-        .stream()
-    )
     releases: list[tuple[str, ReleaseInfo]] = []
-    for snapshot in snapshots:
+    for snapshot in list_desktop_release_snapshots():
         try:
             releases.append((snapshot.id, ReleaseInfo.model_validate(snapshot.to_dict())))
         except Exception:

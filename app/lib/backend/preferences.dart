@@ -76,7 +76,7 @@ class SharedPreferencesUtil {
 
   static const String appearanceModeKey = 'appearanceMode';
 
-  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'system');
+  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
 
   Future<void> setAppearanceMode(String mode) async {
     final prefs = _preferences ?? await SharedPreferences.getInstance();
@@ -721,26 +721,6 @@ class SharedPreferencesUtil {
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
 
-  // Goal tracker widget on homepage - default is true (experimental feature)
-  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
-
-  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
-
-  // Daily score widget on homepage - default is true
-  set showDailyScoreEnabled(bool value) => saveBool('showDailyScoreEnabled', value);
-
-  bool get showDailyScoreEnabled => getBool('showDailyScoreEnabled', defaultValue: true);
-
-  // Tasks widget on homepage - default is true
-  set showTasksEnabled(bool value) => saveBool('showTasksEnabled', value);
-
-  bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
-
-  // Phone call floating button on home screen - default is true
-  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
-
-  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
-
   // Voice response playback mode for hardware-button replies.
   //   0 = off (never speak)
   //   1 = headphones only — AirPods / wired / USB / AirPlay (default)
@@ -887,6 +867,52 @@ class SharedPreferencesUtil {
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
+
+  /// Auto-remove synced phone-local recording copies after [autoRemoveSyncedCopiesDays].
+  /// Default ON for new users (no stored value): cloud storage keeps the data, the
+  /// local file is only a safety copy. Existing installs are pinned OFF once by
+  /// [migrateAutoRemoveSyncedCopiesDefault] so upgrading users keep today's
+  /// keep-everything behaviour until they opt in.
+  bool get autoRemoveSyncedCopies => getBool('autoRemoveSyncedCopies', defaultValue: true);
+
+  set autoRemoveSyncedCopies(bool value) => saveBool('autoRemoveSyncedCopies', value);
+
+  /// One-time split of the auto-remove default, decided on the FIRST launch
+  /// that runs this build. `onboardingCompleted == true` can only mean "an
+  /// existing install upgraded" on that first launch — on any later launch it
+  /// equally describes a fresh install that onboarded since, which must keep
+  /// the getter's ON default. So:
+  /// - already onboarded → existing user: pin OFF once (key first, marker
+  ///   second, so a crash mid-migration re-runs instead of half-applying);
+  /// - not yet onboarded → mark the install immediately so later launches
+  ///   never mistake it for an upgrade; the ON default governs it until the
+  ///   user toggles.
+  Future<void> migrateAutoRemoveSyncedCopiesDefault() async {
+    const markerKey = 'autoRemoveSyncedCopiesDefaultMigrated';
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (prefs.getBool(markerKey) ?? false) return;
+    if (!(prefs.getBool('onboardingCompleted') ?? false)) {
+      await prefs.setBool(markerKey, true);
+      return;
+    }
+    final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
+    final pinned = await prefs.setBool(
+      'autoRemoveSyncedCopies',
+      alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false,
+    );
+    // Only commit the marker after the pin write succeeded, so a failed write
+    // retries on the next launch instead of leaving an existing install on the
+    // ON default with the migration reported complete.
+    if (pinned) {
+      await prefs.setBool(markerKey, true);
+    }
+  }
+
+  /// Retention window, in days, for synced phone-local copies.
+  int get autoRemoveSyncedCopiesDays => getInt('autoRemoveSyncedCopiesDays', defaultValue: 30);
+
+  set autoRemoveSyncedCopiesDays(int value) => saveInt('autoRemoveSyncedCopiesDays', value);
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
@@ -1127,6 +1153,10 @@ class SharedPreferencesUtil {
     saveStringList('cachedPeople', people);
   }
 
+  bool get cachedPeopleStatsTruncated => _preferences?.get('cachedPeopleStatsTruncated') == true;
+
+  set cachedPeopleStatsTruncated(bool value) => saveBool('cachedPeopleStatsTruncated', value);
+
   addCachedPerson(Person person) {
     final List<Person> people = cachedPeople;
     people.add(person);
@@ -1241,6 +1271,7 @@ class SharedPreferencesUtil {
     cachedConversations = <ServerConversation>[];
     cachedMessages = <ServerMessage>[];
     cachedPeople = <Person>[];
+    cachedPeopleStatsTruncated = false;
     appsList = <App>[];
     modifiedConversationDetails = null;
     cachedSingleLanguageMode = false;

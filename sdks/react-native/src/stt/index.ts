@@ -1,9 +1,17 @@
 import { createDeepgramTranscriber } from './deepgram';
 import { createParakeetTranscriber } from './parakeet';
 import { createWhisperTranscriber } from './whisper';
-import type { SttEngine, StreamingTranscriber, TranscriptHandler } from './types';
+import type {
+  SttEngine,
+  StreamingTranscriber,
+  TranscriptHandler,
+} from './types';
 
-export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './types';
+export type {
+  SttEngine,
+  StreamingTranscriber,
+  TranscriptHandler,
+} from './types';
 export { createDeepgramTranscriber } from './deepgram';
 export { createParakeetTranscriber, parakeetWsUrl } from './parakeet';
 export { createWhisperTranscriber } from './whisper';
@@ -16,7 +24,11 @@ export function createTranscriber(
     apiUrl?: string;
     sampleRate?: number;
     whisperRunner?: (pcm: Uint8Array) => Promise<string> | string;
-    createWebSocket?: (url: string, headers: Record<string, string>) => WebSocket;
+    createWebSocket?: (
+      url: string,
+      headers: Record<string, string>
+    ) => WebSocket;
+    drainTimeoutMs?: number;
   }
 ): StreamingTranscriber {
   switch (engine) {
@@ -27,10 +39,14 @@ export function createTranscriber(
         sampleRate: options.sampleRate,
         onTranscript: options.onTranscript,
         createWebSocket: options.createWebSocket,
+        drainTimeoutMs: options.drainTimeoutMs,
       });
     case 'parakeet': {
-      const apiUrl = options.apiUrl || (globalThis as any)?.process?.env?.HOSTED_PARAKEET_API_URL;
-      if (!apiUrl) throw new Error('Parakeet apiUrl or HOSTED_PARAKEET_API_URL required');
+      const apiUrl =
+        options.apiUrl ||
+        (globalThis as any)?.process?.env?.HOSTED_PARAKEET_API_URL;
+      if (!apiUrl)
+        throw new Error('Parakeet apiUrl or HOSTED_PARAKEET_API_URL required');
       return createParakeetTranscriber({
         apiUrl,
         sampleRate: options.sampleRate,
@@ -39,7 +55,9 @@ export function createTranscriber(
     }
     case 'whisper':
       if (!options.whisperRunner) {
-        throw new Error('Whisper requires whisperRunner (feature-gated local model)');
+        throw new Error(
+          'Whisper requires whisperRunner (feature-gated local model)'
+        );
       }
       return createWhisperTranscriber({
         runner: options.whisperRunner,
