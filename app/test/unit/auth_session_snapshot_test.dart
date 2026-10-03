@@ -163,10 +163,10 @@ void main() {
     });
 
     http.StreamedResponse okBody() => http.StreamedResponse(
-      Stream.value(utf8.encode('{"ok": true,\n  "export_complete": true\n}\n')),
-      200,
-      headers: {'content-type': 'application/json'},
-    );
+          Stream.value(utf8.encode('{"ok": true,\n  "export_complete": true\n}\n')),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
 
     test('renames the completed file while the snapshot stays current', () async {
       final gateway = _Gateway(user: const AuthUserSnapshot(uid: 'user-a'));

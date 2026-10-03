@@ -107,8 +107,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const OmiLoadingState()
           : _summary == null
-          ? _buildNotFound()
-          : _buildContent(),
+              ? _buildNotFound()
+              : _buildContent(),
     );
   }
 
@@ -128,15 +128,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
       );
       final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-      PlatformManager.instance.analytics.track(
-        'Daily Summary Shared',
-        properties: {
-          'summary_id': widget.summaryId,
-          'date': summary.date,
-          'share_id': sid,
-          if (targetApp != null) 'target_app': targetApp,
-        },
-      );
+      PlatformManager.instance.analytics.track('Daily Summary Shared', properties: {
+        'summary_id': widget.summaryId,
+        'date': summary.date,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      });
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -279,8 +276,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final message = result.statusCode == 429
           ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
           : result.statusCode == 400
-          ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
-          : context.l10n.recapRegenerateFailed;
+              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+              : context.l10n.recapRegenerateFailed;
       OmiFeedback.error(context, message);
     }
   }
@@ -335,7 +332,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
                   if (summary.actionItems.isNotEmpty) ...[
                     const SizedBox(height: 32),
-                    _buildActionItemsSection(summary),
+                    _buildActionItemsSection(summary)
                   ],
                   if (summary.unresolvedQuestions.isNotEmpty) ...[
                     const SizedBox(height: 32),
@@ -459,9 +456,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         onTap: recapDay == null
             ? null
             : () => routeToPage(
-                context,
-                DayConversationsPage(date: recapDay, fetchConversations: widget.dayConversationsFetcher),
-              ),
+                context, DayConversationsPage(date: recapDay, fetchConversations: widget.dayConversationsFetcher)),
       ),
       _buildStatItem(
         FontAwesomeIcons.clock,
@@ -816,8 +811,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-              ? '$startFormatted - $endFormatted'
-              : startFormatted)
+            ? '$startFormatted - $endFormatted'
+            : startFormatted)
         : '';
 
     final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';

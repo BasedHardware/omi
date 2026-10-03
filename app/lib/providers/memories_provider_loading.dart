@@ -154,8 +154,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
             continue;
           }
           Logger.warning(
-            'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols',
-          );
+              'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols');
           break;
         }
         // Scope belongs to the successful current-page response. The separate
@@ -168,8 +167,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
         if (result.truncated) {
           if (result.truncated) {
             Logger.warning(
-              'MemoriesProvider: server returned a truncated list; stopping at ${seenCurrent.length} rows',
-            );
+                'MemoriesProvider: server returned a truncated list; stopping at ${seenCurrent.length} rows');
           }
           break;
         }

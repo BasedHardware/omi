@@ -35,10 +35,10 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 
   @override
   List<OnboardingPermission> get permissions => [
-    if (Platform.isAndroid) OnboardingPermission.background,
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+        if (Platform.isAndroid) OnboardingPermission.background,
+        OnboardingPermission.location,
+        OnboardingPermission.notifications,
+      ];
 
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async {
@@ -71,7 +71,8 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 OnboardingPermissionsSource resolveOnboardingPermissionsSource(
   BuildContext context,
   OnboardingPermissionsSource? source,
-) => source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
+) =>
+    source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
 
 /// What Continue does on the first-run step and the interstitial: asks, in row order, for every
 /// permission that can still be asked. Allowed, blocked and service-off ones are left alone, and a

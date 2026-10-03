@@ -9,36 +9,34 @@ import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/ui/ui.dart';
 
 DailySummary _summary(String id) => DailySummary(
-  id: id,
-  date: '2026-09-20',
-  createdAt: DateTime.utc(2026, 9, 20, 12),
-  headline: 'Recap $id',
-  overview: 'Nothing much happened',
-  stats: DayStats(totalConversations: 5, actionItemsCount: 3),
-);
+      id: id,
+      date: '2026-09-20',
+      createdAt: DateTime.utc(2026, 9, 20, 12),
+      headline: 'Recap $id',
+      overview: 'Nothing much happened',
+      stats: DayStats(totalConversations: 5, actionItemsCount: 3),
+    );
 
 List<DailySummary> _page(int offset, int count) => [for (var i = 0; i < count; i++) _summary('summary-${offset + i}')];
 
 Widget _app(DailySummariesFetcher fetcher, {Key? key}) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(
-    body: CustomScrollView(
-      slivers: [DailySummariesList(key: key, fetchSummaries: fetcher)],
-    ),
-  ),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: CustomScrollView(
+          slivers: [DailySummariesList(key: key, fetchSummaries: fetcher)],
+        ),
+      ),
+    );
 
 void main() {
   testWidgets('a throwing initial load shows the error state; Try Again reloads', (tester) async {
     var calls = 0;
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) async {
-        calls++;
-        if (calls == 1) throw StateError('backend unreachable');
-        return (items: [_summary('summary-1')], ok: true);
-      }),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) async {
+      calls++;
+      if (calls == 1) throw StateError('backend unreachable');
+      return (items: [_summary('summary-1')], ok: true);
+    }));
     await tester.pumpAndSettle();
 
     expect(find.byType(OmiErrorState), findsOneWidget);
@@ -55,12 +53,10 @@ void main() {
   testWidgets('a failed refresh keeps the loaded rows and hasMore', (tester) async {
     var failRefresh = false;
     final key = GlobalKey<DailySummariesListState>();
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) async {
-        if (failRefresh) throw StateError('refresh blew up');
-        return (items: _page(0, 20), ok: true);
-      }, key: key),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) async {
+      if (failRefresh) throw StateError('refresh blew up');
+      return (items: _page(0, 20), ok: true);
+    }, key: key));
     await tester.pumpAndSettle();
     expect(find.text('Recap summary-0'), findsOneWidget);
 
@@ -76,13 +72,11 @@ void main() {
     final pending = Completer<({List<DailySummary> items, bool ok})>();
     var mode = 0;
     final key = GlobalKey<DailySummariesListState>();
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) {
-        if (mode == 2) return pending.future;
-        if (mode == 1) return Future.value((items: <DailySummary>[], ok: false));
-        return Future.value((items: _page(0, 20), ok: true));
-      }, key: key),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) {
+      if (mode == 2) return pending.future;
+      if (mode == 1) return Future.value((items: <DailySummary>[], ok: false));
+      return Future.value((items: _page(0, 20), ok: true));
+    }, key: key));
     await tester.pumpAndSettle();
     expect(find.text('Recap summary-0'), findsOneWidget);
 
@@ -90,11 +84,8 @@ void main() {
     await key.currentState!.refresh();
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('recaps_refresh_failed_banner')),
-      findsOneWidget,
-      reason: 'the refresh failure is visible without scrolling to the tail',
-    );
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget,
+        reason: 'the refresh failure is visible without scrolling to the tail');
     final positionBefore = tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels;
 
     mode = 2;
@@ -102,11 +93,8 @@ void main() {
     await tester.pump();
     expect(find.text('Recap summary-0'), findsOneWidget, reason: 'rows stay put while the retry is pending');
     expect(tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels, positionBefore);
-    expect(
-      find.byKey(const ValueKey('recaps_refresh_failed_banner')),
-      findsOneWidget,
-      reason: 'the notice remains while the retry runs',
-    );
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget,
+        reason: 'the notice remains while the retry runs');
 
     pending.complete((items: _page(0, 20), ok: true));
     await tester.pumpAndSettle();
@@ -116,13 +104,11 @@ void main() {
   testWidgets('a throwing page load releases the spinner and offers a user retry, once', (tester) async {
     var calls = 0;
     var failNext = true;
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) async {
-        calls++;
-        if (offset > 0 && failNext) throw StateError('page two unreachable');
-        return (items: _page(offset, 20), ok: true);
-      }),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) async {
+      calls++;
+      if (offset > 0 && failNext) throw StateError('page two unreachable');
+      return (items: _page(offset, 20), ok: true);
+    }));
     await tester.pumpAndSettle();
 
     await tester.fling(find.byType(CustomScrollView), const Offset(0, -3000), 1000);
@@ -147,14 +133,12 @@ void main() {
     var pageTwoFails = true;
     var pageTwoCalls = 0;
     final key = GlobalKey<DailySummariesListState>();
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) async {
-        if (offset == 0) return (items: _page(0, 20), ok: true);
-        pageTwoCalls++;
-        if (pageTwoFails) throw StateError('page two unreachable');
-        return (items: _page(offset, 5), ok: true);
-      }, key: key),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) async {
+      if (offset == 0) return (items: _page(0, 20), ok: true);
+      pageTwoCalls++;
+      if (pageTwoFails) throw StateError('page two unreachable');
+      return (items: _page(offset, 5), ok: true);
+    }, key: key));
     await tester.pumpAndSettle();
 
     await tester.fling(find.byType(CustomScrollView), const Offset(0, -3000), 1000);
@@ -178,16 +162,14 @@ void main() {
     final pendingPage = Completer<({List<DailySummary> items, bool ok})>();
     var pendingIssued = false;
     final key = GlobalKey<DailySummariesListState>();
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) {
-        if (offset == 0) return Future.value((items: _page(0, 20), ok: true));
-        if (!pendingIssued) {
-          pendingIssued = true;
-          return pendingPage.future;
-        }
-        return Future.value((items: <DailySummary>[], ok: true));
-      }, key: key),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) {
+      if (offset == 0) return Future.value((items: _page(0, 20), ok: true));
+      if (!pendingIssued) {
+        pendingIssued = true;
+        return pendingPage.future;
+      }
+      return Future.value((items: <DailySummary>[], ok: true));
+    }, key: key));
     await tester.pumpAndSettle();
 
     await tester.fling(find.byType(CustomScrollView), const Offset(0, -3000), 1000);
@@ -204,22 +186,17 @@ void main() {
     final position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
     position.jumpTo(position.maxScrollExtent);
     await tester.pump();
-    expect(
-      find.text('Recap stale-marker'),
-      findsNothing,
-      reason: 'the superseded page load must not append after a fresh first page',
-    );
+    expect(find.text('Recap stale-marker'), findsNothing,
+        reason: 'the superseded page load must not append after a fresh first page');
   });
 
   testWidgets('a failed refresh with rows still offers a retry affordance', (tester) async {
     var failRefresh = false;
     final key = GlobalKey<DailySummariesListState>();
-    await tester.pumpWidget(
-      _app(({int limit = 20, int offset = 0}) async {
-        if (failRefresh) throw StateError('refresh blew up');
-        return (items: _page(0, 5), ok: true);
-      }, key: key),
-    );
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) async {
+      if (failRefresh) throw StateError('refresh blew up');
+      return (items: _page(0, 5), ok: true);
+    }, key: key));
     await tester.pumpAndSettle();
     expect(find.text('Recap summary-0'), findsOneWidget);
 

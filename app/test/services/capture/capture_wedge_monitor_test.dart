@@ -57,13 +57,13 @@ void main() {
     addTearDown(monitor.dispose);
     monitor.setNativeIngressOwner('dev-a', true);
     CaptureIngressHealth health(String phase) => CaptureIngressHealth(
-      phase: phase,
-      generation: 'epoch-1',
-      reason: phase,
-      validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
-      subscriptionConfirmed: phase == 'quiet',
-      unverifiedSinceMs: 1234,
-    );
+          phase: phase,
+          generation: 'epoch-1',
+          reason: phase,
+          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+          subscriptionConfirmed: phase == 'quiet',
+          unverifiedSinceMs: 1234,
+        );
     for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
       monitor.observeIngressHealth('dev-a', health(phase));
       zeroSession(monitor);

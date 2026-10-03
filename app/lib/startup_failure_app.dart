@@ -57,10 +57,10 @@ class StartupFailureApp extends StatelessWidget {
   bool get _isConfiguration => error is StartupConfigurationError;
 
   static Uri _supportUri(AppLocalizations l10n) => Uri(
-    scheme: 'mailto',
-    path: kStartupSupportEmail,
-    query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
-  );
+        scheme: 'mailto',
+        path: kStartupSupportEmail,
+        query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
+      );
 
   static AppLocalizations _strings() {
     try {

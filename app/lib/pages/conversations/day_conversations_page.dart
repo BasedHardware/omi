@@ -16,13 +16,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 
-typedef DayConversationsFetcher =
-    Future<({List<ServerConversation> items, bool ok, bool truncated})> Function({
-      required DateTime startDate,
-      required DateTime endDate,
-      int limit,
-      int offset,
-    });
+typedef DayConversationsFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function({
+  required DateTime startDate,
+  required DateTime endDate,
+  int limit,
+  int offset,
+});
 
 (DateTime start, DateTime end) dayDateBounds(DateTime day) {
   final start = DateTime(day.year, day.month, day.day);
@@ -65,18 +64,13 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
         // other valid row for the day behind an error. Rejected rows surface
         // as partial data instead.
         final result = await _api.list(
-          limit: limit,
-          offset: offset,
-          includeDiscarded: false,
-          startDate: startDate,
-          endDate: endDate,
-        );
+            limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
         return switch (result) {
           ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
-            items: data,
-            ok: true,
-            truncated: truncated || rejectedRows > 0,
-          ),
+              items: data,
+              ok: true,
+              truncated: truncated || rejectedRows > 0,
+            ),
           ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false),
         };
       };
@@ -95,10 +89,7 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
   }
 
   Future<({List<ServerConversation> items, bool ok, bool truncated})> _page(
-    DateTime start,
-    DateTime end,
-    int offset,
-  ) async {
+      DateTime start, DateTime end, int offset) async {
     try {
       return await _fetch(startDate: start, endDate: end, limit: _limit, offset: offset).timeout(_pageDeadline);
     } catch (_) {
@@ -230,7 +221,10 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
         body: RefreshIndicator(
           color: OmiColors.textPrimary,
           onRefresh: _loadDay,
-          child: ListenableBuilder(listenable: _provider, builder: (context, _) => _buildBody(context, l10n, dates)),
+          child: ListenableBuilder(
+            listenable: _provider,
+            builder: (context, _) => _buildBody(context, l10n, dates),
+          ),
         ),
       ),
     );
@@ -243,9 +237,10 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
     }
     final conversations = _provider.displayedConversations;
     if (conversations.isEmpty) {
-      return _scrollable(
-        OmiEmptyState(icon: Icons.forum_outlined, title: l10n.noConversationsOnDate(dates.date(_day))),
-      );
+      return _scrollable(OmiEmptyState(
+        icon: Icons.forum_outlined,
+        title: l10n.noConversationsOnDate(dates.date(_day)),
+      ));
     }
     final extra = _refreshFailed ? 1 : 0;
     return ListView.builder(
@@ -256,7 +251,10 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
         if (_refreshFailed && index == 0) {
           return Padding(
             padding: const EdgeInsets.all(OmiSpacing.md),
-            child: OmiErrorState(message: l10n.somethingWentWrong, onRetry: () => _loadDay()),
+            child: OmiErrorState(
+              message: l10n.somethingWentWrong,
+              onRetry: () => _loadDay(),
+            ),
           );
         }
         index -= extra;
@@ -302,10 +300,7 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
       );
     }
     if (_loadingMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: OmiSpacing.md),
-        child: Center(child: OmiSpinner()),
-      );
+      return const Padding(padding: EdgeInsets.symmetric(vertical: OmiSpacing.md), child: Center(child: OmiSpinner()));
     }
     if (_truncated) {
       return Padding(

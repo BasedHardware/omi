@@ -33,21 +33,21 @@ Widget _host(Widget child, {Locale locale = const Locale('en')}) {
 }
 
 App _chatApp(String id, String name) => App(
-  id: id,
-  name: name,
-  author: 'Omi',
-  description: '',
-  image: '',
-  capabilities: {'chat'},
-  status: 'approved',
-  category: 'productivity',
-  approved: true,
-  ratingCount: 0,
-  enabled: true,
-  deleted: false,
-  isPaid: false,
-  isUserPaid: false,
-);
+      id: id,
+      name: name,
+      author: 'Omi',
+      description: '',
+      image: '',
+      capabilities: {'chat'},
+      status: 'approved',
+      category: 'productivity',
+      approved: true,
+      ratingCount: 0,
+      enabled: true,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    );
 
 void main() {
   group('failed reply', () {
@@ -98,14 +98,12 @@ void main() {
   testWidgets('feedback sheet: localized title and reasons, Submit disabled until a reason is chosen', (tester) async {
     String? submitted;
     await tester.pumpWidget(
-      _host(
-        Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showFeedbackBottomSheet(context, onSubmit: (reason, comment) => submitted = reason),
-            child: const Text('open'),
-          ),
+      _host(Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showFeedbackBottomSheet(context, onSubmit: (reason, comment) => submitted = reason),
+          child: const Text('open'),
         ),
-      ),
+      )),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -131,17 +129,9 @@ void main() {
 
   testWidgets('composer round button looks disabled and is announced disabled when it cannot send', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(
-      _host(
-        const Center(
-          child: ChatComposerRoundButton(
-            icon: FaIcon(FontAwesomeIcons.arrowUp),
-            label: 'Send message',
-            onPressed: null,
-          ),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(const Center(
+      child: ChatComposerRoundButton(icon: FaIcon(FontAwesomeIcons.arrowUp), label: 'Send message', onPressed: null),
+    )));
 
     final node = tester.getSemantics(find.bySemanticsLabel('Send message'));
     expect(node.flagsCollection.isEnabled, Tristate.isFalse);

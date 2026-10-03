@@ -35,14 +35,14 @@ final _memory = Memory(
 );
 
 Memory _row(String id) => Memory(
-  id: id,
-  uid: 'memory-delete-all-test-user',
-  content: 'Memory $id',
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'memory-delete-all-test-user',
+      content: 'Memory $id',
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      visibility: MemoryVisibility.private,
+    );
 
 class _RecordingIndex extends SiriIndexApi {
   final calls = <String>[];
@@ -78,10 +78,10 @@ class _RecordingIndex extends SiriIndexApi {
 }
 
 MemoriesProvider _provider() => MemoriesProvider(
-  fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
-    return GetMemoriesResult([_memory], true);
-  },
-);
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult([_memory], true);
+      },
+    );
 
 void main() {
   setUpAll(() {
@@ -164,13 +164,13 @@ void main() {
     final gate = Completer<void>();
     var page = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest:
-          ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
-            if (page++ == 0) {
-              return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
-            }
-            return gate.future.then((_) => GetMemoriesResult([_memory, _row('m2')], true));
-          },
+      fetchMemoriesCursorRequest: (
+          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+        if (page++ == 0) {
+          return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
+        }
+        return gate.future.then((_) => GetMemoriesResult([_memory, _row('m2')], true));
+      },
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: false),
       deleteAllMemoriesRequest: () async => true,
@@ -191,11 +191,8 @@ void main() {
     expect(provider.memories, isEmpty);
     expect(SharedPreferencesUtil().cachedMemories, isEmpty);
     expect(host.memories, isEmpty);
-    expect(
-      host.calls.sublist(host.calls.lastIndexOf('reconcile') + 1),
-      isNot(contains('upsert')),
-      reason: 'the retired page must not index rows after the clear',
-    );
+    expect(host.calls.sublist(host.calls.lastIndexOf('reconcile') + 1), isNot(contains('upsert')),
+        reason: 'the retired page must not index rows after the clear');
   });
 
   test('a history page pending when delete-all commits is dropped', () async {
@@ -279,13 +276,13 @@ void main() {
     final gate = Completer<void>();
     var page = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest:
-          ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
-            if (page++ == 0) {
-              return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
-            }
-            return gate.future.then((_) => GetMemoriesResult([_memory, _row('m2')], true));
-          },
+      fetchMemoriesCursorRequest: (
+          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+        if (page++ == 0) {
+          return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
+        }
+        return gate.future.then((_) => GetMemoriesResult([_memory, _row('m2')], true));
+      },
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: false),
       deleteAllMemoriesRequest: () async => false,

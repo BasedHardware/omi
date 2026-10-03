@@ -17,19 +17,19 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 class _Tasks extends ActionItemsProvider {
   _Tasks()
-    : super(
-        getActionItems:
-            ({
-              int limit = 50,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async => const ActionItemsResponse(actionItems: [], hasMore: false),
-      );
+      : super(
+          getActionItems: ({
+            int limit = 50,
+            int offset = 0,
+            bool? completed,
+            String? conversationId,
+            DateTime? startDate,
+            DateTime? endDate,
+            DateTime? dueStartDate,
+            DateTime? dueEndDate,
+          }) async =>
+              const ActionItemsResponse(actionItems: [], hasMore: false),
+        );
   Completer<ActionItemWithMetadata?> result = Completer();
   int writes = 0;
   DateTime? savedDueDate;
@@ -48,10 +48,10 @@ class _Tasks extends ActionItemsProvider {
 }
 
 Widget _app(Widget child) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   setUp(() async {

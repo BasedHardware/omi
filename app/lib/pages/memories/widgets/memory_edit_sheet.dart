@@ -259,11 +259,11 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
 
 /// The category as the filter sheet names it; null hides the chip for a category with no label.
 String? _categoryLabel(AppLocalizations l10n, MemoryCategory category) => switch (category) {
-  MemoryCategory.system => l10n.filterSystem,
-  MemoryCategory.interesting => l10n.filterInteresting,
-  MemoryCategory.manual => l10n.filterManual,
-  MemoryCategory.workflow => null,
-};
+      MemoryCategory.system => l10n.filterSystem,
+      MemoryCategory.interesting => l10n.filterInteresting,
+      MemoryCategory.manual => l10n.filterManual,
+      MemoryCategory.workflow => null,
+    };
 
 class _MemoryChip extends StatelessWidget {
   const _MemoryChip({required this.icon, required this.label});

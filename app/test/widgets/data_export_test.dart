@@ -61,8 +61,7 @@ class _Harness {
     void Function(int)? onProgress,
     Future<void>? abortTrigger,
     AuthSessionSnapshot? authorizationSnapshot,
-  })?
-  downloadImpl;
+  })? downloadImpl;
 
   void switchOwnerTo(String? uid) {
     currentOwner = uid;

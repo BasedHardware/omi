@@ -13,14 +13,14 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Map<String, dynamic> _price(String planId, String title, String interval, int amount, {bool active = false}) => {
-  'id': 'price_${planId}_$interval',
-  'plan_id': planId,
-  'title': title,
-  'interval': interval,
-  'unit_amount': amount,
-  'price_string': '\$${amount ~/ 100}/${interval == 'year' ? 'yr' : 'mo'}',
-  'is_active': active,
-};
+      'id': 'price_${planId}_$interval',
+      'plan_id': planId,
+      'title': title,
+      'interval': interval,
+      'unit_amount': amount,
+      'price_string': '\$${amount ~/ 100}/${interval == 'year' ? 'yr' : 'mo'}',
+      'is_active': active,
+    };
 
 class _Harness extends StatefulWidget {
   const _Harness();

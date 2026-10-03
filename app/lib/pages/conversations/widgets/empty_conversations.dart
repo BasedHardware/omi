@@ -38,12 +38,12 @@ class EmptyConversationsWidget extends StatelessWidget {
       child: dateFilterLabel != null
           ? OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsOnDate(dateFilterLabel!))
           : isStarredFilterActive
-          ? OmiEmptyState(
-              glyph: const FaIcon(FontAwesomeIcons.star),
-              title: l10n.noStarredConversations,
-              message: l10n.starConversationHint,
-            )
-          : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+              ? OmiEmptyState(
+                  glyph: const FaIcon(FontAwesomeIcons.star),
+                  title: l10n.noStarredConversations,
+                  message: l10n.starConversationHint,
+                )
+              : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
     );
   }
 }

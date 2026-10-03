@@ -10,12 +10,12 @@ import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/announcements/announcement_dialog.dart';
 
 Announcement _announcement() => Announcement.fromJson({
-  'id': 'a-1',
-  'type': 'announcement',
-  'created_at': '2026-09-01T00:00:00Z',
-  'active': true,
-  'content': {'title': 'Meet Omi Memories', 'body': 'Everything you said, remembered.'},
-});
+      'id': 'a-1',
+      'type': 'announcement',
+      'created_at': '2026-09-01T00:00:00Z',
+      'active': true,
+      'content': {'title': 'Meet Omi Memories', 'body': 'Everything you said, remembered.'},
+    });
 
 void main() {
   late AnnouncementOutcome? outcome;

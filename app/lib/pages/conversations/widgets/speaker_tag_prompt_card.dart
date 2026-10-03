@@ -67,8 +67,9 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
                     child: provider.finished
                         ? _Finished(provider: provider)
                         : provider.pending != null
-                        ? _Answered(key: ValueKey('answered_${provider.pending!.promptId}'), pending: provider.pending!)
-                        : _Question(key: ValueKey('question_${provider.current!.id}'), provider: provider),
+                            ? _Answered(
+                                key: ValueKey('answered_${provider.pending!.promptId}'), pending: provider.pending!)
+                            : _Question(key: ValueKey('question_${provider.current!.id}'), provider: provider),
                   ),
                 ),
                 if (provider.firstTime) ...[
@@ -167,7 +168,8 @@ Future<void> _giveAnswer(
     SpeakerTagAnswer.notAPerson => l10n.speakerTagPromptNotAPersonToast,
     SpeakerTagAnswer.person ||
     SpeakerTagAnswer.newPerson ||
-    SpeakerTagAnswer.someoneElse when displayName != null => l10n.speakerTagPromptLabeledToast(displayName),
+    SpeakerTagAnswer.someoneElse when displayName != null =>
+      l10n.speakerTagPromptLabeledToast(displayName),
     _ => l10n.speakerTagPromptRejectedToast,
   };
   final undone = await OmiFeedback.undo(
@@ -231,8 +233,8 @@ class _Question extends StatelessWidget {
 
     final question = switch (prompt.kind) {
       'confirm_person' when suggestedName != null && suggestedName.isNotEmpty => l10n.speakerTagPromptIsThisPerson(
-        suggestedName,
-      ),
+          suggestedName,
+        ),
       'identify' || 'confirm_person' => l10n.speakerTagPromptWhoIsThis,
       _ => l10n.speakerTagPromptIsThisYou,
     };
@@ -696,37 +698,37 @@ class _Answered extends StatelessWidget {
 /// know", the owner ("That's Me") or not a person at all (a TV, a voice assistant).
 class SpeakerPickerChoice {
   const SpeakerPickerChoice.person(String this.personId, this.displayName)
-    : name = null,
-      unknown = false,
-      me = false,
-      notAPerson = false;
+      : name = null,
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.newPerson(String this.name)
-    : personId = null,
-      displayName = null,
-      unknown = false,
-      me = false,
-      notAPerson = false;
+      : personId = null,
+        displayName = null,
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.unknown()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = true,
-      me = false,
-      notAPerson = false;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = true,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.me()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = false,
-      me = true,
-      notAPerson = false;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = true,
+        notAPerson = false;
   const SpeakerPickerChoice.notAPerson()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = false,
-      me = false,
-      notAPerson = true;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = false,
+        notAPerson = true;
 
   final String? personId;
   final String? name;

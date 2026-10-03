@@ -8,35 +8,9 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/search/global_search.dart';
 
 Future<void> _pushChat(WidgetTester tester, {String tag = 'chat-page', bool disableAnimations = false}) async {
-  await tester.pumpWidget(
-    MediaQuery(
-      data: MediaQueryData.fromView(tester.view).copyWith(disableAnimations: disableAnimations),
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(platform: TargetPlatform.iOS),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).push(ChatSheetRoute<void>(builder: (_) => Scaffold(body: Text(tag)))),
-                child: const Text('open'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-  await tester.tap(find.text('open'));
-  await tester.pumpAndSettle();
-  expect(find.text(tag), findsOneWidget);
-}
-
-Future<void> _pushSearch(WidgetTester tester) async {
-  await tester.pumpWidget(
-    MaterialApp(
+  await tester.pumpWidget(MediaQuery(
+    data: MediaQueryData.fromView(tester.view).copyWith(disableAnimations: disableAnimations),
+    child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(platform: TargetPlatform.iOS),
@@ -45,14 +19,36 @@ Future<void> _pushSearch(WidgetTester tester) async {
           body: Center(
             child: TextButton(
               onPressed: () =>
-                  Navigator.of(context).push(SearchDropRoute<void>(builder: (_) => const Text('search-page'))),
+                  Navigator.of(context).push(ChatSheetRoute<void>(builder: (_) => Scaffold(body: Text(tag)))),
               child: const Text('open'),
             ),
           ),
         ),
       ),
     ),
-  );
+  ));
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+  expect(find.text(tag), findsOneWidget);
+}
+
+Future<void> _pushSearch(WidgetTester tester) async {
+  await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: ThemeData(platform: TargetPlatform.iOS),
+    home: Builder(
+      builder: (context) => Scaffold(
+        body: Center(
+          child: TextButton(
+            onPressed: () =>
+                Navigator.of(context).push(SearchDropRoute<void>(builder: (_) => const Text('search-page'))),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ),
+  ));
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   expect(find.text('search-page'), findsOneWidget);
@@ -115,16 +111,10 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(find.text('chat-page'), findsOneWidget, reason: 'a short drag springs back instead of popping');
-    expect(
-      tester.getTopLeft(find.text('chat-page')).dx,
-      0,
-      reason: 'the cancelled swipe restores the sheet to the left edge',
-    );
-    expect(
-      Navigator.of(tester.element(find.text('open'))).userGestureInProgress,
-      isFalse,
-      reason: 'a cancelled swipe releases the navigator gesture',
-    );
+    expect(tester.getTopLeft(find.text('chat-page')).dx, 0,
+        reason: 'the cancelled swipe restores the sheet to the left edge');
+    expect(Navigator.of(tester.element(find.text('open'))).userGestureInProgress, isFalse,
+        reason: 'a cancelled swipe releases the navigator gesture');
   });
 
   testWidgets('a cancelled edge drag on a SearchDropRoute also releases the gesture', (tester) async {
@@ -145,11 +135,8 @@ void main() {
     final gesture = await tester.startGesture(const Offset(2, 400));
     await gesture.moveBy(const Offset(200, 0));
     await tester.pump();
-    expect(
-      tester.getTopLeft(find.text('chat-page')).dx,
-      greaterThan(before.dx),
-      reason: 'reduced motion must not freeze the edge swipe',
-    );
+    expect(tester.getTopLeft(find.text('chat-page')).dx, greaterThan(before.dx),
+        reason: 'reduced motion must not freeze the edge swipe');
     await gesture.moveBy(const Offset(200, 0));
     await tester.pump();
     await gesture.up();
@@ -159,27 +146,25 @@ void main() {
   });
 
   testWidgets('reduced motion still pops a SearchDropRoute', (tester) async {
-    await tester.pumpWidget(
-      MediaQuery(
-        data: MediaQueryData.fromView(tester.view).copyWith(disableAnimations: true),
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          theme: ThemeData(platform: TargetPlatform.iOS),
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: TextButton(
-                  onPressed: () =>
-                      Navigator.of(context).push(SearchDropRoute<void>(builder: (_) => const Text('search-page'))),
-                  child: const Text('open'),
-                ),
+    await tester.pumpWidget(MediaQuery(
+      data: MediaQueryData.fromView(tester.view).copyWith(disableAnimations: true),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () =>
+                    Navigator.of(context).push(SearchDropRoute<void>(builder: (_) => const Text('search-page'))),
+                child: const Text('open'),
               ),
             ),
           ),
         ),
       ),
-    );
+    ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -237,24 +222,22 @@ void main() {
   });
 
   testWidgets('Android gets no edge swipe', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(platform: TargetPlatform.android),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).push(ChatSheetRoute<void>(builder: (_) => const Text('chat-page'))),
-                child: const Text('open'),
-              ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: ThemeData(platform: TargetPlatform.android),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () =>
+                  Navigator.of(context).push(ChatSheetRoute<void>(builder: (_) => const Text('chat-page'))),
+              child: const Text('open'),
             ),
           ),
         ),
       ),
-    );
+    ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -269,25 +252,22 @@ void main() {
   });
 
   testWidgets('a PopScope that blocks the pop also blocks the swipe', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(platform: TargetPlatform.iOS),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => Navigator.of(
-                  context,
-                ).push(ChatSheetRoute<void>(builder: (_) => const PopScope(canPop: false, child: Text('locked-page')))),
-                child: const Text('open'),
-              ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: ThemeData(platform: TargetPlatform.iOS),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                  ChatSheetRoute<void>(builder: (_) => const PopScope(canPop: false, child: Text('locked-page')))),
+              child: const Text('open'),
             ),
           ),
         ),
       ),
-    );
+    ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 

@@ -59,14 +59,13 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   located.sort((a, b) => a.$1.id.compareTo(b.$1.id));
   final grouped = <({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})>[];
   for (final (conversation, point) in located) {
-    final group = grouped
-        .cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>()
-        .firstWhere(
-          (candidate) => candidate!.points.every(
-            (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
-          ),
-          orElse: () => null,
-        );
+    final group =
+        grouped.cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>().firstWhere(
+              (candidate) => candidate!.points.every(
+                (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
+              ),
+              orElse: () => null,
+            );
     if (group == null) {
       grouped.add((anchor: point, points: [point], conversations: [conversation]));
     } else {

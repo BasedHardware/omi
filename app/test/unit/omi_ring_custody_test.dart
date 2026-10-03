@@ -70,10 +70,10 @@ class _ScriptedTransport extends DeviceTransport {
         if (dropEnableAck) break;
         final held = holdEnableAck;
         void sendAck() => _notify.add(
-          grantedCaps != null
-              ? [RingProtocol.notifyAck, enableStatus, grantedCaps!]
-              : [RingProtocol.notifyAck, enableStatus],
-        );
+              grantedCaps != null
+                  ? [RingProtocol.notifyAck, enableStatus, grantedCaps!]
+                  : [RingProtocol.notifyAck, enableStatus],
+            );
         if (held != null) {
           unawaited(held.future.then((_) => sendAck()));
           break;
@@ -114,16 +114,16 @@ List<int> _v1Info({int caps = 0x0F, int ringId = 0x1122334455667788, int readSeq
 }
 
 RingInfo _ringInfo({int ringId = 0x1122334455667788, int readSeq = 0, int writeSeq = 64}) => RingInfo(
-  readSeq: readSeq,
-  writeSeq: writeSeq,
-  capacityPackets: 1024,
-  droppedPackets: 0,
-  packetSize: 444,
-  advertisedCaps: 0x0F,
-  contractVersion: 1,
-  ringId: ringId,
-  infoBytes: 41,
-);
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 1024,
+      droppedPackets: 0,
+      packetSize: 444,
+      advertisedCaps: 0x0F,
+      contractVersion: 1,
+      ringId: ringId,
+      infoBytes: 41,
+    );
 
 List<int> _legacyInfo() {
   final b = ByteData(31);
@@ -324,9 +324,8 @@ void main() {
       t.emit(DeviceTransportState.connected);
       await _settle();
 
-      final advances = t.writes
-          .where((w) => w[0] == RingProtocol.cmdAdvance || w[0] == RingProtocol.cmdAdvanceId)
-          .toList();
+      final advances =
+          t.writes.where((w) => w[0] == RingProtocol.cmdAdvance || w[0] == RingProtocol.cmdAdvanceId).toList();
       expect(advances, hasLength(1));
       expect(advances.single[0], RingProtocol.cmdAdvanceId);
       final bd = ByteData.sublistView(Uint8List.fromList(advances.single));

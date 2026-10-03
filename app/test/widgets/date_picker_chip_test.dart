@@ -16,25 +16,23 @@ void main() {
 
   testWidgets('a single-day sheet with a callback needs no provider and shows no Remove', (tester) async {
     (DateTime, DateTime)? selected;
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () => showConversationDateRangePicker(
-                context,
-                initialStartDate: DateTime(2026, 9, 12),
-                singleDayOnly: true,
-                onSelected: (start, end) => selected = (start, end),
-              ),
-              child: const Text('open'),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showConversationDateRangePicker(
+              context,
+              initialStartDate: DateTime(2026, 9, 12),
+              singleDayOnly: true,
+              onSelected: (start, end) => selected = (start, end),
             ),
+            child: const Text('open'),
           ),
         ),
       ),
-    );
+    ));
 
     await tester.tap(find.text('open'));
     await tester.pump();
@@ -55,19 +53,17 @@ void main() {
 
   testWidgets('a single-day chip labels one date and clears through one semantics action', (tester) async {
     var clears = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: OmiDateFilterChip(
-            start: DateTime(2026, 9, 12),
-            end: DateTime(2026, 9, 12, 23, 59, 59, 999, 999),
-            onClear: () => clears++,
-          ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: OmiDateFilterChip(
+          start: DateTime(2026, 9, 12),
+          end: DateTime(2026, 9, 12, 23, 59, 59, 999, 999),
+          onClear: () => clears++,
         ),
       ),
-    );
+    ));
 
     expect(find.textContaining('–'), findsNothing, reason: 'a day-end bound is not a range');
     expect(find.textContaining('Sep'), findsOneWidget);

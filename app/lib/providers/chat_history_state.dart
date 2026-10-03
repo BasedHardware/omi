@@ -168,16 +168,11 @@ mixin ChatHistoryState on ChangeNotifier {
   void nameChatSession() {
     final id = chatSessionId;
     if (id == null || !_namedSessions.add(id)) return;
-    unawaited(
-      chatSessionsApi
-          .title(id, List.of(messages))
-          .then((result) {
-            if (result is ApiFailure<String>) _namedSessions.remove(id);
-          })
-          .catchError((Object _) {
-            _namedSessions.remove(id);
-          }),
-    );
+    unawaited(chatSessionsApi.title(id, List.of(messages)).then((result) {
+      if (result is ApiFailure<String>) _namedSessions.remove(id);
+    }).catchError((Object _) {
+      _namedSessions.remove(id);
+    }));
   }
 
   void setHasCachedMessages(bool value) {
@@ -270,10 +265,8 @@ mixin ChatHistoryState on ChangeNotifier {
         historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
       }
     } else {
-      final loaded = await (legacyMessagesLoader ?? getMessagesServer)(
-        appId: appId,
-        dropdownSelected: dropdownSelected,
-      );
+      final loaded =
+          await (legacyMessagesLoader ?? getMessagesServer)(appId: appId, dropdownSelected: dropdownSelected);
       if (_historyDisposed || epoch != _historyEpoch || appId != appProvider?.selectedChatAppId) return;
       isLoadingMessages = false;
       _pendingAppSwitch = false;

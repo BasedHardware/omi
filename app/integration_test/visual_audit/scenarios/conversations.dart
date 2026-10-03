@@ -49,8 +49,7 @@ final conversationsScenarios = <AuditScenario>[
     id: 'conversations-locked-preview',
     title: 'Locked conversations with an upgrade action',
     page: _page,
-    state:
-        'An unlocked conversation followed by three consecutive locked previews, which share one '
+    state: 'An unlocked conversation followed by three consecutive locked previews, which share one '
         'frosted card and one upgrade action; synthetic titles only',
     run: (a) async {
       final items = [

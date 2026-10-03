@@ -689,9 +689,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final controller = widget.playbackController;
     if (controller == null) return;
     final mapper = _timelineMapper;
-    final wall = mapper != null
-        ? mapper.artifactToWall(combined.inMilliseconds / 1000)
-        : combined.inMilliseconds / 1000;
+    final wall =
+        mapper != null ? mapper.artifactToWall(combined.inMilliseconds / 1000) : combined.inMilliseconds / 1000;
     controller.reportPlayback(
       wallSeconds: wall,
       playing: playing ?? _effectivePlaying,
@@ -792,9 +791,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       }
       // At the end of the track the paused point is the tail: restart takes a
       // fresh reader intent if one exists, otherwise the beginning.
-      final resumeWall = completed
-          ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null)
-          : controller?.resumeWall;
+      final resumeWall =
+          completed ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null) : controller?.resumeWall;
       if (resumeWall != null) {
         final generation = ++_seekGeneration;
         final intent = controller!.intentGeneration;
@@ -922,10 +920,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   static BoxDecoration get _barDecoration => BoxDecoration(
-    color: OmiColors.surface1,
-    borderRadius: OmiRadius.pillAll,
-    border: Border.all(color: OmiColors.border, width: 1),
-  );
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.pillAll,
+        border: Border.all(color: OmiColors.border, width: 1),
+      );
 
   void _askOmi() {
     HapticFeedback.mediumImpact();
@@ -1006,8 +1004,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         ListenableBuilder(
           listenable: controller ?? _artifactPosition,
           builder: (context, _) {
-            final showBackToCurrent =
-                controller != null &&
+            final showBackToCurrent = controller != null &&
                 !controller.isFollowing &&
                 controller.followTargetSegmentId != null &&
                 _isAudioInitialized;
@@ -1046,13 +1043,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// Play/pause: a 40 pt circle in the primary ink, labelled for screen readers.
   Widget _buildPlayPauseButton() {
     Widget button(bool isPlaying) => OmiIconButton.filled(
-      icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
-      label: isPlaying ? context.l10n.pause : context.l10n.play,
-      diameter: 40,
-      fillColor: OmiColors.accent,
-      color: OmiColors.onAccent,
-      onPressed: _togglePlayPause,
-    );
+          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
+          label: isPlaying ? context.l10n.pause : context.l10n.play,
+          diameter: 40,
+          fillColor: OmiColors.accent,
+          color: OmiColors.onAccent,
+          onPressed: _togglePlayPause,
+        );
     const loading = SizedBox.square(
       dimension: kOmiMinTapTarget,
       child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
@@ -1094,10 +1091,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       (_AudioFailure.transport, _) => l10n.playbackAudioNetworkFailed,
       (_AudioFailure.unavailable, _) || (_AudioFailure.unmappable, _) => l10n.playbackAudioUnavailable,
       (_AudioFailure.loadFailed, _) => l10n.playbackAudioLoadFailed,
-      (null, true) =>
-        _readyParts < _totalParts
-            ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
-            : l10n.playbackPreparingAudio,
+      (null, true) => _readyParts < _totalParts
+          ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
+          : l10n.playbackPreparingAudio,
       // Audio with no timestamps cannot be placed on the wall at all: say so
       // where the reader can see it rather than only flagging it for tests.
       _ when _hasUnplaceableMissing => l10n.playbackAudioUnavailable,

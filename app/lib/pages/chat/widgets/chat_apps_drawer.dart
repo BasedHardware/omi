@@ -159,13 +159,13 @@ class _AppRow extends StatelessWidget {
       trailing: isSelected
           ? ExcludeSemantics(child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
-          ? null
-          : OmiIconButton(
-              icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
-              label: context.l10n.disableAppNamed(name),
-              color: OmiColors.textTertiary,
-              onPressed: onDisable,
-            ),
+              ? null
+              : OmiIconButton(
+                  icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
+                  label: context.l10n.disableAppNamed(name),
+                  color: OmiColors.textTertiary,
+                  onPressed: onDisable,
+                ),
       selected: isSelected,
       selectedTileColor: OmiColors.surface2,
       onTap: onTap,

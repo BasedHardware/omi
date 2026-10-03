@@ -90,11 +90,7 @@ class SearchDropRoute<T> extends PageRoute<T> with OmiEdgeSwipeRoute<T> {
 
   @override
   Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
+      BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
     return SearchDropTransition(animation: animation, horizontalMotion: edgeSwipeInProgress, child: child);
   }
 
@@ -124,16 +120,11 @@ class SearchDropTransition extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         IgnorePointer(
-          child: FadeTransition(
-            opacity: dim,
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
-          ),
+          child: FadeTransition(opacity: dim, child: ColoredBox(color: Colors.black.withValues(alpha: 0.18))),
         ),
         SlideTransition(
-          position: Tween<Offset>(
-            begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, -1),
-            end: Offset.zero,
-          ).animate(drop),
+          position: Tween<Offset>(begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, -1), end: Offset.zero)
+              .animate(drop),
           child: child,
         ),
       ],
@@ -146,12 +137,8 @@ abstract class GlobalSearchSource {
   const GlobalSearchSource();
 
   Future<ApiResult<SearchOverview>> overview();
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  });
+  Future<ConversationSearchResult> conversations(String query,
+      {String? speakerId, DateTime? startDate, DateTime? endDate});
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false});
   Future<ApiResult<List<DailySummary>>> recaps(String query);
   Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) => recaps(query);
@@ -169,19 +156,10 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
   Future<ApiResult<SearchOverview>> overview() => getSearchOverview();
 
   @override
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) => searchConversationsServerResult(
-    query,
-    limit: 20,
-    includeDiscarded: false,
-    speakerId: speakerId,
-    startDate: startDate,
-    endDate: endDate,
-  );
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
+      searchConversationsServerResult(query,
+          limit: 20, includeDiscarded: false, speakerId: speakerId, startDate: startDate, endDate: endDate);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) =>
@@ -394,11 +372,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     }
 
     var conversations = const ConversationSearchResult(
-      items: [],
-      currentPage: 0,
-      totalPages: 0,
-      outcome: ConversationSearchResultOutcome.failure,
-    );
+        items: [], currentPage: 0, totalPages: 0, outcome: ConversationSearchResultOutcome.failure);
     var recaps = <DailySummary>[];
     var tasks = <ActionItemWithMetadata>[];
     var memories = <MemorySearchHit>[];
@@ -408,44 +382,33 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     var settled = false;
     try {
       await Future.wait<void>([
-        Future.sync(() => source.conversations(query, startDate: start, endDate: end))
-            .then((r) {
-              if (!settled) conversations = r;
-            })
-            .catchError((_) {
-              if (!settled) partial = true;
-            }),
-        Future.sync(() => hasDate ? source.recapsInRange(query, start, end ?? start) : source.recaps(query))
-            .then((r) {
-              if (settled) return;
-              recaps = rows(r);
-            })
-            .catchError((_) {
-              if (!settled) partial = true;
-            }),
-        Future.sync(() => source.tasks(query))
-            .then((r) {
-              if (settled) return;
-              tasks = rows(r);
-            })
-            .catchError((_) {
-              if (!settled) partial = true;
-            }),
-        Future.sync(() => source.memories(query))
-            .then((r) {
-              if (settled) return;
-              memories = rows(r);
-            })
-            .catchError((_) {
-              if (!settled) partial = true;
-            }),
-      ]).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          partial = true;
-          return const [];
-        },
-      );
+        Future.sync(() => source.conversations(query, startDate: start, endDate: end)).then((r) {
+          if (!settled) conversations = r;
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => hasDate ? source.recapsInRange(query, start, end ?? start) : source.recaps(query)).then((r) {
+          if (settled) return;
+          recaps = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => source.tasks(query)).then((r) {
+          if (settled) return;
+          tasks = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => source.memories(query)).then((r) {
+          if (settled) return;
+          memories = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+      ]).timeout(const Duration(seconds: 15), onTimeout: () {
+        partial = true;
+        return const [];
+      });
     } catch (_) {
       if (!settled) partial = true;
     } finally {
@@ -742,12 +705,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     ];
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.fromLTRB(
-        OmiSpacing.md,
-        OmiSpacing.xs,
-        OmiSpacing.md,
-        MediaQuery.paddingOf(context).bottom + 24,
-      ),
+      padding:
+          EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + 24),
       children: [
         GridView.count(
           crossAxisCount: 2,

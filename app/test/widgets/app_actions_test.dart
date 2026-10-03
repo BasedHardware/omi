@@ -35,9 +35,8 @@ App _app({
     deleted: false,
     isPaid: paid,
     isUserPaid: false,
-    externalIntegration: external
-        ? ExternalIntegration(authSteps: authSteps, setupCompletedUrl: setupCompletedUrl)
-        : null,
+    externalIntegration:
+        external ? ExternalIntegration(authSteps: authSteps, setupCompletedUrl: setupCompletedUrl) : null,
   );
 }
 
@@ -70,11 +69,7 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
-          home: Scaffold(
-            body: Center(
-              child: AppListActionButton(app: app, onOpen: () {}),
-            ),
-          ),
+          home: Scaffold(body: Center(child: AppListActionButton(app: app, onOpen: () {}))),
         ),
       ),
     );
@@ -96,13 +91,7 @@ void main() {
     expect(find.text('View'), findsOneWidget);
     expect(find.text('Install'), findsNothing);
 
-    await pump(
-      tester,
-      _app(
-        external: true,
-        authSteps: [AuthStep(name: 'Sign in', url: 'https://example.com')],
-      ),
-    );
+    await pump(tester, _app(external: true, authSteps: [AuthStep(name: 'Sign in', url: 'https://example.com')]));
     expect(find.text('View'), findsOneWidget);
 
     await pump(tester, _app(external: true, setupCompletedUrl: 'https://example.com/setup-done'));

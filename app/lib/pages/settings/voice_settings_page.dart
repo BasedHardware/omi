@@ -158,13 +158,12 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     if (_previewing.value != null || _ownerChanged) return;
     final epoch = ++_previewEpoch;
     _previewing.value = voiceId;
-    final preview =
-        widget.onPreview ??
+    final preview = widget.onPreview ??
         (id) => OmiVoicePlaybackService.instance.playPreview(
-          context.l10n.voicePreviewSample,
-          voiceId: id,
-          allowSystemFallback: false,
-        );
+              context.l10n.voicePreviewSample,
+              voiceId: id,
+              allowSystemFallback: false,
+            );
     try {
       await preview(voiceId);
     } catch (_) {
@@ -299,61 +298,61 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       body: _loading
           ? const OmiLoadingState()
           : _error != null
-          ? OmiErrorState(message: l10n.somethingWentWrong, onRetry: _load)
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
-              children: [
-                OmiSettingsGroup(
-                  footer: l10n.voiceSharedAcrossDevices,
+              ? OmiErrorState(message: l10n.somethingWentWrong, onRetry: _load)
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
                   children: [
-                    OmiSettingsRow(
-                      key: const ValueKey('settings_row_assistantVoice'),
-                      leading: const FaIcon(FontAwesomeIcons.waveSquare),
-                      title: l10n.assistantVoice,
-                      subtitle: _selectedVoice?.name ?? _selectedVoiceId ?? _defaultVoiceId,
-                      trailing: _selectedVoiceId == null
-                          ? null
-                          : ValueListenableBuilder<String?>(
-                              valueListenable: _previewing,
-                              builder: (_, previewing, __) => OmiIconButton(
-                                key: const ValueKey('settings_voice_preview_selected'),
-                                icon: previewing == _selectedVoiceId
-                                    ? const OmiSpinner(size: OmiSpinnerSize.small)
-                                    : const Icon(Icons.play_arrow, size: 18),
-                                label: l10n.preview,
-                                onPressed: previewing == null ? () => _preview(_selectedVoiceId!) : null,
-                              ),
-                            ),
-                      onTap: _saving ? null : _showVoicePicker,
+                    OmiSettingsGroup(
+                      footer: l10n.voiceSharedAcrossDevices,
+                      children: [
+                        OmiSettingsRow(
+                          key: const ValueKey('settings_row_assistantVoice'),
+                          leading: const FaIcon(FontAwesomeIcons.waveSquare),
+                          title: l10n.assistantVoice,
+                          subtitle: _selectedVoice?.name ?? _selectedVoiceId ?? _defaultVoiceId,
+                          trailing: _selectedVoiceId == null
+                              ? null
+                              : ValueListenableBuilder<String?>(
+                                  valueListenable: _previewing,
+                                  builder: (_, previewing, __) => OmiIconButton(
+                                    key: const ValueKey('settings_voice_preview_selected'),
+                                    icon: previewing == _selectedVoiceId
+                                        ? const OmiSpinner(size: OmiSpinnerSize.small)
+                                        : const Icon(Icons.play_arrow, size: 18),
+                                    label: l10n.preview,
+                                    onPressed: previewing == null ? () => _preview(_selectedVoiceId!) : null,
+                                  ),
+                                ),
+                          onTap: _saving ? null : _showVoicePicker,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: OmiSpacing.xl),
+                    OmiSettingsGroup(
+                      children: [
+                        OmiSettingsRow(
+                          key: const ValueKey('settings_row_voiceResponseMode'),
+                          leading: const FaIcon(FontAwesomeIcons.volumeHigh),
+                          title: l10n.voiceResponseMode,
+                          value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+                          onTap: _showModeSheet,
+                        ),
+                        OmiSettingsRow.toggle(
+                          key: const ValueKey('settings_row_readChatRepliesAloud'),
+                          leading: const FaIcon(FontAwesomeIcons.commentDots),
+                          title: l10n.readChatRepliesAloud,
+                          subtitle: l10n.readChatRepliesAloudDescription,
+                          value: _prefs.readChatRepliesAloud,
+                          onChanged: (value) {
+                            if (_ownerChanged) return;
+                            setState(() => _prefs.readChatRepliesAloud = value);
+                            if (!value) _revokeReadAloud();
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: OmiSpacing.xl),
-                OmiSettingsGroup(
-                  children: [
-                    OmiSettingsRow(
-                      key: const ValueKey('settings_row_voiceResponseMode'),
-                      leading: const FaIcon(FontAwesomeIcons.volumeHigh),
-                      title: l10n.voiceResponseMode,
-                      value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
-                      onTap: _showModeSheet,
-                    ),
-                    OmiSettingsRow.toggle(
-                      key: const ValueKey('settings_row_readChatRepliesAloud'),
-                      leading: const FaIcon(FontAwesomeIcons.commentDots),
-                      title: l10n.readChatRepliesAloud,
-                      subtitle: l10n.readChatRepliesAloudDescription,
-                      value: _prefs.readChatRepliesAloud,
-                      onChanged: (value) {
-                        if (_ownerChanged) return;
-                        setState(() => _prefs.readChatRepliesAloud = value);
-                        if (!value) _revokeReadAloud();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
     );
   }
 }

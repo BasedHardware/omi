@@ -631,8 +631,7 @@ class StorageSyncImpl implements StorageSync {
       timeoutTimer.cancel();
     }
 
-    bool transferComplete =
-        endReached &&
+    bool transferComplete = endReached &&
         offset >= wal.storageTotalBytes &&
         !hasError &&
         !hasParseGap &&
@@ -647,9 +646,8 @@ class StorageSyncImpl implements StorageSync {
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     int totalFrames = bytesData.length;
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
-    int timerStart = wal.timerStart > 0
-        ? wal.timerStart
-        : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    int timerStart =
+        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
     int bytesLeft = 0;
 
     try {

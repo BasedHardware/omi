@@ -76,11 +76,11 @@ void main() {
 
   test('buildOmiStaticMapUrl asks for the map style that matches the app theme', () {
     String urlFor(Brightness brightness) => buildOmiStaticMapUrl(
-      pins: const [OmiMapPin(latitude: 1, longitude: 2)],
-      width: 100,
-      height: 100,
-      brightness: brightness,
-    );
+          pins: const [OmiMapPin(latitude: 1, longitude: 2)],
+          width: 100,
+          height: 100,
+          brightness: brightness,
+        );
 
     expect(urlFor(Brightness.light), endsWith('&theme=light'));
     expect(urlFor(Brightness.dark), endsWith('&theme=dark'));
@@ -196,12 +196,12 @@ void main() {
 
   testWidgets('the fallback canvas paints the same pins as the map image', (tester) async {
     Future<void> pumpPins(List<OmiMapPin> pins) => tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(width: 200, height: 100, child: OmiMapPreview(pins: pins)),
-        ),
-      ),
-    );
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(width: 200, height: 100, child: OmiMapPreview(pins: pins)),
+            ),
+          ),
+        );
     final canvas = find.byKey(const ValueKey('omi_map_preview_fallback'));
 
     // Each pin paints a dot and its outline: two circles.
@@ -219,19 +219,19 @@ void main() {
   testWidgets('without a background the canvas is the map land color', (tester) async {
     addTearDown(() => OmiColors.active = OmiPalette.light);
     Future<void> pumpPreview({Color? backgroundColor}) => tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 200,
-            height: 100,
-            child: OmiMapPreview(
-              pins: const [OmiMapPin(latitude: 37.7749, longitude: -122.4194)],
-              backgroundColor: backgroundColor,
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 200,
+                height: 100,
+                child: OmiMapPreview(
+                  pins: const [OmiMapPin(latitude: 37.7749, longitude: -122.4194)],
+                  backgroundColor: backgroundColor,
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        );
     final canvas = find.byKey(const ValueKey('omi_map_preview_fallback'));
 
     for (final (palette, land) in [

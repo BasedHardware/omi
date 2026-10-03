@@ -104,15 +104,13 @@ class HttpPoolManager {
           ..bodyBytes = built.bodyBytes;
         stampRequestTime(request);
         _applyJourneyFaults(request);
-        final streamed = await _client
-            .send(request)
-            .timeout(
-              timeout,
-              onTimeout: () {
-                if (!abort.isCompleted) abort.complete();
-                throw TimeoutException('Request timeout');
-              },
-            );
+        final streamed = await _client.send(request).timeout(
+          timeout,
+          onTimeout: () {
+            if (!abort.isCompleted) abort.complete();
+            throw TimeoutException('Request timeout');
+          },
+        );
         // One deadline covers headers and body: a server that sends headers
         // and then stalls the body must not extend the caller's budget to
         // timeout + timeout. Spend only what is left of this attempt.

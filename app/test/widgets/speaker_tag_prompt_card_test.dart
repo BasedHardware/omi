@@ -18,37 +18,38 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 
 Person _person(String id, String name, {bool pinned = false, String confidence = 'likely'}) => Person(
-  id: id,
-  name: name,
-  createdAt: DateTime.utc(2026, 9, 1),
-  updatedAt: DateTime.utc(2026, 9, 1),
-  pinned: pinned,
-  confidence: confidence,
-  confidenceReasons: const [GeneratedPersonConfidenceReason(code: 'card_picks', count: 2)],
-);
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+      pinned: pinned,
+      confidence: confidence,
+      confidenceReasons: const [GeneratedPersonConfidenceReason(code: 'card_picks', count: 2)],
+    );
 
 GeneratedSpeakerTagPrompt _prompt(
   String id,
   String kind, {
   List<GeneratedSpeakerTagCandidate>? candidates,
   List<String>? suggestedPersonIds,
-}) => GeneratedSpeakerTagPrompt(
-  id: id,
-  kind: kind,
-  origin: kind == 'confirm_person' ? 'auto_person' : 'unnamed',
-  conversationId: 'c1',
-  conversationTitle: 'Coffee chat',
-  conversationStartedAt: DateTime.now().subtract(const Duration(hours: 3)),
-  speakerId: 1,
-  segmentIds: const ['s1'],
-  clipStart: 0,
-  clipEnd: 8,
-  excerpt: 'We should ship it on Friday',
-  suggestedPersonId: kind == 'confirm_person' ? 'p1' : null,
-  suggestedPersonName: kind == 'confirm_person' ? 'Sam' : null,
-  suggestedPersonIds: suggestedPersonIds,
-  candidates: candidates,
-);
+}) =>
+    GeneratedSpeakerTagPrompt(
+      id: id,
+      kind: kind,
+      origin: kind == 'confirm_person' ? 'auto_person' : 'unnamed',
+      conversationId: 'c1',
+      conversationTitle: 'Coffee chat',
+      conversationStartedAt: DateTime.now().subtract(const Duration(hours: 3)),
+      speakerId: 1,
+      segmentIds: const ['s1'],
+      clipStart: 0,
+      clipEnd: 8,
+      excerpt: 'We should ship it on Friday',
+      suggestedPersonId: kind == 'confirm_person' ? 'p1' : null,
+      suggestedPersonName: kind == 'confirm_person' ? 'Sam' : null,
+      suggestedPersonIds: suggestedPersonIds,
+      candidates: candidates,
+    );
 
 class _Harness {
   _Harness(this.provider, this.people, this.answers, this.saves);
@@ -421,8 +422,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(
-            create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
-          ),
+              create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
           ChangeNotifierProvider.value(value: provider),
         ],
         child: const MaterialApp(

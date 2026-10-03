@@ -9,10 +9,10 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/ui/components/omi_permission_row.dart';
 
 Widget _app(Widget child) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 class _FakeSource implements OnboardingPermissionsSource {
   final Map<OnboardingPermission, OmiPermissionStatus> statuses = {
@@ -23,9 +23,9 @@ class _FakeSource implements OnboardingPermissionsSource {
 
   @override
   List<OnboardingPermission> get permissions => const [
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+        OnboardingPermission.location,
+        OnboardingPermission.notifications,
+      ];
 
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async => statuses[permission]!;
@@ -115,9 +115,8 @@ void main() {
     expect(opened, 1);
   });
 
-  testWidgets('onboarding: Allow prompts that one permission; Continue asks only for what is still missing', (
-    tester,
-  ) async {
+  testWidgets('onboarding: Allow prompts that one permission; Continue asks only for what is still missing',
+      (tester) async {
     final source = _FakeSource();
     var continued = 0;
     await tester.pumpWidget(_app(PermissionsWidget(goNext: () => continued++, source: source)));
@@ -135,9 +134,8 @@ void main() {
     await tester.tap(find.byKey(const Key('onboarding_permissions_continue')));
     await tester.pumpAndSettle();
     expect(continued, 1);
-    expect(source.requested, [
-      OnboardingPermission.location,
-    ], reason: 'Continue does not re-ask an allowed permission or prompt for a blocked one');
+    expect(source.requested, [OnboardingPermission.location],
+        reason: 'Continue does not re-ask an allowed permission or prompt for a blocked one');
   });
 
   testWidgets('the action sits on the title line and the reason uses the width below it', (tester) async {

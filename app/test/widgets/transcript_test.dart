@@ -281,23 +281,23 @@ void main() {
     testWidgets('a long saved transcript opens at its first line and stays there when it changes', (tester) async {
       await setupSharedPreferences();
       List<TranscriptSegment> lines(int count) => [
-        for (var i = 0; i < count; i++)
-          TranscriptSegment(
-            id: 'line-$i',
-            text: 'Line number $i of the conversation.',
-            speaker: 'SPEAKER_0${i % 2}',
-            isUser: i.isEven,
-            personId: null,
-            start: i * 10.0,
-            end: i * 10.0 + 5,
-            translations: [],
-          ),
-      ];
+            for (var i = 0; i < count; i++)
+              TranscriptSegment(
+                id: 'line-$i',
+                text: 'Line number $i of the conversation.',
+                speaker: 'SPEAKER_0${i % 2}',
+                isUser: i.isEven,
+                personId: null,
+                start: i * 10.0,
+                end: i * 10.0 + 5,
+                translations: [],
+              ),
+          ];
       Widget page(List<TranscriptSegment> segments) => MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
-      );
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
+          );
 
       await tester.pumpWidget(page(lines(60)));
       await tester.pumpAndSettle();
@@ -722,25 +722,26 @@ void main() {
       bool isUser = false,
       String? personId,
       String? source,
-    }) => TranscriptSegment(
-      id: id,
-      text: text,
-      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-      speakerId: speakerId,
-      isUser: isUser,
-      personId: personId,
-      start: start,
-      end: start + 5,
-      translations: const [],
-      speakerLabelSource: source,
-    );
+    }) =>
+        TranscriptSegment(
+          id: id,
+          text: text,
+          speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+          speakerId: speakerId,
+          isUser: isUser,
+          personId: personId,
+          start: start,
+          end: start + 5,
+          translations: const [],
+          speakerLabelSource: source,
+        );
 
     List<TranscriptSegment> voicesFixture() => [
-      line('a1', 3, 'First thing they said.', 0),
-      line('a2', 3, 'Still the same voice.', 10),
-      line('b1', 4, 'Another voice replies.', 20),
-      line('a3', 3, 'The first voice again.', 30),
-    ];
+          line('a1', 3, 'First thing they said.', 0),
+          line('a2', 3, 'Still the same voice.', 10),
+          line('b1', 4, 'Another voice replies.', 20),
+          line('a3', 3, 'The first voice again.', 30),
+        ];
 
     Finder speakerNameLabels() =>
         find.byWidgetPredicate((widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''));
@@ -755,25 +756,26 @@ void main() {
       void Function(String, int)? editSegment,
       void Function(TranscriptSegment)? onConfirmSpeakerLabel,
       void Function(TranscriptSegment)? onRejectSpeakerLabel,
-    }) => tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: segments,
-            isConversationDetail: true,
-            unresolvedSpeakers: unresolved,
-            taggingSegmentIds: tagging,
-            onSegmentTap: onSegmentTap,
-            onEditSegmentText: onEditSegmentText,
-            editSegment: editSegment,
-            onConfirmSpeakerLabel: onConfirmSpeakerLabel,
-            onRejectSpeakerLabel: onRejectSpeakerLabel,
+    }) =>
+        tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: TranscriptWidget(
+                segments: segments,
+                isConversationDetail: true,
+                unresolvedSpeakers: unresolved,
+                taggingSegmentIds: tagging,
+                onSegmentTap: onSegmentTap,
+                onEditSegmentText: onEditSegmentText,
+                editSegment: editSegment,
+                onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+                onRejectSpeakerLabel: onRejectSpeakerLabel,
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        );
 
     group('unresolved', () {
       testWidgets('render a name row once per turn, not once per line', (tester) async {

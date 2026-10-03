@@ -186,7 +186,10 @@ void main() {
       final url = '${env.requestBaseUrl}clock-skew';
       final eventFuture = nextClockSkewEvent();
 
-      await expectLater(makeStreamingApiCall(url: url).toList(), throwsA(isA<ChatStreamException>()));
+      await expectLater(
+        makeStreamingApiCall(url: url).toList(),
+        throwsA(isA<ChatStreamException>()),
+      );
       final event = await eventFuture;
 
       expect(event.skewMinutes, 15);

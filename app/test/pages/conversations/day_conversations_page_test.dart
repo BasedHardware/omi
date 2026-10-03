@@ -20,14 +20,14 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 ServerConversation _conversation(String id, String title, DateTime started) => ServerConversation.fromJson({
-  'id': id,
-  'created_at': started.toUtc().toIso8601String(),
-  'started_at': started.toUtc().toIso8601String(),
-  'finished_at': started.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
-  'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
-  'status': 'completed',
-  'transcript_segments': [],
-});
+      'id': id,
+      'created_at': started.toUtc().toIso8601String(),
+      'started_at': started.toUtc().toIso8601String(),
+      'finished_at': started.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
+      'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
+      'status': 'completed',
+      'transcript_segments': [],
+    });
 
 class _Fetch {
   _Fetch({this.rows = const [], this.ok = true});
@@ -39,12 +39,8 @@ class _Fetch {
   final calls = <({DateTime start, DateTime end, int offset})>[];
   Completer<({List<ServerConversation> items, bool ok, bool truncated})>? gate;
 
-  Future<({List<ServerConversation> items, bool ok, bool truncated})> call({
-    required DateTime startDate,
-    required DateTime endDate,
-    int limit = 50,
-    int offset = 0,
-  }) {
+  Future<({List<ServerConversation> items, bool ok, bool truncated})> call(
+      {required DateTime startDate, required DateTime endDate, int limit = 50, int offset = 0}) {
     calls.add((start: startDate, end: endDate, offset: offset));
     final pending = gate;
     if (pending != null) return pending.future;
@@ -53,29 +49,24 @@ class _Fetch {
 }
 
 Future<void> _pumpPage(WidgetTester tester, DateTime date, DayConversationsFetcher fetch) {
-  return tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (_) => ConversationDetailProvider()),
-        ChangeNotifierProvider(create: (_) => FolderProvider()),
-        ChangeNotifierProvider(create: (_) => IntegrationProvider()),
-        ChangeNotifierProvider(create: (_) => UsageProvider()),
-        ChangeNotifierProvider(create: (_) => MessageProvider()),
-        ChangeNotifierProvider(
+  return tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+      ChangeNotifierProvider(create: (_) => ConversationDetailProvider()),
+      ChangeNotifierProvider(create: (_) => FolderProvider()),
+      ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => UsageProvider()),
+      ChangeNotifierProvider(create: (_) => MessageProvider()),
+      ChangeNotifierProvider(
           create: (_) => ConversationProvider(
-            conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-            isSignedIn: () => true,
-          ),
-        ),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: DayConversationsPage(date: date, fetchConversations: fetch),
-      ),
+              conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DayConversationsPage(date: date, fetchConversations: fetch),
     ),
-  );
+  ));
 }
 
 void main() {
@@ -184,21 +175,17 @@ void main() {
   });
 
   testWidgets('a local provider update removes the row from the list', (tester) async {
-    final fetch = _Fetch(
-      rows: [
-        _conversation('c1', 'First Chat', DateTime(2026, 9, 12, 9)),
-        _conversation('c2', 'Second Chat', DateTime(2026, 9, 12, 10)),
-      ],
-    );
+    final fetch = _Fetch(rows: [
+      _conversation('c1', 'First Chat', DateTime(2026, 9, 12, 9)),
+      _conversation('c2', 'Second Chat', DateTime(2026, 9, 12, 10)),
+    ]);
     await _pumpPage(tester, day, fetch.call);
     await tester.pump();
     await tester.pumpAndSettle();
     expect(find.text('Second Chat'), findsOneWidget);
 
-    final globalProvider = Provider.of<ConversationProvider>(
-      tester.element(find.byType(DayConversationsPage)),
-      listen: false,
-    );
+    final globalProvider =
+        Provider.of<ConversationProvider>(tester.element(find.byType(DayConversationsPage)), listen: false);
     globalProvider.selectedStartDate = DateTime(2026, 6, 1);
     globalProvider.selectedEndDate = DateTime(2026, 6, 3);
     final provider = Provider.of<ConversationProvider>(tester.element(find.text('Second Chat')), listen: false);
@@ -263,18 +250,15 @@ void main() {
     fetch.ok = true;
     fetch.truncated = false;
     fetch.pages = (offset) => [
-      _conversation('p1-0', 'Row 0 dup', DateTime(2026, 9, 12, 9)),
-      _conversation('p3-0', 'New Row', DateTime(2026, 9, 12, 10)),
-    ];
+          _conversation('p1-0', 'Row 0 dup', DateTime(2026, 9, 12, 9)),
+          _conversation('p3-0', 'New Row', DateTime(2026, 9, 12, 10)),
+        ];
     await tester.tap(find.byKey(const ValueKey('day_load_more_retry')));
     await tester.pump();
     await tester.pumpAndSettle();
     expect(provider.conversations.map((c) => c.id).last, 'p3-0', reason: 'the retried page appends its new rows');
-    expect(
-      provider.conversations.where((c) => c.id == 'p1-0'),
-      hasLength(1),
-      reason: 're-fetched ids are deduplicated',
-    );
+    expect(provider.conversations.where((c) => c.id == 'p1-0'), hasLength(1),
+        reason: 're-fetched ids are deduplicated');
     expect(provider.conversations, hasLength(101));
     expect(find.byKey(const ValueKey('day_load_more')), findsNothing, reason: 'a short page ends paging');
   });

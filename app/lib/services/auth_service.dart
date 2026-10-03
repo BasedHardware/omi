@@ -78,9 +78,8 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   required Future<String?> Function() establishDestination,
 }) async {
   final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
-  final anonymousSourceMigration = sourceToken == null
-      ? null
-      : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final anonymousSourceMigration =
+      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
   return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
@@ -90,13 +89,13 @@ class AuthService {
   static AuthService get instance => _instance;
 
   AuthService._internal()
-    : _tokenGateway = _FirebaseAuthTokenGateway(),
-      _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
-      _refreshDelay = _defaultRefreshDelay,
-      _recordTelemetry = _recordProductionTelemetry,
-      _telemetryContextProvider = _productionTelemetryContext,
-      _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
-      _siriPreparationTimeout = const Duration(seconds: 2);
+      : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
+        _refreshDelay = _defaultRefreshDelay,
+        _recordTelemetry = _recordProductionTelemetry,
+        _telemetryContextProvider = _productionTelemetryContext,
+        _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
+        _siriPreparationTimeout = const Duration(seconds: 2);
 
   @visibleForTesting
   AuthService.forTesting({
@@ -107,13 +106,13 @@ class AuthService {
     AuthTelemetryContextProvider? telemetryContextProvider,
     Future<void> Function()? prepareSiriSignOut,
     Duration siriPreparationTimeout = const Duration(seconds: 2),
-  }) : _tokenGateway = tokenGateway,
-       _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
-       _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
-       _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-       _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
-       _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
-       _siriPreparationTimeout = siriPreparationTimeout;
+  })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
+        _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
+        _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
+        _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
+        _siriPreparationTimeout = siriPreparationTimeout;
 
   /// Replaces the production Firebase token gateway on the **singleton** for
   /// the local hermetic journey lane (SCA-488).
@@ -210,10 +209,10 @@ class AuthService {
   }
 
   static Map<String, dynamic> _productionTelemetryContext() => {
-    'platform': PlatformManager.instance.platform,
-    'app_version': PlatformManager.instance.appVersion,
-    'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
-  };
+        'platform': PlatformManager.instance.platform,
+        'app_version': PlatformManager.instance.appVersion,
+        'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
+      };
 
   /// Routes through the token gateway so the declared Firebase I/O seam
   /// covers identity reads too: the production gateway still answers from
@@ -620,17 +619,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -760,18 +757,16 @@ class AuthService {
       throw StateError('Local development sign-in is only available in the local_dev profile.');
     }
 
-    final response = await http
-        .post(
-          Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body: {'uid': uid},
-        )
-        .timeout(
-          const Duration(seconds: 8),
-          onTimeout: () => throw StateError(
-            'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
-          ),
-        );
+    final response = await http.post(
+      Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'uid': uid},
+    ).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw StateError(
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      ),
+    );
 
     if (response.statusCode == 404) {
       throw StateError(
@@ -959,15 +954,13 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user
-              .updateProfile(displayName: fullName)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  Logger.debug('updateProfile timed out on web platform');
-                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                },
-              );
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -1026,17 +1019,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 

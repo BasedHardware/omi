@@ -26,23 +26,16 @@ class _ScriptedSource extends GlobalSearchSource {
   Future<ApiResult<List<MemorySearchHit>>> Function(String query)? onMemories;
 
   static const _empty = ConversationSearchResult(
-    items: [],
-    currentPage: 1,
-    totalPages: 1,
-    outcome: ConversationSearchResultOutcome.success,
-  );
+      items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
   @override
   Future<ApiResult<SearchOverview>> overview() async =>
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) => onConversations?.call(query) ?? Future.value(_empty);
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
+      onConversations?.call(query) ?? Future.value(_empty);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
@@ -61,35 +54,29 @@ class _ScriptedSource extends GlobalSearchSource {
 }
 
 ServerConversation _conversation(String id, String title) => ServerConversation.fromJson({
-  'id': id,
-  'created_at': DateTime(2026, 9, 28, 10).toUtc().toIso8601String(),
-  'started_at': DateTime(2026, 9, 28, 10).toUtc().toIso8601String(),
-  'finished_at': DateTime(2026, 9, 28, 10, 12).toUtc().toIso8601String(),
-  'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
-  'status': 'completed',
-  'transcript_segments': [],
-});
+      'id': id,
+      'created_at': DateTime(2026, 9, 28, 10).toUtc().toIso8601String(),
+      'started_at': DateTime(2026, 9, 28, 10).toUtc().toIso8601String(),
+      'finished_at': DateTime(2026, 9, 28, 10, 12).toUtc().toIso8601String(),
+      'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
+      'status': 'completed',
+      'transcript_segments': [],
+    });
 
 ConversationSearchResult _conversations(List<ServerConversation> items) => ConversationSearchResult(
-  items: items,
-  currentPage: 1,
-  totalPages: 1,
-  outcome: ConversationSearchResultOutcome.success,
-);
+    items: items, currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
 Future<void> _pumpSearch(WidgetTester tester, GlobalSearchSource source, {String? initialQuery}) {
-  return tester.pumpWidget(
-    MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[]))],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: GlobalSearchPage(initialQuery: initialQuery, source: source),
-        ),
-      ),
+  return tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: GlobalSearchPage(initialQuery: initialQuery, source: source)),
     ),
-  );
+  ));
 }
 
 void main() {
@@ -157,17 +144,13 @@ void main() {
     expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      'bluetooh',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooh');
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(OmiSpinner), findsOneWidget, reason: 'the debounce window is a pending search, not a result');
-    expect(
-      find.text('No results found'),
-      findsNothing,
-      reason: 'cleared results must not render an empty state before the request starts',
-    );
+    expect(find.text('No results found'), findsNothing,
+        reason: 'cleared results must not render an empty state before the request starts');
 
     await tester.pumpAndSettle();
     expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
@@ -182,9 +165,8 @@ void main() {
     await tester.pump();
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      'new',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'new');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('New Answer'), findsOneWidget);
@@ -203,9 +185,7 @@ void main() {
     await tester.pump();
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      '',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)), '');
     await tester.pump();
     staleCompleter.complete(_conversations([_conversation('c-old', 'Stale Answer')]));
     await tester.pumpAndSettle();
@@ -230,16 +210,10 @@ void main() {
     lateTasks.complete(const ApiSuccess(<ActionItemWithMetadata>[]));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Device Connection Troubleshooting'),
-      findsOneWidget,
-      reason: 'a post-deadline completion must not rewrite settled rows',
-    );
-    expect(
-      find.byKey(const ValueKey('search_partial_retry')),
-      findsOneWidget,
-      reason: 'the committed partial flag survives a late success',
-    );
+    expect(find.text('Device Connection Troubleshooting'), findsOneWidget,
+        reason: 'a post-deadline completion must not rewrite settled rows');
+    expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget,
+        reason: 'the committed partial flag survives a late success');
   });
 
   testWidgets('a fresh query shows the searching state during the debounce window', (tester) async {
@@ -248,16 +222,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      'bluetooth',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooth');
     await tester.pump();
 
-    expect(
-      find.byType(OmiSpinner),
-      findsOneWidget,
-      reason: 'a pending debounced search already reads as searching, not empty',
-    );
+    expect(find.byType(OmiSpinner), findsOneWidget,
+        reason: 'a pending debounced search already reads as searching, not empty');
     expect(find.text('No results found'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 400));

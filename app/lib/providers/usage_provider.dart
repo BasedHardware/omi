@@ -12,9 +12,9 @@ typedef UsageRequest = Future<UserUsageResponse?> Function({required String peri
 
 class UsageProvider with ChangeNotifier {
   UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest, DateTime Function()? now})
-    : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
-      _usageRequest = usageRequest ?? getUserUsage,
-      _now = now ?? DateTime.now;
+      : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+        _usageRequest = usageRequest ?? getUserUsage,
+        _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;

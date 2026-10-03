@@ -10,15 +10,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
 
-typedef CalendarYearBuilder =
-    Widget Function({
-      required int year,
-      TextStyle? textStyle,
-      BoxDecoration? decoration,
-      bool? isSelected,
-      bool? isDisabled,
-      bool? isCurrentYear,
-    });
+typedef CalendarYearBuilder = Widget Function({
+  required int year,
+  TextStyle? textStyle,
+  BoxDecoration? decoration,
+  bool? isSelected,
+  bool? isDisabled,
+  bool? isCurrentYear,
+});
 
 CalendarDatePicker2Config getDefaultCalendarConfig({
   DateTime? firstDate,
@@ -65,9 +64,8 @@ Future<void> showConversationDateRangePicker(
 }) async {
   final provider = onSelected == null ? Provider.of<ConversationProvider>(context, listen: false) : null;
   final l10n = context.l10n;
-  final hasExistingFilter = onSelected == null
-      ? provider!.selectedStartDate != null
-      : onClear != null && initialStartDate != null;
+  final hasExistingFilter =
+      onSelected == null ? provider!.selectedStartDate != null : onClear != null && initialStartDate != null;
   final now = DateTime.now();
   List<DateTime?> range = singleDayOnly
       ? [(onSelected == null ? provider!.selectedStartDate : initialStartDate) ?? now]

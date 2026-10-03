@@ -39,14 +39,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
-typedef ChatReplyStreamer =
-    Stream<ServerMessageChunk> Function(
-      String text, {
-      String? appId,
-      List<String>? filesId,
-      ChatPageContext? context,
-      String? chatSessionId,
-    });
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+  String? chatSessionId,
+});
 typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
@@ -87,12 +86,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     VoiceAudioFileSaver? voiceAudioFileSaver,
     Duration voiceReplyTimeout = const Duration(seconds: 60),
     ChatReplyReadAloud? readAloud,
-  }) : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
-       _filesUploader = filesUploader ?? uploadFilesServer,
-       _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
-       _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
-       _voiceReplyTimeout = voiceReplyTimeout,
-       _readAloud = readAloud ?? ChatReplyReadAloud.instance;
+  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+        _filesUploader = filesUploader ?? uploadFilesServer,
+        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+        _voiceReplyTimeout = voiceReplyTimeout,
+        _readAloud = readAloud ?? ChatReplyReadAloud.instance;
 
   @override
   final ChatSessionsApi chatSessionsApi;
@@ -760,8 +759,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (chunk.errorCode == 'quota_exceeded' || _tryParseQuotaError(chunk.text)) {
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
@@ -935,8 +933,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             // Keep the user's message visible; replace AI placeholder with quota message
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
@@ -967,10 +964,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     if (!chatAttemptCompleted) {
       _logChatFailure(ChatStreamFailureClass.server, stage: 'eof');
       if (message.text.isEmpty) {
-        _markReplyFailed(
-          message,
-          _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server),
-        );
+        _markReplyFailed(message,
+            _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server));
         notifyListeners();
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
@@ -978,22 +973,22 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   ChatStreamFailureClass _chunkFailureClass(ServerMessageChunk chunk) => switch (chunk.errorCode) {
-    'offline' => ChatStreamFailureClass.offline,
-    'server_error' => ChatStreamFailureClass.server,
-    'timeout' => ChatStreamFailureClass.timeout,
-    'quota_exceeded' => ChatStreamFailureClass.quota,
-    'not_signed_in' => ChatStreamFailureClass.notSignedIn,
-    _ => ChatStreamFailureClass.server,
-  };
+        'offline' => ChatStreamFailureClass.offline,
+        'server_error' => ChatStreamFailureClass.server,
+        'timeout' => ChatStreamFailureClass.timeout,
+        'quota_exceeded' => ChatStreamFailureClass.quota,
+        'not_signed_in' => ChatStreamFailureClass.notSignedIn,
+        _ => ChatStreamFailureClass.server,
+      };
 
   ProductFailure _productFailureFor(ChatStreamFailureClass failure) => switch (failure) {
-    ChatStreamFailureClass.offline => ProductFailure.network,
-    ChatStreamFailureClass.server => ProductFailure.server,
-    ChatStreamFailureClass.timeout => ProductFailure.timeout,
-    ChatStreamFailureClass.quota => ProductFailure.quota,
-    ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
-    ChatStreamFailureClass.unknown => ProductFailure.unknown,
-  };
+        ChatStreamFailureClass.offline => ProductFailure.network,
+        ChatStreamFailureClass.server => ProductFailure.server,
+        ChatStreamFailureClass.timeout => ProductFailure.timeout,
+        ChatStreamFailureClass.quota => ProductFailure.quota,
+        ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
+        ChatStreamFailureClass.unknown => ProductFailure.unknown,
+      };
 
   void _logChatFailure(ChatStreamFailureClass failure, {required String stage, int? status}) {
     Logger.warning('mobile_chat_failure class=${failure.name} stage=$stage status=$status');
