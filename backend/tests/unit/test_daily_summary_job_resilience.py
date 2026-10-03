@@ -694,3 +694,37 @@ def test_due_local_hours_include_half_and_quarter_hour_zones() -> None:
         assert 'Asia/Kathmandu' in grouped[22]
         assert 'Asia/Kolkata' in grouped[21]
         assert notifications._display_date_for_now('Asia/Kathmandu', now) == now.date()
+
+
+def test_saved_half_hour_zone_cohort_survives_rollover_inside_the_same_utc_hour() -> None:
+    with _loaded_job() as (notifications, notification_db, _redis, _fallbacks):
+        now = datetime(2026, 10, 3, 16, 30, tzinfo=timezone.utc)
+        original = now - timedelta(minutes=15)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        real_pytz = notifications.pytz
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['Asia/Kolkata'], timezone=real_pytz.timezone
+        )
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(21, 'tail', original),
+        )
+        reads = []
+
+        def selector(zones, hour):
+            reads.append((zones, hour))
+            return [('tail', [], 'Asia/Kolkata')] if hour == 21 else []
+
+        notification_db.get_users_for_daily_summary_indexed = selector
+        served = []
+        notifications._send_summary_notification = lambda user: served.append((user[0], user[3]))
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok and outcome.complete
+        assert reads == [(['Asia/Kolkata'], 21), (['Asia/Kolkata'], 22)]
+        assert served == [('tail', original)]

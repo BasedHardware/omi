@@ -408,9 +408,10 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     now = datetime.now(pytz.utc)
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, summary_budget.job_cursor_key())
     resumed_at = summary_budget.cursor_cohort_utc(cursor)
-    if resumed_at is not None and resumed_at.replace(minute=0, second=0, microsecond=0) != now.replace(
-        minute=0, second=0, microsecond=0
-    ):
+    # A local hour can roll over at :15/:30/:45 within the same UTC hour.
+    if resumed_at is not None and resumed_at.replace(
+        minute=(resumed_at.minute // 15) * 15, second=0, microsecond=0
+    ) != now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0):
         resumed = await _send_daily_summary_cohort(resumed_at, cursor)
         if not resumed.complete:
             return resumed
