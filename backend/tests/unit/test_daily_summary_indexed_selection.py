@@ -3,6 +3,7 @@
 import pytest
 
 import database.notifications as notifications_module
+from utils.other.daily_summary_budget import DeferredTokens
 from database.firestore_index_registry import (
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     QUERY_SPECS,
@@ -134,8 +135,8 @@ def test_indexed_selection_defers_all_token_reads(monkeypatch):
     result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
 
     by_uid = {uid: (tokens, zone) for uid, tokens, zone in result}
-    assert by_uid['u1'] == (None, 'UTC')
-    assert by_uid['u2'] == (None, 'UTC')
+    assert by_uid['u1'] == (DeferredTokens('legacy'), 'UTC')
+    assert by_uid['u2'] == (DeferredTokens(None), 'UTC')
 
 
 def test_indexed_selection_keeps_tokenless_users(monkeypatch):
@@ -144,7 +145,32 @@ def test_indexed_selection_keeps_tokenless_users(monkeypatch):
 
     result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
 
-    assert result == [('u1', None, 'UTC')]
+    assert result == [('u1', DeferredTokens(None), 'UTC')]
+
+
+@pytest.mark.parametrize(
+    'legacy_token,device_tokens,expected',
+    [
+        ('legacy', ['sub-a', 'legacy'], ['sub-a', 'legacy']),
+        ('legacy', ['sub-a'], ['sub-a', 'legacy']),
+        (None, ['sub-a'], ['sub-a']),
+    ],
+)
+def test_selected_legacy_token_is_reused_without_rereading_owner(monkeypatch, legacy_token, device_tokens, expected):
+    fake = _FakeDb({'u1': {'time_zone': 'UTC', 'fcm_token': legacy_token}}, tokens={'u1': device_tokens})
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
+    monkeypatch.setattr(notifications_module, 'db', fake)
+    recipient = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)[0]
+
+    # _UserRef deliberately has no get(): even a missing legacy token must not
+    # cause a second read of the parent. Cover legacy-only addition as well as
+    # deduplication when a device document carries that same token.
+    assert (
+        notifications_module.get_all_tokens(
+            recipient[0], legacy_token=recipient[1].legacy_token, user_document_loaded=True
+        )
+        == expected
+    )
 
 
 def test_indexed_selection_propagates_a_raising_chunk(monkeypatch, caplog):

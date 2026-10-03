@@ -76,7 +76,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *_args, **_kwargs: None,
+            send_notification_result=lambda *_args, **_kwargs: 1,
         ),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
         'utils.durable_queue_metrics': _module(

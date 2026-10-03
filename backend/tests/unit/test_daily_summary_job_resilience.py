@@ -16,6 +16,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
+import pytest
+
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 # Imported for its side effect on import cost, not for its API: the job imports
@@ -136,7 +138,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *_a, **_k: None,
+            send_notification_result=lambda *_a, **_k: 1,
         ),
         'utils.observability.fallback': _module('utils.observability.fallback', record_fallback=fallbacks),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
@@ -545,7 +547,7 @@ def _loaded_send_path(
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *args, **kwargs: sends.append((args, kwargs)),
+            send_notification_result=lambda *args, **kwargs: sends.append((args, kwargs)) or 1,
         ),
         'utils.observability.fallback': _module('utils.observability.fallback', record_fallback=RecordedFallbacks()),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
@@ -728,3 +730,63 @@ def test_saved_half_hour_zone_cohort_survives_rollover_inside_the_same_utc_hour(
         assert outcome.ok and outcome.complete
         assert reads == [(['Asia/Kolkata'], 21), (['Asia/Kolkata'], 22)]
         assert served == [('tail', original)]
+
+
+@pytest.mark.parametrize('failure_kind', ['generation', 'delivery', 'timeout'])
+def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure_kind) -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        original = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+        now = original
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc
+        )
+        users = [(f'uid-{i:02}', [], 'UTC') for i in range(12)]
+        reads = []
+
+        def selector(zones, hour):
+            reads.append(hour)
+            return users if hour == 11 else []
+
+        notification_db.get_users_for_daily_summary_indexed = selector
+        attempts = []
+        failure = {
+            'generation': RuntimeError('generation failed'),
+            'delivery': notifications.DailySummaryDeliveryError('delivery failed'),
+            'timeout': TimeoutError('worker timed out'),
+        }[failure_kind]
+        failures_remaining = 2
+
+        def worker(user):
+            nonlocal failures_remaining
+            attempts.append((user[0], notifications._display_date_for_now(user[2], user[3]), user[4], user[5]))
+            if user[0] == 'uid-00' and failures_remaining:
+                failures_remaining -= 1
+                raise failure
+
+        notifications._send_summary_notification = worker
+        for tick in range(2):
+            now = original + timedelta(minutes=15 * tick)
+            outcome = asyncio.run(notifications.send_daily_summary_notification())
+            assert not outcome.ok and not outcome.complete
+            saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+            assert saved['uid'] == 'uid-00', 'later batch progress must not overwrite the failed recipient'
+            assert saved['retry_recipients'] == {'uid-00': failure_kind == 'delivery'}
+            assert notifications.summary_budget.cursor_cohort_utc(saved) == original
+
+        now = original + timedelta(minutes=30)
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok and outcome.complete
+        assert reads == [11, 11, 11, 12]
+        assert redis.store == {}
+        retries = [attempt for attempt in attempts if attempt[0] == 'uid-00']
+        assert len(retries) == 3
+        assert {attempt[1] for attempt in retries} == {original.date() - timedelta(days=1)}
+        assert retries[1][2:] == (failure_kind == 'delivery', True)
+        assert {'uid-08', 'uid-11'} <= {attempt[0] for attempt in attempts}, 'healthy later batches still run'

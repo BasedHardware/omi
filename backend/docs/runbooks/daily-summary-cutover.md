@@ -18,6 +18,8 @@ task retries and should be compared with Scheduler/audit execution counts.
 ## Delivery and bounded catch-up
 
 - Recipient queries read due user documents without traversing FCM tokens.
+  They retain the legacy token from that selected document; deferred lookup
+  reads only the token subcollection, including when the legacy field is absent.
   Tokens are resolved only after the per-user/day lock, existing-record and
   usable-conversation guards succeed, before generation/persistence. Token
   lookup failure releases the lock and leaves no undeliverable stored record.
@@ -27,6 +29,13 @@ task retries and should be compared with Scheduler/audit execution counts.
   date before the current cohort. The existing noon split remains unchanged:
   morning delivery summarizes the previous local day.
 - A query failure propagates to the cohort coordinator and retains the cursor.
+  Failed/timed-out recipients also retain the original cohort across local-hour
+  boundaries, even after later batches checkpoint progress. Generation errors
+  release the owned day lock. Failed pushes retain a delivery-retry marker:
+  retry the stored recap without regenerating it, while ordinary repeat ticks
+  still suppress the push. Zero successful FCM sends count as a failed push;
+  any successful device delivery completes it to avoid repushing to that device.
+  A contended retry remains pending until its outstanding worker finishes.
   Successful timezone chunks still run. The run lock prevents concurrent
   notification sweeps; the per-user/day lock and durable existing-record check
   prevent repeat generation/push on subsequent ticks. Existing backfill creates
@@ -38,6 +47,8 @@ task retries and should be compared with Scheduler/audit execution counts.
   and FCM delivery retain the existing best-effort delivery limitations. The
   two-hour cursor TTL is not a durable outage queue. Do not infer delivery
   success from Cloud Run exit success or the worker `succeeded` counter.
+  A persistently incomplete saved cohort delays the current cohort until it
+  completes; monitor pending recipients and completion alongside budget skips.
 
 ## Deploy after review
 

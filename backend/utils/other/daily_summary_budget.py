@@ -71,6 +71,12 @@ class BoundedConversations(NamedTuple):
         return self.dropped > 0
 
 
+class DeferredTokens(NamedTuple):
+    """Legacy token already read with the owner; only device tokens remain unread."""
+
+    legacy_token: Optional[str]
+
+
 def _sort_key(conversation: Any) -> datetime:
     """Recency key that tolerates naive datetimes and missing fields."""
     value = getattr(conversation, 'started_at', None) or getattr(conversation, 'created_at', None)

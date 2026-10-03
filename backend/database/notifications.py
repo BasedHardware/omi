@@ -24,6 +24,7 @@ from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
 from .firestore_transaction_retry import run_with_transaction_contention_retry
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union, cast
+from utils.other.daily_summary_budget import DeferredTokens
 
 logger = logging.getLogger(__name__)
 
@@ -313,8 +314,12 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     return True
 
 
-def get_all_tokens(uid: str) -> list[str]:
-    """Get all device tokens for a user from subcollection and legacy field"""
+def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False) -> list[str]:
+    """Get device and legacy tokens; reuse a selected owner document when supplied.
+
+    ``user_document_loaded`` distinguishes an absent legacy field from an unread
+    owner, so even tokenless selected owners avoid another parent-document read.
+    """
     tokens: List[str] = []
 
     # Get tokens from new subcollection
@@ -326,12 +331,14 @@ def get_all_tokens(uid: str) -> list[str]:
             tokens.append(str(token_value))
 
     # Get legacy token from main user document (backward compatibility)
-    user_ref = db.collection('users').document(uid).get()
-    if getattr(user_ref, "exists", False):
-        user_data = _typed_doc(user_ref)
-        legacy_token = user_data.get('fcm_token')
-        if legacy_token and legacy_token not in tokens:
-            tokens.append(str(legacy_token))
+    if not user_document_loaded:
+        user_ref = db.collection('users').document(uid).get()
+        if getattr(user_ref, "exists", False):
+            user_data = _typed_doc(user_ref)
+            legacy_value = user_data.get('fcm_token')
+            legacy_token = str(legacy_value) if legacy_value else None
+    if legacy_token and legacy_token not in tokens:
+        tokens.append(legacy_token)
 
     return tokens
 
@@ -388,11 +395,11 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
 
 def get_users_for_daily_summary_indexed(
     timezones: list[str], target_local_hour: int, *, firestore_client: Any = None
-) -> List[Tuple[str, Optional[List[str]], Any]]:
+) -> List[Tuple[str, DeferredTokens, Any]]:
     """Read only due owners using the existing schedule index.
 
-    ``None`` in the token slot means tokens have not been read. The sender
-    resolves them only after it creates a recap; existing, locked, dormant and
+    The token slot carries the already-selected legacy token. The sender
+    resolves device tokens only before it creates a recap; existing, locked, dormant and
     budget-deferred owners cost no FCM-token reads. Tokenless owners still get
     their durable recap. Query errors propagate to the cohort coordinator so
     it checkpoints the failed chunk instead of declaring a partial pass done.
@@ -401,7 +408,7 @@ def get_users_for_daily_summary_indexed(
         return []
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    users: List[Tuple[str, Optional[List[str]], Any]] = []
+    users: List[Tuple[str, DeferredTokens, Any]] = []
     query_count = 0
     complete = False
     try:
@@ -414,7 +421,14 @@ def get_users_for_daily_summary_indexed(
             )
             for user_doc in query.stream():
                 user_data = _typed_doc(user_doc)
-                users.append((str(user_doc.id), None, user_data.get('time_zone')))
+                legacy_value = user_data.get('fcm_token')
+                users.append(
+                    (
+                        str(user_doc.id),
+                        DeferredTokens(str(legacy_value) if legacy_value else None),
+                        user_data.get('time_zone'),
+                    )
+                )
         complete = True
         return users
     finally:

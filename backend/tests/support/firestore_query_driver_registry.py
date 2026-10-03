@@ -1765,7 +1765,13 @@ def _seed_notification_recipient_with_tokens(client, combo, trial):
     client.queue_results([])
 
 
-_add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.notifications.get_all_tokens',
+        base={'uid': UID},
+        domains={'user_document_loaded': [False, True], 'legacy_token': [None, 'legacy-1']},
+    )
+)
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',

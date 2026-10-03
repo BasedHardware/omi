@@ -2,7 +2,7 @@
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from time import monotonic
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -21,7 +21,7 @@ from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
-from utils.notifications import send_bulk_notification, send_notification
+from utils.notifications import send_bulk_notification, send_notification_result
 from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
@@ -161,79 +161,79 @@ def _generate_and_store_daily_summary(
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
 
-    # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
-    # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
-    # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
-    # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
-    existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing_summary:
-        logger.info(
-            f"Daily summary already exists for uid={uid} date={date_str} "
-            f"id={existing_summary.get('id')}; skipping duplicate generation"
+    try:
+        # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
+        # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
+        # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
+        # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
+        existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+        if existing_summary:
+            logger.info(
+                f"Daily summary already exists for uid={uid} date={date_str} "
+                f"id={existing_summary.get('id')}; skipping duplicate generation"
+            )
+            return existing_summary, False, None
+
+        conversations_data = conversations_db.get_conversations(
+            uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
-        return existing_summary, False, None
-
-    conversations_data = conversations_db.get_conversations(
-        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
-    )
-    if not conversations_data or len(conversations_data) == 0:
-        release_daily_summary_lock(uid, date_str)
-        return None, False, _DECLINE_NO_CONVERSATIONS
-
-    conversations = deserialize_conversations(
-        [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
-    )
-    if not conversations:
-        release_daily_summary_lock(uid, date_str)
-        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
-
-    # Skip recap if no conversation captured any speech.
-    if not any(c.transcript_segments for c in conversations if not c.discarded):
-        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
-        release_daily_summary_lock(uid, date_str)
-        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
-
-    # Bound the generator's input (#12530). Keep the most recent conversations
-    # that fit, drop the rest loudly, and always keep at least one so a recap is
-    # still attempted.
-    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
-
-    # The prompt is built by ``conversations_to_string(use_transcript=False)``,
-    # which renders the title plus the first app result or the structured
-    # overview, plus action items and events. A bounded day where no
-    # conversation carries any of these leaves the model titles alone: the
-    # output is thin or hallucinated
-    # and then pushed (flip-review F-12 / decision 4). Decline before the LLM
-    # call — no call, no record, no push. Paid, pre-flip and mobile days are
-    # unchanged by construction: their overviews are non-empty, so this guard
-    # never fires for them.
-    if not any(_conversation_has_summary_content(c) for c in conversations if not c.discarded):
-        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with summary content')
-        release_daily_summary_lock(uid, date_str)
-        return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
-
-    if prepare_delivery is not None:
-        try:
-            prepare_delivery()
-        except Exception:
-            # No generation or persistence has happened. A token-read failure
-            # must leave the owner retryable, rather than persisting a recap
-            # that the existing-record guard would never deliver on retry.
+        if not conversations_data or len(conversations_data) == 0:
             release_daily_summary_lock(uid, date_str)
-            raise
+            return None, False, _DECLINE_NO_CONVERSATIONS
 
-    summary_data = generate_comprehensive_daily_summary(
-        uid,
-        conversations,
-        date_str,
-        start_date_utc,
-        end_date_utc,
-        memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
-    )
-    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
-    # The stored id rides on the returned record so the delivery step can build the
-    # `/daily-summary/{id}` deep link without a second read.
-    return {**summary_data, 'id': summary_id}, True, None
+        conversations = deserialize_conversations(
+            [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
+        )
+        if not conversations:
+            release_daily_summary_lock(uid, date_str)
+            return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
+
+        # Skip recap if no conversation captured any speech.
+        if not any(c.transcript_segments for c in conversations if not c.discarded):
+            logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
+            release_daily_summary_lock(uid, date_str)
+            return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
+
+        # Bound the generator's input (#12530). Keep the most recent conversations
+        # that fit, drop the rest loudly, and always keep at least one so a recap is
+        # still attempted.
+        conversations = bound_daily_summary_conversations(uid, date_str, conversations)
+
+        # The prompt is built by ``conversations_to_string(use_transcript=False)``,
+        # which renders the title plus the first app result or the structured
+        # overview, plus action items and events. A bounded day where no
+        # conversation carries any of these leaves the model titles alone: the
+        # output is thin or hallucinated
+        # and then pushed (flip-review F-12 / decision 4). Decline before the LLM
+        # call — no call, no record, no push. Paid, pre-flip and mobile days are
+        # unchanged by construction: their overviews are non-empty, so this guard
+        # never fires for them.
+        if not any(_conversation_has_summary_content(c) for c in conversations if not c.discarded):
+            logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with summary content')
+            release_daily_summary_lock(uid, date_str)
+            return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
+
+        if prepare_delivery is not None:
+            prepare_delivery()
+
+        summary_data = generate_comprehensive_daily_summary(
+            uid,
+            conversations,
+            date_str,
+            start_date_utc,
+            end_date_utc,
+            memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
+        )
+        summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+        # The stored id rides on the returned record so the delivery step can build the
+        # `/daily-summary/{id}` deep link without a second read.
+        return {**summary_data, 'id': summary_id}, True, None
+
+    except Exception:
+        # We own this day lock. Failed reads/generation/persistence must permit
+        # the saved cohort to retry on the next tick, even after the due hour.
+        release_daily_summary_lock(uid, date_str)
+        raise
 
 
 def _env_float(name: str, default: float) -> float:
@@ -335,13 +335,17 @@ class DailySummaryJobStats:
     skipped_for_budget: int = 0
     recipient_docs_selected: int = 0
     recipient_queries: int = 0
+    retry_recipients: Dict[str, bool] = field(default_factory=dict)
+    retry_hour: Optional[int] = None
+    retry_uid: Optional[str] = None
 
     def as_log(self) -> str:
         return (
             f'groups_attempted={self.groups_attempted} groups_failed={self.groups_failed} '
             f'attempted={self.attempted} succeeded={self.succeeded} failed={self.failed} '
             f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget} '
-            f'recipient_docs_selected={self.recipient_docs_selected} recipient_queries={self.recipient_queries}'
+            f'recipient_docs_selected={self.recipient_docs_selected} recipient_queries={self.recipient_queries} '
+            f'retry_recipients={len(self.retry_recipients)}'
         )
 
 
@@ -350,6 +354,10 @@ class DailySummaryCronOutcome:
     ok: bool
     error_text: Optional[str] = None
     complete: bool = True
+
+
+class DailySummaryDeliveryError(RuntimeError):
+    """A durable recap exists but its push failed before delivery completed."""
 
 
 def should_run_job() -> bool:
@@ -445,7 +453,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
       job-end line with attempted/succeeded/failed/skipped counts.
     """
     deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
-    stats = DailySummaryJobStats()
+    stats = DailySummaryJobStats(retry_recipients=dict((cursor or {}).get('retry_recipients', {})))
     cursor_key = summary_budget.job_cursor_key()
 
     try:
@@ -471,7 +479,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         if stop_processing or monotonic() >= deadline:
             completed_all = False
             stop_processing = True
-            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
             )
@@ -486,14 +494,14 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             completed_all = False
-            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
 
         if query_error and not users:
             stats.groups_failed += 1
             completed_all = False
-            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
             return ProcessOutcome.reject(str(query_error), reason='user_query')
 
@@ -504,7 +512,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             # job never even listed. Keep the run resumable and point the next
             # execution at this hour.
             completed_all = False
-            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
             )
@@ -523,7 +531,15 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         failed_before = stats.failed
         timed_out_before = stats.timed_out
         finished_group = await _send_bulk_summary_notification(
-            [(*user, cohort_utc) for user in ordered_users],
+            [
+                (
+                    *user,
+                    cohort_utc,
+                    stats.retry_recipients.get(str(user[0]), False),
+                    str(user[0]) in stats.retry_recipients,
+                )
+                for user in ordered_users
+            ],
             deadline=deadline,
             stats=stats,
             target_hour=target_hour,
@@ -536,6 +552,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
         hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
         if hour_send_failures:
+            completed_all = False
             return ProcessOutcome.reject(
                 f'{hour_send_failures} user send(s) failed at hour {target_hour}',
                 reason='hour_send_failed',
@@ -556,6 +573,12 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             result.outcome.error_text,
         )
 
+    if stats.retry_uid is not None:
+        # Later batches/groups may checkpoint their progress. Keep the earliest
+        # failed recipient and the original cohort after the entire pass, so a
+        # final-tick failure survives both those writes and the local-hour boundary.
+        completed_all = False
+        await _checkpoint(cursor_key, stats.retry_hour, stats.retry_uid, cohort_utc, stats.retry_recipients)
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
@@ -585,13 +608,20 @@ def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Opt
 
 
 async def _checkpoint(
-    cursor_key: str, target_hour: Optional[int], uid: Optional[str], cohort_utc: Optional[datetime] = None
+    cursor_key: str,
+    target_hour: Optional[int],
+    uid: Optional[str],
+    cohort_utc: Optional[datetime] = None,
+    retry_recipients: Optional[Dict[str, bool]] = None,
 ) -> None:
+    cursor = summary_budget.make_cursor(target_hour, uid, cohort_utc)
+    if retry_recipients:
+        cursor['retry_recipients'] = dict(retry_recipients)
     await run_blocking(
         db_executor,
         summary_budget.write_job_cursor,
         cursor_key,
-        summary_budget.make_cursor(target_hour, uid, cohort_utc),
+        cursor,
     )
 
 
@@ -604,8 +634,8 @@ async def _query_daily_summary_chunks(selector: Any, timezone_chunks: List[List[
 
 def _reduce_daily_summary_chunks(
     chunk_results: List[Any], target_hour: int
-) -> Tuple[List[Tuple[str, Optional[List[str]], Any]], Optional[BaseException], bool]:
-    users: List[Tuple[str, Optional[List[str]], Any]] = []
+) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
+    users: List[Tuple[str, Any, Any]] = []
     chunk_errors: List[BaseException] = []
     every_chunk_read = True
     for chunk_index, chunk in enumerate(chunk_results):
@@ -622,7 +652,7 @@ def _reduce_daily_summary_chunks(
 
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
-) -> Tuple[List[Tuple[str, Optional[List[str]], Any]], Optional[BaseException], bool]:
+) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
 
     Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
@@ -685,9 +715,11 @@ def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens)
     )
 
     if tokens:
-        send_notification(
+        delivered = send_notification_result(
             uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
         )
+        if delivered == 0:
+            raise RuntimeError('daily summary push delivered to no devices')
     else:
         logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
 
@@ -767,10 +799,15 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     date_str = display_date.strftime('%Y-%m-%d')
 
     tokens = user_data[1] if len(user_data) > 1 else None
+    retry_delivery = bool(user_data[4]) if len(user_data) > 4 else False
+    retry_attempt = bool(user_data[5]) if len(user_data) > 5 else False
 
     def prepare_delivery() -> None:
         nonlocal tokens
-        if tokens is None:
+        if isinstance(tokens, summary_budget.DeferredTokens):
+            tokens = notification_db.get_all_tokens(uid, legacy_token=tokens.legacy_token, user_document_loaded=True)
+            logger.info('daily_summary_delivery_token_read owners=1 tokens=%d', len(tokens))
+        elif tokens is None:
             tokens = notification_db.get_all_tokens(uid)
             logger.info('daily_summary_delivery_token_read owners=1 tokens=%d', len(tokens))
 
@@ -778,8 +815,17 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery
     )
     pending_webhook: Optional[dict] = None
-    if created and summary_data:
-        _deliver_current_day_summary(uid, date_str, summary_data, tokens)
+    if retry_attempt and declined == _DECLINE_LOCKED:
+        # A timed-out worker may still own the day. Keep its recipient pending
+        # until that worker finishes, rather than treating contention as delivery.
+        raise RuntimeError('daily summary retry still locked')
+    if (created or retry_delivery) and summary_data:
+        try:
+            prepare_delivery()
+            _deliver_current_day_summary(uid, date_str, summary_data, tokens)
+        except Exception as exc:
+            release_daily_summary_lock(uid, date_str)
+            raise DailySummaryDeliveryError(str(exc)) from exc
         # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
         pending_webhook = summary_data
 
@@ -838,7 +884,7 @@ async def _send_bulk_summary_notification(
         if deadline is not None and monotonic() >= deadline:
             counters.skipped_for_budget += len(users) - i
             if cursor_key:
-                await _checkpoint(cursor_key, target_hour, str(users[i][0]), cohort_utc)
+                await _checkpoint(cursor_key, target_hour, str(users[i][0]), cohort_utc, counters.retry_recipients)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
             )
@@ -867,6 +913,14 @@ async def _send_bulk_summary_notification(
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             uid = str(batch[j][0])
+            if isinstance(result, BaseException):
+                counters.retry_recipients[uid] = counters.retry_recipients.get(uid, False) or isinstance(
+                    result, DailySummaryDeliveryError
+                )
+                if counters.retry_uid is None:
+                    counters.retry_hour, counters.retry_uid = target_hour, uid
+            else:
+                counters.retry_recipients.pop(uid, None)
             if isinstance(result, (asyncio.TimeoutError, TimeoutError)):
                 counters.timed_out += 1
                 logger.error(
@@ -891,7 +945,9 @@ async def _send_bulk_summary_notification(
                 counters.succeeded += 1
 
         if cursor_key and i + _BATCH_SIZE < len(users):
-            await _checkpoint(cursor_key, target_hour, str(users[i + _BATCH_SIZE][0]), cohort_utc)
+            await _checkpoint(
+                cursor_key, target_hour, str(users[i + _BATCH_SIZE][0]), cohort_utc, counters.retry_recipients
+            )
 
         if counters.timed_out >= DAILY_SUMMARY_MAX_ABANDONED_USERS:
             # Abandoned threads still occupy postprocess_executor slots. Past this
