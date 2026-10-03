@@ -163,3 +163,12 @@ def test_late_created_row_does_not_steal_speech_outside_its_creation_interval():
     assert {row['id'] for row in conversations(store)} == before
     assert chunks[0]['transcript_segments'][0]['text'] in texts(store, 'GEN-EARLY')
     assert chunks[1]['transcript_segments'][0]['text'] in texts(store, 'GEN-LATE')
+
+
+def test_overlap_replay_does_not_create_a_sync_row():
+    """The saved-row set is the observable contract: no sync upload may mint a row."""
+    store = seeded_store(overlap_rows())
+    chunk = sync_chunk(1900, 1910, 'genuinely new speech inside the overlapping generation window')
+    replay(store, [chunk], plan(store, [chunk]).targets)
+    assert {row['id'] for row in conversations(store)} == {'GEN-EARLY', 'GEN-LATE'}
+    assert 'genuinely new speech inside the overlapping generation window' in texts(store, 'GEN-LATE')

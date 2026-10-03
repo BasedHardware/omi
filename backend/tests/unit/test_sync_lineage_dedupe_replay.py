@@ -511,6 +511,16 @@ def test_new_speech_enrolls_and_finishes_normally(pipeline_module, monkeypatch, 
     assert 'appended_seconds=30.00' in lines[0] and 'repeat_only=False' in lines[0]
 
 
+def test_mixed_process_segment_stores_only_new_speech(pipeline_module, monkeypatch):
+    """The saved transcript is the contract: repeats drop, new speech appends."""
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE] + NEW
+    ok, _, _ = _drive_process_segment(pipeline, monkeypatch, store, texts)
+    assert texts_of(store, LIVE_ID) == LIVE + NEW
+    assert ok is True
+
+
 def test_sync_scoped_retry_after_a_failed_finish_completes_the_existing_debt(pipeline_module, monkeypatch, caplog):
     """A commit whose finish fails is completed by the identical re-upload.
 
