@@ -92,15 +92,15 @@ def _enable(app, client=None, *, user_paid=False, tester=False):
     fastapi_app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
     with ExitStack() as stack:
         stack.enter_context(
-            # safe_request_target does real DNS resolution; hermetic tests must pin without network.
+            # safe_request_targets does real DNS resolution; hermetic tests must pin without network.
             patch.object(
                 apps_router,
-                'safe_request_target',
-                lambda url: (url, {'headers': {}, 'extensions': {}}),
+                'safe_request_targets',
+                lambda url: [(url, {'headers': {}, 'extensions': {}})],
             )
         )
         stack.enter_context(patch.object(apps_router, 'get_available_app_by_id', lambda _id, _uid: app))
-        stack.enter_context(patch.object(apps_router, 'get_webhook_client', lambda: client))
+        stack.enter_context(patch.object(apps_router, 'get_pinned_delivery_client', lambda: client))
         stack.enter_context(patch.object(apps_router, 'is_tester', lambda _uid: tester))
         stack.enter_context(patch.object(apps_router, 'get_is_user_paid_app', lambda _id, _uid: user_paid))
         stack.enter_context(patch.object(apps_router, 'enable_app', lambda _uid, _id: enable_calls.append(_id) or True))
@@ -244,10 +244,15 @@ def test_setup_probe_uses_the_pinned_target():
 
     def _pin(url):
         seen['pinned_from'] = url
-        return 'https://93.184.216.34/status', {
-            'headers': {'Host': 'provider.test'},
-            'extensions': {'sni_hostname': 'provider.test'},
-        }
+        return [
+            (
+                'https://93.184.216.34/status',
+                {
+                    'headers': {'Host': 'provider.test'},
+                    'extensions': {'sni_hostname': 'provider.test'},
+                },
+            )
+        ]
 
     fastapi_app = FastAPI()
     target_router = copy(apps_router.router)
@@ -260,8 +265,8 @@ def test_setup_probe_uses_the_pinned_target():
     fastapi_app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
     with ExitStack() as stack:
         stack.enter_context(patch.object(apps_router, 'get_available_app_by_id', lambda _id, _uid: _external_app()))
-        stack.enter_context(patch.object(apps_router, 'get_webhook_client', lambda: _CaptureClient()))
-        stack.enter_context(patch.object(apps_router, 'safe_request_target', _pin))
+        stack.enter_context(patch.object(apps_router, 'get_pinned_delivery_client', lambda: _CaptureClient()))
+        stack.enter_context(patch.object(apps_router, 'safe_request_targets', _pin))
         stack.enter_context(patch.object(apps_router, 'is_tester', lambda _uid: False))
         stack.enter_context(patch.object(apps_router, 'get_is_user_paid_app', lambda _id, _uid: False))
         stack.enter_context(patch.object(apps_router, 'enable_app', lambda _uid, _id: True))
@@ -274,6 +279,51 @@ def test_setup_probe_uses_the_pinned_target():
     assert seen['kwargs']['headers'] == {'Host': 'provider.test'}
     assert seen['kwargs']['extensions'] == {'sni_hostname': 'provider.test'}
     assert seen['kwargs']['follow_redirects'] is False
+
+
+def test_setup_probe_tries_every_safe_address_before_reporting_unavailable():
+    """A multi-A / dual-stack setup hostname must not fail 503 on the first
+    unreachable address: pinning replaced HTTPX's normal address fallback, so
+    the probe tries every safe resolved address (webhook delivery parity)."""
+    attempts = []
+
+    class _FlakyClient:
+        async def get(self, url, **_kwargs):
+            attempts.append(url)
+            if '93.184.216.34' in url:
+                raise httpx.ConnectError('first address unreachable')
+            return _response(200)
+
+    def _pin(url):
+        return [
+            ('https://93.184.216.34/status', {'headers': {}, 'extensions': {}}),
+            ('https://93.184.216.35/status', {'headers': {}, 'extensions': {}}),
+        ]
+
+    fastapi_app = FastAPI()
+    target_router = copy(apps_router.router)
+    target_router.routes = [
+        route
+        for route in apps_router.router.routes
+        if getattr(route, 'path', None) == '/v1/apps/enable' and 'POST' in (getattr(route, 'methods', None) or set())
+    ]
+    fastapi_app.include_router(target_router)
+    fastapi_app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(apps_router, 'get_available_app_by_id', lambda _id, _uid: _external_app()))
+        stack.enter_context(patch.object(apps_router, 'get_pinned_delivery_client', lambda: _FlakyClient()))
+        stack.enter_context(patch.object(apps_router, 'safe_request_targets', _pin))
+        stack.enter_context(patch.object(apps_router, 'is_tester', lambda _uid: False))
+        stack.enter_context(patch.object(apps_router, 'get_is_user_paid_app', lambda _id, _uid: False))
+        stack.enter_context(patch.object(apps_router, 'enable_app', lambda _uid, _id: True))
+        stack.enter_context(patch.object(apps_router, 'increase_app_installs_count', lambda _id: None))
+        response = TestClient(fastapi_app).post('/v1/apps/enable', params={'app_id': 'app-1'})
+
+    assert response.status_code == 200
+    assert attempts == [
+        'https://93.184.216.34/status?uid=user-1',
+        'https://93.184.216.35/status?uid=user-1',
+    ]
 
 
 def test_enable_failure_logs_carry_no_body_or_identity(caplog):

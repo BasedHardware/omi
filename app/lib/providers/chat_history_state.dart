@@ -45,6 +45,7 @@ mixin ChatHistoryState on ChangeNotifier {
   /// Clears only the local projection. A server session is allocated on the first send.
   bool startFreshChat() {
     if (!canSwitchChat) return false;
+    _clearPendingAppSwitchFence();
     _historyEpoch++;
     appProvider?.setSelectedChatAppId(null);
     chatSessionId = null;
@@ -70,6 +71,7 @@ mixin ChatHistoryState on ChangeNotifier {
   /// Commits a new selection after a successful read; epoch checks discard superseded results.
   Future<bool> openChatSession(ChatSessionSummary session) async {
     if (!canSwitchChat) return false;
+    _clearPendingAppSwitchFence();
     final epoch = ++_historyEpoch;
     isLoadingMessages = true;
     loadingOlderMessages = false;
@@ -197,6 +199,29 @@ mixin ChatHistoryState on ChangeNotifier {
     _pendingAppSwitch = true;
   }
 
+  /// Raises the switch fence as soon as the selection itself changes, instead
+  /// of only when the bootstrap read starts: the deliberate pre-read delay in
+  /// the drawer's switch handler is otherwise a window where a send would
+  /// target the new app while the old app's transcript is still visible.
+  /// Call [markPendingAppSwitch] first; the fence clears with the read.
+  void notifySwitchingChatApp() {
+    if (!_pendingAppSwitch) return;
+    if (isSwitchingChatApp) return;
+    isSwitchingChatApp = true;
+    notifyListeners();
+  }
+
+  /// Drops a raised switch fence when the switch itself is superseded (a turn
+  /// started before the bootstrap read, or another flow replaced the thread).
+  /// Without this the fence would outlive the switch and block Send forever.
+  void _clearPendingAppSwitchFence() {
+    _pendingAppSwitch = false;
+    if (isSwitchingChatApp) {
+      isSwitchingChatApp = false;
+      notifyListeners();
+    }
+  }
+
   void setClearingChat(bool value) {
     isClearingChat = value;
     notifyListeners();
@@ -204,7 +229,12 @@ mixin ChatHistoryState on ChangeNotifier {
 
   /// Explicit sessions never consume the legacy cache, which has no session/app ownership key.
   Future<void> refreshMessages({bool dropdownSelected = false}) async {
-    if (chatMutationInProgress) return;
+    if (chatMutationInProgress) {
+      // A turn (e.g. pendant voice) started inside the switch window: the
+      // bootstrap read is superseded, so the raised fence must not survive it.
+      _clearPendingAppSwitchFence();
+      return;
+    }
     if (dropdownSelected || (appProvider?.selectedChatAppId ?? '').isNotEmpty) {
       _historyEpoch++;
       chatSessionId = null;
@@ -223,6 +253,7 @@ mixin ChatHistoryState on ChangeNotifier {
       final result = await chatSessionsApi.messages(id);
       if (_historyDisposed || epoch != _historyEpoch) return;
       isLoadingMessages = false;
+      _pendingAppSwitch = false;
       isSwitchingChatApp = false;
       if (result is ApiFailure<List<ServerMessage>>) {
         historyProblem = result.problem;
@@ -238,6 +269,7 @@ mixin ChatHistoryState on ChangeNotifier {
           await (legacyMessagesLoader ?? getMessagesServer)(appId: appId, dropdownSelected: dropdownSelected);
       if (_historyDisposed || epoch != _historyEpoch || appId != appProvider?.selectedChatAppId) return;
       isLoadingMessages = false;
+      _pendingAppSwitch = false;
       isSwitchingChatApp = false;
       messages = loaded;
       historyProblem = null;

@@ -636,7 +636,11 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       currentAppId = null;
     }
     String chatTargetId = currentAppId ?? 'omi';
-    bool isPersonaChat = _selectedChatApp()?.hasCapability('persona') ?? false;
+    // The voice endpoint has no app field and the backend voice pipeline runs
+    // without an app persona (`app = None`), so a voice turn never uses the
+    // selected app's persona even when one is picked. Reporting it as persona
+    // chat would overcount; only the typed path honors the selection today.
+    const bool isPersonaChat = false;
 
     PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 

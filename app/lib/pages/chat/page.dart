@@ -734,9 +734,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
-    // `isSwitchingChatApp` fences only the app-switch bootstrap read: a send
-    // there would invalidate the read and append the turn to the previous
-    // app's transcript. Same-thread loading does not block sending.
+    // `isSwitchingChatApp` fences the whole app-switch window (raised when the
+    // selection changes, cleared when the bootstrap read settles): a send in
+    // that window would append the turn to the previous app's transcript while
+    // the picker already shows the new app. Same-thread loading does not block
+    // sending.
     if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     String? currentContext = _selectedContext;
     setState(() {
@@ -1020,6 +1022,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (messageProvider == null || !messageProvider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
       return;
     }
+
+    // Fence sends for the whole switch, starting here: after the selection
+    // changes below there is a deliberate pre-read delay, and a send landing
+    // in that window would target the new app while the old app's transcript
+    // is still on screen (the later bootstrap read then returns early because
+    // the send made chatMutationInProgress true, leaving the mixed transcript).
+    messageProvider.markPendingAppSwitch();
+    messageProvider.notifySwitchingChatApp();
 
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);

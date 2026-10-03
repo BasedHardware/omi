@@ -23,7 +23,12 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import UnsafeWebhookURLError, get_webhook_client, get_webhook_semaphore, safe_request_target
+from utils.http_client import (
+    UnsafeWebhookURLError,
+    get_pinned_delivery_client,
+    get_webhook_semaphore,
+    safe_request_targets,
+)
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -2274,38 +2279,56 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
                 detail='This app is missing its integration setup configuration. Contact its developer.',
             )
         if app.external_integration.setup_completed_url:
-            client = get_webhook_client()
+            client = get_pinned_delivery_client()
             setup_url = app.external_integration.setup_completed_url
             # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
             # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
             # IP while presenting the original Host/SNI, so a DNS record swapped between check and
             # connect (SSRF / DNS rebinding) cannot redirect this probe at an internal service.
+            # Pinned URLs run on the non-pooling client: a pooled keep-alive connection keyed by
+            # the resolved IP could be reused for another setup hostname resolving to the same IP
+            # and skip that hostname's TLS certificate verification.
             try:
-                pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, setup_url)
+                pinned_targets = await run_blocking(db_executor, safe_request_targets, setup_url)
             except UnsafeWebhookURLError:
                 logger.warning('app_install_failure class=setup_configuration')
                 raise HTTPException(
                     status_code=422,
                     detail='This app has an invalid setup endpoint. Contact its developer.',
                 )
-            separator = '&' if '?' in pinned_url else '?'
-            try:
-                async with get_webhook_semaphore():
-                    res = await client.get(
-                        f'{pinned_url}{separator}uid={uid}',
-                        headers=pin_kwargs['headers'],
-                        extensions=pin_kwargs['extensions'],
-                        follow_redirects=False,
+            res = None
+            for pinned_url, pin_kwargs in pinned_targets:
+                separator = '&' if '?' in pinned_url else '?'
+                try:
+                    async with get_webhook_semaphore():
+                        res = await client.get(
+                            f'{pinned_url}{separator}uid={uid}',
+                            headers=pin_kwargs['headers'],
+                            extensions=pin_kwargs['extensions'],
+                            follow_redirects=False,
+                        )
+                    break
+                except (UnsafeWebhookURLError, httpx.InvalidURL):
+                    # InvalidURL: a malformed developer URL that survived pinning (e.g. illegal
+                    # characters in the path) must not 500 — it is an app misconfiguration,
+                    # and no resolved address can fix the path. UnsafeWebhookURLError from the
+                    # request stack keeps the same invalid-configuration mapping.
+                    logger.warning('app_install_failure class=setup_configuration')
+                    raise HTTPException(
+                        status_code=422,
+                        detail='This app has an invalid setup endpoint. Contact its developer.',
                     )
-            except (UnsafeWebhookURLError, httpx.InvalidURL):
-                # InvalidURL: a malformed developer URL that survived pinning (e.g. illegal
-                # characters in the path) must not 500 — it is an app misconfiguration.
-                logger.warning('app_install_failure class=setup_configuration')
-                raise HTTPException(
-                    status_code=422,
-                    detail='This app has an invalid setup endpoint. Contact its developer.',
-                )
-            except httpx.RequestError:
+                except httpx.RequestError as exc:
+                    # Multi-A / dual-stack hostnames: try every safe resolved address
+                    # before reporting the setup service unavailable, matching
+                    # HTTPX's normal address fallback that pinning replaced.
+                    logger.info(
+                        f'app setup probe: pinned address unreachable reason={type(exc).__name__}; '
+                        'trying next resolved address'
+                    )
+                    res = None
+                    continue
+            if res is None:
                 logger.warning('app_install_failure class=setup_unavailable')
                 raise HTTPException(
                     status_code=503,
