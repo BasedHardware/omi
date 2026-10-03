@@ -85,6 +85,56 @@ void main() {
         ['unverified', 'repairing', 'reconnecting', 'quiet', 'actionRequired', 'flowing']);
   });
 
+  test('native ownership acquired while the feature gate waits suppresses the legacy episode', () async {
+    final gate = Completer<bool>();
+    final monitor = makeMonitor(featureGate: () => gate.future, withRetry: true);
+    addTearDown(monitor.dispose);
+    zeroSession(monitor);
+    zeroSession(monitor);
+    zeroSession(monitor);
+    monitor.setNativeIngressOwner('dev-a', true);
+    gate.complete(true);
+    await pumpEventQueue();
+    expect(monitor.hasActiveEpisode('dev-a'), isFalse);
+    expect(forEvent('Capture Wedge Detected'), isEmpty);
+    expect(retriedDevices, isEmpty);
+    // Relinquishing native ownership must still allow a later legacy recovery.
+    monitor.setNativeIngressOwner('dev-a', false);
+    zeroSession(monitor);
+    await pumpEventQueue();
+    expect(retriedDevices, ['dev-a']);
+  });
+
+  test('transcript resolves telemetry while preserving the independent ingress failure', () async {
+    var transferRetries = 0;
+    final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+    addTearDown(monitor.dispose);
+    monitor.setNativeIngressOwner('dev-a', true);
+    monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'actionRequired',
+          generation: 'epoch-1',
+          reason: 'exhausted',
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 0,
+        ));
+    for (var i = 0; i < 3; i++) {
+      monitor.onCaptureSessionEnded(connectedSession(monitor), binaryBytesSent: 320);
+    }
+    await pumpEventQueue();
+    expect(transferRetries, 1);
+    monitor.onTranscriptObserved('dev-a');
+    expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+    expect(forEvent('Capture Recovery Resolved').single['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+    for (var i = 0; i < 3; i++) {
+      monitor.onCaptureSessionEnded(connectedSession(monitor), binaryBytesSent: 320);
+    }
+    await pumpEventQueue();
+    expect(transferRetries, 2, reason: 'a new transport outage must not be suppressed by the resolved episode');
+  });
+
   group('zero-byte session streak', () {
     test('two zero-byte sessions do not declare a wedge', () async {
       final monitor = makeMonitor(withRetry: true);

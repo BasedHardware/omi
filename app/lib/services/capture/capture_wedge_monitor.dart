@@ -418,9 +418,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         allowed = false;
       }
     }
-    // Ownership can arrive while the gate was pending (TOCTOU): recheck after
-    // the await, or a legacy episode lands invisibly, blocks later declarations
-    // via _canDeclare, and its recovery exits at the owner guard.
+    // Native may acquire recovery ownership while the feature gate awaits.
     if (!allowed ||
         !_canDeclare(state, trigger) ||
         (_nativeIngressDevices.contains(deviceId) &&
@@ -492,22 +490,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   }
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
-    if (state.episode?.trigger == triggerIngressRecoveryFailed) {
-      // The ingress failure stays (native owns it), but a transcript during
-      // the alert must still release the telemetry slot: native-owned devices
-      // can hold bytes_sent_no_transcript episodes, and an occupied slot
-      // blocks later declarations and transfer retries.
-      state.telemetryEpisode = null;
-      notifyListeners();
-      return;
-    }
-    if (state.episode == null && state.telemetryEpisode == null) return;
-    for (final episode in [state.episode, state.telemetryEpisode]) {
+    // A transcript resolves its transport episode, but cannot prove that
+    // current pendant audio has recovered from an independent ingress fault.
+    final preserveIngress = state.episode?.trigger == triggerIngressRecoveryFailed;
+    final actionable = preserveIngress ? null : state.episode;
+    if (actionable == null && state.telemetryEpisode == null) return;
+    for (final episode in [actionable, state.telemetryEpisode]) {
       if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
         _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
       }
     }
-    state.episode = null;
+    if (!preserveIngress) state.episode = null;
     state.telemetryEpisode = null;
     notifyListeners();
   }

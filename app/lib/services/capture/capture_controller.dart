@@ -780,9 +780,10 @@ class CaptureController extends ChangeNotifier
     final target = authorized && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
     final previous = _ingressDeviceId;
     if (previous != null && previous != target) {
+      // End the local recording identity even if the native revocation fails.
+      _verifiedIngressStartedAt = null;
       await port.setCaptureAuthorized(previous, false);
       _wedgeMonitor.setNativeIngressOwner(previous, false);
-      _verifiedIngressStartedAt = null;
     }
     _ingressDeviceId = target;
     if (target != null) {
@@ -799,9 +800,10 @@ class CaptureController extends ChangeNotifier
       if (health?.verifiedAt(_now()) == true) {
         _verifiedIngressStartedAt ??= _now();
         _recordingTelemetry.markStarted(evidence: 'native_ingress');
-      } else if (health == null) {
-        _verifiedIngressStartedAt = null;
       }
+      // Verification controls visibility, not recording identity. Keep the
+      // original start through a quiet/recovery interval; authorization loss
+      // or a device switch resets it in _setIngressAuthorized.
       _wedgeMonitor.observeIngressHealth(deviceId, health);
     }
     notifyListeners();

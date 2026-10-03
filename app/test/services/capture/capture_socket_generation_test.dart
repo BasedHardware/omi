@@ -120,6 +120,7 @@ class _NoopBle implements CaptureBleListeners {
 class _IngressBle extends ChangeNotifier implements CaptureBleListeners, CaptureIngressPort {
   CaptureIngressHealth? health;
   final authorizations = <bool>[];
+  bool failDeauthorization = false;
   @override
   bool get supportsIngressHealth => true;
   @override
@@ -129,7 +130,11 @@ class _IngressBle extends ChangeNotifier implements CaptureBleListeners, Capture
   @override
   void removeIngressListener(VoidCallback listener) => removeListener(listener);
   @override
-  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async => authorizations.add(authorized);
+  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async {
+    authorizations.add(authorized);
+    if (!authorized && failDeauthorization) throw StateError('native revocation failed');
+  }
+
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) {}
   @override
@@ -170,75 +175,84 @@ class HeldStore implements LocalSegmentStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('real provider authorizes ingress but waits for audio before Recording Started and timer', () async {
-    final dir = await Directory.systemTemp.createTemp('capture-ingress-');
-    final world = await CaptureReplayWorld.boot(tempDir: dir);
-    final ble = _IngressBle();
-    final events = <String>[];
-    try {
-      world.disposeController();
-      world.deviceConnection = ScriptedDeviceConnection();
-      final p = composeCaptureProvider(_deps(
-        world: world,
-        ble: ble,
-        telemetry: RecordingLifecycleTelemetry(
-          emitter: (event, _) => events.add(event),
-          clock: world.clock.now,
-          idFactory: () => 'ingress',
-        ),
-      ));
-      addTearDown(p.dispose);
-      final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
-      await p.streamDeviceRecording(device: device);
-      expect(ble.authorizations, contains(true));
-      expect(p.pendantCaptureVerified, isFalse);
-      world.deviceConnection!.emitSubscriptionFailure();
-      expect(events, contains('Recording Subscription Failed'));
-      expect(p.liveCaptureStartedAt, isNull);
-      expect(events, isNot(contains(RecordingLifecycleTelemetry.startedEvent)));
-      ble.health = CaptureIngressHealth(
-        phase: 'flowing',
-        generation: 'fresh',
-        reason: 'audio_observed',
-        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
-        subscriptionConfirmed: true,
-        unverifiedSinceMs: 0,
-      );
-      ble.notifyListeners();
-      expect(p.pendantCaptureVerified, isTrue);
-      final verifiedAt = world.clock.now();
-      expect(p.liveCaptureStartedAt, verifiedAt);
-      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
-
-      // A lease expiry is a verification lapse, not a new recording: the first
-      // verified time must survive so the timer continues instead of
-      // restarting at zero when audio returns.
-      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
-      expect(p.pendantCaptureVerified, isFalse);
-      expect(p.liveCaptureStartedAt, isNull, reason: 'unverified is still hidden');
-      ble.health = CaptureIngressHealth(
-        phase: 'flowing',
-        generation: 'fresh',
-        reason: 'audio_observed',
-        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
-        subscriptionConfirmed: true,
-        unverifiedSinceMs: 0,
-      );
-      ble.notifyListeners();
-      expect(p.pendantCaptureVerified, isTrue);
-      expect(p.liveCaptureStartedAt, verifiedAt, reason: 'audio returning must not restart the timer');
-      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
-
-      ble.health = null; // ready replay invalidates proof
-      ble.notifyListeners();
-      expect(p.liveCaptureStartedAt, isNull);
-      await p.pauseCapture();
-      expect(ble.authorizations.last, isFalse);
-    } finally {
-      await world.dispose();
-      await dir.delete(recursive: true);
-    }
-  });
+  for (final nativeRevocationFails in [false, true]) {
+    test(
+        'real provider authorizes ingress but waits for audio before Recording Started and timer (revocation failure: $nativeRevocationFails)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('capture-ingress-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      final ble = _IngressBle();
+      final events = <String>[];
+      try {
+        world.disposeController();
+        world.deviceConnection = ScriptedDeviceConnection();
+        final p = composeCaptureProvider(_deps(
+          world: world,
+          ble: ble,
+          telemetry: RecordingLifecycleTelemetry(
+            emitter: (event, _) => events.add(event),
+            clock: world.clock.now,
+            idFactory: () => 'ingress',
+          ),
+        ));
+        addTearDown(p.dispose);
+        final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
+        await p.streamDeviceRecording(device: device);
+        expect(ble.authorizations, contains(true));
+        expect(p.pendantCaptureVerified, isFalse);
+        world.deviceConnection!.emitSubscriptionFailure();
+        expect(events, contains('Recording Subscription Failed'));
+        expect(p.liveCaptureStartedAt, isNull);
+        expect(events, isNot(contains(RecordingLifecycleTelemetry.startedEvent)));
+        ble.health = CaptureIngressHealth(
+          phase: 'flowing',
+          generation: 'fresh',
+          reason: 'audio_observed',
+          validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+          subscriptionConfirmed: true,
+          unverifiedSinceMs: 0,
+        );
+        ble.notifyListeners();
+        expect(p.pendantCaptureVerified, isTrue);
+        expect(p.liveCaptureStartedAt, world.clock.now());
+        expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+        ble.health = null; // ready replay invalidates proof
+        ble.notifyListeners();
+        expect(p.liveCaptureStartedAt, isNull);
+        final firstStartedAt = world.clock.now();
+        world.clock.advanceTo(firstStartedAt.add(const Duration(seconds: 40)));
+        ble.health = CaptureIngressHealth(
+          phase: 'flowing',
+          generation: 'resumed',
+          reason: 'audio_observed',
+          validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+          subscriptionConfirmed: true,
+          unverifiedSinceMs: 0,
+        );
+        ble.notifyListeners();
+        expect(p.liveCaptureStartedAt, firstStartedAt,
+            reason: 'temporary loss of proof hides the timer without restarting the recording');
+        expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+        ble.failDeauthorization = nativeRevocationFails;
+        if (nativeRevocationFails) {
+          await expectLater(p.pauseCapture(), throwsA(isA<StateError>()));
+        } else {
+          await p.pauseCapture();
+        }
+        expect(ble.authorizations.last, isFalse);
+        ble.failDeauthorization = false;
+        // Explicit pause ends authorization even if the native call failed.
+        world.clock.advanceTo(world.clock.now().add(const Duration(seconds: 5)));
+        await p.resumeCapture();
+        if (nativeRevocationFails) await p.streamDeviceRecording(device: device);
+        ble.notifyListeners();
+        expect(p.liveCaptureStartedAt, world.clock.now());
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    });
+  }
 
   test('real provider coalesces concurrent reconnects into one socket open', () async {
     final dir = await Directory.systemTemp.createTemp('c1-join-');
