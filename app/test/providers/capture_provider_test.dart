@@ -97,6 +97,29 @@ TranscriptSegment _segment(String id, String text) {
   );
 }
 
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
+}
+
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
 
@@ -926,6 +949,69 @@ void main() {
 
       // Should trigger a new call
       expect(mockExternalActions.setPeopleCallCount, 2);
+    });
+
+    test('a failed refresh from unknown-person segments reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final actions = MockCaptureExternalActions();
+      final provider = CaptureProvider()..updateExternalActions(actions);
+      provider.segments = [_segmentWithPerson('seed', null)];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
+        expect(actions.setPeopleCallCount, 1);
+        provider.onSegmentReceived([_segmentWithPerson('seg-b', 'seg-person-b')]);
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel);
+        await _flushEventQueue();
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onSegmentReceived([_segmentWithPerson('seg-c', 'seg-person-c')]);
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+    });
+
+    test('a failed refresh from a speaker suggestion reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final actions = MockCaptureExternalActions();
+      final provider = CaptureProvider()..updateExternalActions(actions);
+      provider.segments = [
+        _segmentWithPerson('seg-a', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+        _segmentWithPerson('seg-c', null)..speakerId = 2,
+      ];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 0, personId: 'suggested-a', personName: 'A', segmentId: 'seg-a'));
+        expect(actions.setPeopleCallCount, 1);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel);
+        await _flushEventQueue();
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 2, personId: 'suggested-c', personName: 'C', segmentId: 'seg-c'));
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
     });
   });
 

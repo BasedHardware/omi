@@ -75,6 +75,38 @@ class _NoopBle implements CaptureBleListeners {
   void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
 }
 
+class _ThrowingRemovalActions extends _RecordingActions {
+  _ThrowingRemovalActions(this.error);
+
+  final Object error;
+
+  @override
+  void removeProcessingConversation(String conversationId) => throw error;
+}
+
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
+}
+
 CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
@@ -200,5 +232,50 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted.map((conversation) => conversation.id), ['ready']);
+  });
+
+  test('a failed process request is handled by the in-flight listener without an unhandled zone error', () async {
+    final sentinel = StateError('process-boom');
+    final finalize = Completer<void>();
+    late Completer<CreateConversationResponse?> processGate;
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      process: () => processGate.future,
+    );
+
+    final outcome = await _runInGuardedZone(() async {
+      processGate = Completer<CreateConversationResponse?>();
+      final pending = provider.forceProcessingCurrentConversation();
+      finalize.complete();
+      await pending;
+      processGate.completeError(sentinel);
+      await _flushEventQueue();
+      provider.dispose();
+    });
+
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+  });
+
+  test('a throwing processing-list update does not escape as an unhandled zone error', () async {
+    final sentinel = StateError('remove-boom');
+    final finalize = Completer<void>();
+    final provider = _provider(
+      actions: _ThrowingRemovalActions(sentinel),
+      finalizeGate: finalize,
+      process: () async => null,
+    );
+
+    final outcome = await _runInGuardedZone(() async {
+      final pending = provider.forceProcessingCurrentConversation();
+      finalize.complete();
+      await pending;
+      await _flushEventQueue();
+      provider.dispose();
+    });
+
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
   });
 }

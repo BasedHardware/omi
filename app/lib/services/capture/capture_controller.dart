@@ -3291,6 +3291,8 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
+    }).catchError((Object error) {
+      Logger.debug('Process Now result handling failed: $error');
     });
   }
 
@@ -3434,6 +3436,9 @@ class CaptureController extends ChangeNotifier
       _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
         _peopleRefreshFuture = null;
       });
+      _peopleRefreshFuture?.catchError((Object error) {
+        Logger.debug('People cache refresh failed: $error');
+      });
     }
 
     // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
@@ -3552,6 +3557,9 @@ class CaptureController extends ChangeNotifier
     if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
       _peopleRefreshFuture = externalActions.refreshPeople().whenComplete(() {
         _peopleRefreshFuture = null;
+      });
+      _peopleRefreshFuture?.catchError((Object error) {
+        Logger.debug('People cache refresh failed: $error');
       });
     }
 
