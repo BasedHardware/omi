@@ -7,6 +7,9 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyReplyTokenSanitizer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ProactivityNotificationAdapter.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityCardFeedback.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityFeedConsumer.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityReceiptStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutFlags.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/LegacyContextBucketMigrations.swift
@@ -27,3 +30,9 @@ steps:
   - id: S4
     name: Preserve shared display behavior
     do: "Run xcrun swift test --skip-build --package-path Desktop --filter NotificationDisplayTimerTests and --filter LegacyReplyTokenSanitizerTests. Verify hover pauses the shared display timer and historical reply machine tokens remain hidden. Use floating-bar-functional for live renderer acceptance; unit results alone do not establish visible app acceptance."
+  - id: S5
+    name: Durable consumer receipts and retry
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter ProactivityReceiptStoreTests. Verify one shown receipt across feed/push/relaunch, stable event IDs after a transport failure, owner-switch and sign-out purge, no timeout outcome, and server-clock notification expiry. Tests must use temporary synthetic storage."
+  - id: S6
+    name: Visible feed card and feedback acceptance
+    do: "In an isolated non-production bundle with synthetic feed fixtures, foreground the app and verify a fresh item mounts once in the floating bar. Use the Helpful and Not helpful controls, then open its linked conversation or task; verify opened is emitted only after that target appears. Repeat the item on refresh and after relaunch and verify it is not shown again. Explicit dismissal records dismissed, timeout records nothing, and a queued expired item never renders. Sign out and switch synthetic owners during a delayed response and verify no prior-owner card appears. Use floating-bar-functional for shared renderer acceptance; unit tests alone do not establish this live acceptance."
