@@ -92,6 +92,9 @@ def account_deletion_identity(monkeypatch, fake_firestore, fresh_uid):
             marker.delete()
 
     monkeypatch.setenv("ADMIN_KEY", admin_key)
+    # ADMIN_KEY_AUTH_ENABLED defaults off (fail-closed); this fixture
+    # authenticates via Bearer <ADMIN_KEY><uid>, so opt in explicitly.
+    monkeypatch.setenv("ADMIN_KEY_AUTH_ENABLED", "true")
     clear_marker()
     try:
         yield fresh_uid, {"Authorization": f"Bearer {admin_key}{fresh_uid}"}

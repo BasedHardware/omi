@@ -2,12 +2,17 @@
 
 This directory contains three distinct things:
 
-## 1. `omi-plugin-sdk/` — shared SDK (models only)
+## 1. `omi-plugin-sdk/` — shared SDK (models + HMAC auth)
 
 `omi-plugin-sdk` is a small Python package that owns the Omi webhook
 payload models (`omi_plugin_sdk.models`: `Conversation`, `TranscriptSegment`,
-`ActionItem`, ...). It is intentionally models-only — auth/webhook/FastAPI
-helpers were removed in July 2026.
+`ActionItem`, ...) and shared HMAC auth helpers (`omi_plugin_sdk.auth`).
+
+**Auth rule:** a query/body `uid` is an identity *hint*, not authentication.
+Plugins must call `resolve_authenticated_uid` / `verify_headers` and reject
+unsigned requests. Backend signs outbound plugin calls when
+`OMI_PLUGIN_WEBHOOK_SECRET` is set (`X-Omi-Uid` / `X-Omi-Timestamp` /
+`X-Omi-Signature`).
 
 SDK installation differs by consumer:
 

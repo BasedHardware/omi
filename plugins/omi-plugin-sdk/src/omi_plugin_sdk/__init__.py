@@ -1,5 +1,18 @@
 """Shared Omi plugin SDK."""
 
+from omi_plugin_sdk.auth import (
+    PluginAuthError,
+    SIGNATURE_HEADER,
+    TIMESTAMP_HEADER,
+    UID_HEADER,
+    WEBHOOK_SECRET_ENV,
+    build_auth_headers,
+    get_webhook_secret,
+    resolve_authenticated_uid,
+    sign_payload,
+    verify_headers,
+    verify_payload,
+)
 from omi_plugin_sdk.models import (
     ActionItem,
     ActionItemsExtraction,
@@ -30,8 +43,19 @@ __all__ = [
     "ExternalIntegrationConversationSource",
     "ExternalIntegrationCreateConversation",
     "Geolocation",
+    "PluginAuthError",
     "PluginResult",
+    "SIGNATURE_HEADER",
     "Section",
     "Structured",
+    "TIMESTAMP_HEADER",
     "TranscriptSegment",
+    "UID_HEADER",
+    "WEBHOOK_SECRET_ENV",
+    "build_auth_headers",
+    "get_webhook_secret",
+    "resolve_authenticated_uid",
+    "sign_payload",
+    "verify_headers",
+    "verify_payload",
 ]
