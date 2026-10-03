@@ -154,3 +154,38 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_export_json_stdout(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "Export me", "category": "work", "visibility": "private", "tags": ["python"]}]
+    )
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert len(payload) == 1
+    assert payload[0]["id"] == "m1"
+
+
+def test_memory_export_csv_to_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "CSV export", "category": "work", "visibility": "private", "tags": ["tag1"]}]
+    )
+    out_file = tmp_path / "export.csv"
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "csv", "--output", str(out_file)])
+    assert result.exit_code == 0
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8")
+    assert "id,category,visibility,content,tags" in content
+    assert "m1,work,private,CSV export,tag1" in content
+
+
+def test_memory_export_markdown_stdout(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "Markdown export", "category": "skills", "visibility": "public", "tags": []}]
+    )
+    result = cli_runner.invoke(app, ["memory", "export", "-f", "markdown"])
+    assert result.exit_code == 0
+    assert "type: omi-memories" in result.stdout
+    assert "### Memory `m1`" in result.stdout
+    assert "Markdown export" in result.stdout

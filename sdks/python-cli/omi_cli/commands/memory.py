@@ -1,8 +1,12 @@
 """``omi memory`` — facts and learnings about the user."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Optional
+import csv
+import io
+import json
+import sys
+from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
 from rich.markup import escape
@@ -154,3 +158,120 @@ def delete_memory(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")
+
+
+class ExportFormat(str, Enum):
+    json = "json"
+    csv = "csv"
+    md = "md"
+    markdown = "markdown"
+
+
+def _memories_to_csv(items: list[dict[str, Any]]) -> str:
+    output = io.StringIO()
+    fieldnames = ["id", "category", "visibility", "content", "tags", "created_at", "updated_at"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for item in items:
+        row = dict(item)
+        tags = row.get("tags")
+        if isinstance(tags, list):
+            row["tags"] = ", ".join(str(t) for t in tags)
+        writer.writerow(row)
+    return output.getvalue()
+
+
+def _memories_to_markdown(items: list[dict[str, Any]]) -> str:
+    lines = [
+        "---",
+        "type: omi-memories",
+        f"total: {len(items)}",
+        "---",
+        "",
+        "# Memories Export",
+        "",
+    ]
+    if not items:
+        lines.append("_No memories found._")
+        return "\n".join(lines) + "\n"
+
+    for m in items:
+        m_id = m.get("id", "unknown")
+        cat = m.get("category", "uncategorized")
+        vis = m.get("visibility", "private")
+        content = m.get("content", "")
+        created = m.get("created_at", "")
+        tags = m.get("tags") or []
+        tag_str = ", ".join(f"`#{t}`" for t in tags) if tags else ""
+
+        lines.append(f"### Memory `{m_id}`")
+        lines.append(f"- **Category:** {cat}")
+        lines.append(f"- **Visibility:** {vis}")
+        if created:
+            lines.append(f"- **Created:** {created}")
+        if tag_str:
+            lines.append(f"- **Tags:** {tag_str}")
+        lines.append("")
+        lines.append(content)
+        lines.append("")
+    return "\n".join(lines)
+
+
+@app.command("export", help="Export memories to a file or stdout (JSON, CSV, Markdown).")
+def export_memories(
+    typer_ctx: typer.Context,
+    format: ExportFormat = typer.Option(
+        ExportFormat.json,
+        "--format",
+        "-f",
+        help="Export format (json, csv, md, markdown).",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file path (prints to stdout if omitted).",
+    ),
+    categories: Optional[str] = typer.Option(
+        None,
+        "--categories",
+        help="Comma-separated category filter (e.g. 'work,skills').",
+    ),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    items: list[dict[str, Any]] = []
+    page_size = 100
+    offset = 0
+    with ctx.make_client() as client:
+        while True:
+            params: dict[str, Any] = {"limit": page_size, "offset": offset}
+            if categories:
+                params["categories"] = categories
+            page = client.get("/v1/dev/user/memories", params=params)
+            if not page:
+                break
+            items.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+
+    fmt = format.value.lower()
+    if fmt == "json":
+        content = json.dumps(items, indent=2)
+    elif fmt == "csv":
+        content = _memories_to_csv(items)
+    elif fmt in ("md", "markdown"):
+        content = _memories_to_markdown(items)
+    else:
+        raise UsageError(message=f"Unsupported format: {format}")
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(content, encoding="utf-8")
+        ctx.renderer.success(f"Exported {len(items)} memories to [bold]{escape(str(output))}[/bold]")
+    else:
+        if ctx.renderer.json_mode and fmt == "json":
+            ctx.renderer.emit(items)
+        else:
+            sys.stdout.write(content if content.endswith("\n") else content + "\n")
+            sys.stdout.flush()
