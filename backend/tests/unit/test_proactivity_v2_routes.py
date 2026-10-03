@@ -43,3 +43,12 @@ def test_flag_off_empty_and_store_error_is_503(monkeypatch):
 
         monkeypatch.setattr(routes.proactivity, 'enabled', unavailable)
         assert client.get('/v1/proactivity/feed').status_code == 503
+
+
+def test_mentor_push_keeps_released_client_chat_route():
+    payload = routes.proactivity.push_payload(
+        dict(item_id='item', source_kind='conversation', source_id='source', producer='conversation_mentor_v2')
+    )
+    assert payload['navigate_to'] == '/chat/mentor'
+    assert payload['item_id'] == 'item' and payload['target_id'] == 'source'
+    assert payload['notification_type'] != 'plugin'  # Generic preview must not become a duplicate chat message.

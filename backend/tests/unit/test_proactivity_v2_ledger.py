@@ -120,8 +120,10 @@ def test_push_last_fence_observes_disable(store):
 def test_server_completion_requires_confirmed_followup_exposure(store):
     item = ready(store)
     result = ledger.record_server_outcome(item['item_id'], 'accepted', uid='u', firestore_client=store, now=NOW)
-    assert not result['recorded'] and not result['acted_24h']
+    assert result['recorded'] and not result['acted_24h']
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['outcomes']['accepted']['source'] == 'server'
+    assert not row['delivered']
     outcome(store, item, 'shown')
-    assert ledger.record_server_outcome(item['item_id'], 'accepted', uid='u', firestore_client=store, now=NOW)[
-        'acted_24h'
-    ]
+    repeat = ledger.record_server_outcome(item['item_id'], 'accepted', uid='u', firestore_client=store, now=NOW)
+    assert not repeat['recorded'] and not repeat['acted_24h']

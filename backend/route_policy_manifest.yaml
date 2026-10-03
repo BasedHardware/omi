@@ -3899,7 +3899,7 @@ routes:
       rate_limit:
         policy_name: proactivity:api
         key_subject: uid
-        enforcement: fail_closed
+        enforcement: fail_open
         placement: dependency
       timeout_class: default_method
       surface: first_party_app
@@ -3921,7 +3921,7 @@ routes:
       rate_limit:
         policy_name: proactivity:api
         key_subject: uid
-        enforcement: fail_closed
+        enforcement: fail_open
         placement: dependency
       timeout_class: default_method
       surface: first_party_app

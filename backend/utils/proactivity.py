@@ -149,6 +149,8 @@ async def close_item(*, item: dict[str, Any], state: str, reason: str = '') -> N
         reason=reason,
     )
 
+    logger.info('proactivity_v2_item_terminal producer=%s state=%s reason=%s', item['producer'], state, reason)
+
 
 def decode_feed_item(uid: str, item: dict[str, Any]) -> ProactivityFeedItem:
     content = json.loads(decrypt(item['content'], uid))
@@ -178,6 +180,18 @@ def _push_preferences(uid: str) -> None:
         raise ProactivityDenied('quiet_hours')
 
 
+def push_payload(item: dict[str, Any]) -> dict[str, str]:
+    data = {
+        'notification_type': 'proactivity_v2',
+        'item_id': item['item_id'],
+        'target_kind': item['source_kind'],
+        'target_id': item['source_id'],
+    }
+    if item['producer'] == 'conversation_mentor_v2':
+        data['navigate_to'] = '/chat/mentor'
+    return data
+
+
 async def push_item(*, item: dict[str, Any]) -> None:
     uid, producer = item['uid'], item['producer']
     await ensure_admitted(uid, producer)
@@ -194,12 +208,7 @@ async def push_item(*, item: dict[str, Any]) -> None:
                 body='You have a new update',
                 source=producer,
                 kind=NotificationKind.PROACTIVITY_V2,
-                data={
-                    'notification_type': 'proactivity_v2',
-                    'item_id': claimed['item_id'],
-                    'target_kind': claimed['source_kind'],
-                    'target_id': claimed['source_id'],
-                },
+                data=push_payload(claimed),
             )
         )
         status = 'accepted' if outcome.delivered and outcome.delivered > 0 else 'failed'

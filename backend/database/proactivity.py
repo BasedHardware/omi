@@ -251,9 +251,6 @@ def record_outcome(
             raise ProactivityDenied('not_found')
         pref_ref = user_ref(client, uid).collection(PREFERENCES).document(item['producer'])
         pref = data_at(pref_ref, tx)
-        # Completing a task independently is not evidence of seeing a feed-only suggestion.
-        if surface == 'server' and action == 'accepted' and not item['delivered'] and not item.get('push_accepted_at'):
-            return dict(item_id=item_id, recorded=False, acted_24h=False, negative=item['negative'])
         events = item['outcomes']
         for kind, event in events.items():
             if event['event_id'] == event_id and kind != action:
@@ -261,8 +258,12 @@ def record_outcome(
         response = dict(item_id=item_id, recorded=False, acted_24h=item['acted_24h'], negative=item['negative'])
         if action == 'timeout' or action in events:
             return response
-        # A server reply/completion is proof of exposure, unlike push acceptance alone.
-        if not item['delivered'] and (action == 'shown' or action in POSITIVE):
+        # A mentor reply or client action can prove exposure; independent task completion cannot.
+        confirms_exposure = action == 'shown' or (
+            action in POSITIVE
+            and not (surface == 'server' and action == 'accepted' and not item.get('push_accepted_at'))
+        )
+        if not item['delivered'] and confirms_exposure:
             anchor = item.get('push_accepted_at', now) if surface == 'server' else now
             if anchor > item['created_at'] + timedelta(hours=24) or now > anchor + timedelta(hours=24):
                 raise ProactivityDenied('expired')
@@ -273,7 +274,13 @@ def record_outcome(
                 delivery_channel=channel,
                 delivery_surface=surface,
             )
-        events[action] = dict(event_id=event_id, at=now, surface=surface, channel=channel)
+        events[action] = dict(
+            event_id=event_id,
+            at=now,
+            source='server' if surface == 'server' else 'client',
+            surface=surface,
+            channel=channel,
+        )
         if action in POSITIVE:
             item.setdefault('first_action', action)
             item.setdefault('first_action_at', now)
