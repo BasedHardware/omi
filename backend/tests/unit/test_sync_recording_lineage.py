@@ -1023,12 +1023,19 @@ def coordinator():
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
 
 
-def _drive(module, stubs, chunks, monkeypatch, *, stamp):
+def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
     pipeline = stubs['pipeline']
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
+    wav_path = '/tmp/job-lineage/w.wav'
+
+    def decode(raw_paths, decoded_frames=None):
+        if decoded_frames is not None:
+            decoded_frames[wav_path] = [16000]
+        return [wav_path]
+
+    pipeline.decode_files_to_wav = MagicMock(side_effect=decode)
     pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
+    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
     pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
     pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
     pipeline.users_db = MagicMock()
@@ -1058,12 +1065,20 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
         '_candidate_rows',
         lambda *_args, **_kwargs: candidates,
     )
+    if s1_claims:
+        mapping = {'claim': next(iter(s1_claims.values())), 'offsets': [0, 16000], 'incomplete': False}
+
+        async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
+            return wav_paths, {path: dict(mapping) for path in wav_paths}, False
+
+        monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
     return captured, SimpleNamespace(
         target_conversation_id=stamp,
         client_device_id='pendant',
         recording_session_id=ORIGIN,
         audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
         audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
+        capture_evidence_claims=s1_claims,
     )
 
 
