@@ -23,7 +23,7 @@ from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
-from utils.goals_response import normalize_goal_history_entry
+from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
@@ -2446,6 +2446,7 @@ class UpdateGoalRequest(BaseModel):
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
     """Convert datetime objects to ISO strings for JSON serialization."""
+    goal = normalize_goal_response(goal)
     if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
         goal['created_at'] = goal['created_at'].isoformat()
     if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
@@ -2468,16 +2469,14 @@ def get_goals(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     limit = max(1, min(limit, 1000))
-    if include_inactive:
-        # Pass the clamp down so the response honours the documented limit. The bound is
-        # applied after the in-Python newest-first sort rather than at the query, because a
-        # Firestore order_by('created_at') would silently exclude legacy goals that lack the
-        # field; see get_all_goals.
-        goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
-    else:
-        goals = goals_db.get_user_goals(uid, limit=limit)
-
-    return [_serialize_goal_datetimes(g) for g in goals]
+    return list_developer_goals(
+        uid,
+        limit=limit,
+        include_inactive=include_inactive,
+        goals_db=goals_db,
+        response_model=GoalResponse,
+        logger=logger,
+    )
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
