@@ -11,18 +11,17 @@ enum ProactivityAction { shown, opened, thumbsUp, thumbsDown, dismissed, produce
 
 extension ProactivityActionWire on ProactivityAction {
   String get wire => switch (this) {
-    ProactivityAction.thumbsUp => 'thumbs_up',
-    ProactivityAction.thumbsDown => 'thumbs_down',
-    ProactivityAction.producerDisabled => 'producer_disabled',
-    _ => name,
-  };
+        ProactivityAction.thumbsUp => 'thumbs_up',
+        ProactivityAction.thumbsDown => 'thumbs_down',
+        ProactivityAction.producerDisabled => 'producer_disabled',
+        _ => name,
+      };
 }
 
-typedef OutcomeSender =
-    Future<ApiResult<GeneratedProactivityOutcomeResponse>> Function(
-      String itemId,
-      GeneratedProactivityOutcomeRequest event,
-    );
+typedef OutcomeSender = Future<ApiResult<GeneratedProactivityOutcomeResponse>> Function(
+  String itemId,
+  GeneratedProactivityOutcomeRequest event,
+);
 
 /// Only receipts, never feed content. Writes serialize before network attempts.
 /// Account epochs fence delayed storage, navigation and transport completions.
