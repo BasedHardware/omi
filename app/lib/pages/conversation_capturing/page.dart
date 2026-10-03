@@ -152,6 +152,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
           appBar: ConversationStateAppBar(
+            showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
             sourceLabel: switch (provider.liveCaptureSource) {
@@ -642,6 +643,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool photoChannelActive,
     required bool transcriptionInterrupted,
   }) {
+    if (!provider.pendantCaptureVerified) return '';
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

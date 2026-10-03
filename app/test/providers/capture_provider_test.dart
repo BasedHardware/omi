@@ -558,9 +558,10 @@ void main() {
       device: _device(id: 'omi-1', type: DeviceType.omi),
     );
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties['failure_class'], 'capture_unavailable');
-    expect(events.single.properties['recording_id'], 'recording-device-fail');
+    expect(events.map((event) => event.name),
+        [RecordingLifecycleTelemetry.requestedEvent, RecordingLifecycleTelemetry.startFailedEvent]);
+    expect(events.last.properties['failure_class'], 'capture_unavailable');
+    expect(events.last.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
   });
 
