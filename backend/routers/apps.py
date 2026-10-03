@@ -23,7 +23,7 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import UnsafeWebhookURLError, get_webhook_client, get_webhook_semaphore
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -2244,24 +2244,60 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = _safe_app_from_dict(app)
     if not app:
+        logger.warning('app_install_failure class=missing_app')
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
+        logger.warning('app_install_failure class=disabled')
         raise HTTPException(status_code=400, detail=_disabled_app_install_detail(app, uid))
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
+            logger.warning('app_install_failure class=private_access')
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if app.works_externally() and app.external_integration.setup_completed_url:
-        client = get_webhook_client()
-        setup_url = app.external_integration.setup_completed_url
-        separator = '&' if '?' in setup_url else '?'
-        res = await client.get(f'{setup_url}{separator}uid={uid}')
-        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not _setup_completed_from_response(res):
-            raise HTTPException(status_code=400, detail='App setup is not completed')
-
     # Check payment status
     if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+        logger.warning('app_install_failure class=payment_required')
+        raise HTTPException(
+            status_code=403,
+            detail='This app requires a paid subscription. Complete the purchase on the app page, then try again.',
+        )
+    if app.works_externally():
+        if app.external_integration is None:
+            logger.warning('app_install_failure class=setup_configuration')
+            raise HTTPException(
+                status_code=422,
+                detail='This app is missing its integration setup configuration. Contact its developer.',
+            )
+        if app.external_integration.setup_completed_url:
+            client = get_webhook_client()
+            setup_url = app.external_integration.setup_completed_url
+            separator = '&' if '?' in setup_url else '?'
+            try:
+                async with get_webhook_semaphore():
+                    res = await client.get(f'{setup_url}{separator}uid={uid}')
+            except UnsafeWebhookURLError:
+                logger.warning('app_install_failure class=setup_configuration')
+                raise HTTPException(
+                    status_code=422,
+                    detail='This app has an invalid setup endpoint. Contact its developer.',
+                )
+            except httpx.RequestError:
+                logger.warning('app_install_failure class=setup_unavailable')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if res.status_code != 200:
+                logger.warning(f'app_install_failure class=setup_unavailable status={res.status_code}')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if not _setup_completed_from_response(res):
+                logger.warning('app_install_failure class=setup_incomplete')
+                raise HTTPException(
+                    status_code=400,
+                    detail='App setup is not completed. Open the app setup instructions and connect the required account, then try again.',
+                )
 
     newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
     if (

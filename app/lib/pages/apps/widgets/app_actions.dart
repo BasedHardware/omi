@@ -23,7 +23,9 @@ bool appNeedsDetailToEnable(App app) {
   if (app.isPaid && !app.isUserPaid) return true;
   final integration = app.externalIntegration;
   if (integration == null) return false;
-  return integration.authSteps.isNotEmpty || (integration.setupInstructionsFilePath?.isNotEmpty ?? false);
+  return integration.authSteps.isNotEmpty ||
+      (integration.setupInstructionsFilePath?.isNotEmpty ?? false) ||
+      (integration.setupCompletedUrl?.isNotEmpty ?? false);
 }
 
 /// The one consent question before an app that works outside Omi receives the reader's data.
