@@ -3,7 +3,7 @@
 import json
 import zlib
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
@@ -28,8 +28,34 @@ _MAX_TRANSCRIPT_DECODED_BYTES = 512 * 1024
 _MAX_TRANSCRIPT_SEGMENTS = 4096
 
 
+def _normalize_timeline_datetime(dt: Optional[datetime | str]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        cleaned = dt.strip()
+        if not cleaned:
+            raise ValueError("date string cannot be empty or whitespace")
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid ISO timestamp string: {dt}") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    raise TypeError("date must be a datetime, ISO timestamp string, or None")
+
+
 def _bounded_identity_segments(uid: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Decode only bounded speaker identity fields, never transcript text."""
+    if not isinstance(uid, str) or not uid.strip():
+        return []
+    clean_uid = uid.strip()
+    if not isinstance(data, dict):
+        return []
 
     raw = data.get('transcript_segments')
     if isinstance(raw, list):
@@ -42,7 +68,7 @@ def _bounded_identity_segments(uid: str, data: Dict[str, Any]) -> List[Dict[str,
                 max_encrypted_chars = (((_MAX_TRANSCRIPT_STORED_BYTES * 2) + 28 + 2) // 3) * 4
                 if not raw.isascii() or len(raw) > max_encrypted_chars:
                     return []
-                decrypted_hex = encryption.decrypt(raw, uid)
+                decrypted_hex = encryption.decrypt(raw, clean_uid)
                 if len(decrypted_hex) > _MAX_TRANSCRIPT_STORED_BYTES * 2 or len(decrypted_hex) % 2:
                     return []
                 compressed = bytes.fromhex(decrypted_hex)
@@ -62,7 +88,7 @@ def _bounded_identity_segments(uid: str, data: Dict[str, Any]) -> List[Dict[str,
             ):
                 return []
             parsed = json.loads(decoded.decode('utf-8'))
-        except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error):
+        except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error, KeyError, AttributeError):
             return []
         if not isinstance(parsed, list) or len(parsed) > _MAX_TRANSCRIPT_SEGMENTS:
             return []
@@ -89,8 +115,8 @@ def list_entity_timeline_conversations(
     *,
     db_client: Any,
     limit: int,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[datetime | str] = None,
+    end_date: Optional[datetime | str] = None,
 ) -> List[Dict[str, Any]]:
     """Read one deterministic, completed-conversation window for a timeline.
 
@@ -98,10 +124,22 @@ def list_entity_timeline_conversations(
     most a fixed compressed/expanded byte budget and retains identity fields
     only; transcript text and photos never leave the database boundary.
     """
-
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
+    if db_client is None:
+        raise ValueError("db_client must not be None")
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit must be an integer")
     if limit < 1 or limit > 501:
         raise ValueError('entity timeline conversation limit must be between 1 and 501')
-    collection = db_client.collection('users').document(uid).collection(conversations_collection)
+
+    norm_start = _normalize_timeline_datetime(start_date)
+    norm_end = _normalize_timeline_datetime(end_date)
+    if norm_start is not None and norm_end is not None and norm_start > norm_end:
+        raise ValueError("start_date cannot be after end_date")
+
+    collection = db_client.collection('users').document(clean_uid).collection(conversations_collection)
     query = ENTITY_TIMELINE_CONVERSATIONS_QUERY.build(
         collection,
         {
@@ -110,10 +148,10 @@ def list_entity_timeline_conversations(
         },
         field_filter_factory=FieldFilter,
     )
-    if start_date is not None:
-        query = query.where(filter=FieldFilter('created_at', '>=', start_date))
-    if end_date is not None:
-        query = query.where(filter=FieldFilter('created_at', '<=', end_date))
+    if norm_start is not None:
+        query = query.where(filter=FieldFilter('created_at', '>=', norm_start))
+    if norm_end is not None:
+        query = query.where(filter=FieldFilter('created_at', '<=', norm_end))
     query = (
         query.order_by('created_at', direction=firestore.Query.DESCENDING)
         .order_by('__name__', direction=firestore.Query.DESCENDING)
@@ -125,7 +163,7 @@ def list_entity_timeline_conversations(
         if data is None:
             continue
         data['id'] = snapshot.id
-        data['transcript_segments'] = _bounded_identity_segments(uid, data)
+        data['transcript_segments'] = _bounded_identity_segments(clean_uid, data)
         conversations.append(data)
     return conversations
 
@@ -135,19 +173,31 @@ def list_entity_timeline_meetings(
     *,
     db_client: Any,
     limit: int,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[datetime | str] = None,
+    end_date: Optional[datetime | str] = None,
 ) -> List[Dict[str, Any]]:
     """Read a stable, bounded calendar window through an injected authority."""
-
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
+    if db_client is None:
+        raise ValueError("db_client must not be None")
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit must be an integer")
     if limit < 1 or limit > 501:
         raise ValueError('entity timeline meeting limit must be between 1 and 501')
-    collection = db_client.collection('users').document(uid).collection('meetings')
+
+    norm_start = _normalize_timeline_datetime(start_date)
+    norm_end = _normalize_timeline_datetime(end_date)
+    if norm_start is not None and norm_end is not None and norm_start > norm_end:
+        raise ValueError("start_date cannot be after end_date")
+
+    collection = db_client.collection('users').document(clean_uid).collection('meetings')
     query = ENTITY_TIMELINE_MEETINGS_QUERY.build(collection, {}, field_filter_factory=FieldFilter)
-    if start_date is not None:
-        query = query.where('start_time', '>=', start_date)
-    if end_date is not None:
-        query = query.where('start_time', '<=', end_date)
+    if norm_start is not None:
+        query = query.where('start_time', '>=', norm_start)
+    if norm_end is not None:
+        query = query.where('start_time', '<=', norm_end)
     query = (
         query.order_by('start_time', direction=firestore.Query.DESCENDING)
         .order_by('__name__', direction=firestore.Query.DESCENDING)
@@ -169,23 +219,35 @@ def list_entity_timeline_screen_activity(
     *,
     db_client: Any,
     limit: int,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[datetime | str] = None,
+    end_date: Optional[datetime | str] = None,
 ) -> List[Dict[str, Any]]:
     """Read a deterministic screen-metadata window for exact alias matching."""
-
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
+    if db_client is None:
+        raise ValueError("db_client must not be None")
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit must be an integer")
     if limit < 1 or limit > 501:
         raise ValueError('entity timeline screen limit must be between 1 and 501')
-    collection = db_client.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+
+    norm_start = _normalize_timeline_datetime(start_date)
+    norm_end = _normalize_timeline_datetime(end_date)
+    if norm_start is not None and norm_end is not None and norm_start > norm_end:
+        raise ValueError("start_date cannot be after end_date")
+
+    collection = db_client.collection(USERS_COLLECTION).document(clean_uid).collection(SCREEN_ACTIVITY_COLLECTION)
     query = ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY.build(collection, {}, field_filter_factory=FieldFilter)
-    if start_date is not None:
+    if norm_start is not None:
         query = query.where(
-            filter=firestore.FieldFilter('timestamp', '>=', normalize_screen_activity_timestamp(start_date))
+            filter=firestore.FieldFilter('timestamp', '>=', normalize_screen_activity_timestamp(norm_start))
         )
-    if end_date is not None:
+    if norm_end is not None:
         query = query.where(
             filter=firestore.FieldFilter(
-                'timestamp', '<=', normalize_screen_activity_timestamp(end_date, end_of_second=True)
+                'timestamp', '<=', normalize_screen_activity_timestamp(norm_end, end_of_second=True)
             )
         )
     query = (
@@ -202,3 +264,4 @@ def list_entity_timeline_screen_activity(
         data['id'] = snapshot.id
         rows.append(data)
     return rows
+
