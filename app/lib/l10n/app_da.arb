@@ -3843,5 +3843,22 @@
     "diagnosticsLongestGap": "Længste pause",
     "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
     "diagnosticsLastDuration": "Seneste {duration}",
-    "peopleStatsIncomplete": "Antallene kan være ufuldstændige."
+    "peopleStatsIncomplete": "Antallene kan være ufuldstændige.",
+    "reprocessingConversationProgress": "Samtalen genbehandles…",
+    "conversationReprocessed": "Samtalen er opdateret",
+    "loadingTranscript": "Indlæser transskription…",
+    "transcriptLoadFailed": "Transskriptionen kunne ikke indlæses.",
+    "processingConversationProgress": "Behandler samtalen…",
+    "conversationProcessingFailedMessage": "Samtalen kunne ikke behandles.",
+    "waitForReprocessing": "Vent, til genbehandlingen er færdig.",
+    "unnamedSpeakerLabel": "Taler",
+    "unresolvedSpeakersNotice": "Talerne er ikke adskilt på tværs af optagelser.",
+    "unresolvedSpeakersTitle": "Om taler-mærker",
+    "unresolvedSpeakersMessage": "Omi kunne ikke skelne de andre stemmer på tværs af optagelserne. Tryk på et taler-mærke for at navngive, hvem der taler.",
+    "nameSpeakerTitle": "Navngiv taler",
+    "playbackPreparingAudio": "Forbereder lyd…",
+    "playbackBackToCurrent": "Tilbage til aktuel",
+    "playbackAudioUnavailable": "Lyd ikke tilgængelig",
+    "playbackAudioLoadFailed": "Lyden kunne ikke indlæses",
+    "playbackAudioNetworkFailed": "Tjek forbindelsen"
 }

@@ -96,13 +96,14 @@ def _loaded_notifications() -> Iterator[Tuple[ModuleType, ModuleType, ModuleType
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *_a, **_k: None,
+            send_notification_result=lambda *_a, **_k: 1,
         ),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
         'database.daily_summaries': _module(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
 

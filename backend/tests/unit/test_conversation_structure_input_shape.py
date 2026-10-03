@@ -140,3 +140,93 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
             assert providers[expected].call_args.args[4] == conversation.text_source_spec
         elif text_source == 'other':
             assert providers[expected].call_args.args[1] == conversation.text_source_spec
+
+
+def _blank_capture(stack):
+    now = datetime(2026, 10, 1, 18, 0, tzinfo=timezone.utc)
+    return stack.models.Conversation(
+        id='blank-capture',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=stack.structured.Structured(),
+        transcript_segments=[
+            stack.segments.TranscriptSegment(
+                id='seg-blank', text='   ', speaker='SPEAKER_00', speaker_id=0, is_user=True, start=0, end=3
+            )
+        ],
+        source='omi',
+        status='processing',
+    )
+
+
+def test_empty_capture_is_rule_discarded_before_the_notes_model(stack, processing, monkeypatch):
+    from unittest.mock import Mock
+
+    from utils.conversations import transcript_for_llm
+    from utils.conversations.relevance import decide_relevance
+
+    conversation = stack.models.Conversation(
+        id='empty-capture',
+        created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        structured=stack.structured.Structured(),
+        transcript_segments=[],
+        source='omi',
+        status='processing',
+    )
+    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
+    monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
+    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
+    notes = Mock(side_effect=AssertionError('empty capture reached the notes model'))
+    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
+    decisions = []
+    _structured, discarded = processing._get_structured(
+        'synthetic-uid', 'en', conversation, relevance_observer=decisions.append
+    )
+
+    assert discarded is True
+    notes.assert_not_called()
+    assert [(d.verdict, d.decided_by, d.reason) for d in decisions] == [('discard', 'rule', 'empty_transcript')]
+
+
+def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(stack, processing, monkeypatch):
+    """A user-restored capture whose transcript renders only structural headers
+    keeps through the real relevance path, never reaches the model, and lands on
+    the deterministic minimum title instead of a provider error."""
+    from unittest.mock import Mock
+
+    from utils.conversations import transcript_for_llm
+    from utils.conversations.relevance import decide_relevance
+    from utils.llm import conversation_processing as notes_module
+
+    conversation = _blank_capture(stack)
+    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
+    monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
+    monkeypatch.setattr(processing, 'relevance_arm', lambda *_args: 'nano')
+    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
+    get_llm = Mock(side_effect=AssertionError('content-free capture reached the notes model'))
+    monkeypatch.setattr(notes_module, 'get_llm', get_llm)
+
+    decisions = []
+    structured, discarded = processing._get_structured(
+        'synthetic-uid',
+        'en',
+        conversation,
+        user_kept=True,
+        relevance_observer=decisions.append,
+    )
+
+    assert discarded is False
+    assert structured.title == ''
+    assert [(d.verdict, d.decided_by, d.reason) for d in decisions] == [('keep', 'user', 'restored')]
+    get_llm.assert_not_called()
+
+    restored = processing._get_conversation_obj(
+        'synthetic-uid', structured, conversation, relevance_discarded=discarded
+    )
+    assert restored.discarded is False
+    assert restored.structured.title.startswith('Recording · ')

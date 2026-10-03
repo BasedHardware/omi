@@ -11358,5 +11358,22 @@
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
     "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
     "diagnosticsLastDuration": "শেষ {duration}",
-    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।"
+    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।",
+    "reprocessingConversationProgress": "কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…",
+    "conversationReprocessed": "কথোপকথন আপডেট হয়েছে",
+    "loadingTranscript": "ট্রান্সক্রিপ্ট লোড হচ্ছে…",
+    "transcriptLoadFailed": "ট্রান্সক্রিপ্ট লোড করা যায়নি।",
+    "processingConversationProgress": "কথোপকথন প্রক্রিয়া করা হচ্ছে…",
+    "conversationProcessingFailedMessage": "এই কথোপকথনটি প্রক্রিয়া করা যায়নি।",
+    "waitForReprocessing": "পুনরায় প্রক্রিয়াকরণ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।",
+    "unnamedSpeakerLabel": "স্পিকার",
+    "unresolvedSpeakersNotice": "রেকর্ডিং জুড়ে স্পিকাররা আলাদা করা হয়নি।",
+    "unresolvedSpeakersTitle": "স্পিকার লেবেল সম্পর্কে",
+    "unresolvedSpeakersMessage": "রেকর্ডিং জুড়ে Omi অন্য কণ্ঠস্বরগুলো আলাদা করতে পারেনি। কে কথা বলছে তা নাম দিতে স্পিকার লেবেলে ট্যাপ করুন।",
+    "nameSpeakerTitle": "স্পিকারের নাম দিন",
+    "playbackPreparingAudio": "অডিও প্রস্তুত হচ্ছে…",
+    "playbackBackToCurrent": "বর্তমানে ফিরে যান",
+    "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
+    "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
+    "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন"
 }

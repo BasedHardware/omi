@@ -1762,17 +1762,22 @@ _add(
 
 
 def _seed_daily_summary_recipient(client, combo, trial):
-    """Queue one recipient so the per-user ``fcm_tokens`` stream executes.
-
-    The consume-once queues feed the recipients query (one matched user, whose
-    ``fcm_token`` legacy field doubles as the non-subcollection token source)
-    and then the nested ``users/{uid}/fcm_tokens`` stream.
-    """
+    """Queue a due owner; tokens are now resolved after generation guards."""
     client.queue_results([client.snapshot(f'users/{UID}', {'fcm_token': 'legacy-1'})])
+
+
+def _seed_notification_recipient_with_tokens(client, combo, trial):
+    _seed_daily_summary_recipient(client, combo, trial)
     client.queue_results([])
 
 
-_add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.notifications.get_all_tokens',
+        base={'uid': UID},
+        domains={'user_document_loaded': [False, True], 'legacy_token': [None, 'legacy-1']},
+    )
+)
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',
@@ -1784,14 +1789,14 @@ _add(
     DriverEntry(
         'database.notifications.get_users_id_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(
     DriverEntry(
         'database.notifications.get_users_token_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(DriverEntry('database.notifications.remove_bulk_tokens', base={'tokens': ['token-1', 'token-2']}))

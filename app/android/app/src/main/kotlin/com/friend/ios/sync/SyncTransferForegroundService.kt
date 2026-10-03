@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.friend.ios.fgs.ForegroundStartContract
@@ -32,12 +33,15 @@ class SyncTransferForegroundService : Service() {
     companion object {
         private const val TAG = "SyncTransfer.FgService"
         private const val EXTRA_TEXT = "notification_text"
+        private const val ACTION_STOP = "com.friend.ios.sync.STOP"
+        @Volatile private var cancellationRequested = false
 
         /**
          * Promote the service to the foreground and hold a partial wake lock.
          * Returns whether the OS accepted the start; Dart treats a rejection
          * as non-fatal (transfer continues without OS keep-alive).
          */
+        @MainThread
         fun start(context: Context, text: String? = null): Boolean {
             return try {
                 val intent = Intent(context, SyncTransferForegroundService::class.java)
@@ -45,6 +49,7 @@ class SyncTransferForegroundService : Service() {
                     intent.putExtra(EXTRA_TEXT, text)
                 }
                 ContextCompat.startForegroundService(context, intent)
+                cancellationRequested = false
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start sync-transfer foreground service", e)
@@ -52,9 +57,20 @@ class SyncTransferForegroundService : Service() {
             }
         }
 
+        @MainThread
         fun stop(context: Context) {
+            // Retain cancellation even if a background-policy change rejects
+            // the queued command. A pending START still promotes before it
+            // observes this flag and shuts down without acquiring a wake lock.
+            cancellationRequested = true
             try {
-                context.stopService(Intent(context, SyncTransferForegroundService::class.java))
+                // stopService can cancel an accepted foreground start before
+                // its callbacks run. Android 16 then crashes the process even
+                // if onCreate subsequently calls startForeground. Deliver stop
+                // in the same command queue so promotion always precedes it.
+                context.startService(
+                    Intent(context, SyncTransferForegroundService::class.java).setAction(ACTION_STOP)
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to stop sync-transfer foreground service: ${e.message}")
             }
@@ -87,18 +103,28 @@ class SyncTransferForegroundService : Service() {
             } else {
                 startForeground(SyncTransferKeepAlivePolicy.NOTIFICATION_ID, notification)
             }
+            Log.d(TAG, "Foreground promotion accepted")
         } catch (e: Exception) {
             Log.e(TAG, "Cold-start startForeground failed", e)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Each accepted start has a foreground obligation, including a start
+        // delivered to an existing instance or immediately followed by stop.
+        promoteColdStart()
+        if (intent?.action == ACTION_STOP || cancellationRequested) {
+            // A newer queued start owns the service; an older cancellation
+            // must not tear down its notification or wake lock.
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         // Replace the immediate shortService notification with dataSync for
         // the transfer lifetime. A rejected type retries shortService before
         // stopping, including when the early promotion could not complete.
         val notification = buildNotification(intent?.getStringExtra(EXTRA_TEXT))
         if (!promoteToForeground(notification)) {
-            stopSelf()
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
         acquireWakeLock()
@@ -135,7 +161,7 @@ class SyncTransferForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Flutter dies with the task; do not leave a sync notification behind.
-        stopSelf()
+        stop(this)
         super.onTaskRemoved(rootIntent)
     }
 
