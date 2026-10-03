@@ -23,9 +23,11 @@ import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/expandable_text.dart';
+import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// The conversation detail's Transcript tab: the speaker-summary action, then the transcript (or
@@ -84,6 +86,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       segments,
       people: people,
       l10n: context.l10n,
+      unresolved: provider.conversation.speakerResolution?.status == 'unavailable',
     ).forSegment(segment);
     PlatformManager.instance.analytics.editSegmentTextStarted();
     bool saved = false;
@@ -113,6 +116,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       speakerId: speakerId,
       segmentId: segmentId,
       segments: provider.conversation.transcriptSegments,
+      unresolvedSpeakers: provider.conversation.speakerResolution?.status == 'unavailable',
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         return _startSpeakerAssignment(
           provider,
@@ -340,27 +344,98 @@ class _TranscriptHeading extends StatelessWidget {
 
   final ServerConversation conversation;
 
+  /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
+  /// "others" rule.
+  static int? _speakerCount(ServerConversation conversation) {
+    final resolution = conversation.speakerResolution;
+    if (resolution == null || !resolution.countable) return null;
+    final segments = conversation.transcriptSegments;
+    final ownerIds = {
+      for (final segment in segments)
+        if (segment.isUser) segment.speakerId
+    };
+    final personIdsBySpeaker = <int, Set<String>>{};
+    for (final segment in segments) {
+      if (segment.isUser || segment.speakerId == omiSpeakerId) continue;
+      final personId = segment.personId;
+      if (personId != null && personId.trim().isNotEmpty) {
+        personIdsBySpeaker.putIfAbsent(segment.speakerId, () => {}).add(personId);
+      }
+    }
+    final voices = <String>{};
+    for (final rawId in resolution.participantSpeakerIds.toSet()) {
+      if (ownerIds.contains(rawId) || rawId == omiSpeakerId) continue;
+      final personIds = personIdsBySpeaker[rawId];
+      if (personIds == null || personIds.isEmpty) {
+        voices.add('speaker-$rawId');
+      } else {
+        voices.addAll(personIds.map((id) => 'person-$id'));
+      }
+    }
+    return voices.length + (ownerIds.isEmpty ? 0 : 1);
+  }
+
+  static bool _hasUnnamedVoice(ServerConversation conversation, List<Person> people) {
+    if (conversation.speakerResolution?.status != 'unavailable') return false;
+    return conversation.transcriptSegments.any((segment) {
+      if (segment.isUser || segment.speakerId == omiSpeakerId) return false;
+      final person = personById(people, segment.personId);
+      return person == null || person.name.trim().isEmpty;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final voices = {
-      for (final segment in conversation.transcriptSegments) segment.isUser ? 'owner' : 'speaker-${segment.speakerId}',
-    };
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    final count = _speakerCount(conversation);
     final duration = conversationDurationLabel(conversation, l10n);
     final label = [
       l10n.transcript,
       if (duration.isNotEmpty) duration,
-      l10n.transcriptSpeakerCount(voices.length),
+      if (count != null) l10n.transcriptSpeakerCount(count),
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: ConversationDetailChip(
-          key: const Key('conversation_transcript_heading'),
-          icon: const Icon(Icons.notes),
-          label: label,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: ConversationDetailChip(
+              key: const Key('conversation_transcript_heading'),
+              icon: const Icon(Icons.notes),
+              label: label,
+            ),
+          ),
+          if (_hasUnnamedVoice(conversation, people))
+            InkWell(
+              key: const Key('transcript_unresolved_speakers_notice'),
+              onTap: () => showOmiSheet<void>(
+                context: context,
+                title: context.l10n.unresolvedSpeakersTitle,
+                builder: (sheetContext) => SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                    child: Text(
+                      sheetContext.l10n.unresolvedSpeakersMessage,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ),
+                ),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    l10n.unresolvedSpeakersNotice,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
