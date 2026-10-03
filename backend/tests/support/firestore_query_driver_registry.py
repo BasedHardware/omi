@@ -124,6 +124,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
+    'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
+    'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
     'database.proactivity.cohort_query': 'b14c1c6f3a2f47db38dd468da1bf6b51054d27e6418d813a614cc5b9e1a7a698',
     'database.proactivity.feed_query': '9426ea3253186857c638371d1bcebb7007b92a9430aaad1db5e49e96465ddb84',
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
@@ -491,6 +494,7 @@ _add(
         'database.chat.add_app_message',
         base={'text': 'shape-text', 'app_id': 'app-1', 'uid': UID},
         domains={'conversation_id': [None, 'conv-1']},
+        neutrals={'proactivity_item_id': (None, 'internal message mapping only; does not change query shape')},
     )
 )
 _add(
@@ -2506,7 +2510,7 @@ _add(
         covered_by=('database.proactivity_producers.delivered_mentor_items',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='bfeda8200c63abd13036317d112a6f27d8367f0d246c395bb9331c6a8de57fe3',
+        body_digest=BODY_DIGEST['database.proactivity_producers.mentor_history_query'],
     )
 )
 
@@ -2516,7 +2520,7 @@ _add(
         covered_by=('database.proactivity_producers.record_mentor_reply',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='6f5a40a51a64b70602500589d9493395d87cf696ea2528d95a5e2b6b411c3803',
+        body_digest=BODY_DIGEST['database.proactivity_producers.recent_mentor_query'],
     )
 )
 
@@ -2526,6 +2530,6 @@ _add(
         covered_by=('database.proactivity_producers.record_task_completion',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='1b1d3cbd9bc4897e195a6978308aeeffc86e94f79bca9762971583e180fcede3',
+        body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
     )
 )
