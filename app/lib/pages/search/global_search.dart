@@ -13,7 +13,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
+import 'package:omi/pages/action_items/task_page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
@@ -589,7 +589,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               title: task.description,
               onTap: () {
                 _remember(_query.text);
-                showActionItemFormSheet(context, actionItem: task);
+                openTaskPage(context, task);
               },
             ),
         ],

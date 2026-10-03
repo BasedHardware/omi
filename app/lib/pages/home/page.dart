@@ -7,6 +7,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -894,37 +895,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  /// Export and the completed toggle, beside the switcher while Tasks is showing.
+  /// One ⋯ beside the switcher while Tasks is showing: the same anchored menu as the conversation
+  /// page, with Task Integrations (export) and the multi-select entries.
   Widget _buildTasksActions(BuildContext context) {
     return Consumer<ActionItemsProvider>(
-      builder: (context, actionItemsProvider, _) {
-        final showCompleted = actionItemsProvider.showCompletedView;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
-              icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
+      builder: (context, tasks, _) {
+        // Paywalled tasks can't be acted on, so they don't count towards "all".
+        final hasItems = tasks.selectableItems.isNotEmpty;
+        final allSelected = tasks.allSelectableSelected;
+        return PullDownButton(
+          itemBuilder: (context) => [
+            PullDownMenuItem(
+              title: context.l10n.taskIntegrations,
+              iconWidget: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 18),
               onTap: () {
                 OmiHaptics.selection();
                 PlatformManager.instance.analytics.exportTasksBannerClicked();
                 routeToPage(context, const TaskIntegrationsPage());
               },
             ),
-            HeaderCircleButton(
-              semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
-              icon: FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                size: 16,
-                color: showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary,
-              ),
+            const PullDownMenuDivider.large(),
+            PullDownMenuItem(
+              title: context.l10n.selectActionItems,
+              icon: Icons.check_box_outlined,
+              enabled: hasItems,
               onTap: () {
                 OmiHaptics.light();
-                actionItemsProvider.toggleShowCompletedView();
+                primaryFocus?.unfocus();
+                tasks.startSelection();
+              },
+            ),
+            PullDownMenuItem(
+              title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
+              icon: allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+              enabled: hasItems,
+              onTap: () {
+                OmiHaptics.light();
+                primaryFocus?.unfocus();
+                if (allSelected) {
+                  tasks.clearSelection();
+                } else {
+                  // Every page, not just the loaded one; paywalled tasks stay out.
+                  unawaited(tasks.selectAllTasks());
+                }
               },
             ),
           ],
+          buttonBuilder: (context, showMenu) => HeaderCircleButton(
+            semanticLabel: context.l10n.moreOptions,
+            icon: Icon(Icons.more_horiz_rounded, size: 20, color: OmiColors.textSecondary),
+            onTap: () {
+              OmiHaptics.selection();
+              showMenu();
+            },
+          ),
         );
       },
     );
