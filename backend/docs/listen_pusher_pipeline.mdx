@@ -2376,6 +2376,21 @@ No new Firestore operations, authoritative replay suppression, scene grouping
 or effects are introduced by this stage. Exact mixed-channel audio and legacy
 uploads remain unsupported.
 
+`LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED` defaults on (typos off), but still
+requires separate `CAPTURE_EVIDENCE_V1_DARK_WRITE` admission. Live transcript
+writes now piggyback only whole source frames covered by the fresh transcript's
+exact provider capture-sample ranges, cumulatively acknowledged per generation.
+Receipt wall-time anchors plus bounded root/epoch high-water history accompany
+the `committed_transcript_v1` proof. The proof and speech land in the same
+transaction; missing/unplaced samples, receipt or history conflicts, bounds
+overflow, and failed commits cannot authorize suppression. Flag off writes the
+legacy receipt-only snapshot. Receipt-only evidence never authorizes audio or
+lexical suppression. The committed-coverage consumer and S1-gated lineage
+binding are not enabled by this producer alone. Deploying the producer requires
+the backend-listen image and matching dev/prod Helm values with
+`LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the
+root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
+
 ### Translation admission and output truthfulness
 
 After connect preferences load, `TranscriptProcessor` construction binds the

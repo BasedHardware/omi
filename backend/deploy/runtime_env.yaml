@@ -23,6 +23,9 @@ environments:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -459,6 +462,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -2085,6 +2091,9 @@ environments:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -2537,6 +2546,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
