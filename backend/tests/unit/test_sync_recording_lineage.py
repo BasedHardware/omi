@@ -171,6 +171,69 @@ def texts(store, cid):
     return [segment['text'] for segment in store.rows[('users', 'u', 'conversations', cid)]['transcript_segments']]
 
 
+PROOF_ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
+PROOF_FRAMES = 500000
+PROOF_SPF = 160
+
+
+def prove(chunk, store, row_id):
+    """Pair sync_vad receipts for the chunk with live runs on its target row.
+
+    The new dedupe drops only with independent source-frame capture proof, so
+    replays that intentionally exercise suppression furnish the paired evidence
+    explicitly; unproven wording is kept as legitimate repetition.
+    """
+    for i, segment in enumerate(chunk['transcript_segments']):
+        segment.setdefault('id', f"{chunk['id']}-seg-{i}")
+    chunk['capture_evidence'] = {
+        'version': 1,
+        'capability': 'source_position',
+        'coverage': 'mapped',
+        'origin': 'sync_vad',
+        'receipts': [
+            {
+                'segment_id': segment['id'],
+                'capture_root': PROOF_ROOT,
+                'clock_epoch': 7,
+                'channel': 'mono',
+                'source_start_frame': i * 1000,
+                'source_start_offset': 0,
+                'source_end_frame': i * 1000 + 999,
+                'source_end_offset': 0,
+                'rate_hz': 16000,
+                'producer_revision': 'sync_vad_stt_v1',
+            }
+            for i, segment in enumerate(chunk['transcript_segments'])
+        ],
+    }
+    store.rows[('users', 'u', 'conversations', row_id)]['capture_evidence'] = {
+        'version': 1,
+        'capability': 'source_position',
+        'coverage': 'mapped',
+        'origin': 'live',
+        'conflicts': 0,
+        'runs': [
+            {
+                'capture_root': PROOF_ROOT,
+                'clock_epoch': 7,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'source_frame_start': 0,
+                'source_frame_end': PROOF_FRAMES,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': PROOF_FRAMES * PROOF_SPF,
+                'samples_per_frame': PROOF_SPF,
+            }
+        ],
+    }
+
+
+def replay_proven(store, chunks, targets):
+    for chunk in chunks:
+        prove(chunk, store, targets[chunk['id']])
+    return replay(store, chunks, targets)
+
+
 # --- Synthetic replay -------------------------------------------------------
 
 
@@ -202,7 +265,8 @@ def test_unstamped_batch_is_split_across_the_generations_that_own_its_audio():
 def test_replay_has_no_repeated_speech_when_live_and_sync_wording_match():
     store = seeded_store()
     for chunks, stamp in ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None)):
-        replay(store, chunks, plan(store, chunks, stamp=stamp).targets)
+        targets = plan(store, chunks, stamp=stamp).targets
+        replay_proven(store, chunks, targets)
     for k in (L, L + 1, L + 2):
         assert len(texts(store, gen_id(k))) == len(set(texts(store, gen_id(k))))
 
@@ -231,12 +295,12 @@ def test_retry_binds_the_same_rows_and_appends_nothing_new():
     uploads = ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None))
     first = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
     for (chunks, _), targets in zip(uploads, first):
-        replay(store, chunks, targets)
+        replay_proven(store, chunks, targets)
     snapshot = deepcopy(store.rows)
     again = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
     assert again == first
     for (chunks, _), targets in zip(uploads, again):
-        for _, created, survivors in replay(store, chunks, targets):
+        for _, created, survivors in replay_proven(store, chunks, targets):
             assert not created and not survivors
     conversation_rows = lambda rows: {k: v for k, v in rows.items() if k[2] == 'conversations'}  # noqa: E731
     assert {k: v['transcript_segments'] for k, v in conversation_rows(store.rows).items()} == {

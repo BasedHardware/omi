@@ -23,11 +23,13 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.relevance_rules import deterministic_relevance
+from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.live_speech_dedupe import (
+    MAX_LIVE_SEGMENTS,
     append_alignment_method,
     bounded_span_seconds,
     drop_covered_repeats,
-    drop_exact_retries,
+    drop_proven_exact_retries,
     pinned_audio_timeline,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
@@ -409,19 +411,34 @@ def assign_in_transaction(
             and sync_live_dedupe_active_for(user_ref.id)
         )
         if live_dedupe and plan_target is not None and live_row is not None:
+            verified = capture_covered_indices(
+                new,
+                incoming.get('capture_evidence'),
+                live_row.get('capture_evidence'),
+            )
             lexical_kept, dedupe_report = drop_covered_repeats(
                 new,
                 live_row.get('transcript_segments', []),
                 live_origin=plan_target['started_at'].timestamp(),
                 live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
+                verified_capture_indices=verified,
             )
             live_origin = plan_target['started_at'].timestamp()
-            live_stored = [
-                dict(segment, timestamp=live_origin + segment['start'])
-                for segment in live_row.get('transcript_segments', [])
-                if isinstance(segment.get('start'), (int, float))
-            ]
-            survivors, exact_retries, sync_retry = drop_exact_retries(lexical_kept, live_stored)
+            raw_live_segments = live_row.get('transcript_segments') or []
+            if len(raw_live_segments) > MAX_LIVE_SEGMENTS:
+                survivors, exact_retries, sync_retry = list(lexical_kept), 0, False
+            else:
+                live_stored = [
+                    dict(segment, timestamp=live_origin + segment['start'])
+                    for segment in raw_live_segments
+                    if isinstance(segment.get('start'), (int, float))
+                ]
+                lexical_kept_ids = {id(segment) for segment in lexical_kept}
+                survivors, exact_retries, sync_retry = drop_proven_exact_retries(
+                    [(index, segment) for index, segment in enumerate(new) if id(segment) in lexical_kept_ids],
+                    live_stored,
+                    verified_indices=verified,
+                )
             live_stats = {
                 'report': dedupe_report,
                 'exact_retries': exact_retries,

@@ -4,9 +4,14 @@ A WAL is uploaded whole whenever any frame missed the socket, so a segment bound
 to a live generation (``utils/sync/recording_lineage.py``) can re-upload speech
 the socket already transcribed, reworded by a second STT pass. When this switch
 is on, ``utils/sync/live_speech_dedupe.py`` drops an incoming segment only when
-a bounded live window lexically covers it, then applies a safe exact-retry
-pass (identical normalized text plus identical absolute range or segment id);
-anything ambiguous is kept.
+``utils/sync/capture_repeat_evidence.py`` independently proves its full
+source-frame coverage (a unique ``sync_vad`` receipt whose touched frames the
+live row's ``origin=live`` snapshot positively covers) AND a bounded live
+window lexically covers it; lexical or exact-range text alone never
+suppresses — an unproven identical utterance is legitimate repetition. The
+exact-retry pass then drops identical normalized text plus identical absolute
+range or segment id only for a capture-proven segment or one sharing the
+stored line's nonempty ``sync:`` scope; anything ambiguous is kept.
 
 ``SYNC_LINEAGE_LIVE_DEDUPE_ENABLED`` unset or blank means on. Only an explicit
 on-token keeps it on when set; every other value — including a mistyped kill

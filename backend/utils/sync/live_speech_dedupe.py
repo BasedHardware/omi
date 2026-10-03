@@ -4,8 +4,9 @@ Live and sync transcribe the same audio with different wording, so the existing
 exact-text/exact-range merge dedupe cannot drop a reworded repeat. There is no
 reliable constant offset between WAL and live clocks, so this helper never
 rewrites timestamps and never drops on time coverage alone: an incoming segment
-is dropped only when a contiguous window of canonical live segments in its time
-neighborhood lexically covers every substantive incoming token.
+is dropped only when its capture is independently proven (``verified_capture_indices``)
+AND a contiguous window of canonical live segments in its time neighborhood
+lexically covers every substantive incoming token.
 
 Live windows come from at most three chronologically adjacent live segments.
 Their time span is the segment's ``audio_capture_start``/``audio_capture_end``
@@ -24,12 +25,14 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from difflib import SequenceMatcher
 from typing import Optional
 
 MAX_MIDPOINT_DISTANCE_SECONDS = 1800.0
 MAX_INCOMING_SEGMENTS = 64
+MAX_LIVE_SEGMENTS = 4096
 MAX_CANDIDATE_SEGMENTS = 128
 MAX_WINDOWS_EVALUATED = 16
 MIN_INCOMING_TOKENS = 8
@@ -243,20 +246,83 @@ def drop_exact_retries(incoming_segments: list[dict], existing_segments: list[di
     return kept, dropped, sync_retry
 
 
+def drop_proven_exact_retries(
+    indexed_incoming: list[tuple[int, dict]],
+    existing_segments: list[dict],
+    *,
+    verified_indices: frozenset[int] = frozenset(),
+) -> tuple[list[dict], int, bool]:
+    """Exact-retry pass restricted to capture-proven or same-scope evidence.
+
+    ``indexed_incoming`` pairs each kept incoming segment with its original
+    intake index. A capture-proven index may exact-retry against all canonical
+    segments; an unproven one only ever compares against stored lines carrying
+    the identical nonempty ``sync:`` scope (file or segment-hash granularity),
+    so unproved live text, ranges and bare ids are never the drop authority.
+    More than ``MAX_LIVE_SEGMENTS`` existing or ``MAX_INCOMING_SEGMENTS``
+    incoming rows bounds the pools before any matching: unproven segments then
+    keep untouched without tokenizing.
+    """
+    if len(existing_segments) > MAX_LIVE_SEGMENTS:
+        return [segment for _, segment in indexed_incoming], 0, False
+    oversized = len(indexed_incoming) > MAX_INCOMING_SEGMENTS
+    bounded_existing = existing_segments
+    scoped_existing: dict[str, list[dict]] = {}
+    for existing in bounded_existing:
+        scope = str(existing.get('speaker_id_scope') or '')
+        if scope.startswith('sync:'):
+            scoped_existing.setdefault(scope, []).append(existing)
+    survivors: list[dict] = []
+    retries = 0
+    sync_retry = False
+    for index, segment in indexed_incoming[:MAX_INCOMING_SEGMENTS]:
+        if index in verified_indices:
+            pool = bounded_existing
+        elif oversized:
+            survivors.append(segment)
+            continue
+        else:
+            scope = str(segment.get('speaker_id_scope') or '')
+            pool = scoped_existing.get(scope, []) if scope.startswith('sync:') else []
+        kept, dropped, retry = drop_exact_retries([segment], pool)
+        retries += dropped
+        sync_retry = sync_retry or retry
+        survivors.extend(kept)
+    survivors.extend(segment for _, segment in indexed_incoming[MAX_INCOMING_SEGMENTS:])
+    return survivors, retries, sync_retry
+
+
+def _zero_report() -> dict:
+    return {
+        'dropped_seconds': 0.0,
+        'dropped_segments': 0,
+        'evaluated_segments': 0,
+        'methods': [],
+        'alignment_method': 'none',
+        'repeat_only': False,
+    }
+
+
 def drop_covered_repeats(
     incoming_segments: list[dict],
     live_segments: list[dict],
     *,
     live_origin: float,
     live_pinned: bool,
+    verified_capture_indices: frozenset[int] = frozenset(),
 ) -> tuple[list[dict], dict]:
     """Return (kept incoming segments, drop report) for one bound intake.
 
-    The report carries ``dropped_seconds``, the per-drop ``methods`` and
-    ``repeat_only`` (every evaluated incoming segment was covered). Callers own
-    telemetry aggregation; nothing here mutates the inputs.
+    Only ``verified_capture_indices`` — incoming segments whose full source
+    frame coverage is independently proven by S1 capture evidence — may drop;
+    every other incoming segment is kept before any candidate work. The report
+    carries ``dropped_seconds``, the per-drop ``methods`` and ``repeat_only``
+    (every evaluated incoming segment was covered). Callers own telemetry
+    aggregation; nothing here mutates the inputs.
     """
-    live = []
+    if not verified_capture_indices or len(live_segments) > MAX_LIVE_SEGMENTS:
+        return list(incoming_segments), _zero_report()
+    live_index = []
     for segment in live_segments:
         if not _eligible_live(segment):
             continue
@@ -264,8 +330,12 @@ def drop_covered_repeats(
         text = segment.get('text') or ''
         if bounds is None or len(text) > MAX_CHARS:
             continue
-        live.append((bounds, segment, _tokens(text)))
-    live.sort(key=lambda item: (item[0][0], item[0][1], item[1].get('text') or ''))
+        midpoint = (bounds[0] + bounds[1]) / 2
+        if not math.isfinite(midpoint):
+            continue
+        live_index.append((midpoint, bounds, segment))
+    live_index.sort(key=lambda item: (item[0], item[1][0], item[1][1], item[2].get('text') or ''))
+    midpoints = [item[0] for item in live_index]
 
     kept: list[dict] = []
     dropped_seconds = 0.0
@@ -274,6 +344,9 @@ def drop_covered_repeats(
     evaluated = 0
     for index, segment in enumerate(incoming_segments):
         if index >= MAX_INCOMING_SEGMENTS:
+            kept.append(segment)
+            continue
+        if index not in verified_capture_indices:
             kept.append(segment)
             continue
         evaluated += 1
@@ -291,14 +364,18 @@ def drop_covered_repeats(
         if not math.isfinite(midpoint):
             kept.append(segment)
             continue
+        low = bisect_left(midpoints, midpoint - MAX_MIDPOINT_DISTANCE_SECONDS)
+        high = bisect_right(midpoints, midpoint + MAX_MIDPOINT_DISTANCE_SECONDS)
+        if high - low > MAX_CANDIDATE_SEGMENTS:
+            kept.append(segment)
+            continue
         nearby = sorted(
             (
-                (abs((bounds[0] + bounds[1]) / 2 - midpoint), bounds, segment_live, live_tokens)
-                for bounds, segment_live, live_tokens in live
-                if abs((bounds[0] + bounds[1]) / 2 - midpoint) <= MAX_MIDPOINT_DISTANCE_SECONDS
+                (abs(item[0] - midpoint), item[1], item[2], _tokens(item[2].get('text') or ''))
+                for item in live_index[low:high]
             ),
             key=lambda item: (item[0], item[1][0], item[1][1], item[2].get('text') or ''),
-        )[:MAX_CANDIDATE_SEGMENTS]
+        )
         windows = []
         chronological = sorted(nearby, key=lambda item: (item[1][0], item[1][1], item[2].get('text') or ''))
         for start_index in range(len(chronological)):
@@ -358,11 +435,7 @@ def drop_covered_repeats(
             continue
         dropped_count += 1
         dropped_seconds += incoming_duration
-        methods.append(
-            'capture_window'
-            if all(part[1][2] == 'capture_window' for part in matched)
-            else 'content_window' if all(part[1][2] == 'content_window' for part in matched) else 'mixed'
-        )
+        methods.append('source_frame_lexical')
     report = {
         'dropped_seconds': dropped_seconds,
         'dropped_segments': dropped_count,

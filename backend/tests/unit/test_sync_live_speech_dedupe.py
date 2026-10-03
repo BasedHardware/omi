@@ -1,6 +1,7 @@
 """Lexical repeat coverage for safety-WAL segments bound to a live row.
 
-``drop_covered_repeats`` drops an incoming segment only when a bounded live
+``drop_covered_repeats`` drops an incoming segment only when its index is
+independently capture-proven (``verified_capture_indices``) AND a bounded live
 window lexically covers every substantive incoming token; every ambiguity is
 kept. Clock truth: the live capture fields when present, otherwise the row
 origin plus stored offsets — a content window, faithful capture when the v2
@@ -9,7 +10,13 @@ pin is set. All text is synthetic.
 
 import pytest
 
-from utils.sync.live_speech_dedupe import bounded_span_seconds, drop_covered_repeats, drop_exact_retries
+from utils.sync import live_speech_dedupe
+from utils.sync.live_speech_dedupe import (
+    bounded_span_seconds,
+    drop_covered_repeats,
+    drop_exact_retries,
+    drop_proven_exact_retries,
+)
 
 ORIGIN = 1_800_000_000.0
 
@@ -43,12 +50,19 @@ def reworded(text):
     return 'Um, ' + ' '.join(words).capitalize() + '!'
 
 
-def drop(incoming_segments, live=None, **kwargs):
+def proven(incoming_segments):
+    return frozenset(range(min(len(incoming_segments), 64)))
+
+
+def drop(incoming_segments, live=None, verified=None, **kwargs):
+    if verified is None:
+        verified = proven(incoming_segments)
     return drop_covered_repeats(
         incoming_segments,
         live_row_segments() if live is None else live,
         live_origin=ORIGIN,
         live_pinned=False,
+        verified_capture_indices=verified,
     )
 
 
@@ -58,7 +72,7 @@ def test_reworded_repeat_is_dropped_new_speech_is_kept():
     kept, report = drop(repeats + [fresh])
     assert kept == [fresh]
     assert report['dropped_seconds'] == 28.5
-    assert report['alignment_method'] == 'content_window'
+    assert report['alignment_method'] == 'source_frame_lexical'
     assert report['repeat_only'] is False
 
 
@@ -66,6 +80,85 @@ def test_entirely_covered_upload_reports_repeat_only():
     repeats = [incoming(reworded(LIVE[i]), i * 10.0 + 40) for i in range(3)]
     kept, report = drop(repeats)
     assert kept == [] and report['repeat_only'] is True
+
+
+def test_unproven_identical_and_reworded_second_utterance_is_kept():
+    """Without independent capture proof the same words are legitimate repetition."""
+    incoming_segments = [incoming(LIVE[0], 40.0), incoming(reworded(LIVE[1]), 50.0)]
+    kept, report = drop(incoming_segments, verified=frozenset())
+    assert kept == incoming_segments
+    assert report['dropped_segments'] == 0 and report['evaluated_segments'] == 0
+    assert report['alignment_method'] == 'none' and report['repeat_only'] is False
+
+
+def test_unproven_speaker_change_is_kept():
+    segment = incoming(LIVE[0], 40.0)
+    segment['speaker_id'] = 1
+    kept, _ = drop([segment], verified=frozenset())
+    assert kept == [segment]
+
+
+def test_partially_proven_upload_proves_only_the_proven_indices():
+    repeats = [incoming(reworded(LIVE[i]), i * 10.0 + 40) for i in range(3)]
+    kept, report = drop(repeats, verified=frozenset({0, 2}))
+    assert kept == [repeats[1]]
+    assert report['dropped_segments'] == 2 and report['evaluated_segments'] == 2
+
+
+def test_no_proof_never_scans_or_tokenizes(monkeypatch):
+    calls = []
+    monkeypatch.setattr(live_speech_dedupe, '_tokens', lambda text: calls.append(text) or [])
+    kept, report = drop([incoming(reworded(LIVE[0]), 40.0)], verified=frozenset())
+    assert report['evaluated_segments'] == 0 and calls == []
+
+
+def test_oversized_live_row_abstains_before_scanning(monkeypatch):
+    calls = []
+    monkeypatch.setattr(live_speech_dedupe, '_tokens', lambda text: calls.append(text) or [])
+    huge = [live_segment(0) for _ in range(4097)]
+    segment = incoming(reworded(LIVE[0]), 40.0)
+    kept, report = drop([segment], live=huge)
+    assert kept == [segment] and report['evaluated_segments'] == 0 and calls == []
+
+
+def test_oversized_candidate_neighborhood_keeps_before_candidate_work(monkeypatch):
+    token_calls = []
+    matcher_calls = []
+    real_tokens = live_speech_dedupe._tokens
+
+    def counting(text):
+        token_calls.append(text)
+        return real_tokens(text)
+
+    class NoMatcher:
+        def __init__(self, *args, **kwargs):
+            matcher_calls.append(args)
+
+    monkeypatch.setattr(live_speech_dedupe, '_tokens', counting)
+    monkeypatch.setattr(live_speech_dedupe, 'SequenceMatcher', NoMatcher)
+    crowd = [live_segment(0, start=i * 5.0, end=i * 5.0 + 4.0) for i in range(129)]
+    segment = incoming(reworded(LIVE[0]), 40.0)
+    kept, _ = drop([segment], live=crowd)
+    assert kept == [segment]
+    assert token_calls == [segment['text']] and matcher_calls == []
+
+
+def test_distant_live_segments_are_never_tokenized(monkeypatch):
+    token_calls = []
+    real_tokens = live_speech_dedupe._tokens
+
+    def counting(text):
+        token_calls.append(text)
+        return real_tokens(text)
+
+    monkeypatch.setattr(live_speech_dedupe, '_tokens', counting)
+    far = [live_segment(0, start=ORIGIN + 4000.0, end=ORIGIN + 4009.0)]
+    far[0]['audio_capture_start'] = ORIGIN + 4000.0
+    far[0]['audio_capture_end'] = ORIGIN + 4009.0
+    segment = incoming(reworded(LIVE[0]), 40.0)
+    kept, _ = drop([segment], live=far)
+    assert kept == [segment]
+    assert token_calls == [segment['text']]
 
 
 def test_same_segment_mixing_repeat_and_novel_clause_is_kept():
@@ -122,18 +215,21 @@ def test_empty_live_row_and_non_live_rows_never_donate_coverage():
     assert drop([repeat], live=legacy_scoped)[0] == [repeat]
 
 
-def test_live_capture_fields_and_the_v2_pin_report_capture_window():
+def test_capture_fields_and_pinned_rows_still_cover_proven_repeats():
     repeat = incoming(reworded(LIVE[0]), 40.0)
     capture = [live_segment(0, audio_capture_start=ORIGIN, audio_capture_end=ORIGIN + 9.5)]
-    kept, report = drop_covered_repeats([repeat], capture, live_origin=ORIGIN + 900.0, live_pinned=False)
-    assert kept == [] and report['alignment_method'] == 'capture_window'
-    kept, report = drop_covered_repeats([repeat], live_row_segments(), live_origin=ORIGIN, live_pinned=True)
-    assert kept == [] and report['alignment_method'] == 'capture_window'
-
-
-def test_legacy_clock_reports_content_window():
-    kept, report = drop([incoming(reworded(LIVE[0]), 40.0)])
-    assert kept == [] and report['alignment_method'] == 'content_window'
+    kept, report = drop_covered_repeats(
+        [repeat], capture, live_origin=ORIGIN + 900.0, live_pinned=False, verified_capture_indices=frozenset({0})
+    )
+    assert kept == [] and report['alignment_method'] == 'source_frame_lexical'
+    kept, report = drop_covered_repeats(
+        [repeat],
+        live_row_segments(),
+        live_origin=ORIGIN,
+        live_pinned=True,
+        verified_capture_indices=frozenset({0}),
+    )
+    assert kept == [] and report['alignment_method'] == 'source_frame_lexical'
 
 
 def test_past_the_incoming_cap_is_retained_untouched():
@@ -257,6 +353,44 @@ def test_exact_retry_keeps_invalid_ranges_and_oversized_text():
     stored['end'] = stored['start']
     _, dropped, _ = drop_exact_retries([incoming(LIVE[0], 0.0)], [stored])
     assert dropped == 0
+
+
+def test_proven_exact_retry_drops_against_live_text():
+    stored = {'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}
+    segment = incoming(LIVE[0], 0.0)
+    kept, dropped, sync_retry = drop_proven_exact_retries([(0, segment)], [stored], verified_indices=frozenset({0}))
+    assert dropped == 1 and kept == [] and sync_retry is False
+
+
+def test_unproven_exact_retry_needs_the_same_sync_scope():
+    stored = {'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}
+    segment = incoming(LIVE[0], 0.0)
+    kept, dropped, _ = drop_proven_exact_retries([(0, segment)], [stored])
+    assert dropped == 0 and kept == [segment]
+    scoped_stored = dict(stored, speaker_id_scope='sync:wal-1')
+    scoped_segment = dict(segment, speaker_id_scope='sync:wal-1')
+    kept, dropped, sync_retry = drop_proven_exact_retries([(0, scoped_segment)], [scoped_stored])
+    assert dropped == 1 and kept == [] and sync_retry is True
+    other_scope = dict(segment, speaker_id_scope='sync:wal-2')
+    kept, dropped, _ = drop_proven_exact_retries([(0, other_scope)], [scoped_stored])
+    assert dropped == 0 and kept == [other_scope]
+
+
+def test_unproven_exact_retry_ignores_id_matches_on_live_text():
+    stored = {'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}
+    segment = dict(incoming(LIVE[0], 99.0), id='seg-a')
+    kept, dropped, _ = drop_proven_exact_retries([(0, segment)], [stored])
+    assert dropped == 0 and kept == [segment]
+    kept, dropped, _ = drop_proven_exact_retries([(0, segment)], [stored], verified_indices=frozenset({0}))
+    assert dropped == 1 and kept == []
+
+
+def test_oversized_live_row_returns_everything_unchanged():
+    stored = {'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}
+    segment = incoming(LIVE[0], 0.0)
+    huge = [stored] * 4097
+    kept, dropped, sync_retry = drop_proven_exact_retries([(0, segment)], huge, verified_indices=frozenset({0}))
+    assert (dropped, sync_retry) == (0, False) and kept == [segment]
 
 
 def test_oversized_live_text_never_enters_windows_or_matching():

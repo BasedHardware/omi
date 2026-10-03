@@ -47,12 +47,68 @@ def reworded(text):
     return 'Um, ' + ' '.join(words).capitalize() + '!'
 
 
+PROOF_ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
+PROOF_SPF = 160
+PROOF_FRAMES = 100000
+
+
 def live_segments(**per_segment):
     return [dict({'start': i * 10.0, 'end': i * 10.0 + 10.0, 'text': LIVE[i]}, **per_segment) for i in range(7)]
 
 
 def sync_segment(text, start, duration=10.0, **extra):
     return dict({'start': start, 'end': start + duration, 'text': text}, **extra)
+
+
+def with_ids(sync, prefix='s'):
+    return [dict(row, id=row.get('id') or f'{prefix}{i}') for i, row in enumerate(sync)]
+
+
+def proof(sync, frames=PROOF_FRAMES):
+    """Paired sync_vad receipts plus a live run covering every receipted frame."""
+    return {
+        'sync_capture_evidence': {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'origin': 'sync_vad',
+            'receipts': [
+                {
+                    'segment_id': row['id'],
+                    'capture_root': PROOF_ROOT,
+                    'clock_epoch': 7,
+                    'channel': 'mono',
+                    'source_start_frame': i * 1000,
+                    'source_start_offset': 0,
+                    'source_end_frame': i * 1000 + 999,
+                    'source_end_offset': 0,
+                    'rate_hz': 16000,
+                    'producer_revision': 'sync_vad_stt_v1',
+                }
+                for i, row in enumerate(sync)
+            ],
+        },
+        'live_capture_evidence': {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'origin': 'live',
+            'conflicts': 0,
+            'runs': [
+                {
+                    'capture_root': PROOF_ROOT,
+                    'clock_epoch': 7,
+                    'rate_hz': 16000,
+                    'channel': 'mono',
+                    'source_frame_start': 0,
+                    'source_frame_end': frames,
+                    'decoded_sample_start': 0,
+                    'decoded_sample_end': frames * PROOF_SPF,
+                    'samples_per_frame': PROOF_SPF,
+                }
+            ],
+        },
+    }
 
 
 def run_replay(tmp_path, payload, extra_args=()):
@@ -72,16 +128,28 @@ def decisions(result):
     return json.loads(result.stdout)
 
 
-def test_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_path):
+def test_unproven_identical_and_reworded_repeats_are_kept(tmp_path):
+    """Without paired capture evidence even identical wording keeps — no signal."""
+    sync = [sync_segment(LIVE[0], 0.0), sync_segment(reworded(LIVE[1]), 10.0)]
+    result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [row['decision'] for row in out['segments']] == ['kept', 'kept']
+    assert out['totals'] == {'kept_segments': 2, 'dropped_segments': 0, 'kept_seconds': 20.0, 'dropped_seconds': 0.0}
+
+
+def test_proven_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_path):
     for skew in (40, 1200):
-        sync = [sync_segment(reworded(LIVE[i]), skew + i * 10.0) for i in range(7)] + [
-            sync_segment(text, skew + 70.0 + i * 10.0) for i, text in enumerate(NEW)
-        ]
-        result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync})
+        sync = with_ids(
+            [sync_segment(reworded(LIVE[i]), skew + i * 10.0) for i in range(7)]
+            + [sync_segment(text, skew + 70.0 + i * 10.0) for i, text in enumerate(NEW)]
+        )
+        payload = {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync)}
+        result = run_replay(tmp_path, payload)
         assert result.returncode == 0, result.stderr
         out = decisions(result)
         assert [row['decision'] for row in out['segments']] == ['dropped'] * 7 + ['kept'] * 3
-        assert all(row['reason'].startswith('lexical_repeat:') for row in out['segments'][:7])
+        assert all(row['reason'] == 'lexical_repeat:source_frame_lexical' for row in out['segments'][:7])
         assert out['totals'] == {
             'kept_segments': 3,
             'dropped_segments': 7,
@@ -90,22 +158,25 @@ def test_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_path):
         }
 
 
-def test_correction_prefixed_segment_is_kept(tmp_path):
-    sync = [sync_segment('Actually ' + LIVE[0], 40.0)]
-    result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync})
+def test_correction_prefixed_segment_is_kept_even_with_proof(tmp_path):
+    sync = with_ids([sync_segment('Actually ' + LIVE[0], 40.0)])
+    payload = {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync)}
+    result = run_replay(tmp_path, payload)
     assert result.returncode == 0, result.stderr
     out = decisions(result)
     assert out['segments'][0]['decision'] == 'kept'
     assert out['totals']['kept_seconds'] == 10.0
 
 
-def test_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path):
+def test_proven_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path):
     live = live_segments() + [{'start': 70.0, 'end': 73.0, 'text': 'okay see you'}]
-    sync = [
-        sync_segment('okay see you', 70.0, duration=3.0),
-        sync_segment(NEW[0], 70.0, duration=3.0),
-    ]
-    result = run_replay(tmp_path, {'live_segments': live, 'sync_segments': sync})
+    sync = with_ids(
+        [
+            sync_segment('okay see you', 70.0, duration=3.0),
+            sync_segment(NEW[0], 70.0, duration=3.0),
+        ]
+    )
+    result = run_replay(tmp_path, {'live_segments': live, 'sync_segments': sync, **proof(sync)})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
     assert out['segments'][0] == {
@@ -118,9 +189,21 @@ def test_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path):
     assert out['segments'][1]['decision'] == 'kept'
 
 
+def test_unproven_exact_text_same_range_is_kept(tmp_path):
+    live = live_segments() + [{'start': 70.0, 'end': 73.0, 'text': 'okay see you'}]
+    sync = [sync_segment('okay see you', 70.0, duration=3.0)]
+    result = run_replay(tmp_path, {'live_segments': live, 'sync_segments': sync})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['segments'][0]['decision'] == 'kept'
+
+
 def test_sync_scoped_live_lines_skip_lexical_but_still_exact_retry(tmp_path):
     live = live_segments(speaker_id_scope='sync:WAL-9')
-    sync = [sync_segment(reworded(LIVE[0]), 0.0), sync_segment(LIVE[1], 10.0)]
+    sync = [
+        sync_segment(reworded(LIVE[0]), 0.0, speaker_id_scope='sync:WAL-9'),
+        sync_segment(LIVE[1], 10.0, speaker_id_scope='sync:WAL-9'),
+    ]
     result = run_replay(tmp_path, {'live_segments': live, 'sync_segments': sync})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
@@ -134,23 +217,24 @@ def test_sync_scoped_live_lines_skip_lexical_but_still_exact_retry(tmp_path):
     }
 
 
-def test_incoming_cap_keeps_the_sixty_fifth_segment(tmp_path):
-    sync = [sync_segment(reworded(LIVE[i % 7]), i * 10.0 + 40) for i in range(65)]
-    result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync})
+def test_oversized_incoming_abstains_and_keeps_everything(tmp_path):
+    sync = with_ids([sync_segment(reworded(LIVE[i % 7]), i * 10.0 + 40) for i in range(65)])
+    result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync[:64])})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert [row['decision'] for row in out['segments'][:64]] == ['dropped'] * 64
-    assert out['segments'][64]['decision'] == 'kept'
-    assert out['totals']['dropped_segments'] == 64 and out['totals']['kept_segments'] == 1
+    assert [row['decision'] for row in out['segments']] == ['kept'] * 65
+    assert out['totals']['dropped_segments'] == 0 and out['totals']['kept_segments'] == 65
 
 
 def test_extra_metadata_is_ignored_and_the_input_is_never_mutated(tmp_path):
-    sync = [
-        sync_segment(reworded(LIVE[0]), 40.0, speaker='SPEAKER_00', session='meta-1'),
-        sync_segment(NEW[0], 50.0, is_user=True),
-    ]
+    sync = with_ids(
+        [
+            sync_segment(reworded(LIVE[0]), 40.0, speaker='SPEAKER_00', session='meta-1'),
+            sync_segment(NEW[0], 50.0, is_user=True),
+        ]
+    )
     input_path = tmp_path / 'input.json'
-    payload = {'live_segments': live_segments(), 'sync_segments': sync}
+    payload = {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync)}
     input_path.write_text(json.dumps(payload), encoding='utf-8')
     raw = input_path.read_bytes()
     result = run_replay(tmp_path, payload)

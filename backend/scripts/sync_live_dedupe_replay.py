@@ -7,10 +7,12 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.sync.live_speech_dedupe import drop_covered_repeats, drop_exact_retries
+from utils.sync.capture_repeat_evidence import capture_covered_indices
+from utils.sync.live_speech_dedupe import drop_covered_repeats, drop_proven_exact_retries
 
 
 def _segments(payload: dict, name: str) -> list[dict]:
@@ -22,7 +24,12 @@ def _segments(payload: dict, name: str) -> list[dict]:
         if not isinstance(row, dict) or not isinstance(row.get('text'), str):
             raise ValueError(f'{name}[{index}] must contain text, start and end')
         start, end = row.get('start'), row.get('end')
-        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in (start, end)):
+        if (
+            isinstance(start, bool)
+            or isinstance(end, bool)
+            or not isinstance(start, (int, float))
+            or not isinstance(end, (int, float))
+        ):
             raise ValueError(f'{name}[{index}] start/end must be finite numbers')
         start, end = float(start), float(end)
         if not math.isfinite(start) or not math.isfinite(end) or end <= start or not math.isfinite(end - start):
@@ -31,16 +38,25 @@ def _segments(payload: dict, name: str) -> list[dict]:
     return result
 
 
-def replay(payload: dict) -> dict:
+def replay(payload: Any) -> dict:
     if not isinstance(payload, dict):
         raise ValueError('input must be an object containing live_segments and sync_segments')
     live = _segments(payload, 'live_segments')
     sync = _segments(payload, 'sync_segments')
     incoming = [dict(row, timestamp=row['start'], start=0.0, end=row['end'] - row['start']) for row in sync]
-    lexical_kept, report = drop_covered_repeats(incoming, live, live_origin=0.0, live_pinned=False)
+    verified = capture_covered_indices(
+        incoming, payload.get('sync_capture_evidence'), payload.get('live_capture_evidence')
+    )
+    lexical_kept, report = drop_covered_repeats(
+        incoming, live, live_origin=0.0, live_pinned=False, verified_capture_indices=verified
+    )
     existing = [dict(row, timestamp=row['start']) for row in live]
-    kept, _, _ = drop_exact_retries(lexical_kept, existing)
     lexical_ids = {id(row) for row in lexical_kept}
+    kept, _, _ = drop_proven_exact_retries(
+        [(index, row) for index, row in enumerate(incoming) if id(row) in lexical_ids],
+        existing,
+        verified_indices=verified,
+    )
     kept_ids = {id(row) for row in kept}
     methods = iter(report['methods'])
     decisions = []

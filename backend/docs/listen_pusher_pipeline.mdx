@@ -21,8 +21,14 @@ VAD segment to the one generation whose source, device, lock and interval
 overlaps to the later-created row whose creation interval proxy covers the
 segment, and straddles split. Otherwise a segment keeps the phone's
 `conversation_id` stamp or the unbound path, which never adopts a live row.
-Bound segments lexically repeating a live window drop
-(`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist); all-repeat uploads
+Bound segments lexically repeating a live window drop only when independent
+source-frame evidence proves the repeat — a unique `sync_vad` receipt per
+incoming segment whose touched frames the live row's `origin=live` snapshot
+positively covers — or it is a same-capture exact retry: normalized identical
+text at an identical absolute range or segment id, AND a shared nonempty
+`sync:` scope with the stored line (a scope match alone never authorizes a
+lexical drop); lexical or exact-range text alone never suppresses
+(`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist). All-repeat uploads
 acknowledge without writes or enrichment, and `SYNC_LINEAGE_RESOLVE_ENABLED`
 off restores whole-batch binding. One level earlier, uploads carrying the
 opt-in S1 source-position signal additionally trim source frames the live

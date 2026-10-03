@@ -28,6 +28,7 @@ from tests.unit.test_sync_lineage_dedupe_replay import (
     T0 as DEDUPE_T0,
     _drive_process_segment,
     live_row,
+    prove,
     reworded,
     seeded_store,
     seeded_store_with_donor,
@@ -395,9 +396,11 @@ def test_stamp_fallback_live_append_reports_extent_growth(extra_seconds, bucket)
 
 
 def test_all_repeat_stamp_fallback_reports_zero_and_writes_nothing():
-    store = seeded_store([live_row()])
-    before = deepcopy(store.rows)
+    row = live_row()
     incoming = _stamp_incoming([reworded(text) for text in LIVE])
+    prove(incoming, row)
+    store = seeded_store([row])
+    before = deepcopy(store.rows)
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
     assert created is False and not survivors
     assert store.rows == before
@@ -472,9 +475,11 @@ def test_stamp_fallback_size_rollover_never_reports_live_stretch(monkeypatch):
 
 
 def test_all_repeat_stamp_fallback_with_a_donor_reports_zero():
-    store = seeded_store_with_donor([live_row()])
-    before = deepcopy(store.rows)
+    row = live_row()
     incoming = _stamp_incoming([reworded(text) for text in LIVE])
+    prove(incoming, row)
+    store = seeded_store_with_donor([row])
+    before = deepcopy(store.rows)
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
     assert created is False and survivors == [] and store.rows == before
     assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0'
