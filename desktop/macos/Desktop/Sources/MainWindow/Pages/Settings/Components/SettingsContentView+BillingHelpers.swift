@@ -740,6 +740,7 @@ extension SettingsContentView {
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
+    let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
     Task {
       do {
@@ -767,6 +768,11 @@ extension SettingsContentView {
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
           dailySummaryHour = dailySummary.hour
+          if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
+            savedDailySummaryDepth = dailySummary.depth
+            dailySummaryDepth = dailySummary.depth
+            dailySummaryDepthError = nil
+          }
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
           // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.
