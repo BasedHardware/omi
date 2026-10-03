@@ -9,7 +9,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MIGRATIONS, getUserVersion, runMigrations, type Migration, type MigrationDb } from './dbMigrations'
+import {
+  MIGRATIONS,
+  getUserVersion,
+  runMigrations,
+  type Migration,
+  type MigrationDb
+} from './dbMigrations'
+import { MEMORY_SEARCH_SCHEMA } from '../search/memorySearchStore'
 
 // The local_conversation schema as it shipped BEFORE the sync outbox (verbatim
 // from db.ts as of feat/windows-capture — kind/messages/title already present).
@@ -29,7 +36,10 @@ const OLD_SCHEMA = `
 const tempFiles: string[] = []
 
 function makeOldDbFile(): { file: string; db: DatabaseSync } {
-  const file = path.join(os.tmpdir(), `omi-mig-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
+  const file = path.join(
+    os.tmpdir(),
+    `omi-mig-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
+  )
   tempFiles.push(file)
   const db = new DatabaseSync(file)
   db.exec(OLD_SCHEMA)
@@ -68,7 +78,9 @@ describe('runMigrations', () => {
     }
     // Pre-existing data survives and gets the defaults.
     const row = db
-      .prepare('SELECT id, transcript, title, sync_state, sync_attempts, cloud_id FROM local_conversation')
+      .prepare(
+        'SELECT id, transcript, title, sync_state, sync_attempts, cloud_id FROM local_conversation'
+      )
       .get() as Record<string, unknown>
     expect(row.id).toBe('conv-1')
     expect(row.transcript).toBe('You: hello')
@@ -102,6 +114,53 @@ describe('runMigrations', () => {
     expect(() => runMigrations(d, bad)).toThrow(/migration 1 .*boom/)
     expect(getUserVersion(d)).toBe(0)
     expect(columns(db, 'local_conversation')).not.toContain('doomed')
+  })
+
+  it('v3 backfills the memories index so an existing install can find its own memories', () => {
+    const { file, db } = makeOldDbFile()
+    // An install that predates the index: memories exist, the index does not.
+    db.exec(`CREATE TABLE memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL,
+      source_app TEXT NOT NULL DEFAULT '',
+      window_title TEXT NOT NULL DEFAULT '',
+      context_summary TEXT NOT NULL DEFAULT '',
+      confidence REAL,
+      screenshot_id INTEGER,
+      backend_id TEXT,
+      backend_synced INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );`)
+    db.prepare('INSERT INTO memories (content, category, created_at) VALUES (?, ?, ?)').run(
+      'Signed the lease in March',
+      'personal',
+      1000
+    )
+    // db.ts's bootstrap block creates the index before runMigrations, so the
+    // triggers exist but never fired for the row above.
+    db.exec(MEMORY_SEARCH_SCHEMA)
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM memories_fts WHERE memories_fts MATCH 'lease*'").get()
+    ).toEqual({ n: 0 })
+
+    runMigrations(db as unknown as MigrationDb)
+
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM memories_fts WHERE memories_fts MATCH 'lease*'").get()
+    ).toEqual({ n: 1 })
+    expect(getUserVersion(db as unknown as MigrationDb)).toBe(MIGRATIONS.length)
+    db.close()
+    expect(file).toBeTruthy()
+  })
+
+  it('v3 skips cleanly when the memories index is not there', () => {
+    // A migration-only harness seeds local_conversation alone; the guard must not
+    // turn that into a hard failure that blocks every later migration.
+    const { db } = makeOldDbFile()
+    expect(() => runMigrations(db as unknown as MigrationDb)).not.toThrow()
+    expect(getUserVersion(db as unknown as MigrationDb)).toBe(MIGRATIONS.length)
+    db.close()
   })
 
   it('rejects a non-contiguous migration list (append-only discipline)', () => {
