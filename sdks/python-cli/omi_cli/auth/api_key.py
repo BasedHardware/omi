@@ -44,6 +44,12 @@ def validate_api_key_format(api_key: str) -> str:
             ),
         )
 
+    if not cleaned.isascii():
+        raise UsageError(
+            message="API key contains non-ASCII characters",
+            detail="Developer keys are ASCII-only. Paste the token exactly as shown in the Omi web app.",
+        )
+
     if len(cleaned) < len(DEV_API_KEY_PREFIX) + 16:
         raise UsageError(
             message="API key looks too short",
