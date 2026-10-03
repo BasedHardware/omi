@@ -19,12 +19,15 @@ MESSAGES = [{'text': SECRET, 'is_user': True}, {'text': 'other speaker', 'is_use
 def admission(monkeypatch):
     # Dependency initialization belongs to setup, not the behavioral call-phase budget.
     from utils import managed_compute  # noqa: F401
+    from database import _client as client_db
+    from database import cache as cache_db
+    from database import users as users_db
 
     lookup = MagicMock(return_value=None)
     cache = InMemoryCacheManager()
-    monkeypatch.setattr(admission_module, 'get_memory_cache', lambda: cache)
-    monkeypatch.setattr(admission_module.users_db, 'get_user_valid_subscription', lookup)
-    monkeypatch.setattr(admission_module, 'get_customer_firestore_client', lambda: 'fake-client')
+    monkeypatch.setattr(cache_db, 'get_memory_cache', lambda: cache)
+    monkeypatch.setattr(users_db, 'get_user_valid_subscription', lookup)
+    monkeypatch.setattr(client_db, 'get_customer_firestore_client', lambda: 'fake-client')
     fallback = MagicMock()
     monkeypatch.setattr(admission_module, 'record_fallback', fallback)
     return lookup, fallback
@@ -65,7 +68,9 @@ def test_entitlement_is_cached_per_uid_for_300_seconds(admission, plan):
     assert lookup.call_count == 1
     assert admission_module.mentor_plan_allows_evaluation('other-synthetic') is allowed
     assert lookup.call_count == 2
-    cache = admission_module.get_memory_cache()
+    from database import cache as cache_db
+
+    cache = cache_db.get_memory_cache()
     entry = cache.cache['mentor_entitlement:synthetic']
     assert entry.ttl == 300
     entry.timestamp -= 301

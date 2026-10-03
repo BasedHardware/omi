@@ -2,9 +2,6 @@
 
 import logging
 
-import database.users as users_db
-from database._client import get_customer_firestore_client
-from database.cache import get_memory_cache
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -20,6 +17,9 @@ def mentor_plan_allows_evaluation(uid: str) -> bool:
     The uid-less, fixed-reason log is an aggregate skip/fail-open counter.
     """
     from utils.managed_compute import authorize_managed_compute
+    import database.users as users_db
+    from database._client import get_customer_firestore_client
+    from database.cache import get_memory_cache
 
     def fetch_entitlement() -> bool | None:
         subscription = users_db.get_user_valid_subscription(

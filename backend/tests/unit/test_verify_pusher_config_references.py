@@ -181,6 +181,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert literals == {
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
