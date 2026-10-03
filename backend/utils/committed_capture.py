@@ -178,7 +178,13 @@ class CommittedCaptureMap:
         return tuple(intervals)
 
     def remember_transcripts(self, segments: Iterable[dict]) -> None:
-        for segment in segments:
+        if len(self.notes) >= MAX_TRANSCRIPT_NOTES:
+            self.incomplete = True
+            return
+        for index, segment in enumerate(segments):
+            if index >= MAX_TRANSCRIPT_NOTES:
+                self.incomplete = True
+                return
             note = self._note_intervals(segment.get('_capture_word_ranges'))
             if note is None:
                 continue
@@ -191,9 +197,9 @@ class CommittedCaptureMap:
                     self._conflict()
                 continue
             self.notes[segment_id] = note
-            if len(self.notes) > MAX_TRANSCRIPT_NOTES:
-                self.notes.pop(next(iter(self.notes)))
+            if len(self.notes) >= MAX_TRANSCRIPT_NOTES:
                 self.incomplete = True
+                return
 
     def committed_snapshot(self, owner: str, segments: Iterable) -> dict | None:
         if not self.complete or self.conflicts:

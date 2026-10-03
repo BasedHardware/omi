@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ from models.transcript_segment import TranscriptSegment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_audio_timeline_round3 import UID, T0, _processor, _seed_row
 from tests.unit.test_listen_audio_timeline_stack import _Stack
+from routers.listen.transcripts import TranscriptProcessor
 from utils.capture_evidence import SourcePositionMap
 from utils.committed_capture import CommittedCaptureMap, PROOF_KIND
 
@@ -306,16 +308,90 @@ def test_history_coalesces_root_epoch_key_anywhere_not_only_tail():
     assert committed.complete is True
 
 
-def test_note_cap_evicts_recall_only():
+def test_note_cap_keeps_first_notes_and_marks_incomplete():
     committed = CommittedCaptureMap()
     _feed(committed, 600, wall0=1000.0)
     windows = {f's{i}': (i * SPF, (i + 1) * SPF) for i in range(520)}
     committed.remember_transcripts(_note_segments(**windows))
     assert len(committed.notes) == 512
     assert committed.incomplete is True
-    snapshot = committed.committed_snapshot('conv', [_segment('s519')])
+    assert committed.notes.get('s0') == ((0, SPF),)
+    assert 's512' not in committed.notes
+    assert 's519' not in committed.notes
+    snapshot = committed.committed_snapshot('conv', [_segment('s0')])
     assert snapshot['proof'] == PROOF_KIND
     assert snapshot['coverage'] == 'incomplete'
+    assert [(r['source_frame_start'], r['source_frame_end']) for r in snapshot['runs']] == [(0, 1)]
+    assert committed.committed_snapshot('conv', [_segment('s519')]) is None
+
+
+def test_exact_note_cap_counts_as_incomplete():
+    committed = CommittedCaptureMap()
+    _feed(committed, 520, wall0=1000.0)
+    committed.remember_transcripts(_note_segments(**{f's{i}': (i * SPF, (i + 1) * SPF) for i in range(511)}))
+    assert len(committed.notes) == 511
+    assert committed.incomplete is False
+    committed.remember_transcripts(_note_segments(s511=(511 * SPF, 512 * SPF)))
+    assert len(committed.notes) == 512
+    assert committed.incomplete is True
+
+
+def test_full_notes_callback_returns_without_iterating():
+    committed = CommittedCaptureMap()
+    _feed(committed, 4, wall0=1000.0)
+    committed.remember_transcripts(_note_segments(**{f's{i}': (i * SPF, (i + 1) * SPF) for i in range(512)}))
+    assert len(committed.notes) == 512
+    assert committed.incomplete is True
+
+    def poisoned():
+        raise AssertionError('callback iterable must not be consumed once notes are full')
+        yield
+
+    committed.remember_transcripts(poisoned())
+    assert list(committed.notes)[0] == 's0'
+    assert len(committed.notes) == 512
+
+
+def test_oversized_callback_inspects_at_most_note_cap_entries():
+    committed = CommittedCaptureMap()
+    _feed(committed, 4, wall0=1000.0)
+    committed.remember_transcripts(_note_segments(dup=(0, SPF)))
+    touched = set()
+
+    class Counted(dict):
+        def get(self, key, default=None):
+            touched.add(id(self))
+            return super().get(key, default)
+
+    invalid = [Counted({'id': f'bad{i}', '_capture_word_ranges': ((100, 100),)}) for i in range(600)]
+    duplicates = [Counted({'id': 'dup', '_capture_word_ranges': ((0, SPF),)}) for _ in range(600)]
+    committed.remember_transcripts(invalid + duplicates)
+    assert len(touched) <= 512
+    assert len(committed.notes) == 1
+    assert committed.incomplete is True
+
+
+def test_large_transcript_callback_stops_note_work_at_cap():
+    committed = CommittedCaptureMap()
+    _feed(committed, 10000, wall0=1000.0)
+    touched = set()
+
+    class Counted(dict):
+        def get(self, key, default=None):
+            touched.add(id(self))
+            return super().get(key, default)
+
+    segments = [Counted({'id': f's{i}', '_capture_word_ranges': ((i * SPF, (i + 1) * SPF),)}) for i in range(10000)]
+    committed.remember_transcripts(iter(segments))
+    assert len(touched) <= 512
+    assert len(committed.notes) == 512
+    assert committed.notes.get('s0') == ((0, SPF),)
+    assert 's9999' not in committed.notes
+    assert committed.incomplete is True
+    snapshot = committed.committed_snapshot('conv', [_segment('s0')])
+    assert snapshot['proof'] == PROOF_KIND
+    assert snapshot['coverage'] == 'incomplete'
+    assert [(r['source_frame_start'], r['source_frame_end']) for r in snapshot['runs']] == [(0, 1)]
 
 
 def test_proof_envelope_is_bounded_and_content_free():
@@ -446,6 +522,46 @@ async def test_enqueue_epoch_segments_remembers_raw_provider_fields(monkeypatch,
         assert '_capture_word_ranges' not in segments[0]
         assigned = next(iter(committed.notes))
         uuid.UUID(assigned)
+    finally:
+        stack.restore()
+
+
+async def test_large_callback_notes_stay_bounded_while_enqueue_admission_owns_speech(monkeypatch):
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+    stack = _Stack(monkeypatch, v2=True, conversation_id='committed-cap')
+    try:
+        stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
+        processor = object.__new__(TranscriptProcessor)
+        processor.host = stack.host
+        processor.segment_buffer = deque(maxlen=4)
+        processor._v2_legacy_fallback = deque(maxlen=4)
+        processor._v2_legacy_fallback_ids = set()
+        processor._v2_retry_counts = {}
+        processor._v2_retry_until = 0.0
+        stack.host.transcripts = processor
+        touched = set()
+
+        class Counted(dict):
+            def get(self, key, default=None):
+                if key == '_capture_word_ranges':
+                    touched.add(id(self))
+                return super().get(key, default)
+
+        segments = [
+            Counted({'id': f's{i}', 'text': f'w{i}', 'start': 0.0, 'end': 0.5, '_capture_word_ranges': ((0, SPF),)})
+            for i in range(600)
+        ]
+        with pytest.raises(RuntimeError, match='capacity exhausted'):
+            stack.receiver._enqueue_epoch_segments(segments)
+        committed = stack.host.state.source_position_map._committed
+        assert committed.incomplete is True
+        assert len(committed.notes) <= 512
+        assert len(touched) <= 512
+        assert all(segment['text'] == f'w{i}' for i, segment in enumerate(segments))
+        assert all('_capture_word_ranges' not in segment for segment in segments)
+        assert len(processor.segment_buffer) == 0
+        assert len(processor._v2_legacy_fallback) == 0
     finally:
         stack.restore()
 

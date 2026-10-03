@@ -2402,16 +2402,16 @@ uploads remain unsupported.
 requires separate `CAPTURE_EVIDENCE_V1_DARK_WRITE` admission. Live transcript
 writes now piggyback only whole source frames covered by the fresh transcript's
 recognized provider word/token intervals (each <=2s, mapped independently, gaps
-never filled), cumulatively acknowledged per generation and anchored by receipt
-wall times plus bounded root/epoch high-water history. Proof and speech land in
+never filled), cumulatively acknowledged per generation (512 stored notes,
+512 callback entries inspected), and anchored by receipt wall times plus
+bounded root/epoch high-water history. Proof and speech land in
 one transaction; a span-only segment or invalid/missing word metadata adds no
 new coverage, and when no usable proof remains — receipt or history conflicts,
 bounds overflow, failed commits — the committed-coverage unknown envelope
 persists instead of authorizing suppression. Flag off writes the legacy
 receipt-only snapshot; receipt-only evidence never authorizes audio or lexical
 suppression. The committed-coverage consumer and S1-gated lineage binding are
-not enabled by this producer alone; deploying the producer requires the
-backend-listen image and matching dev/prod Helm values with `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
+not enabled by this producer alone; deploying the producer requires the backend-listen image and matching dev/prod Helm values with `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
 
 ### Translation admission and output truthfulness
 
