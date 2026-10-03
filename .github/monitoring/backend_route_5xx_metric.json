@@ -1,0 +1,23 @@
+{
+  "description": "Backend Cloud Run platform request-log 5xx counter. Route identity is the bounded tuple (method, route, route_action); unknown paths have empty route and are excluded from the route alert. The route catalogue covers the incident and chronic routes from 2026-10-02.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=\"backend\" AND logName=\"projects/based-hardware/logs/run.googleapis.com%2Frequests\" AND httpRequest.status >= 500 AND httpRequest.status < 600",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [
+      {"key": "method", "valueType": "STRING", "description": "Bounded HTTP method; combined with route and route_action for route identity."},
+      {"key": "route", "valueType": "STRING", "description": "Finite static path catalogue. /v1/conversations with action reprocess denotes /v1/conversations/{id}/reprocess. Unknown paths are empty."},
+      {"key": "route_resource", "valueType": "STRING", "description": "/v1/conversations for the parameterised reprocess route; empty otherwise."},
+      {"key": "route_action", "valueType": "STRING", "description": "reprocess for the parameterised conversation reprocess route; empty otherwise. IDs and queries are never labels."},
+      {"key": "status_class", "valueType": "STRING", "description": "5 for all matching request logs; all 5xx status codes count together."}
+    ]
+  },
+  "labelExtractors": {
+    "method": "REGEXP_EXTRACT(httpRequest.requestMethod, \"^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$\")",
+    "route": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+(/v1/users/people|/v1/dev/user/memories|/v1/dev/user/goals|/v3/memories|/v1/conversations/from-segments|/v2/voice-message/transcribe)/?(?:[?#].*)?$\")",
+    "route_resource": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+(/v1/conversations)/[^/?#]+/reprocess/?(?:[?#].*)?$\")",
+    "route_action": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+/v1/conversations/[^/?#]+/(reprocess)/?(?:[?#].*)?$\")",
+    "status_class": "REGEXP_EXTRACT(httpRequest.status, \"^(5)[0-9]{2}$\")"
+  }
+}

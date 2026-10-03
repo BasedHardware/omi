@@ -1,0 +1,30 @@
+{
+  "displayName": "Backend single-route 5xx regression",
+  "documentation": {
+    "content": "A catalogued backend route has more than 15 server errors in a rolling 900-second window for 600 seconds. Route identity is method + route for static paths, or method + route_resource + /{id}/ + route_action for reprocess. Status codes and revisions are summed, but routes and methods are not. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/backend-route-5xx.md. This bounded initial catalogue covers the supplied incident/chronic routes; other paths are counted with empty route labels but do not page.",
+    "mimeType": "text/markdown"
+  },
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [],
+  "conditions": [
+    {
+      "displayName": "One route exceeds 15 5xx in 15 minutes for 10 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/backend_route_5xx\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND metric.labels.method != \"\" AND (metric.labels.route != \"\" OR metric.labels.route_resource != \"\")",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 15,
+        "duration": "600s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "900s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": ["metric.label.method", "metric.label.route", "metric.label.route_resource", "metric.label.route_action"]
+          }
+        ],
+        "trigger": {"count": 1}
+      }
+    }
+  ]
+}
