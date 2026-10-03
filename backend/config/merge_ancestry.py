@@ -75,6 +75,24 @@ def _plain_tombstone(row: Mapping[str, Any], merged_into: str) -> bool:
     )
 
 
+def _declared_cycle(edges: Mapping[str, list[str]]) -> bool:
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> bool:
+        if node in visited:
+            return False
+        if node in visiting:
+            return True
+        visiting.add(node)
+        cyclic = any(visit(next_id) for next_id in edges.get(node, ()))
+        visiting.discard(node)
+        visited.add(node)
+        return cyclic
+
+    return any(visit(node) for node in edges)
+
+
 def ancestry_union(
     survivor: Mapping[str, Any],
     donors: Mapping[str, Mapping[str, Any]],
@@ -140,6 +158,7 @@ def flatten_updates(
     donor_ancestry = {donor_id: ancestry_ids(donor)[1] for donor_id, donor in donors.items()}
     donor_id_of = {aid: donor_id for donor_id, ids in donor_ancestry.items() for aid in ids}
     updates: dict[str, dict[str, Any]] = {}
+    declared: dict[str, list[str]] = {}
     for ancestor_id in sorted(set(union) - set(donor_ancestry)):
         row = ancestor_rows.get(ancestor_id)
         if row is None:
@@ -152,6 +171,15 @@ def flatten_updates(
                 return INVALID, [], {}
             if state and (state.get('role') != 'donor' or state.get('survivor_id') != survivor_id):
                 return INVALID, [], {}
+            reason, nested = ancestry_ids(row)
+            if reason is not None or any(
+                nested_id not in survivor_set
+                or (ancestor_rows.get(nested_id) or {}).get('sync_merged_into') != survivor_id
+                for nested_id in nested
+            ):
+                return INVALID, [], {}
+            if nested:
+                declared[ancestor_id] = nested
             continue
         declared_by = donor_id_of[ancestor_id]
         if not _plain_tombstone(row, declared_by) or _smart_state(row):
@@ -163,6 +191,8 @@ def flatten_updates(
             for nested_id in nested
         ):
             return INVALID, [], {}
+        if nested:
+            declared[ancestor_id] = nested
         if user_managed(row):
             return USER_MANAGED, [], {}
         revision = int(row['sync_content_revision'])
@@ -173,4 +203,6 @@ def flatten_updates(
         if row.get('sync_bridge_cleaned_revision') == revision:
             patch['sync_bridge_cleaned_revision'] = revision + 1
         updates[ancestor_id] = patch
+    if _declared_cycle(declared):
+        return INVALID, [], {}
     return None, sorted(union), updates
