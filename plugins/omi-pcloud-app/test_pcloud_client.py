@@ -40,12 +40,18 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         self.assertEqual(client.provider_id, "pcloud")
 
     def test_multi_region_base_urls(self):
-        """Location ID correctly selects US vs EU endpoints."""
+        """Location ID correctly selects US vs EU endpoints or raises ValueError."""
         us_client = PCloudClient("token", location_id=1)
         self.assertEqual(us_client.base_url, "https://api.pcloud.com")
 
         eu_client = PCloudClient("token", location_id=2)
         self.assertEqual(eu_client.base_url, "https://eapi.pcloud.com")
+
+        with self.assertRaises(ValueError):
+            PCloudClient("token", location_id=3)
+
+        with self.assertRaises(ValueError):
+            PCloudClient("token", location_id=0)
 
     def test_sanitize_path(self):
         """Sanitizer cleans invalid characters and preserves valid text."""
