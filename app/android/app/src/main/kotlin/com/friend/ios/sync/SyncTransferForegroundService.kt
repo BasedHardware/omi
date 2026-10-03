@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.friend.ios.fgs.ForegroundStartContract
@@ -33,12 +34,14 @@ class SyncTransferForegroundService : Service() {
         private const val TAG = "SyncTransfer.FgService"
         private const val EXTRA_TEXT = "notification_text"
         private const val ACTION_STOP = "com.friend.ios.sync.STOP"
+        @Volatile private var cancellationRequested = false
 
         /**
          * Promote the service to the foreground and hold a partial wake lock.
          * Returns whether the OS accepted the start; Dart treats a rejection
          * as non-fatal (transfer continues without OS keep-alive).
          */
+        @MainThread
         fun start(context: Context, text: String? = null): Boolean {
             return try {
                 val intent = Intent(context, SyncTransferForegroundService::class.java)
@@ -46,6 +49,7 @@ class SyncTransferForegroundService : Service() {
                     intent.putExtra(EXTRA_TEXT, text)
                 }
                 ContextCompat.startForegroundService(context, intent)
+                cancellationRequested = false
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start sync-transfer foreground service", e)
@@ -53,7 +57,12 @@ class SyncTransferForegroundService : Service() {
             }
         }
 
+        @MainThread
         fun stop(context: Context) {
+            // Retain cancellation even if a background-policy change rejects
+            // the queued command. A pending START still promotes before it
+            // observes this flag and shuts down without acquiring a wake lock.
+            cancellationRequested = true
             try {
                 // stopService can cancel an accepted foreground start before
                 // its callbacks run. Android 16 then crashes the process even
@@ -103,7 +112,7 @@ class SyncTransferForegroundService : Service() {
         // Each accepted start has a foreground obligation, including a start
         // delivered to an existing instance or immediately followed by stop.
         promoteColdStart()
-        if (intent?.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP || cancellationRequested) {
             // A newer queued start owns the service; an older cancellation
             // must not tear down its notification or wake lock.
             stopSelfResult(startId)

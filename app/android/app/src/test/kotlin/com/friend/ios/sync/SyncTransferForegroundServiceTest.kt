@@ -2,6 +2,8 @@ package com.friend.ios.sync
 
 import android.app.Application
 import android.content.Intent
+import android.content.ContextWrapper
+import android.content.ComponentName
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,27 +32,60 @@ class SyncTransferForegroundServiceTest {
         val service = controller.get()
         assertNotNull(shadowOf(service).lastForegroundNotification)
         service.onStartCommand(start, 0, 1)
-        val wakeLock = ShadowPowerManager.getLatestWakeLock()
-        assertTrue(wakeLock.isHeld)
+        // Cancellation arrived before delivery: promote, then stop without
+        // ever acquiring a transfer wake lock.
+        assertNull(ShadowPowerManager.getLatestWakeLock())
         service.onStartCommand(stop, 0, 2)
         assertEquals(2, shadowOf(service).stopSelfResultId)
         controller.destroy()
-        assertFalse(wakeLock.isHeld)
+        assertNull(ShadowPowerManager.getLatestWakeLock())
     }
 
     @Test
-    fun `queued stop is scoped to its start id and a later start keeps the service promoted`() {
+    fun `queued stop uses its own id when a later start was already accepted`() {
         val context = RuntimeEnvironment.getApplication()
+        assertTrue(SyncTransferForegroundService.start(context))
+        val firstStart = shadowOf(context).getNextStartedService()
+        SyncTransferForegroundService.stop(context)
+        val staleStop = shadowOf(context).getNextStartedService()
+        // Android has accepted the newer start before it delivers the old stop.
+        assertTrue(SyncTransferForegroundService.start(context))
+        val laterStart = shadowOf(context).getNextStartedService()
         val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
         val service = controller.get()
-        service.onStartCommand(Intent(), 0, 1)
-        SyncTransferForegroundService.stop(context)
-        service.onStartCommand(shadowOf(context).getNextStartedService(), 0, 2)
+        service.onStartCommand(firstStart, 0, 1)
+        val unscopedStopId = shadowOf(service).stopSelfId
+        service.onStartCommand(staleStop, 0, 2)
         assertEquals(2, shadowOf(service).stopSelfResultId)
-        service.onStartCommand(Intent(), 0, 3)
+        assertEquals(unscopedStopId, shadowOf(service).stopSelfId)
+        assertFalse(shadowOf(service).isForegroundStopped)
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        service.onStartCommand(laterStart, 0, 3)
         assertNotNull(shadowOf(service).lastForegroundNotification)
         assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        // Robolectric records stop IDs; Android's ActivityManager decides whether
+        // that ID is stale. The companion emulator probe verifies its real result.
         controller.destroy()
         assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+    }
+
+    @Test
+    fun `rejected background stop remains cancelled until the pending start promotes`() {
+        val context = RuntimeEnvironment.getApplication()
+        assertTrue(SyncTransferForegroundService.start(context))
+        val start = shadowOf(context).getNextStartedService()
+        val rejectingContext = object : ContextWrapper(context) {
+            override fun startService(intent: Intent): ComponentName? {
+                throw IllegalStateException("Background service start denied")
+            }
+        }
+        SyncTransferForegroundService.stop(rejectingContext)
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+        service.onStartCommand(start, 0, 1)
+        assertNotNull(shadowOf(service).lastForegroundNotification)
+        assertEquals(1, shadowOf(service).stopSelfResultId)
+        assertNull(ShadowPowerManager.getLatestWakeLock())
+        controller.destroy()
     }
 }

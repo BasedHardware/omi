@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import time
@@ -19,6 +20,10 @@ def main():
     parser.add_argument("--gradle", default=str(APP / "android/gradlew"))
     parser.add_argument("--rounds", type=int, default=5)
     args = parser.parse_args()
+    if not Path(args.gradle).is_file() and shutil.which(args.gradle) is None:
+        parser.error(
+            "Gradle executable is missing. Pass --gradle /path/to/gradle; see the probe README."
+        )
     sdk = Path(os.environ.get("ANDROID_HOME", str(Path.home() / "Library/Android/sdk")))
     adb = [str(sdk / "platform-tools/adb"), "-s", args.serial]
 
@@ -52,6 +57,7 @@ def main():
         [args.gradle, "-p", str(project), "assembleDebug", "--console=plain"],
         env=env,
         check=True,
+        timeout=600,
     )
     apk = project / "build/outputs/apk/debug/fgs-probe-debug.apk"
     device("install", "-r", str(apk))
@@ -117,6 +123,8 @@ def main():
                 passed = (
                     device("shell", "cat", "/proc/sys/kernel/random/boot_id") == boot_id
                     and active_verified
+                    and (mode == "orphan-stop" or "ACCEPTED" in log)
+                    and (mode != "background-stop" or "BACKGROUND_STOP" in log)
                     and f"SURVIVED mode={mode}" in log
                     and "FATAL EXCEPTION" not in log
                     and "ServiceRecord{" not in services

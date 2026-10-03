@@ -12,7 +12,11 @@ python3 app/scripts/android_fgs_probe.py --serial emulator-5554 --rounds 5 \
   --output /tmp/omi-fgs-evidence --gradle /path/to/gradle
 ```
 
-The app's generated `app/android/gradlew` is the default Gradle executable.
+A clean checkout has no `app/android/gradlew`: pass an installed Gradle 8.14.2
+executable with `--gradle` as above. If the Flutter app was already bootstrapped,
+`(cd app && flutter build apk --debug --flavor dev --target-platform android-arm64 --config-only)`
+generates the wrapper, which the runner uses by default. A missing executable
+fails with setup instructions; the build has a ten-minute timeout.
 The runner compiles fresh production sources, then exercises immediate stop,
 100 start/stop pairs, stop followed by restart, stop with no active service, and cancellation after moving the task to the background.
 Each case starts a fresh process and must survive while releasing its service,
