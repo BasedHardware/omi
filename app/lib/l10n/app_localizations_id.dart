@@ -12341,6 +12341,17 @@ class AppLocalizationsId extends AppLocalizations {
   String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
 
   @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tidak ada tugas pada $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Memproses ulang percakapan…';
 
   @override

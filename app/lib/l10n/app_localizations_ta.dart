@@ -12413,6 +12413,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
 
   @override
+  String get previousDay => 'முந்தைய நாள்';
+
+  @override
+  String get nextDay => 'அடுத்த நாள்';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date அன்று பணிகள் இல்லை';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';
 
   @override

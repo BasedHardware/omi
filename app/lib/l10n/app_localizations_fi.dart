@@ -12333,6 +12333,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
 
   @override
+  String get previousDay => 'Edellinen päivä';
+
+  @override
+  String get nextDay => 'Seuraava päivä';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ei tehtäviä $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
 
   @override

@@ -12333,6 +12333,17 @@ class AppLocalizationsCs extends AppLocalizations {
   String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
 
   @override
+  String get previousDay => 'Předchozí den';
+
+  @override
+  String get nextDay => 'Následující den';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Žádné úkoly na $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Konverzace se znovu zpracovává…';
 
   @override

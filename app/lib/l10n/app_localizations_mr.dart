@@ -12336,6 +12336,17 @@ class AppLocalizationsMr extends AppLocalizations {
   String get peopleStatsIncomplete => 'मोजणी अपूर्ण असू शकते.';
 
   @override
+  String get previousDay => 'मागील दिवस';
+
+  @override
+  String get nextDay => 'पुढील दिवस';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date रोजी कोणतीही कामे नाहीत';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'संभाषण पुन्हा प्रक्रिया होत आहे…';
 
   @override

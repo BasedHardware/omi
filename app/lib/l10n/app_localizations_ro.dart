@@ -12384,6 +12384,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
 
   @override
+  String get previousDay => 'Ziua precedentă';
+
+  @override
+  String get nextDay => 'Ziua următoare';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nicio sarcină pe $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Se reprocesează conversația…';
 
   @override

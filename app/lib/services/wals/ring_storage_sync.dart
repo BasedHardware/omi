@@ -338,7 +338,8 @@ class RingStorageSyncImpl implements RingStorageSync {
           // This preserves the "resume from same read_seq" guarantee — pairing
           // with the no-advance-on-failure invariant in _syncRing.
           Logger.debug(
-              'RingStorageSync: Ring transfer incomplete; unadvanced records preserved, will resume next sync');
+            'RingStorageSync: Ring transfer incomplete; unadvanced records preserved, will resume next sync',
+          );
           listener.onWalUpdated();
           break;
         }
@@ -427,12 +428,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         ringInfo,
         sessionToken: Object(),
         effectiveCaps: effectiveCaps,
-        replayAdvance: (seq) async => (await connection.advanceRingCustody(
-          seq,
-          expectedEpoch: epoch,
-          expectedRingId: ringId,
-        ))
-            ?.status,
+        replayAdvance: (seq) async =>
+            (await connection.advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: ringId))?.status,
       );
       if (!stillEpoch()) return false;
     }
@@ -527,8 +524,10 @@ class RingStorageSyncImpl implements RingStorageSync {
           }
           var admittedBytes = 0;
           try {
-            final admitted =
-                await localSync.ensureStorageAdmission(bytes: bytes, admittedGeneration: admittedGeneration);
+            final admitted = await localSync.ensureStorageAdmission(
+              bytes: bytes,
+              admittedGeneration: admittedGeneration,
+            );
             if (!admitted) {
               throw StateError('storage admission refused (cap/disk reserve)');
             }
@@ -545,20 +544,9 @@ class RingStorageSyncImpl implements RingStorageSync {
             }
             if (ringId != null && connection.ringCustodyEpoch == epoch) {
               for (final range in contiguousRanges(chunkSeqs)) {
-                await _custody.recordDurableRingRange(
-                  custodyDeviceId,
-                  epoch,
-                  ringId,
-                  range.$1,
-                  range.$2,
-                  [
-                    CustodyWalRef(
-                      fileName: file.path.split('/').last,
-                      bytes: fileBytes,
-                      frames: chunk.length,
-                    ),
-                  ],
-                );
+                await _custody.recordDurableRingRange(custodyDeviceId, epoch, ringId, range.$1, range.$2, [
+                  CustodyWalRef(fileName: file.path.split('/').last, bytes: fileBytes, frames: chunk.length),
+                ]);
               }
             }
             DebugLogManager.logEvent('pendant_custody', {
@@ -620,9 +608,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (opcode == RingProtocol.notifyReadBegin) {
         final begin = RingProtocol.parseReadBeginNotification(value);
         if (begin != null) {
-          Logger.debug(
-            'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}',
-          );
+          Logger.debug('RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}');
           beginStartSeq = begin.transferStartSeq;
           beginPacketCount = begin.packetCount;
           if (!firstDataReceived) {
@@ -706,11 +692,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (wal.storageTotalBytes > 0) {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
-          progress?.onWalSyncedProgress(
-            pct,
-            speedKBps: _currentSpeedKBps,
-            phase: SyncPhase.downloadingFromDevice,
-          );
+          progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
         }
       }
 
@@ -873,11 +855,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<bool> _custodyAdvance(DeviceConnection connection, String deviceId, int epoch, int seq, int? ringId) async {
     if (connection.ringCustodyEpoch != epoch) return false;
     if (_custody.isIncarnationInvalid(deviceId, epoch)) return false;
-    final ack = await connection.advanceRingCustody(
-      seq,
-      expectedEpoch: epoch,
-      expectedRingId: ringId,
-    );
+    final ack = await connection.advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: ringId);
     if (ack == null) return false;
     if (ack.isOk) {
       await _custody.markAdvanced(deviceId, epoch, seq);

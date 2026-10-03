@@ -334,11 +334,7 @@ class OmiVoicePlaybackService {
       };
       final hit = devices.any((d) => headphoneTypes.contains(d.type));
       debugPrint('OmiVoicePlayback: headphones=$hit (devices=${devices.map((d) => d.type).toList()})');
-      return VoicePlaybackOutputSnapshot(
-        headphonesConnected: hit,
-        checkFailed: false,
-        route: _coarsenRoute(devices),
-      );
+      return VoicePlaybackOutputSnapshot(headphonesConnected: hit, checkFailed: false, route: _coarsenRoute(devices));
     } catch (e) {
       debugPrint('OmiVoicePlayback: headphone check failed: $e — skipping playback');
       // Fail closed: if we can't tell whether headphones are connected,
@@ -405,9 +401,7 @@ class OmiVoicePlaybackService {
   }
 
   /// Immediately cancel all synthesis + playback.
-  Future<void> interrupt({
-    VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none,
-  }) async {
+  Future<void> interrupt({VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none}) async {
     _beginAttemptSeq++;
     if (_lifecycleOpen) {
       _lifecycleToken++;
@@ -801,10 +795,8 @@ class OmiVoicePlaybackService {
     return synthesizeSpeechStream(text: text, voiceId: voiceId);
   }
 
-  ProgressiveTtsAudioSource _sourceFor(TtsAudioStream stream) => ProgressiveTtsAudioSource(
-        stream,
-        stallTimeout: debugHooks?.streamStallTimeout ?? progressiveTtsStallTimeout,
-      );
+  ProgressiveTtsAudioSource _sourceFor(TtsAudioStream stream) =>
+      ProgressiveTtsAudioSource(stream, stallTimeout: debugHooks?.streamStallTimeout ?? progressiveTtsStallTimeout);
 
   Future<_CloudPlaybackResult> _playPreviewSource(ProgressiveTtsAudioSource source) async {
     await source.ready;
@@ -825,11 +817,7 @@ class OmiVoicePlaybackService {
       return _CloudPlaybackResult(started: true, position: Duration.zero, transfer: await source.settled);
     }
     final playback = await ProgressiveTtsPcmPlayer(_previewPlayer).play(source);
-    return _CloudPlaybackResult(
-      started: playback.started,
-      position: playback.position,
-      transfer: playback.transfer,
-    );
+    return _CloudPlaybackResult(started: playback.started, position: playback.position, transfer: playback.transfer);
   }
 
   Future<void> _speakPreviewFallback(String text) async {
@@ -876,18 +864,10 @@ class OmiVoicePlaybackService {
         if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
       },
     );
-    return _CloudPlaybackResult(
-      started: playback.started,
-      position: playback.position,
-      transfer: playback.transfer,
-    );
+    return _CloudPlaybackResult(started: playback.started, position: playback.position, transfer: playback.transfer);
   }
 
-  String _unplayedRemainder(
-    String text,
-    _CloudPlaybackResult result,
-    ProgressiveTtsAudioSource source,
-  ) {
+  String _unplayedRemainder(String text, _CloudPlaybackResult result, ProgressiveTtsAudioSource source) {
     if (!result.started) return text;
 
     final expected = source.expectedBytes;

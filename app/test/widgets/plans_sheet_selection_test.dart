@@ -44,12 +44,7 @@ class _HarnessState extends State<_Harness> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _wave,
-      notesController: _notes,
-      arrowController: _arrow,
-      arrowAnimation: _arrow,
-    );
+    return PlansSheet(waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrow);
   }
 }
 
@@ -76,20 +71,22 @@ void main() {
 
     final usage = UsageProvider();
     addTearDown(usage.dispose);
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription: Subscription(
-        plan: PlanType.unlimitedV2,
-        status: SubscriptionStatus.active,
-        stripeSubscriptionId: 'sub_1',
-        currentPriceId: 'price_unlimited_v2_month',
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.unlimitedV2,
+          status: SubscriptionStatus.active,
+          stripeSubscriptionId: 'sub_1',
+          currentPriceId: 'price_unlimited_v2_month',
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
       ),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-    ));
+    );
     usage.debugSetAvailablePlans({
       'plans': <dynamic>[
         _price('plus', 'Plus', 'month', 900),

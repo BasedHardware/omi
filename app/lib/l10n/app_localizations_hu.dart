@@ -12377,6 +12377,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String get peopleStatsIncomplete => 'A számok hiányosak lehetnek.';
 
   @override
+  String get previousDay => 'Előző nap';
+
+  @override
+  String get nextDay => 'Következő nap';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nincsenek feladatok ezen a napon: $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'A beszélgetés újrafeldolgozása…';
 
   @override

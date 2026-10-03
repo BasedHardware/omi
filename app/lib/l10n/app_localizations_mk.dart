@@ -12389,6 +12389,17 @@ class AppLocalizationsMk extends AppLocalizations {
   String get peopleStatsIncomplete => 'Бројките може да се нецелосни.';
 
   @override
+  String get previousDay => 'Претходен ден';
+
+  @override
+  String get nextDay => 'Следен ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нема задачи на $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Разговорот повторно се обработува…';
 
   @override

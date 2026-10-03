@@ -12323,6 +12323,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
 
   @override
+  String get previousDay => 'Eelmine päev';
+
+  @override
+  String get nextDay => 'Järgmine päev';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date pole ülesandeid';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
 
   @override

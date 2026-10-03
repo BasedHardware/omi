@@ -12325,6 +12325,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
 
   @override
+  String get previousDay => 'Predchádzajúci deň';
+
+  @override
+  String get nextDay => 'Nasledujúci deň';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Žiadne úlohy na $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
 
   @override

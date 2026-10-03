@@ -129,8 +129,10 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
         final direction = _locateDirection(index);
         if (direction == 0) break;
         final position = _scrollController.position;
-        final target = (position.pixels + direction * position.viewportDimension * 0.9)
-            .clamp(position.minScrollExtent, position.maxScrollExtent);
+        final target = (position.pixels + direction * position.viewportDimension * 0.9).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
         // At a stable edge with nothing left to reveal: stop rather than
         // jumping in place forever.
         if ((target - position.pixels).abs() < 0.5) return;

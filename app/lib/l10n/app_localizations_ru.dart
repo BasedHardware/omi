@@ -12372,6 +12372,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
 
   @override
+  String get previousDay => 'Предыдущий день';
+
+  @override
+  String get nextDay => 'Следующий день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нет задач на $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Повторная обработка разговора…';
 
   @override

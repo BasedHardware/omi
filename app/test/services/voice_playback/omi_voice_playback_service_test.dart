@@ -21,21 +21,12 @@ const _twoChunkReply =
     '$_firstSentence And then the reply continues with additional words until the chunker is past the first ideal window.';
 final _mp3 = Uint8List.fromList(const [1, 2, 3]);
 
-TtsSynthesisRequest _streamRequest(
-  Stream<List<int>> bytes, {
-  int? contentLength,
-  Future<void> Function()? onCancel,
-}) {
+TtsSynthesisRequest _streamRequest(Stream<List<int>> bytes, {int? contentLength, Future<void> Function()? onCancel}) {
   Future<void> cancel() => onCancel?.call() ?? Future<void>.value();
 
   return TtsSynthesisRequest(
     response: Future.value(
-      TtsAudioStream(
-        bytes: bytes,
-        contentLength: contentLength,
-        contentType: 'audio/mpeg',
-        cancel: cancel,
-      ),
+      TtsAudioStream(bytes: bytes, contentLength: contentLength, contentType: 'audio/mpeg', cancel: cancel),
     ),
     cancel: cancel,
   );
@@ -275,18 +266,16 @@ void main() {
   test('a synthesis error drops that chunk and still plays the next', () async {
     SharedPreferencesUtil().voiceResponseMode = 2;
     var calls = 0;
-    await install(synthesize: (text, {voiceId}) async {
-      calls++;
-      if (calls == 1) throw Exception('synth failed');
-      return _mp3;
-    });
+    await install(
+      synthesize: (text, {voiceId}) async {
+        calls++;
+        if (calls == 1) throw Exception('synth failed');
+        return _mp3;
+      },
+    );
 
     await service.beginResponse(messageId: 'drop');
-    service.updateStreamingResponse(
-      messageId: 'drop',
-      fullText: _twoChunkReply,
-      isFinal: true,
-    );
+    service.updateStreamingResponse(messageId: 'drop', fullText: _twoChunkReply, isFinal: true);
     await finishPlayback();
 
     expect(calls, 2);
@@ -505,11 +494,8 @@ void main() {
     final bytes = StreamController<List<int>>(onCancel: () => subscriptionCancelled = true);
     final playbackStarted = Completer<void>();
     await install(
-      synthesizeStream: (_, {voiceId}) => _streamRequest(
-        bytes.stream,
-        contentLength: 8192,
-        onCancel: () async => requestCancelled = true,
-      ),
+      synthesizeStream: (_, {voiceId}) =>
+          _streamRequest(bytes.stream, contentLength: 8192, onCancel: () async => requestCancelled = true),
       playStream: (source) async {
         playbackStarted.complete();
         await source.settled;
@@ -567,9 +553,7 @@ void main() {
         synthesized.add(text);
         final id = ++nextId;
         return _streamRequest(
-          Stream<List<int>>.fromIterable([
-            Uint8List.fromList(List<int>.filled(progressiveTtsPrebufferBytes, id)),
-          ]),
+          Stream<List<int>>.fromIterable([Uint8List.fromList(List<int>.filled(progressiveTtsPrebufferBytes, id))]),
           contentLength: progressiveTtsPrebufferBytes,
         );
       },
@@ -595,11 +579,13 @@ void main() {
     SharedPreferencesUtil().voiceResponseMode = 2;
     final oldSynthesis = Completer<Uint8List?>();
     var synthesisCalls = 0;
-    await install(synthesize: (_, {voiceId}) {
-      synthesisCalls++;
-      if (synthesisCalls == 1) return oldSynthesis.future;
-      return Future.value(_mp3);
-    });
+    await install(
+      synthesize: (_, {voiceId}) {
+        synthesisCalls++;
+        if (synthesisCalls == 1) return oldSynthesis.future;
+        return Future.value(_mp3);
+      },
+    );
 
     await service.beginResponse(messageId: 'old');
     service.updateStreamingResponse(messageId: 'old', fullText: _firstSentence, isFinal: true);

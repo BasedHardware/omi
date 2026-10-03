@@ -12398,6 +12398,17 @@ class AppLocalizationsIt extends AppLocalizations {
   String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';
 
   @override
+  String get previousDay => 'Giorno precedente';
+
+  @override
+  String get nextDay => 'Giorno successivo';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nessuna attività il $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Rielaborazione della conversazione…';
 
   @override

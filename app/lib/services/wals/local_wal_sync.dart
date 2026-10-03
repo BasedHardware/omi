@@ -540,9 +540,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       final generation = _sessionGeneration;
-      unawaited(_drainPendantTail(generation).catchError((e) {
-        Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
-      }));
+      unawaited(
+        _drainPendantTail(generation).catchError((e) {
+          Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
+        }),
+      );
     }
   }
 
@@ -682,10 +684,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final stableEvidence = evidenceRoot != null &&
         evidenceStart != null &&
         evidenceEpoch != null &&
-        evidenceFrames.asMap().entries.every((entry) =>
-            entry.value.captureRoot == evidenceRoot &&
-            entry.value.sourceClockEpoch == evidenceEpoch &&
-            entry.value.sourceFramePosition == evidenceStart + entry.key);
+        evidenceFrames.asMap().entries.every(
+              (entry) =>
+                  entry.value.captureRoot == evidenceRoot &&
+                  entry.value.sourceClockEpoch == evidenceEpoch &&
+                  entry.value.sourceFramePosition == evidenceStart + entry.key,
+            );
     var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
@@ -855,10 +859,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final stableEvidence = evidenceRoot != null &&
             evidenceStart != null &&
             evidenceEpoch != null &&
-            frames.asMap().entries.every((entry) =>
-                entry.value.captureRoot == evidenceRoot &&
-                entry.value.sourceClockEpoch == evidenceEpoch &&
-                entry.value.sourceFramePosition == evidenceStart + entry.key);
+            frames.asMap().entries.every(
+                  (entry) =>
+                      entry.value.captureRoot == evidenceRoot &&
+                      entry.value.sourceClockEpoch == evidenceEpoch &&
+                      entry.value.sourceFramePosition == evidenceStart + entry.key,
+                );
         final live = _liveEvidenceFor(frames);
 
         final wal = Wal(
@@ -942,7 +948,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           data.addAll(byteFrame.buffer.asUint8List());
         }
         if (!await _checkStorageAdmission(
-            bytes: data.length, admittedGeneration: generation, failClosedOnUnknownSpace: false)) {
+          bytes: data.length,
+          admittedGeneration: generation,
+          failClosedOnUnknownSpace: false,
+        )) {
           if (_isPendantWal(wal)) _pendantBlockedByStorage = true;
           break;
         }
@@ -1040,11 +1049,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
     if (connection == null) return;
     if (connection.ringCustodyEpoch != epoch) return;
-    final ack = await connection.advanceRingCustody(
-      target,
-      expectedEpoch: epoch,
-      expectedRingId: proofRingId,
-    );
+    final ack = await connection.advanceRingCustody(target, expectedEpoch: epoch, expectedRingId: proofRingId);
     if (ack == null) return;
     if (ack.isOk) {
       await _custody.markAdvanced(deviceId, epoch, target);
@@ -1075,9 +1080,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
-  int get _pendingDiskWalCount => [..._retiredWals, ..._foreignWals, ..._wals]
-      .where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0))
-      .length;
+  int get _pendingDiskWalCount => [
+        ..._retiredWals,
+        ..._foreignWals,
+        ..._wals,
+      ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused
@@ -1173,8 +1180,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     required int admittedGeneration,
     required bool failClosedOnUnknownSpace,
   }) {
-    return _enqueueAdmission(() => _checkStorageAdmissionLocked(
-        bytes: bytes, admittedGeneration: admittedGeneration, failClosedOnUnknownSpace: failClosedOnUnknownSpace));
+    return _enqueueAdmission(
+      () => _checkStorageAdmissionLocked(
+        bytes: bytes,
+        admittedGeneration: admittedGeneration,
+        failClosedOnUnknownSpace: failClosedOnUnknownSpace,
+      ),
+    );
   }
 
   Future<bool> _checkStorageAdmissionLocked({
@@ -1267,11 +1279,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // account's, so the retention preference applies to them too — matching
     // the device-wide scope of _enforceRetentionPolicy.
     final expired = [..._retiredWals, ..._foreignWals, ..._wals]
-        .where((wal) =>
-            wal.storage == WalStorage.disk &&
-            wal.status == WalStatus.synced &&
-            wal.syncedAt > 0 &&
-            wal.syncedAt <= cutoff)
+        .where(
+          (wal) =>
+              wal.storage == WalStorage.disk &&
+              wal.status == WalStatus.synced &&
+              wal.syncedAt > 0 &&
+              wal.syncedAt <= cutoff,
+        )
         .toList();
     if (expired.isEmpty) return 0;
 
@@ -1488,10 +1502,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final stableEvidence = evidenceRoot != null &&
         evidenceStart != null &&
         evidenceEpoch != null &&
-        evidenceFrames.asMap().entries.every((entry) =>
-            entry.value.captureRoot == evidenceRoot &&
-            entry.value.sourceClockEpoch == evidenceEpoch &&
-            entry.value.sourceFramePosition == evidenceStart + entry.key);
+        evidenceFrames.asMap().entries.every(
+              (entry) =>
+                  entry.value.captureRoot == evidenceRoot &&
+                  entry.value.sourceClockEpoch == evidenceEpoch &&
+                  entry.value.sourceFramePosition == evidenceStart + entry.key,
+            );
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -2349,10 +2365,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         resp.localUploadFailures = 1;
         resp.localUploadPermanentFailures = 1;
         resp.localUploadPermanentError = e.toString();
-        DebugLogManager.logEvent('single_wal_terminal_http_refusal', {
-          'walId': wal.id,
-          'statusCode': e.statusCode,
-        });
+        DebugLogManager.logEvent('single_wal_terminal_http_refusal', {'walId': wal.id, 'statusCode': e.statusCode});
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);
         return resp;

@@ -12144,6 +12144,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
 
   @override
+  String get previousDay => '이전 날';
+
+  @override
+  String get nextDay => '다음 날';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date에 할 일이 없습니다';
+  }
+
+  @override
   String get reprocessingConversationProgress => '대화를 다시 처리하는 중…';
 
   @override

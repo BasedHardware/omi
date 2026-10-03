@@ -12324,6 +12324,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
 
   @override
+  String get previousDay => 'Ngày trước';
+
+  @override
+  String get nextDay => 'Ngày sau';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Không có tác vụ vào $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Đang xử lý lại cuộc trò chuyện…';
 
   @override

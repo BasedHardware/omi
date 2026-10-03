@@ -309,10 +309,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           : provider.isClearingChat
                               ? OmiLoadingState(label: context.l10n.deletingMessages)
                               : (provider.messages.isEmpty)
-                                  ? ChatGreeting(
-                                      isConnected: connectivityProvider.isConnected,
-                                      name: prefs.givenName,
-                                    )
+                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
                                   : _buildTranscript(provider),
                     ),
                     _buildComposer(context, provider, connectivityProvider),
@@ -1162,9 +1159,7 @@ class _SelectedTextChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
-            ),
+            ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary)),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(
