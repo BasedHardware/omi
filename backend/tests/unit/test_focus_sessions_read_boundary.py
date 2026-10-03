@@ -18,6 +18,14 @@ from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+try:
+    import email.message  # noqa: F401
+    import anyio.from_thread  # noqa: F401
+except ImportError:
+    pass
+
+
+
 # Configure safe test environment
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 os.environ.setdefault(
@@ -30,10 +38,21 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
+from testing.import_isolation import AutoMockModule, stub_modules
+
 # Hermetic isolation stubs for external cloud and telemetry packages
-_STUB_MODULES = (
+_STUB_MODULES = [
     "google",
+    "google.api_core",
+    "google.api_core.exceptions",
+    "google.cloud",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.firestore_v1.base_query",
+    "google.cloud.storage",
     "firebase_admin",
+    "firebase_admin.auth",
+    "firebase_admin.firestore",
     "redis",
     "sentry_sdk",
     "requests",
@@ -50,40 +69,17 @@ _STUB_MODULES = (
     "openai",
     "anthropic",
     "prometheus_client",
-)
+    "database._client",
+    "utils.other.storage",
+]
 
+_fakes = {}
+for _name in _STUB_MODULES:
+    _m = AutoMockModule(_name)
+    _m.__path__ = []
+    _fakes[_name] = _m
 
-def _is_stub_candidate(name: str) -> bool:
-    return any(name == prefix or name.startswith(prefix + ".") for prefix in _STUB_MODULES)
-
-
-class _AutoMockModule(types.ModuleType):
-    __path__ = []
-
-    def __getattr__(self, name: str) -> Any:
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
-
-
-class _HermeticImportFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def find_spec(self, name: str, path: Any = None, target: Any = None) -> Any:
-        if _is_stub_candidate(name):
-            return importlib.machinery.ModuleSpec(name, self, is_package=True)
-        return None
-
-    def create_module(self, spec: Any) -> types.ModuleType:
-        return _AutoMockModule(spec.name)
-
-    def exec_module(self, module: types.ModuleType) -> None:
-        pass
-
-
-_finder = _HermeticImportFinder()
-sys.meta_path.insert(0, _finder)
-try:
+with stub_modules(_fakes):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -91,9 +87,7 @@ try:
     from models.focus_session import FocusSession
     import routers.focus_sessions as focus_sessions_router
     from utils.other import endpoints as auth
-finally:
-    # Retain finder if needed for lazy imports within modules
-    pass
+
 
 
 class _FakeSnapshot:
@@ -308,6 +302,8 @@ class TestFocusSessionsNonPIILogging(unittest.TestCase):
         self.assertNotIn(sensitive_desc, log_text)
         self.assertNotIn(sensitive_msg, log_text)
         self.assertNotIn("bearer_xyz123abc", log_text)
+        self.assertNotIn("SecretApp", log_text)
+
 
 
 class TestDatabaseGetFocusSessionsStreamResilience(unittest.TestCase):

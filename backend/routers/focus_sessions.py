@@ -65,9 +65,18 @@ def get_focus_sessions(
 
     def _log_skipped_session(record: Any, exc: Exception) -> None:
         doc_id = 'unknown'
-        if isinstance(record, (dict, Mapping)):
-            doc_id = str(record.get('id') or 'unknown')
-        logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        try:
+            if isinstance(record, (dict, Mapping)):
+                raw_id = record.get('id')
+                if raw_id is not None:
+                    doc_id = str(raw_id)
+        except Exception:
+            doc_id = 'unknown'
+        try:
+            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        except Exception:
+            pass
+
 
     return FocusSession.deserialize_many_safe(raw_sessions, on_error=_log_skipped_session)
 
