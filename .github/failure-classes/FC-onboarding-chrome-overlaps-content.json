@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-onboarding-chrome-overlaps-content",
+  "violated_contract": "Onboarding navigation and progress controls must not cover a step's heading or scrolling content. A system SafeArea alone does not reserve space for app-owned chrome.",
+  "canonical_prevention": "The onboarding host owns its header layout. Top-aligned steps allocate a header row and place the page in the remaining space, consuming the top safe-area inset once; artwork with bottom-card steps can retain floating chrome.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/onboarding_header_spacing_test.dart"
+  ],
+  "evidence_prs": [14514, 18436],
+  "scope_hints": [
+    "app/lib/pages/onboarding/wrapper.dart",
+    "app/lib/pages/onboarding/widgets/onboarding_step_layout.dart"
+  ],
+  "status": "open"
+}
