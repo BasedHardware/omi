@@ -14,7 +14,7 @@ class _FailingRefreshProvider extends ConversationDetailProvider {
   final Object sentinel;
 
   @override
-  Future<void> refreshConversation() async => throw sentinel;
+  Future<void> refreshConversation({bool trackLoad = false}) async => throw sentinel;
 }
 
 Future<void> _flushEventQueue() async {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
@@ -77,7 +78,7 @@ void main() {
           ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
           ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
           ChangeNotifierProvider<PeopleProvider>.value(
-            value: PeopleProvider(loadPeople: () async => people)..people = people,
+            value: PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people,
           ),
         ],
         child: const MaterialApp(
