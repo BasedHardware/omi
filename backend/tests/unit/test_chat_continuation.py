@@ -7,9 +7,12 @@ repeating already delivered content, or omitting text.
 """
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 import pytest
 
+from models.app import App
 from models.chat import Message
+from utils.retrieval.graph import execute_persona_chat_stream
 from utils.retrieval.continuation import (
     CONTINUATION_SYSTEM_CONTRACT,
     format_continuation_user_prompt,
@@ -225,10 +228,6 @@ def test_strip_continuation_overlap_handles_empty_inputs():
 
 @pytest.mark.asyncio
 async def test_persona_chat_stream_applies_continuation_contract(monkeypatch):
-    from unittest.mock import MagicMock
-    from models.app import App
-    from utils.retrieval.graph import execute_persona_chat_stream
-
     app = App(
         id="app-1",
         name="Test Persona",

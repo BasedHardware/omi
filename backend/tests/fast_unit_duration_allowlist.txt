@@ -385,3 +385,5 @@ tests/unit/test_conversation_scan.py::test_people_route_returns_stats
 # Admits MAX_JOBS + 8 legacy receipt-named people through the real ledger transaction and byte
 # budget to prove the admission bound; ~1.1s CPU on CI runners, measured 2026-10-03.
 tests/unit/test_speaker_learning_round2.py::test_legacy_admission_bounds_candidates
+# First await of execute_persona_chat_stream amortizes the LangGraph retrieval graph
+tests/unit/test_chat_continuation.py::test_persona_chat_stream_applies_continuation_contract
