@@ -1,4 +1,6 @@
 import asyncio
+import contextvars
+import logging
 import threading
 import time
 from types import SimpleNamespace
@@ -475,6 +477,80 @@ def test_list_verification_pool_is_bounded_and_dedupes_inflight(monkeypatch):
         release.set()
         pool.shutdown(wait=True)
     assert queued.done()
+
+
+def test_list_verification_deadline_logs_info_not_error(monkeypatch, caplog):
+    pool = MonitoredThreadPoolExecutor(name='tag-deadline', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    caplog.set_level(logging.INFO)
+
+    def timed_out(uid, row, start, end, text, *, verification_deadline):
+        raise service.FutureTimeoutError()
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', timed_out)
+    try:
+        future = service._submit_list_verification('u', {'id': 'late'}, 0, 5, 'one two', time.monotonic() + 1)
+        cleared = threading.Event()
+        future.add_done_callback(lambda _: cleared.set())
+        with pytest.raises(service.FutureTimeoutError):
+            future.result(timeout=2)
+        assert cleared.wait(timeout=2)
+        assert 'speaker tag list verification deadline reached' in [record.getMessage() for record in caplog.records]
+        assert not any(
+            record.levelno >= logging.ERROR and 'speaker tag list verification' in record.getMessage()
+            for record in caplog.records
+        )
+        assert service._inflight_verifications == {}
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_list_verification_unexpected_error_logs_error_with_traceback(monkeypatch, caplog):
+    pool = MonitoredThreadPoolExecutor(name='tag-failure', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    caplog.set_level(logging.INFO)
+
+    def boom(uid, row, start, end, text, *, verification_deadline):
+        raise RuntimeError('doomed')
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', boom)
+    try:
+        future = service._submit_list_verification('u', {'id': 'doom'}, 0, 5, 'one two', time.monotonic() + 1)
+        cleared = threading.Event()
+        future.add_done_callback(lambda _: cleared.set())
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        assert cleared.wait(timeout=2)
+        [failure] = [
+            record
+            for record in caplog.records
+            if record.levelno >= logging.ERROR and 'speaker tag list verification failed' in record.getMessage()
+        ]
+        assert 'error_type=RuntimeError' in failure.getMessage()
+        assert failure.exc_info
+        assert service._inflight_verifications == {}
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_list_verification_propagates_contextvars(monkeypatch):
+    pool = MonitoredThreadPoolExecutor(name='tag-context', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    marker = contextvars.ContextVar('speaker_tag_marker', default='absent')
+    observed = []
+
+    def verify(uid, row, start, end, text, *, verification_deadline):
+        observed.append(marker.get())
+        return b'ok'
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', verify)
+    try:
+        marker.set('byok-marker')
+        future = service._submit_list_verification('u', {'id': 'ctx'}, 0, 5, 'one two', time.monotonic() + 1)
+        assert future.result(timeout=2) == b'ok'
+        assert observed == ['byok-marker']
+    finally:
+        pool.shutdown(wait=True)
 
 
 def test_verification_stt_runs_inline_with_one_budgeted_provider_attempt(monkeypatch):
