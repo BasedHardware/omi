@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
+
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/preferences.dart';
@@ -49,6 +50,21 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// Playback sync: the line containing the playhead is highlighted, and while
+  /// [followCurrentSegment] the list keeps [followTargetSegmentId] near the top
+  /// third. [playbackFollowRequest] re-triggers the scroll even when the target
+  /// did not change (line tap, scrub, back-to-current).
+  final String? currentSegmentId;
+  final String? followTargetSegmentId;
+  final bool followCurrentSegment;
+  final int playbackFollowRequest;
+
+  /// The reader's gestures: fired once per drag on [onUserScroll], and with the
+  /// topmost partially-visible segment during drags and at ballistic end on
+  /// [onTopVisibleSegmentChanged]. Programmatic scrolls fire neither.
+  final VoidCallback? onUserScroll;
+  final ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged;
+
   /// "Yes" / "Not <name>" under the first line Omi named by voice. Both null hides the question
   /// and leaves only the Likely badge.
   final void Function(TranscriptSegment segment)? onConfirmSpeakerLabel;
@@ -87,6 +103,12 @@ class TranscriptWidget extends StatefulWidget {
     this.onConfirmSpeakerLabel,
     this.onRejectSpeakerLabel,
     this.startedAt,
+    this.currentSegmentId,
+    this.followTargetSegmentId,
+    this.followCurrentSegment = false,
+    this.playbackFollowRequest = 0,
+    this.onUserScroll,
+    this.onTopVisibleSegmentChanged,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -145,6 +167,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // ScrollController to enable proper scrolling
   late final ScrollController _scrollController;
+
+  // Playback-follow state: the last scrolled-to target and the last honoured
+  // follow request, plus the generation that cancels an in-flight locate when
+  // the reader takes the scroll back.
+  String? _lastFollowTargetId;
+  int _lastFollowRequest = -1;
+  int _locateGeneration = 0;
+  bool _userGestureNotified = false;
+  TranscriptSegment? _lastReportedTopSegment;
 
   // Auto-scroll state management
   bool _userHasScrolled = false;
@@ -241,6 +272,23 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         }
       });
     }
+
+    if (widget.followCurrentSegment && widget.followTargetSegmentId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
+  }
+
+  /// Scrolls the playback follow target into the top third. Triggered only on a
+  /// new target id or a new explicit request — never on position ticks.
+  void _followPlaybackTarget() {
+    final targetId = widget.followTargetSegmentId;
+    if (!widget.followCurrentSegment || targetId == null) return;
+    if (targetId == _lastFollowTargetId && widget.playbackFollowRequest == _lastFollowRequest) return;
+    _lastFollowTargetId = targetId;
+    _lastFollowRequest = widget.playbackFollowRequest;
+    _locateSegment(targetId, alignment: 1 / 3);
   }
 
   void _syncSegmentKeys() {
@@ -278,6 +326,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
+
+    if (widget.followCurrentSegment &&
+        (widget.followTargetSegmentId != oldWidget.followTargetSegmentId ||
+            widget.playbackFollowRequest != oldWidget.playbackFollowRequest)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
 
     if (widget.searchQuery != oldWidget.searchQuery) {
       _rebuildMatchKeys();
@@ -395,6 +451,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _userHasScrolled = true;
     _readerDragRecovered = true;
     _interruptAutoScroll();
+    _noteUserGesture();
     _driveReaderDrag(dy);
   }
 
@@ -402,6 +459,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     _scrollController.jumpTo((_scrollController.offset - dy).clamp(position.minScrollExtent, position.maxScrollExtent));
+    _reportTopVisibleSegment();
   }
 
   void _endReaderDrag(int pointer) {
@@ -415,6 +473,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (recovered && _isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
       _captureCurrentPosition();
       _isUserScrolling = false;
+      _userGestureEnded();
     }
   }
 
@@ -614,10 +673,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _readerDragTakenOverByNative = true;
       _readerDragRecovered = false;
       _interruptAutoScroll();
+      _noteUserGesture();
       _captureCurrentPosition();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isUserScrolling) _reportTopVisibleSegment();
+      });
     } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
       _captureCurrentPosition();
       _isUserScrolling = false;
+      _userGestureEnded();
     }
     return false;
   }
@@ -633,11 +697,20 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _readerDragTakenOverByNative = true;
     _readerDragRecovered = false;
     _interruptAutoScroll();
+    _noteUserGesture();
     return false;
   }
 
   bool _onScrollUpdate(ScrollUpdateNotification notification) {
-    if (notification.depth != 0 || notification.dragDetails == null) return false;
+    if (notification.depth != 0) return false;
+    if (notification.dragDetails == null) {
+      // Ballistic momentum carries no drag details; while the reader still owns
+      // the scroll it keeps moving the read point.
+      if (_isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
+        _reportTopVisibleSegment();
+      }
+      return false;
+    }
 
     // A pointer drag always outranks follow and pending anchor restores.
     _pendingAnchorRestore = false;
@@ -646,7 +719,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _readerDragTakenOverByNative = true;
     _readerDragRecovered = false;
     _interruptAutoScroll();
+    _noteUserGesture();
     _captureCurrentPosition();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isUserScrolling) _reportTopVisibleSegment();
+    });
     return false;
   }
 
@@ -715,6 +792,110 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     });
   }
 
+  /// Direction toward [segmentIndex] measured from the rows the list has
+  /// actually built: -1 up, +1 down, 0 once the target is inside the built
+  /// range. No height estimate is involved.
+  int _locateDirection(int segmentIndex) {
+    var minBuilt = widget.segments.length;
+    var maxBuilt = -1;
+    for (var i = 0; i < widget.segments.length; i++) {
+      if (_segmentKeys[widget.segments[i].id]?.currentContext != null) {
+        if (i < minBuilt) minBuilt = i;
+        if (i > maxBuilt) maxBuilt = i;
+      }
+    }
+    if (segmentIndex < minBuilt) return -1;
+    if (segmentIndex > maxBuilt) return 1;
+    return 0;
+  }
+
+  /// Scrolls [segmentId] so its row's leading edge sits [alignment] of the way
+  /// down the viewport (1/3 keeps the current line near the top third).
+  ///
+  /// Pages one viewport at a time until the row is built — a measured
+  /// continuation, not an estimate — then lands exactly. A reader gesture or a
+  /// newer locate bumps [_locateGeneration] and stops the loop on the next
+  /// frame boundary, so a locate can never re-grab a user drag.
+  Future<void> _locateSegment(String segmentId, {required double alignment}) async {
+    final generation = ++_locateGeneration;
+    final index = widget.segments.indexWhere((segment) => segment.id == segmentId);
+    if (index < 0) return;
+    _isAutoScrolling = true;
+    try {
+      while (_segmentKeys[segmentId]?.currentContext == null) {
+        if (!mounted || generation != _locateGeneration || !_scrollController.hasClients) return;
+        final direction = _locateDirection(index);
+        if (direction == 0) break;
+        final position = _scrollController.position;
+        final target = (position.pixels + direction * position.viewportDimension * 0.9)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
+        // At a stable edge with nothing left to reveal: stop rather than
+        // jumping in place forever.
+        if ((target - position.pixels).abs() < 0.5) return;
+        _scrollController.jumpTo(target);
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      if (!mounted || generation != _locateGeneration || !_scrollController.hasClients) return;
+      final renderObject = _segmentKeys[segmentId]?.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox) return;
+      final viewport = RenderAbstractViewport.of(renderObject);
+      final position = _scrollController.position;
+      final target = (viewport.getOffsetToReveal(renderObject, 0).offset - position.viewportDimension * alignment)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      await _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      );
+    } finally {
+      if (generation == _locateGeneration) _isAutoScrolling = false;
+    }
+  }
+
+  /// The reader's intent: called once per drag, and again with the top
+  /// visible segment as it changes. UserScroll/ScrollUpdate carry dragDetails
+  /// only for real gestures, so programmatic scrolls never reach this.
+  void _noteUserGesture() {
+    _locateGeneration++;
+    if (_userGestureNotified) return;
+    _userGestureNotified = true;
+    // Reset the top-segment dedupe once per gesture: repeated drag updates
+    // must not re-report the same top segment as a fresh reader move.
+    _lastReportedTopSegment = null;
+    widget.onUserScroll?.call();
+  }
+
+  void _userGestureEnded() {
+    _userGestureNotified = false;
+    _reportTopVisibleSegment();
+  }
+
+  /// The topmost partially-visible segment — the smallest top that still
+  /// intersects the viewport. Heading, leading items and the spacing rows are
+  /// not segments; the last line at the viewport's bottom edge still counts.
+  void _reportTopVisibleSegment() {
+    final onTop = widget.onTopVisibleSegmentChanged;
+    if (onTop == null || !_scrollController.hasClients) return;
+    TranscriptSegment? topSegment;
+    var closestTop = double.infinity;
+    final currentScroll = _scrollController.offset;
+    for (final segment in widget.segments) {
+      final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox) continue;
+      final viewport = RenderAbstractViewport.of(renderObject);
+      final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+      final bottom = top + renderObject.size.height;
+      if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
+        closestTop = top;
+        topSegment = segment;
+      }
+    }
+    if (topSegment != null && !identical(topSegment, _lastReportedTopSegment)) {
+      _lastReportedTopSegment = topSegment;
+      onTop(topSegment);
+    }
+  }
+
   void _scrollToSearchResultFallback() {
     final searchQuery = widget.searchQuery.toLowerCase();
     int currentMatchIndex = 0;
@@ -731,28 +912,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       currentMatchIndex += matches.length;
     }
 
-    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final segmentKey = _segmentKeys[widget.segments[targetSegmentIndex].id];
-
-      final segmentContext = segmentKey?.currentContext;
+    if (targetSegmentIndex >= 0 && targetSegmentIndex < widget.segments.length) {
+      final segment = widget.segments[targetSegmentIndex];
+      final segmentContext = _segmentKeys[segment.id]?.currentContext;
       if (segmentContext != null) {
         _scrollToContext(segmentContext);
         return;
       }
 
-      const itemHeight = 80.0;
-      final headerHeight = widget.topMargin ? 32.0 : 0.0;
-      final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
-
-      _isAutoScrolling = true;
-      _scrollController
-          .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
-          .then((_) {
-        _isAutoScrolling = false;
+      // The match lives in an unbuilt row far away: locate it by paging, then
+      // ensure the matched span itself once the row exists. A reader gesture or
+      // a changed query cancels the follow-up reveal.
+      final query = widget.searchQuery;
+      final resultIndex = widget.currentResultIndex;
+      final future = _locateSegment(segment.id, alignment: 0.35);
+      final generation = _locateGeneration;
+      future.then((_) {
+        if (!mounted) return;
+        if (generation != _locateGeneration) return;
+        if (widget.searchQuery != query || widget.currentResultIndex != resultIndex) return;
+        if (resultIndex < 0 || resultIndex >= _matchKeys.length) return;
+        final matchContext = _matchKeys[resultIndex].currentContext;
+        if (matchContext != null && matchContext.mounted) _scrollToContext(matchContext);
       });
     }
   }
@@ -1194,6 +1375,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final asksToConfirm =
         person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
+    final isCurrent = data.id == widget.currentSegmentId;
     final unnamed = !data.isUser && !isOmi && person == null;
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
@@ -1268,7 +1450,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               segmentIdx,
               data.isUser,
               style: OmiType.body.copyWith(
-                color: data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+                color: data.isUser || isCurrent ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
                 letterSpacing: 0.0,
                 height: 1.5,
               ),
@@ -1317,6 +1499,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           onTap: play,
           child: line,
         ),
+      );
+    }
+    if (isCurrent) {
+      line = Semantics(
+        selected: true,
+        child: KeyedSubtree(key: ValueKey('transcript_current_${data.id}'), child: line),
       );
     }
     return Container(

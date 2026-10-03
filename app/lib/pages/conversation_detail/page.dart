@@ -25,6 +25,7 @@ import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, 
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -122,6 +123,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   // Callback to seek audio to transcript segment (start, end) in wall seconds
   Future<void> Function(double start, double end)? _seekToSegmentCallback;
+
+  // Page-owned playback state: the bar's player reports into it, the transcript
+  // highlights and follows from it.
+  late final ConversationPlaybackController _playbackController;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -243,6 +248,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
     // transcript only once the final summary state is known.
+    _playbackController = ConversationPlaybackController()..updateSegments(widget.conversation.transcriptSegments);
     _createTabController(initialIndex: _indexForTab(widget.initialTab ?? ConversationTab.summary));
     selectedTab = _tabForIndex(_controller!.index);
 
@@ -372,6 +378,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _playbackController.dispose();
     super.dispose();
   }
 
@@ -1069,12 +1076,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                 _controller!.animateTo(_transcriptTabIndex);
                               }
 
-                              // Seek to segment using callback (start + end for bounded play)
+                              // Seek to segment start; playback keeps running past the segment end.
                               if (_seekToSegmentCallback != null) {
                                 await _seekToSegmentCallback!(segment.start, segment.end);
-                                HapticFeedback.lightImpact();
                               }
                             },
+                            playbackController: _playbackController,
                           ),
                         ),
                       ],
@@ -1108,6 +1115,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   selectedTab: selectedTab,
                   conversation: conversation,
                   hasSegments: hasBar,
+                  playbackController: _playbackController,
                   onSeekFunctionReady: (seekFunction) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
