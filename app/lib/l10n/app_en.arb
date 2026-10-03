@@ -12552,10 +12552,6 @@
     "@deviceConnecting": {
         "description": "Header device pill while a paired device reconnects"
     },
-    "recordOptionsTip": "Tip: tap the arrow on the record button to record a phone call.",
-    "@recordOptionsTip": {
-        "description": "One-time hint after the first phone-mic recording"
-    },
     "firmwareUpdateFailedTitle": "Update Failed",
     "@firmwareUpdateFailedTitle": {
         "description": "Title of the firmware update failed state"
@@ -13312,10 +13308,6 @@
     "@recordWith": {
         "description": "Title of the sheet listing ways to record (Phone mic, Phone call)."
     },
-    "moreWaysToRecord": "More ways to record",
-    "@moreWaysToRecord": {
-        "description": "Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet."
-    },
     "openCall": "Open call",
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
@@ -13360,10 +13352,6 @@
     "captureStorageAlmostFull": "Storage almost full",
     "@captureStorageAlmostFull": {
         "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
-    },
-    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
-    "@capturePendantDisconnectedDetail": {
-        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
     },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
@@ -14575,5 +14563,21 @@
                 "type": "String"
             }
         }
+    },
+    "askAnythingButton": "Ask anything",
+    "@askAnythingButton": {
+        "description": "Home button that opens AI chat, beside a speech-bubble icon"
+    },
+    "pendantLostConnection": "Your pendant lost its connection to this phone.",
+    "@pendantLostConnection": {
+        "description": "Disconnected sheet: first line, what happened when the pendant dropped"
+    },
+    "pendantReconnectsOnItsOwn": "Omi reconnects on its own when the pendant is on and nearby.",
+    "@pendantReconnectsOnItsOwn": {
+        "description": "Disconnected sheet: reassurance that reconnecting needs no action"
+    },
+    "pendantRecordingSafe": "Everything recorded before this is safe.",
+    "@pendantRecordingSafe": {
+        "description": "Disconnected sheet: reassurance that nothing recorded is lost"
     }
 }

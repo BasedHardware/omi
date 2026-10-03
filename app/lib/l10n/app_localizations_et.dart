@@ -10659,9 +10659,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceConnecting => 'Ühendamine…';
 
   @override
-  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
 
   @override
@@ -11205,9 +11202,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get recordWith => 'Salvestusviis';
 
   @override
-  String get moreWaysToRecord => 'Rohkem salvestusviise';
-
-  @override
   String get openCall => 'Ava kõne';
 
   @override
@@ -11245,10 +11239,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12221,4 +12211,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get askAnythingButton => 'Küsi mida tahes';
+
+  @override
+  String get pendantLostConnection => 'Ripats kaotas ühenduse selle telefoniga.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.';
+
+  @override
+  String get pendantRecordingSafe => 'Kõik varem salvestatu on alles.';
 }

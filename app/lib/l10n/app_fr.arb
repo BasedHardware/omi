@@ -3420,7 +3420,6 @@
     "batteryLevelSemantics": "Batterie {level} %",
     "updateOmiGlassFirmware": "Mettre à jour le firmware OmiGlass",
     "deviceConnecting": "Connexion…",
-    "recordOptionsTip": "Astuce : touchez la flèche du bouton d'enregistrement pour enregistrer un appel.",
     "firmwareUpdateFailedTitle": "Échec de la mise à jour",
     "firmwareUpdateFailedMessage": "La mise à jour n'a pas abouti. Votre appareil utilise toujours le firmware actuel et peut être utilisé sans risque. Gardez-le chargé et près du téléphone, puis réessayez.",
     "firmwareDownloadFailedMessage": "La mise à jour n'a pas pu être téléchargée et votre appareil n'a pas été modifié. Vérifiez votre connexion internet, puis réessayez.",
@@ -3573,7 +3572,6 @@
     "pendantPausesDuringCall": "Pendentif en pause pendant l'appel",
     "keepUsingPendant": "Continuer avec le pendentif",
     "recordWith": "Enregistrer avec",
-    "moreWaysToRecord": "Autres façons d'enregistrer",
     "openCall": "Ouvrir l'appel",
     "captureRecoveryBanner": "Omi n’envoie pas de son — touchez pour vous reconnecter",
     "phoneRecordingBlockedByPendantBatch": "Arrêtez Transcribe Later sur votre pendentif avant d'enregistrer avec votre téléphone.",
@@ -3586,7 +3584,6 @@
     "captureStarting": "Démarrage…",
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
-    "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
     "participantsSummaryUncounted": "{name} et d'autres",
     "deviceOnboardingVoiceReplyTitle": "Écoutez les réponses d’Omi",
     "deviceOnboardingVoiceReplySample": "C’est noté. Votre prochaine réunion commence dans vingt minutes.",
@@ -3817,5 +3814,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconnaîtra {name} la prochaine fois.} pending{Cela prend quelques secondes.} disabled{Activez l’enregistrement des voix dans les Réglages pour qu’Omi puisse reconnaître {name}.} other{Omi a besoin d’une parole plus claire de {name} et continuera d’essayer.}}",
     "speakerLabelEarlierMatches": "Conversations précédentes avec cette voix : {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
-    "speakerLabelTalkTime": "{duration} de cette voix"
+    "speakerLabelTalkTime": "{duration} de cette voix",
+    "askAnythingButton": "Demandez n'importe quoi",
+    "pendantLostConnection": "Votre pendentif a perdu la connexion avec ce téléphone.",
+    "pendantReconnectsOnItsOwn": "Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité.",
+    "pendantRecordingSafe": "Tout ce qui a été enregistré avant est en sécurité."
 }

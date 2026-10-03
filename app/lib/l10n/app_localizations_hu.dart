@@ -10703,9 +10703,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
 
   @override
@@ -11250,9 +11247,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get recordWith => 'Rögzítés ezzel';
 
   @override
-  String get moreWaysToRecord => 'További rögzítési módok';
-
-  @override
   String get openCall => 'Hívás megnyitása';
 
   @override
@@ -11290,10 +11284,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12269,4 +12259,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get askAnythingButton => 'Kérdezz bármit';
+
+  @override
+  String get pendantLostConnection => 'A medál elvesztette a kapcsolatot ezzel a telefonnal.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.';
+
+  @override
+  String get pendantRecordingSafe => 'Minden, amit eddig rögzített, biztonságban van.';
 }

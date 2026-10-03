@@ -10750,9 +10750,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deviceConnecting => 'Verbindung wird hergestellt…';
 
   @override
-  String get recordOptionsTip => 'Tipp: Tippe auf den Pfeil an der Aufnahmetaste, um ein Telefonat aufzunehmen.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update fehlgeschlagen';
 
   @override
@@ -11299,9 +11296,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get recordWith => 'Aufnehmen mit';
 
   @override
-  String get moreWaysToRecord => 'Weitere Aufnahmeoptionen';
-
-  @override
   String get openCall => 'Anruf öffnen';
 
   @override
@@ -11339,10 +11333,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Speicher fast voll';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12320,4 +12310,17 @@ class AppLocalizationsDe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
   }
+
+  @override
+  String get askAnythingButton => 'Frag irgendetwas';
+
+  @override
+  String get pendantLostConnection => 'Dein Anhänger hat die Verbindung zu diesem Telefon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles bisher Aufgenommene ist sicher.';
 }

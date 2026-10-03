@@ -10653,9 +10653,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceConnecting => 'Pripája sa…';
 
   @override
-  String get recordOptionsTip => 'Tip: klepnutím na šípku na tlačidle nahrávania nahráte telefonický hovor.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizácia zlyhala';
 
   @override
@@ -11198,9 +11195,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get recordWith => 'Nahrať pomocou';
 
   @override
-  String get moreWaysToRecord => 'Ďalšie spôsoby nahrávania';
-
-  @override
   String get openCall => 'Otvoriť hovor';
 
   @override
@@ -11237,10 +11231,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložisko je takmer plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12216,4 +12206,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
+
+  @override
+  String get pendantLostConnection => 'Prívesok stratil spojenie s týmto telefónom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku.';
+
+  @override
+  String get pendantRecordingSafe => 'Všetko nahraté predtým je v bezpečí.';
 }

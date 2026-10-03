@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Akku {level} %",
     "updateOmiGlassFirmware": "Päivitä OmiGlassin laiteohjelmisto",
     "deviceConnecting": "Yhdistetään…",
-    "recordOptionsTip": "Vinkki: tallenna puhelu napauttamalla tallennuspainikkeen nuolta.",
     "firmwareUpdateFailedTitle": "Päivitys epäonnistui",
     "firmwareUpdateFailedMessage": "Päivitys ei valmistunut. Laitteessasi on yhä nykyinen laiteohjelmisto, ja sitä on turvallista käyttää. Pidä se ladattuna ja lähellä puhelinta ja yritä uudelleen.",
     "firmwareDownloadFailedMessage": "Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "Riipus on tauolla puhelun ajan",
     "keepUsingPendant": "Jatka riipuksella",
     "recordWith": "Tallennustapa",
-    "moreWaysToRecord": "Lisää tallennustapoja",
     "openCall": "Avaa puhelu",
     "captureRecoveryBanner": "Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla",
     "phoneRecordingBlockedByPendantBatch": "Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Käynnistetään…",
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
-    "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
     "participantsSummaryUncounted": "{name} ja muut",
     "deviceOnboardingVoiceReplyTitle": "Kuuntele Omin vastaukset",
     "deviceOnboardingVoiceReplySample": "Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
     "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}",
     "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
-    "speakerLabelTalkTime": "{duration} tästä äänestä"
+    "speakerLabelTalkTime": "{duration} tästä äänestä",
+    "askAnythingButton": "Kysy mitä tahansa",
+    "pendantLostConnection": "Riipus menetti yhteyden tähän puhelimeen.",
+    "pendantReconnectsOnItsOwn": "Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.",
+    "pendantRecordingSafe": "Kaikki tätä ennen tallennettu on tallessa."
 }

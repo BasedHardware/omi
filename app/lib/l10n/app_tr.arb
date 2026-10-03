@@ -3420,7 +3420,6 @@
     "batteryLevelSemantics": "Pil %{level}",
     "updateOmiGlassFirmware": "OmiGlass Yazılımını Güncelle",
     "deviceConnecting": "Bağlanıyor…",
-    "recordOptionsTip": "İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.",
     "firmwareUpdateFailedTitle": "Güncelleme Başarısız",
     "firmwareUpdateFailedMessage": "Güncelleme tamamlanmadı. Cihazınız hâlâ mevcut yazılımda ve güvenle kullanılabilir. Şarjlı ve telefonunuza yakın tutun, sonra tekrar deneyin.",
     "firmwareDownloadFailedMessage": "Güncelleme indirilemedi ve cihazınız değişmedi. İnternet bağlantınızı kontrol edip tekrar deneyin.",
@@ -3573,7 +3572,6 @@
     "pendantPausesDuringCall": "Arama sırasında kolye duraklar",
     "keepUsingPendant": "Kolyeyi kullanmaya devam et",
     "recordWith": "Kayıt yöntemi",
-    "moreWaysToRecord": "Diğer kayıt yöntemleri",
     "openCall": "Aramayı aç",
     "captureRecoveryBanner": "Omi ses göndermiyor — yeniden bağlanmak için dokunun",
     "phoneRecordingBlockedByPendantBatch": "Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later'ı durdurun.",
@@ -3586,7 +3584,6 @@
     "captureStarting": "Başlatılıyor…",
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
-    "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
     "participantsSummaryUncounted": "{name} ve diğerleri",
     "deviceOnboardingVoiceReplyTitle": "Omi'nin yanıtlarını dinleyin",
     "deviceOnboardingVoiceReplySample": "Anladım. Sonraki toplantınız yirmi dakika içinde başlıyor.",
@@ -3817,5 +3814,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi bir dahaki sefere {name} kişisini tanıyacak.} pending{Bu birkaç saniye sürer.} disabled{Omi {name} kişisini tanıyabilsin diye Ayarlar’da ses kaydetmeyi açın.} other{Omi, {name} kişisinin daha net konuşmasına ihtiyaç duyuyor ve denemeye devam edecek.}}",
     "speakerLabelEarlierMatches": "Bu sesle önceki sohbetler: {count}",
     "speakerLabelText": "{part, select, likely{Muhtemel} soundsLike{{name} gibi duyuluyor} notPerson{{name} değil} carried{Hâlâ {name}. Son sohbetinizden aktarıldı.} change{Değiştir} alsoTitle{Bu da {name} mi?} alsoBody{Omi aynı sesi önceki sohbetlerde buldu.} confirmed{Bu etiketi onayladınız} other{İncele}}",
-    "speakerLabelTalkTime": "Bu sesten {duration}"
+    "speakerLabelTalkTime": "Bu sesten {duration}",
+    "askAnythingButton": "Her şeyi sor",
+    "pendantLostConnection": "Kolyenin bu telefonla bağlantısı kesildi.",
+    "pendantReconnectsOnItsOwn": "Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır.",
+    "pendantRecordingSafe": "Bundan önce kaydedilen her şey güvende."
 }

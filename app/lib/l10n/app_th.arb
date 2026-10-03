@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "แบตเตอรี่ {level}%",
     "updateOmiGlassFirmware": "อัปเดตเฟิร์มแวร์ OmiGlass",
     "deviceConnecting": "กำลังเชื่อมต่อ…",
-    "recordOptionsTip": "เคล็ดลับ: แตะลูกศรบนปุ่มบันทึกเพื่อบันทึกการโทร",
     "firmwareUpdateFailedTitle": "อัปเดตไม่สำเร็จ",
     "firmwareUpdateFailedMessage": "การอัปเดตไม่เสร็จสมบูรณ์ อุปกรณ์ของคุณยังใช้เฟิร์มแวร์เดิมและใช้งานได้อย่างปลอดภัย ชาร์จไว้และวางใกล้โทรศัพท์ แล้วลองอีกครั้ง",
     "firmwareDownloadFailedMessage": "ดาวน์โหลดอัปเดตไม่ได้ และอุปกรณ์ของคุณไม่มีการเปลี่ยนแปลง ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองอีกครั้ง",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "จี้จะหยุดชั่วคราวระหว่างการโทร",
     "keepUsingPendant": "ใช้จี้ต่อ",
     "recordWith": "บันทึกด้วย",
-    "moreWaysToRecord": "วิธีบันทึกเพิ่มเติม",
     "openCall": "เปิดการโทร",
     "captureRecoveryBanner": "Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่",
     "phoneRecordingBlockedByPendantBatch": "หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์",
@@ -3551,7 +3549,6 @@
     "captureStarting": "กำลังเริ่ม…",
     "capturePhoneStorageFull": "พื้นที่โทรศัพท์เต็ม",
     "captureStorageAlmostFull": "พื้นที่ใกล้เต็ม",
-    "capturePendantDisconnectedDetail": "จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย",
     "participantsSummaryUncounted": "{name} และคนอื่นๆ",
     "deviceOnboardingVoiceReplyTitle": "ฟังคำตอบของ Omi",
     "deviceOnboardingVoiceReplySample": "รับทราบ การประชุมครั้งถัดไปของคุณจะเริ่มในอีกยี่สิบนาที",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi จะจำเสียงของ {name} ได้ในครั้งหน้า} pending{ใช้เวลาไม่กี่วินาที} disabled{เปิดการบันทึกเสียงในการตั้งค่าเพื่อให้ Omi จำเสียงของ {name} ได้} other{Omi ต้องการเสียงพูดที่ชัดเจนจาก {name} มากขึ้น และจะพยายามต่อไป}}",
     "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
     "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
-    "speakerLabelTalkTime": "{duration} ของเสียงนี้"
+    "speakerLabelTalkTime": "{duration} ของเสียงนี้",
+    "askAnythingButton": "ถามอะไรก็ได้",
+    "pendantLostConnection": "จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้",
+    "pendantReconnectsOnItsOwn": "Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้",
+    "pendantRecordingSafe": "ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย"
 }

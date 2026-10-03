@@ -10693,9 +10693,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceConnecting => 'Verbinden…';
 
   @override
-  String get recordOptionsTip => 'Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update mislukt';
 
   @override
@@ -11241,9 +11238,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get recordWith => 'Opnemen met';
 
   @override
-  String get moreWaysToRecord => 'Meer manieren om op te nemen';
-
-  @override
   String get openCall => 'Gesprek openen';
 
   @override
@@ -11281,10 +11275,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Opslag bijna vol';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12262,4 +12252,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get askAnythingButton => 'Vraag wat je wilt';
+
+  @override
+  String get pendantLostConnection => 'Je hanger heeft de verbinding met deze telefoon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles wat eerder is opgenomen, is veilig.';
 }

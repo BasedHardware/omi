@@ -17,6 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -88,10 +89,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     }
   }
 
+  // A recap reads like Home: the canvas (a white page in light mode), glass controls, flat rows.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OmiCanvas(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
-      backgroundColor: OmiColors.surface0,
+      backgroundColor: OmiColors.canvas,
       body: _isLoading
           ? const OmiLoadingState()
           : _summary == null
@@ -311,12 +315,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           slivers: [
             _buildHeader(summary),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, 100),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  _buildTitle(summary),
+                  const SizedBox(height: OmiSpacing.md),
                   _buildOverviewCard(summary),
-                  const SizedBox(height: 24),
-                  _buildStatsRow(summary),
                   if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
                   if (summary.actionItems.isNotEmpty) ...[
                     const SizedBox(height: 32),
@@ -348,131 +352,84 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
+  /// The bar stays pinned with its glass controls; the title scrolls with the page.
   Widget _buildHeader(DailySummary summary) {
     return SliverAppBar(
-      expandedHeight: 150,
       pinned: true,
-      backgroundColor: OmiColors.surface0,
-      leading: Center(child: OmiBackButton.circled(fillColor: OmiColors.surface3)),
+      backgroundColor: OmiColors.canvas,
+      surfaceTintColor: Colors.transparent,
+      leading: const Center(child: OmiBackButton.circled()),
       actions: [
         OmiIconButton.filled(
           icon: _isSharing ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.share_outlined),
           label: context.l10n.share,
-          fillColor: OmiColors.surface3,
           onPressed: _isSharing ? null : _shareSummary,
         ),
         OmiIconButton.filled(
           icon: _isDeleting ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.more_horiz),
           label: context.l10n.moreOptions,
-          fillColor: OmiColors.surface3,
           onPressed: _isDeleting ? null : _showActionsSheet,
         ),
         const SizedBox(width: 8),
       ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              // Neutral header wash (INV-UI-1: no purple).
-              colors: [OmiColors.surface2, OmiColors.surface0],
-            ),
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Spacer(),
-                  // Date above emoji and title
-                  Text(
-                    summary.formattedDate,
-                    style: TextStyle(
-                      color: OmiColors.textPrimary.withValues(alpha: 0.6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Emoji and title row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(summary.dayEmoji, style: const TextStyle(fontSize: 32)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          summary.headline,
-                          style: TextStyle(
-                            color: OmiColors.textPrimary,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+    );
+  }
+
+  /// The day's emoji in a tile, the date, the headline, and one line of counts ("3 conversations · 1h 23m
+  /// · 2 tasks"), where the stat boxes were; desktop watching time and proactive moments follow with
+  /// their glyphs when there are any.
+  Widget _buildTitle(DailySummary summary) {
+    final l10n = context.l10n;
+    final stats = summary.stats;
+    final counts = [
+      if (stats.totalConversations > 0) l10n.conversationCount(stats.totalConversations),
+      if (stats.totalDurationMinutes > 0) stats.formattedDuration,
+      if (stats.actionItemsCount > 0) l10n.taskCount(stats.actionItemsCount),
+    ].join(' · ');
+    final secondary = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    final figures = secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    Widget extra(FaIconData icon, String value) => Row(mainAxisSize: MainAxisSize.min, children: [
+          FaIcon(icon, size: 11, color: OmiColors.textSecondary),
+          const SizedBox(width: 4),
+          Text(value, style: figures),
+        ]);
+    final extras = [
+      if ((stats.watchingMinutes ?? 0) > 0) extra(FontAwesomeIcons.eye, stats.formattedWatchingDuration!),
+      if ((stats.proactiveMoments ?? 0) > 0) extra(FontAwesomeIcons.bell, '${stats.proactiveMoments}'),
+    ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DeviceTile(emoji: summary.dayEmoji),
+        const SizedBox(width: OmiSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(summary.formattedDate, style: secondary.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 2),
+              Text(summary.headline, style: OmiType.title3.copyWith(fontWeight: FontWeight.w700, height: 1.22)),
+              if (counts.isNotEmpty || extras.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: OmiSpacing.sm,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (counts.isNotEmpty) Text(counts, key: const ValueKey('daily_summary_counts'), style: figures),
+                    ...extras,
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildOverviewCard(DailySummary summary) {
     return Text(summary.overview, style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, height: 1.5));
-  }
-
-  Widget _buildStatsRow(DailySummary summary) {
-    final items = <Widget>[
-      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
-    ];
-    if ((summary.stats.watchingMinutes ?? 0) > 0) {
-      items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
-    }
-    if ((summary.stats.proactiveMoments ?? 0) > 0) {
-      items.add(_buildStatItem(FontAwesomeIcons.bell, '${summary.stats.proactiveMoments}'));
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = items.length > 3 ? 3 : items.length;
-        final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [for (final item in items) SizedBox(width: itemWidth, child: item)],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatItem(FaIconData icon, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          FaIcon(icon, color: OmiColors.textSecondary, size: 14),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
   }
 
   // Format time from "17:00" to "5PM" format
@@ -499,31 +456,34 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       children: [
         _buildSectionTitle(context.l10n.yourDaysJourney),
         const SizedBox(height: 16),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: GestureDetector(
-            onTap: () {
-              if (summary.locations.isNotEmpty) {
-                // Apple Maps cannot take waypoints via map_launcher, so the
-                // preview opens the day's first stop; each timeline row below
-                // opens its own stop.
-                MapsUtil.launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
-              }
-            },
-            child: SizedBox(
-              width: double.infinity,
-              height: 200,
-              child: OmiMapPreview(
-                key: const ValueKey('daily_summary_journey_preview'),
-                pins: [
-                  for (final location in summary.locations)
-                    OmiMapPin(latitude: location.latitude, longitude: location.longitude),
-                ],
+        Container(
+          foregroundDecoration: OmiGlass.rim(const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll)),
+          child: ClipRRect(
+            borderRadius: OmiRadius.xlAll,
+            child: GestureDetector(
+              onTap: () {
+                if (summary.locations.isNotEmpty) {
+                  // Apple Maps cannot take waypoints via map_launcher, so the
+                  // preview opens the day's first stop; each timeline row below
+                  // opens its own stop.
+                  MapsUtil.launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
+                }
+              },
+              child: SizedBox(
+                width: double.infinity,
+                height: 200,
+                child: OmiMapPreview(
+                  key: const ValueKey('daily_summary_journey_preview'),
+                  pins: [
+                    for (final location in summary.locations)
+                      OmiMapPin(latitude: location.latitude, longitude: location.longitude),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: OmiSpacing.xs),
         // Timeline list
         ...timelineLocations.asMap().entries.map((entry) {
           final index = entry.key;
@@ -543,32 +503,28 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         const SizedBox(height: 12),
         ...summary.highlights.map((highlight) {
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () {
               if (highlight.conversationIds.isNotEmpty) {
                 _openConversation(highlight.conversationIds.first);
               }
             },
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: DeviceTile.rowPadding / 2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(highlight.emoji, style: const TextStyle(fontSize: 20)),
-                  const SizedBox(width: 10),
+                  DeviceTile(emoji: highlight.emoji),
+                  const SizedBox(width: OmiSpacing.sm),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          highlight.topic,
-                          style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
+                        Text(highlight.topic, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
                         const SizedBox(height: 2),
                         Text(
                           highlight.summary,
-                          style: TextStyle(color: OmiColors.textSecondary, fontSize: 13, height: 1.3),
+                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3),
                         ),
                       ],
                     ),
@@ -614,11 +570,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
   Widget _buildActionItemRow(ActionItemSummary item) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => _openConversation(item.sourceConversationId),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
             // Checkbox indicator
@@ -659,11 +614,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         const SizedBox(height: 12),
         ...summary.unresolvedQuestions.map((q) {
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _openConversation(q.conversationId),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 children: [
                   Expanded(
@@ -687,11 +641,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         const SizedBox(height: 12),
         ...summary.decisionsMade.map((d) {
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _openConversation(d.conversationId),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 children: [
                   Expanded(
@@ -726,11 +679,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         const SizedBox(height: 12),
         ...summary.knowledgeNuggets.map((k) {
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => _openConversation(k.conversationId),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 children: [
                   Expanded(
@@ -747,10 +699,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: TextStyle(color: OmiColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
-    );
+    return Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary));
   }
 
   Widget _buildTimelineItem(TimelineLocation location, int index) {
@@ -773,13 +722,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
-        child: Container(
+        child: Padding(
           key: ValueKey('daily_summary_location_row_$index'),
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.symmetric(vertical: DeviceTile.rowPadding / 2),
           child: Row(
             children: [
+              const DeviceTile(icon: Icons.place_outlined),
+              const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

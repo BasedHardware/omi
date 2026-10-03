@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Aku {level}%",
     "updateOmiGlassFirmware": "Värskenda OmiGlassi püsivara",
     "deviceConnecting": "Ühendamine…",
-    "recordOptionsTip": "Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.",
     "firmwareUpdateFailedTitle": "Värskendamine ebaõnnestus",
     "firmwareUpdateFailedMessage": "Värskendus ei lõppenud. Seadmel on endiselt praegune püsivara ja seda on ohutu kasutada. Hoia see laetuna ja telefoni lähedal ning proovi uuesti.",
     "firmwareDownloadFailedMessage": "Värskendust ei õnnestunud alla laadida ja seadet ei muudetud. Kontrolli internetiühendust ja proovi uuesti.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "Ripats on kõne ajal peatatud",
     "keepUsingPendant": "Jätka ripatsiga",
     "recordWith": "Salvestusviis",
-    "moreWaysToRecord": "Rohkem salvestusviise",
     "openCall": "Ava kõne",
     "captureRecoveryBanner": "Omi ei saada heli — puudutage uuesti ühendamiseks",
     "phoneRecordingBlockedByPendantBatch": "Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Käivitamine…",
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
-    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
     "participantsSummaryUncounted": "{name} ja teised",
     "deviceOnboardingVoiceReplyTitle": "Kuula Omi vastuseid",
     "deviceOnboardingVoiceReplySample": "Selge. Sinu järgmine kohtumine algab kahekümne minuti pärast.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest"
+    "speakerLabelTalkTime": "{duration} sellest häälest",
+    "askAnythingButton": "Küsi mida tahes",
+    "pendantLostConnection": "Ripats kaotas ühenduse selle telefoniga.",
+    "pendantReconnectsOnItsOwn": "Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.",
+    "pendantRecordingSafe": "Kõik varem salvestatu on alles."
 }

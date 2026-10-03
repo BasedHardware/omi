@@ -10942,7 +10942,6 @@
     "batteryLevelSemantics": "Батерија {level}%",
     "updateOmiGlassFirmware": "Ажурирај фирмвер за OmiGlass",
     "deviceConnecting": "Повезивање…",
-    "recordOptionsTip": "Савет: додирните стрелицу на дугмету за снимање да бисте снимили телефонски позив.",
     "firmwareUpdateFailedTitle": "Ажурирање није успело",
     "firmwareUpdateFailedMessage": "Ажурирање није завршено. Уређај је и даље на тренутном фирмверу и безбедан је за употребу. Држите га напуњеним и близу телефона, па покушајте поново.",
     "firmwareDownloadFailedMessage": "Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.",
@@ -11095,7 +11094,6 @@
     "pendantPausesDuringCall": "Привезак је паузиран током позива",
     "keepUsingPendant": "Настави са привеском",
     "recordWith": "Снимај помоћу",
-    "moreWaysToRecord": "Више начина снимања",
     "openCall": "Отвори позив",
     "captureRecoveryBanner": "Omi не шаље звук — додирните за поновно повезивање",
     "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privesku pre snimanja telefonom.",
@@ -11108,7 +11106,6 @@
     "captureStarting": "Покретање…",
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
-    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чујте Omi одговоре",
     "deviceOnboardingVoiceReplySample": "Разумем. Ваш следећи састанак почиње за двадесет минута.",
@@ -11339,5 +11336,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ће препознати особу {name} следећи пут.} pending{Ово траје неколико секунди.} disabled{Укључите чување гласова у подешавањима да би Omi могао да препозна особу {name}.} other{Omi треба више јасног говора особе {name} и наставиће да покушава.}}",
     "speakerLabelEarlierMatches": "Ранији разговори са овим гласом: {count}",
     "speakerLabelText": "{part, select, likely{Вероватно} soundsLike{Звучи као {name}} notPerson{Није {name}} carried{И даље {name}. Пренето из вашег последњег разговора.} change{Промени} alsoTitle{Да ли је ово такође {name}?} alsoBody{Omi је пронашао исти глас у ранијим разговорима.} confirmed{Потврдили сте ову ознаку} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} овог гласа"
+    "speakerLabelTalkTime": "{duration} овог гласа",
+    "askAnythingButton": "Питај шта год",
+    "pendantLostConnection": "Привезак је изгубио везу са овим телефоном.",
+    "pendantReconnectsOnItsOwn": "Omi ће се сам поново повезати кад је привезак укључен и у близини.",
+    "pendantRecordingSafe": "Све снимљено до сада је безбедно."
 }

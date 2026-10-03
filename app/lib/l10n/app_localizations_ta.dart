@@ -10734,10 +10734,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceConnecting => 'இணைக்கிறது…';
 
   @override
-  String get recordOptionsTip =>
-      'குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'புதுப்பிப்பு தோல்வியடைந்தது';
 
   @override
@@ -11284,9 +11280,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get recordWith => 'பதிவுசெய்யும் முறை';
 
   @override
-  String get moreWaysToRecord => 'பதிவுசெய்ய மேலும் வழிகள்';
-
-  @override
   String get openCall => 'அழைப்பைத் திறக்கவும்';
 
   @override
@@ -11324,10 +11317,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12305,4 +12294,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
+
+  @override
+  String get askAnythingButton => 'எதையும் கேளுங்கள்';
+
+  @override
+  String get pendantLostConnection => 'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும்.';
+
+  @override
+  String get pendantRecordingSafe => 'இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 }

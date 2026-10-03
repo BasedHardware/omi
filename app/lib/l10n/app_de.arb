@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Akku {level} %",
     "updateOmiGlassFirmware": "OmiGlass-Firmware aktualisieren",
     "deviceConnecting": "Verbindung wird hergestellt…",
-    "recordOptionsTip": "Tipp: Tippe auf den Pfeil an der Aufnahmetaste, um ein Telefonat aufzunehmen.",
     "firmwareUpdateFailedTitle": "Update fehlgeschlagen",
     "firmwareUpdateFailedMessage": "Das Update wurde nicht abgeschlossen. Dein Gerät läuft weiter mit der aktuellen Firmware und kann sicher genutzt werden. Lade es auf, halte es in der Nähe deines Telefons und versuche es erneut.",
     "firmwareDownloadFailedMessage": "Das Update konnte nicht geladen werden, dein Gerät wurde nicht verändert. Prüfe deine Internetverbindung und versuche es erneut.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "Anhänger pausiert während des Anrufs",
     "keepUsingPendant": "Anhänger weiter nutzen",
     "recordWith": "Aufnehmen mit",
-    "moreWaysToRecord": "Weitere Aufnahmeoptionen",
     "openCall": "Anruf öffnen",
     "captureRecoveryBanner": "Omi sendet keinen Ton — zum erneuten Verbinden tippen",
     "phoneRecordingBlockedByPendantBatch": "Beende Transcribe Later auf deinem Anhänger, bevor du mit dem Telefon aufnimmst.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Startet…",
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
-    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
     "participantsSummaryUncounted": "{name} und weitere",
     "deviceOnboardingVoiceReplyTitle": "Omis Antworten anhören",
     "deviceOnboardingVoiceReplySample": "Alles klar. Dein nächstes Meeting beginnt in zwanzig Minuten.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi erkennt {name} beim nächsten Mal.} pending{Das dauert ein paar Sekunden.} disabled{Aktiviere in den Einstellungen das Speichern von Stimmen, damit Omi {name} erkennen kann.} other{Omi braucht mehr klare Sprache von {name} und versucht es weiter.}}",
     "speakerLabelEarlierMatches": "Frühere Gespräche mit dieser Stimme: {count}",
     "speakerLabelText": "{part, select, likely{Wahrscheinlich} soundsLike{Klingt wie {name}} notPerson{Nicht {name}} carried{Weiterhin {name}. Aus deinem letzten Gespräch übernommen.} change{Ändern} alsoTitle{Ist das auch {name}?} alsoBody{Omi hat dieselbe Stimme in früheren Gesprächen gefunden.} confirmed{Du hast dieses Label bestätigt} other{Prüfen}}",
-    "speakerLabelTalkTime": "{duration} dieser Stimme"
+    "speakerLabelTalkTime": "{duration} dieser Stimme",
+    "askAnythingButton": "Frag irgendetwas",
+    "pendantLostConnection": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren.",
+    "pendantReconnectsOnItsOwn": "Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist.",
+    "pendantRecordingSafe": "Alles bisher Aufgenommene ist sicher."
 }

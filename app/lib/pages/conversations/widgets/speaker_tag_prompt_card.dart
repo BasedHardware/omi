@@ -51,7 +51,7 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
           child: Container(
             key: const Key('speaker_tag_prompt_card'),
             decoration: BoxDecoration(
-              color: OmiColors.surface1,
+              color: OmiCanvas.cardOf(context),
               borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.xl)),
             ),
             margin: const EdgeInsets.fromLTRB(OmiSpacing.md, 15, OmiSpacing.md, 0),

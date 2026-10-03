@@ -10674,9 +10674,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceConnecting => 'Bağlanıyor…';
 
   @override
-  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
 
   @override
@@ -11219,9 +11216,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get recordWith => 'Kayıt yöntemi';
 
   @override
-  String get moreWaysToRecord => 'Diğer kayıt yöntemleri';
-
-  @override
   String get openCall => 'Aramayı aç';
 
   @override
@@ -11259,10 +11253,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12235,4 +12225,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get askAnythingButton => 'Her şeyi sor';
+
+  @override
+  String get pendantLostConnection => 'Kolyenin bu telefonla bağlantısı kesildi.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır.';
+
+  @override
+  String get pendantRecordingSafe => 'Bundan önce kaydedilen her şey güvende.';
 }

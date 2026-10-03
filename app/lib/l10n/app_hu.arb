@@ -3481,7 +3481,6 @@
     "batteryLevelSemantics": "Akkumulátor {level}%",
     "updateOmiGlassFirmware": "OmiGlass firmware frissítése",
     "deviceConnecting": "Csatlakozás…",
-    "recordOptionsTip": "Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.",
     "firmwareUpdateFailedTitle": "A frissítés nem sikerült",
     "firmwareUpdateFailedMessage": "A frissítés nem fejeződött be. Az eszközöd továbbra is a jelenlegi firmware-t használja, és biztonságosan használható. Tartsd feltöltve és a telefon közelében, majd próbáld újra.",
     "firmwareDownloadFailedMessage": "A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.",
@@ -3634,7 +3633,6 @@
     "pendantPausesDuringCall": "A medál szünetel a hívás alatt",
     "keepUsingPendant": "Maradok a medálnál",
     "recordWith": "Rögzítés ezzel",
-    "moreWaysToRecord": "További rögzítési módok",
     "openCall": "Hívás megnyitása",
     "captureRecoveryBanner": "Az Omi nem küld hangot — koppintson az újracsatlakozáshoz",
     "phoneRecordingBlockedByPendantBatch": "Állítsa le a Transcribe Later módot a medálján, mielőtt telefonnal rögzítene.",
@@ -3647,7 +3645,6 @@
     "captureStarting": "Indítás…",
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
-    "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
     "participantsSummaryUncounted": "{name} és mások",
     "deviceOnboardingVoiceReplyTitle": "Hallgasd meg Omi válaszait",
     "deviceOnboardingVoiceReplySample": "Rendben. A következő megbeszélésed húsz perc múlva kezdődik.",
@@ -3878,5 +3875,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Az Omi legközelebb felismeri őt: {name}.} pending{Ez néhány másodpercig tart.} disabled{Kapcsold be a hangok mentését a Beállításokban, hogy az Omi felismerhesse őt: {name}.} other{Az Ominak több tiszta beszédre van szüksége tőle: {name}, és tovább próbálkozik.}}",
     "speakerLabelEarlierMatches": "Korábbi beszélgetések ezzel a hanggal: {count}",
     "speakerLabelText": "{part, select, likely{Valószínű} soundsLike{{name} hangjához hasonlít} notPerson{Nem {name}} carried{Továbbra is {name}. Átvéve az előző beszélgetésedből.} change{Módosítás} alsoTitle{Ő is {name}?} alsoBody{Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.} confirmed{Megerősítetted ezt a címkét} other{Áttekintés}}",
-    "speakerLabelTalkTime": "{duration} ebből a hangból"
+    "speakerLabelTalkTime": "{duration} ebből a hangból",
+    "askAnythingButton": "Kérdezz bármit",
+    "pendantLostConnection": "A medál elvesztette a kapcsolatot ezzel a telefonnal.",
+    "pendantReconnectsOnItsOwn": "Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.",
+    "pendantRecordingSafe": "Minden, amit eddig rögzített, biztonságban van."
 }

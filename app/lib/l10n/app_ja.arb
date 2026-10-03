@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "バッテリー {level}%",
     "updateOmiGlassFirmware": "OmiGlass のファームウェアを更新",
     "deviceConnecting": "接続中…",
-    "recordOptionsTip": "ヒント：録音ボタンの矢印をタップすると通話を録音できます。",
     "firmwareUpdateFailedTitle": "アップデートに失敗しました",
     "firmwareUpdateFailedMessage": "アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。",
     "firmwareDownloadFailedMessage": "アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "通話中はペンダントが一時停止します",
     "keepUsingPendant": "ペンダントを使い続ける",
     "recordWith": "録音方法",
-    "moreWaysToRecord": "その他の録音方法",
     "openCall": "通話を開く",
     "captureRecoveryBanner": "Omiが音声を送信していません — タップして再接続",
     "phoneRecordingBlockedByPendantBatch": "携帯で録音する前に、ペンダントの Transcribe Later を停止してください。",
@@ -3551,7 +3549,6 @@
     "captureStarting": "開始中…",
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
-    "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
     "participantsSummaryUncounted": "{name}ほか",
     "deviceOnboardingVoiceReplyTitle": "Omiの回答を聞く",
     "deviceOnboardingVoiceReplySample": "了解しました。次の会議は20分後に始まります。",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{次回から Omi が{name}さんを認識します。} pending{数秒かかります。} disabled{Omi が{name}さんを認識できるように、設定で声の保存をオンにしてください。} other{Omi は{name}さんのはっきりした音声がもっと必要です。引き続き試みます。}}",
     "speakerLabelEarlierMatches": "この声の過去の会話数：{count}",
     "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
-    "speakerLabelTalkTime": "この声の{duration}"
+    "speakerLabelTalkTime": "この声の{duration}",
+    "askAnythingButton": "何でも聞いてください",
+    "pendantLostConnection": "ペンダントとこのスマートフォンの接続が切れました。",
+    "pendantReconnectsOnItsOwn": "ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。",
+    "pendantRecordingSafe": "それまでに録音した内容は保存されています。"
 }

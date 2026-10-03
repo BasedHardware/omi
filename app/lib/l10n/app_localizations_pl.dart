@@ -10695,10 +10695,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceConnecting => 'Łączenie…';
 
   @override
-  String get recordOptionsTip =>
-      'Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizacja nie powiodła się';
 
   @override
@@ -11243,9 +11239,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get recordWith => 'Nagraj za pomocą';
 
   @override
-  String get moreWaysToRecord => 'Więcej sposobów nagrywania';
-
-  @override
   String get openCall => 'Otwórz połączenie';
 
   @override
@@ -11283,10 +11276,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12260,4 +12249,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get askAnythingButton => 'Zapytaj o cokolwiek';
+
+  @override
+  String get pendantLostConnection => 'Wisiorek utracił połączenie z tym telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu.';
+
+  @override
+  String get pendantRecordingSafe => 'Wszystko nagrane wcześniej jest bezpieczne.';
 }

@@ -10576,9 +10576,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceConnecting => 'מתחבר…';
 
   @override
-  String get recordOptionsTip => 'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'העדכון נכשל';
 
   @override
@@ -11119,9 +11116,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recordWith => 'הקלטה באמצעות';
 
   @override
-  String get moreWaysToRecord => 'דרכים נוספות להקליט';
-
-  @override
   String get openCall => 'פתיחת השיחה';
 
   @override
@@ -11158,10 +11152,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12128,4 +12118,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
+
+  @override
+  String get askAnythingButton => 'שאל כל דבר';
+
+  @override
+  String get pendantLostConnection => 'התליון איבד את החיבור לטלפון הזה.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב.';
+
+  @override
+  String get pendantRecordingSafe => 'כל מה שהוקלט עד עכשיו שמור.';
 }

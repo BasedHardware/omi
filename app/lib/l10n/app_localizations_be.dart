@@ -10692,9 +10692,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceConnecting => 'Падключэнне…';
 
   @override
-  String get recordOptionsTip => 'Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
 
   @override
@@ -11237,9 +11234,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get recordWith => 'Запісаць праз';
 
   @override
-  String get moreWaysToRecord => 'Іншыя спосабы запісу';
-
-  @override
   String get openCall => 'Адкрыць званок';
 
   @override
@@ -11276,10 +11270,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12255,4 +12245,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
+
+  @override
+  String get askAnythingButton => 'Спытайце што заўгодна';
+
+  @override
+  String get pendantLostConnection => 'Кулон страціў сувязь з гэтым тэлефонам.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi перападключыцца сам, калі кулон уключаны і побач.';
+
+  @override
+  String get pendantRecordingSafe => 'Усё, што запісана да гэтага, захавана.';
 }

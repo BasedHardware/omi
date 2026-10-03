@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Batería {level} %",
     "updateOmiGlassFirmware": "Actualizar firmware de OmiGlass",
     "deviceConnecting": "Conectando…",
-    "recordOptionsTip": "Consejo: toca la flecha del botón de grabar para grabar una llamada.",
     "firmwareUpdateFailedTitle": "Error en la actualización",
     "firmwareUpdateFailedMessage": "La actualización no terminó. Tu dispositivo sigue con el firmware actual y es seguro usarlo. Mantenlo cargado y cerca del teléfono, y vuelve a intentarlo.",
     "firmwareDownloadFailedMessage": "No se pudo descargar la actualización y tu dispositivo no cambió. Revisa tu conexión a internet y vuelve a intentarlo.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "El colgante se pausa durante la llamada",
     "keepUsingPendant": "Seguir usando el colgante",
     "recordWith": "Grabar con",
-    "moreWaysToRecord": "Más formas de grabar",
     "openCall": "Abrir llamada",
     "captureRecoveryBanner": "Omi no está enviando audio — toca para volver a conectar",
     "phoneRecordingBlockedByPendantBatch": "Detén Transcribe Later en tu colgante antes de grabar con el teléfono.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Iniciando…",
     "capturePhoneStorageFull": "Almacenamiento del teléfono lleno",
     "captureStorageAlmostFull": "Almacenamiento casi lleno",
-    "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.",
     "participantsSummaryUncounted": "{name} y otros",
     "deviceOnboardingVoiceReplyTitle": "Escucha las respuestas de Omi",
     "deviceOnboardingVoiceReplySample": "Entendido. Tu próxima reunión empieza en veinte minutos.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconocerá a {name} la próxima vez.} pending{Esto tarda unos segundos.} disabled{Activa el guardado de voces en Ajustes para que Omi pueda reconocer a {name}.} other{Omi necesita más habla clara de {name} y seguirá intentándolo.}}",
     "speakerLabelEarlierMatches": "Conversaciones anteriores con esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} de esta voz"
+    "speakerLabelTalkTime": "{duration} de esta voz",
+    "askAnythingButton": "Pregunta cualquier cosa",
+    "pendantLostConnection": "Tu colgante perdió la conexión con este teléfono.",
+    "pendantReconnectsOnItsOwn": "Omi se volverá a conectar solo cuando el colgante esté encendido y cerca.",
+    "pendantRecordingSafe": "Todo lo grabado antes está a salvo."
 }

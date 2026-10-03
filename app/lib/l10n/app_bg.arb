@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Батерия {level}%",
     "updateOmiGlassFirmware": "Актуализиране на фърмуера на OmiGlass",
     "deviceConnecting": "Свързване…",
-    "recordOptionsTip": "Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.",
     "firmwareUpdateFailedTitle": "Неуспешна актуализация",
     "firmwareUpdateFailedMessage": "Актуализацията не завърши. Устройството ви е с текущия фърмуер и е безопасно за използване. Дръжте го заредено и близо до телефона и опитайте отново.",
     "firmwareDownloadFailedMessage": "Актуализацията не можа да бъде изтеглена и устройството не е променено. Проверете интернет връзката и опитайте отново.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "Висулката е на пауза по време на обаждането",
     "keepUsingPendant": "Продължи с висулката",
     "recordWith": "Запис с",
-    "moreWaysToRecord": "Още начини за запис",
     "openCall": "Отвори обаждането",
     "captureRecoveryBanner": "Omi не изпраща аудио — докоснете, за да се свържете отново",
     "phoneRecordingBlockedByPendantBatch": "Спрете Transcribe Later на висулката си, преди да записвате с телефона.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Стартиране…",
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
-    "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чуйте отговорите на Omi",
     "deviceOnboardingVoiceReplySample": "Готово. Следващата ви среща започва след двадесет минути.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ще разпознае {name} следващия път.} pending{Това отнема няколко секунди.} disabled{Включете запазването на гласове в Настройки, за да може Omi да разпознава {name}.} other{Omi се нуждае от повече ясна реч от {name} и ще продължи да опитва.}}",
     "speakerLabelEarlierMatches": "Предишни разговори с този глас: {count}",
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
-    "speakerLabelTalkTime": "{duration} от този глас"
+    "speakerLabelTalkTime": "{duration} от този глас",
+    "askAnythingButton": "Попитайте каквото и да е",
+    "pendantLostConnection": "Висулката загуби връзка с този телефон.",
+    "pendantReconnectsOnItsOwn": "Omi ще се свърже отново сам, когато висулката е включена и наблизо.",
+    "pendantRecordingSafe": "Всичко записано дотук е запазено."
 }

@@ -35,7 +35,7 @@ class HeaderSyncButton extends StatelessWidget {
       semanticLabel: pending > 0 ? '${l10n.sync}, ${l10n.transcriptionsPendingCount(pending)}' : l10n.sync,
       onTap: onTap,
       badgeCount: pending,
-      color: isSyncing ? OmiColors.surface3 : OmiColors.surface1,
+      color: isSyncing ? OmiColors.surface3 : null,
       icon: Icon(Icons.cloud_rounded, size: 18, color: isSyncing ? OmiColors.textPrimary : OmiColors.textSecondary),
     );
   }

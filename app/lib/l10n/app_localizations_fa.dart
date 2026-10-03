@@ -10660,9 +10660,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceConnecting => 'در حال اتصال…';
 
   @override
-  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، روی فلش دکمه ضبط بزنید.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
 
   @override
@@ -11204,9 +11201,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get recordWith => 'ضبط با';
 
   @override
-  String get moreWaysToRecord => 'روش‌های دیگر ضبط';
-
-  @override
   String get openCall => 'باز کردن تماس';
 
   @override
@@ -11243,10 +11237,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12222,4 +12212,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get askAnythingButton => 'هر چیزی بپرسید';
+
+  @override
+  String get pendantLostConnection => 'آویز شما اتصالش را با این تلفن از دست داد.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود.';
+
+  @override
+  String get pendantRecordingSafe => 'هر آنچه پیش از این ضبط شده محفوظ است.';
 }

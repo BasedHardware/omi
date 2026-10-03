@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "Baterie {level} %",
     "updateOmiGlassFirmware": "Aktualizovat firmware OmiGlass",
     "deviceConnecting": "Připojování…",
-    "recordOptionsTip": "Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.",
     "firmwareUpdateFailedTitle": "Aktualizace se nezdařila",
     "firmwareUpdateFailedMessage": "Aktualizace nebyla dokončena. Zařízení má stále současný firmware a je bezpečné ho používat. Nabijte ho, mějte ho u telefonu a zkuste to znovu.",
     "firmwareDownloadFailedMessage": "Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "Přívěsek se během hovoru pozastaví",
     "keepUsingPendant": "Dál používat přívěsek",
     "recordWith": "Nahrát pomocí",
-    "moreWaysToRecord": "Další způsoby nahrávání",
     "openCall": "Otevřít hovor",
     "captureRecoveryBanner": "Omi neodesílá zvuk — klepnutím se znovu připojte",
     "phoneRecordingBlockedByPendantBatch": "Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "Spouštění…",
     "capturePhoneStorageFull": "Úložiště telefonu je plné",
     "captureStorageAlmostFull": "Úložiště je téměř plné",
-    "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.",
     "participantsSummaryUncounted": "{name} a další",
     "deviceOnboardingVoiceReplyTitle": "Poslechněte si odpovědi Omi",
     "deviceOnboardingVoiceReplySample": "Mám to. Vaše další schůzka začíná za dvacet minut.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi příště pozná osobu {name}.} pending{Potrvá to několik sekund.} disabled{Zapněte v Nastavení ukládání hlasů, aby Omi mohl poznat osobu {name}.} other{Omi potřebuje více zřetelné řeči od osoby {name} a bude to zkoušet dál.}}",
     "speakerLabelEarlierMatches": "Dřívější rozhovory s tímto hlasem: {count}",
     "speakerLabelText": "{part, select, likely{Pravděpodobně} soundsLike{Zní jako {name}} notPerson{Není {name}} carried{Stále {name}. Převzato z vaší poslední konverzace.} change{Změnit} alsoTitle{Je to také {name}?} alsoBody{Omi našel stejný hlas v dřívějších rozhovorech.} confirmed{Tento štítek jste potvrdili} other{Zkontrolovat}}",
-    "speakerLabelTalkTime": "{duration} tohoto hlasu"
+    "speakerLabelTalkTime": "{duration} tohoto hlasu",
+    "askAnythingButton": "Zeptejte se na cokoliv",
+    "pendantLostConnection": "Přívěsek ztratil spojení s tímto telefonem.",
+    "pendantReconnectsOnItsOwn": "Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž.",
+    "pendantRecordingSafe": "Vše nahrané předtím je v bezpečí."
 }

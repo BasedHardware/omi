@@ -3420,7 +3420,6 @@
     "batteryLevelSemantics": "Baterai {level}%",
     "updateOmiGlassFirmware": "Perbarui Firmware OmiGlass",
     "deviceConnecting": "Menghubungkan…",
-    "recordOptionsTip": "Tips: ketuk panah pada tombol rekam untuk merekam panggilan telepon.",
     "firmwareUpdateFailedTitle": "Pembaruan Gagal",
     "firmwareUpdateFailedMessage": "Pembaruan tidak selesai. Perangkat Anda masih memakai firmware saat ini dan aman digunakan. Pastikan terisi daya dan dekat ponsel, lalu coba lagi.",
     "firmwareDownloadFailedMessage": "Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.",
@@ -3573,7 +3572,6 @@
     "pendantPausesDuringCall": "Liontin dijeda selama panggilan",
     "keepUsingPendant": "Tetap pakai liontin",
     "recordWith": "Rekam dengan",
-    "moreWaysToRecord": "Cara lain untuk merekam",
     "openCall": "Buka panggilan",
     "captureRecoveryBanner": "Omi tidak mengirim audio — ketuk untuk menghubungkan kembali",
     "phoneRecordingBlockedByPendantBatch": "Hentikan Transcribe Later di pendant Anda sebelum merekam dengan ponsel.",
@@ -3586,7 +3584,6 @@
     "captureStarting": "Memulai…",
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
-    "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
     "participantsSummaryUncounted": "{name} dan lainnya",
     "deviceOnboardingVoiceReplyTitle": "Dengarkan jawaban Omi",
     "deviceOnboardingVoiceReplySample": "Baik. Rapat Anda berikutnya dimulai dua puluh menit lagi.",
@@ -3817,5 +3814,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengenali {name} lain kali.} pending{Ini butuh beberapa detik.} disabled{Aktifkan penyimpanan suara di Pengaturan agar Omi dapat mengenali {name}.} other{Omi butuh lebih banyak ucapan jelas dari {name} dan akan terus mencoba.}}",
     "speakerLabelEarlierMatches": "Percakapan sebelumnya dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Terdengar seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dilanjutkan dari percakapan terakhir Anda.} change{Ubah} alsoTitle{Apakah ini juga {name}?} alsoBody{Omi menemukan suara yang sama di percakapan sebelumnya.} confirmed{Anda telah mengonfirmasi label ini} other{Tinjau}}",
-    "speakerLabelTalkTime": "{duration} dari suara ini"
+    "speakerLabelTalkTime": "{duration} dari suara ini",
+    "askAnythingButton": "Tanyakan apa saja",
+    "pendantLostConnection": "Liontin kehilangan koneksi dengan ponsel ini.",
+    "pendantReconnectsOnItsOwn": "Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda.",
+    "pendantRecordingSafe": "Semua yang direkam sebelumnya aman."
 }

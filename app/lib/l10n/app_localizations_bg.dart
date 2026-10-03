@@ -10702,9 +10702,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceConnecting => 'Свързване…';
 
   @override
-  String get recordOptionsTip => 'Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
 
   @override
@@ -11249,9 +11246,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get recordWith => 'Запис с';
 
   @override
-  String get moreWaysToRecord => 'Още начини за запис';
-
-  @override
   String get openCall => 'Отвори обаждането';
 
   @override
@@ -11289,10 +11283,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12268,4 +12258,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get askAnythingButton => 'Попитайте каквото и да е';
+
+  @override
+  String get pendantLostConnection => 'Висулката загуби връзка с този телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ще се свърже отново сам, когато висулката е включена и наблизо.';
+
+  @override
+  String get pendantRecordingSafe => 'Всичко записано дотук е запазено.';
 }

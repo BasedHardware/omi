@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "बैटरी {level}%",
     "updateOmiGlassFirmware": "OmiGlass फ़र्मवेयर अपडेट करें",
     "deviceConnecting": "कनेक्ट हो रहा है…",
-    "recordOptionsTip": "सुझाव: फ़ोन कॉल रिकॉर्ड करने के लिए रिकॉर्ड बटन पर तीर टैप करें।",
     "firmwareUpdateFailedTitle": "अपडेट विफल रहा",
     "firmwareUpdateFailedMessage": "अपडेट पूरा नहीं हुआ। आपका डिवाइस अभी भी मौजूदा फ़र्मवेयर पर है और इस्तेमाल के लिए सुरक्षित है। उसे चार्ज और फ़ोन के पास रखें, फिर दोबारा कोशिश करें।",
     "firmwareDownloadFailedMessage": "अपडेट डाउनलोड नहीं हो सका और आपके डिवाइस में कोई बदलाव नहीं हुआ। इंटरनेट कनेक्शन जाँचें, फिर दोबारा कोशिश करें।",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "कॉल के दौरान पेंडेंट रुका रहेगा",
     "keepUsingPendant": "पेंडेंट ही इस्तेमाल करें",
     "recordWith": "रिकॉर्ड करने का तरीका",
-    "moreWaysToRecord": "रिकॉर्ड करने के और तरीके",
     "openCall": "कॉल खोलें",
     "captureRecoveryBanner": "Omi ऑडियो नहीं भेज रहा है — फिर से कनेक्ट करने के लिए टैप करें",
     "phoneRecordingBlockedByPendantBatch": "फ़ोन से रिकॉर्ड करने से पहले अपने पेंडेंट पर Transcribe Later बंद करें।",
@@ -3551,7 +3549,6 @@
     "captureStarting": "शुरू हो रहा है…",
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
-    "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
     "participantsSummaryUncounted": "{name} और अन्य",
     "deviceOnboardingVoiceReplyTitle": "Omi के जवाब सुनें",
     "deviceOnboardingVoiceReplySample": "समझ गया। आपकी अगली मीटिंग बीस मिनट में शुरू होगी।",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi अगली बार {name} को पहचान लेगा।} pending{इसमें कुछ सेकंड लगते हैं।} disabled{Omi {name} को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।} other{Omi को {name} की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।}}",
     "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
-    "speakerLabelTalkTime": "इस आवाज़ का {duration}"
+    "speakerLabelTalkTime": "इस आवाज़ का {duration}",
+    "askAnythingButton": "कुछ भी पूछें",
+    "pendantLostConnection": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया।",
+    "pendantReconnectsOnItsOwn": "पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा।",
+    "pendantRecordingSafe": "इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।"
 }

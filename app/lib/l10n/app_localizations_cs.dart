@@ -10661,9 +10661,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceConnecting => 'Připojování…';
 
   @override
-  String get recordOptionsTip => 'Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
 
   @override
@@ -11205,9 +11202,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get recordWith => 'Nahrát pomocí';
 
   @override
-  String get moreWaysToRecord => 'Další způsoby nahrávání';
-
-  @override
   String get openCall => 'Otevřít hovor';
 
   @override
@@ -11245,10 +11239,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložiště je téměř plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12222,4 +12212,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get askAnythingButton => 'Zeptejte se na cokoliv';
+
+  @override
+  String get pendantLostConnection => 'Přívěsek ztratil spojení s tímto telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž.';
+
+  @override
+  String get pendantRecordingSafe => 'Vše nahrané předtím je v bezpečí.';
 }

@@ -10942,7 +10942,6 @@
     "batteryLevelSemantics": "Батарэя {level}%",
     "updateOmiGlassFirmware": "Абнавіць прашыўку OmiGlass",
     "deviceConnecting": "Падключэнне…",
-    "recordOptionsTip": "Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.",
     "firmwareUpdateFailedTitle": "Абнаўленне не ўдалося",
     "firmwareUpdateFailedMessage": "Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.",
     "firmwareDownloadFailedMessage": "Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.",
@@ -11095,7 +11094,6 @@
     "pendantPausesDuringCall": "Кулон на паўзе падчас званка",
     "keepUsingPendant": "Працягнуць з кулонам",
     "recordWith": "Запісаць праз",
-    "moreWaysToRecord": "Іншыя спосабы запісу",
     "openCall": "Адкрыць званок",
     "captureRecoveryBanner": "Omi не перадае гук — націсніце, каб падключыцца зноў",
     "phoneRecordingBlockedByPendantBatch": "Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.",
@@ -11108,7 +11106,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
-    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
     "participantsSummaryUncounted": "{name} і іншыя",
     "deviceOnboardingVoiceReplyTitle": "Слухайце адказы Omi",
     "deviceOnboardingVoiceReplySample": "Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.",
@@ -11339,5 +11336,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
     "speakerLabelEarlierMatches": "Ранейшыя размовы з гэтым голасам: {count}",
     "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
-    "speakerLabelTalkTime": "{duration} гэтага голасу"
+    "speakerLabelTalkTime": "{duration} гэтага голасу",
+    "askAnythingButton": "Спытайце што заўгодна",
+    "pendantLostConnection": "Кулон страціў сувязь з гэтым тэлефонам.",
+    "pendantReconnectsOnItsOwn": "Omi перападключыцца сам, калі кулон уключаны і побач.",
+    "pendantRecordingSafe": "Усё, што запісана да гэтага, захавана."
 }

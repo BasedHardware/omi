@@ -10711,9 +10711,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceConnecting => 'Se conectează…';
 
   @override
-  String get recordOptionsTip => 'Sfat: atinge săgeata de pe butonul de înregistrare pentru a înregistra un apel.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Actualizarea a eșuat';
 
   @override
@@ -11259,9 +11256,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get recordWith => 'Înregistrează cu';
 
   @override
-  String get moreWaysToRecord => 'Mai multe moduri de înregistrare';
-
-  @override
   String get openCall => 'Deschide apelul';
 
   @override
@@ -11299,10 +11293,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12277,4 +12267,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get askAnythingButton => 'Întreabă orice';
+
+  @override
+  String get pendantLostConnection => 'Pandantivul a pierdut conexiunea cu acest telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se va reconecta singur când pandantivul este pornit și în apropiere.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot ce s-a înregistrat înainte este în siguranță.';
 }

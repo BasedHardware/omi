@@ -10665,9 +10665,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceConnecting => 'Yhdistetään…';
 
   @override
-  String get recordOptionsTip => 'Vinkki: tallenna puhelu napauttamalla tallennuspainikkeen nuolta.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
 
   @override
@@ -11210,9 +11207,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get recordWith => 'Tallennustapa';
 
   @override
-  String get moreWaysToRecord => 'Lisää tallennustapoja';
-
-  @override
   String get openCall => 'Avaa puhelu';
 
   @override
@@ -11250,10 +11244,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12227,4 +12217,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
+
+  @override
+  String get pendantLostConnection => 'Riipus menetti yhteyden tähän puhelimeen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.';
+
+  @override
+  String get pendantRecordingSafe => 'Kaikki tätä ennen tallennettu on tallessa.';
 }

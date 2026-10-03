@@ -3385,7 +3385,6 @@
     "batteryLevelSemantics": "البطارية {level}%",
     "updateOmiGlassFirmware": "تحديث برنامج OmiGlass الثابت",
     "deviceConnecting": "جارٍ الاتصال…",
-    "recordOptionsTip": "نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.",
     "firmwareUpdateFailedTitle": "فشل التحديث",
     "firmwareUpdateFailedMessage": "لم يكتمل التحديث. لا يزال جهازك يعمل بالبرنامج الثابت الحالي ويمكن استخدامه بأمان. أبقه مشحونًا وقريبًا من هاتفك، ثم حاول مرة أخرى.",
     "firmwareDownloadFailedMessage": "تعذّر تنزيل التحديث ولم يتغير جهازك. تحقق من اتصالك بالإنترنت، ثم حاول مرة أخرى.",
@@ -3538,7 +3537,6 @@
     "pendantPausesDuringCall": "تتوقف القلادة مؤقتاً أثناء المكالمة",
     "keepUsingPendant": "متابعة استخدام القلادة",
     "recordWith": "التسجيل باستخدام",
-    "moreWaysToRecord": "طرق أخرى للتسجيل",
     "openCall": "فتح المكالمة",
     "captureRecoveryBanner": "أومي لا يرسل الصوت — انقر لإعادة الاتصال",
     "phoneRecordingBlockedByPendantBatch": "أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.",
@@ -3551,7 +3549,6 @@
     "captureStarting": "جارٍ البدء…",
     "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
     "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
-    "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
     "participantsSummaryUncounted": "{name} وآخرون",
     "deviceOnboardingVoiceReplyTitle": "استمع إلى إجابات Omi",
     "deviceOnboardingVoiceReplySample": "تم. يبدأ اجتماعك التالي بعد عشرين دقيقة.",
@@ -3782,5 +3779,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{سيتعرّف Omi على {name} في المرة القادمة.} pending{يستغرق هذا بضع ثوانٍ.} disabled{فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على {name}.} other{يحتاج Omi إلى مزيد من الكلام الواضح من {name} وسيواصل المحاولة.}}",
     "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
-    "speakerLabelTalkTime": "{duration} من هذا الصوت"
+    "speakerLabelTalkTime": "{duration} من هذا الصوت",
+    "askAnythingButton": "اسأل أي شيء",
+    "pendantLostConnection": "فقد القلادة اتصالها بهذا الهاتف.",
+    "pendantReconnectsOnItsOwn": "سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة.",
+    "pendantRecordingSafe": "كل ما سُجّل قبل ذلك محفوظ."
 }

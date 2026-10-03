@@ -11,6 +11,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
 class _TestEnvFields implements EnvFields {
@@ -54,7 +55,7 @@ void main() {
 
     final firstRow = find.byKey(const ValueKey('daily_summary_location_row_0'));
     final secondRow = find.byKey(const ValueKey('daily_summary_location_row_1'));
-    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 40;
+    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 2 * OmiSpacing.md;
 
     expect(firstRow, findsOneWidget);
     expect(secondRow, findsOneWidget);
@@ -221,6 +222,39 @@ void main() {
     expect(find.text('17m'), findsOneWidget);
     expect(find.text('9'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the counts are one line under the headline, each saying what it counts', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-counts',
+          summary: _summary(stats: DayStats(totalConversations: 3, totalDurationMinutes: 83, actionItemsCount: 2)),
+        ),
+      ),
+    );
+    await tester.pump();
+    final counts = tester.widget<Text>(find.byKey(const ValueKey('daily_summary_counts'))).data!;
+    expect(counts, contains('3 conversations'));
+    expect(counts, contains('2 tasks'));
+    expect(counts.split(' · '), hasLength(3), reason: 'conversations, length, tasks');
+    // A length of zero says nothing, so it is left out.
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DailySummaryDetailPage(
+          key: const ValueKey('zero'),
+          summaryId: 'summary-zero',
+          summary: _summary(stats: DayStats(totalConversations: 2, totalDurationMinutes: 0, actionItemsCount: 0)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('daily_summary_counts'))).data, '2 conversations');
+    expect(find.text('0m'), findsNothing);
   });
 }
 
