@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3231DB770E215E8822E8BCD2 /* NativeHomePlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */; };
+		54B82DB38A045FC9F129AAD3 /* NativeHomeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */; };
+		5D9C31BF05A42EBBD84A417D /* NativeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */; };
+		C7A93FEF080556311DEA1478 /* NativeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */; };
+		CD51D64B482D31A12E53D31F /* NativeHomePlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */; };
+		DE135B6BD088236D7566D3D6 /* NativeHomeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */; };
 		A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
 		A5F00003A5F00003A5F00003 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
 		A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
@@ -224,6 +230,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomePlatformView.swift; sourceTree = "<group>"; };
+		8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomeView.swift; sourceTree = "<group>"; };
+		C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomeContract.swift; sourceTree = "<group>"; };
 		A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeFoundationSinks.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodDebug.xcconfig; path = Flutter/prodDebug.xcconfig; sourceTree = "<group>"; };
@@ -399,6 +408,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A6FD2DF83F717B3C18AB8223 /* NativeUI */ = {
+			isa = PBXGroup;
+			children = (
+				C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */,
+				1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */,
+				8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */,
+			);
+			name = NativeUI;
+			path = NativeUI;
+			sourceTree = "<group>";
+		};
 		0C49E6672202A57A856CB534 /* BatteryWidget */ = {
 			isa = PBXGroup;
 			children = (
@@ -541,6 +561,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				A6FD2DF83F717B3C18AB8223 /* NativeUI */,
 				42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */,
 				BAADF00DF00DF00DF00DFB01 /* Ble */,
 				BAADF00DF00DF00DF00DFC00 /* RayBanMeta */,
@@ -1027,6 +1048,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				54B82DB38A045FC9F129AAD3 /* NativeHomeContract.swift in Sources */,
+				3231DB770E215E8822E8BCD2 /* NativeHomePlatformView.swift in Sources */,
+				5D9C31BF05A42EBBD84A417D /* NativeHomeView.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */,
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
@@ -1090,6 +1114,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE135B6BD088236D7566D3D6 /* NativeHomeContract.swift in Sources */,
+				CD51D64B482D31A12E53D31F /* NativeHomePlatformView.swift in Sources */,
+				C7A93FEF080556311DEA1478 /* NativeHomeView.swift in Sources */,
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
 				A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */,
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,

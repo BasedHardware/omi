@@ -145,6 +145,14 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiNativeHome") {
+      registrar.register(NativeHomeViewFactory(messenger: messenger), withId: "com.omi.native_ui/home")
+    }
+    let nativeUIConfig = FlutterMethodChannel(name: "com.omi.native_ui/config", binaryMessenger: messenger)
+    nativeUIConfig.setMethodCallHandler { call, result in
+      guard call.method == "isSupported" else { result(FlutterMethodNotImplemented); return }
+      if #available(iOS 16.0, *) { result(true) } else { result(false) }
+    }
     SiriBridge.shared.attach(messenger: messenger)
     #if compiler(>=6.4)
     if #available(iOS 16.0, *),

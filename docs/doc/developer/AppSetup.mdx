@@ -435,3 +435,15 @@ flutter test test/providers/speech_profile_provider_test.dart test/widgets/speec
 For device verification, use the dev flavor and dev backend. Check speaking,
 Skip, and upload failure on the actual onboarding step. Advancing through All
 Done is a navigation event; verify the upload result separately.
+
+## Contributing to native iOS presentation
+
+The experimental iOS conversation renderer lives in `app/ios/Runner/NativeUI/`.
+Its SwiftUI views receive localized presentation snapshots from the Flutter
+providers through a platform view. Existing mobile services continue to own
+authentication, API calls and recording. Native presentation changes should
+retain those owners and the account-session checks around asynchronous reads.
+
+See the [native UI contributor guide](https://github.com/BasedHardware/omi/blob/main/app/docs/ios-native-ui.md)
+for the bridge contract and focused test commands. The preview is tracked in
+[#20426](https://github.com/BasedHardware/omi/issues/20426); the default app UI is unchanged at this stage.
