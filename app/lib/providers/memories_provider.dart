@@ -1046,6 +1046,16 @@ class MemoriesProvider extends ChangeNotifier {
     final indexedIds = _memories.map((memory) => memory.id).toList();
     if (!await _deleteAllMemoriesRequest()) return false;
     if (generation != _sessionGeneration || SharedPreferencesUtil().uid != ownerUid) return false;
+    // Invalidate any in-flight progressive load: its next provisional
+    // publication would replace this emptied list with pre-deletion rows, and
+    // its final path would cache and re-index them again.
+    _sessionGeneration++;
+    _loadSequence++;
+    _ledgerProjectionRevision++;
+    _inFlightLoad = null;
+    // The fenced load returns at its guards without releasing _loading; this
+    // mutation owns the terminal state.
+    _loading = false;
     _memories.clear();
     _cancelDeletionTimer();
     _pendingDeletionId = null;

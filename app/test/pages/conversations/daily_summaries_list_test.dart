@@ -141,6 +141,10 @@ void main() {
 
     await tester.fling(find.byType(CustomScrollView), const Offset(0, -3000), 1000);
     await tester.pump();
+    // The stale-marker assertion below is only meaningful if the deferred page
+    // request actually started: completing a future nothing awaits would pass
+    // vacuously.
+    expect(pendingIssued, isTrue, reason: 'the deferred page request must be in flight to be invalidated');
 
     await key.currentState!.refresh();
     await tester.pumpAndSettle();
@@ -170,12 +174,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Recap summary-0'), findsOneWidget);
+    // The retry affordance must sit at the viewport with the rows, not only in
+    // the tail below the fold.
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget);
     expect(find.text('Try Again'), findsOneWidget);
+    expect(find.byType(OmiSpinner), findsNothing, reason: 'rows stay on screen: retry keeps the scroll position');
 
     failRefresh = false;
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
-    expect(find.text('Try Again'), findsNothing);
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsNothing);
     expect(find.text('Recap summary-0'), findsOneWidget);
   });
 }

@@ -210,35 +210,70 @@ class DailySummariesListState extends State<DailySummariesList> {
       );
     }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) {
-        // Extra tail item for spinner / bottom padding
-        if (index == _summaries.length) {
-          if (_isLoadingMore) {
-            return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
-          }
-          if (_loadMoreFailed || _loadFailed) {
-            return Padding(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              child: Center(
-                child: OmiButton.secondary(
-                  label: context.l10n.tryAgain,
-                  size: OmiButtonSize.compact,
-                  onPressed: _loadMoreFailed ? _retryLoadMore : () => _loadSummaries(),
-                ),
+    return SliverMainAxisGroup(
+      slivers: [
+        // A failed refresh with rows on screen must surface at the viewport,
+        // not only in the tail below the fold (hub audit #24 keeps
+        // pull-to-refresh honest: the failure is visible where the user is).
+        if (_loadFailed)
+          SliverToBoxAdapter(
+            child: Padding(
+              key: const ValueKey('recaps_refresh_failed_banner'),
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  OmiButton.secondary(
+                    label: context.l10n.tryAgain,
+                    size: OmiButtonSize.compact,
+                    // Rows are on screen; a full shimmer would throw away the
+                    // scroll position the user is already looking at.
+                    onPressed: () => _loadSummaries(showSpinner: false),
+                  ),
+                ],
               ),
-            );
-          }
-          return SizedBox(height: widget.bottomPadding);
-        }
+            ),
+          ),
+        SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            // Extra tail item for spinner / bottom padding
+            if (index == _summaries.length) {
+              if (_isLoadingMore) {
+                return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
+              }
+              if (_loadMoreFailed) {
+                return Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: Center(
+                    child: OmiButton.secondary(
+                      label: context.l10n.tryAgain,
+                      size: OmiButtonSize.compact,
+                      // Rows are on screen; a full shimmer would throw away the
+                      // scroll position the user is already looking at.
+                      onPressed: _retryLoadMore,
+                    ),
+                  ),
+                );
+              }
+              return SizedBox(height: widget.bottomPadding);
+            }
 
-        // Prefetch more when approaching end
-        if (_hasMore && !_isLoadingMore && !_loadMoreFailed && !_loadFailed && index >= _summaries.length - 3) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-        }
+            // Prefetch more when approaching end
+            if (_hasMore && !_isLoadingMore && !_loadMoreFailed && !_loadFailed && index >= _summaries.length - 3) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+            }
 
-        return _buildSummaryCard(_summaries[index]);
-      }, childCount: _summaries.length + 1),
+            return _buildSummaryCard(_summaries[index]);
+          }, childCount: _summaries.length + 1),
+        ),
+      ],
     );
   }
 

@@ -134,6 +134,27 @@ void main() {
     expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
   });
 
+  testWidgets('editing a query keeps the page searching through the debounce window', (tester) async {
+    final source = _ScriptedSource()
+      ..onConversations = (_) async => _conversations([_conversation('c1', 'Device Connection Troubleshooting')]);
+    await _pumpSearch(tester, source, initialQuery: 'bluetooth');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
+
+    await tester.enterText(
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooh');
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byType(OmiSpinner), findsOneWidget, reason: 'the debounce window is a pending search, not a result');
+    expect(find.text('No results found'), findsNothing,
+        reason: 'cleared results must not render an empty state before the request starts');
+
+    await tester.pumpAndSettle();
+    expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
+  });
+
   testWidgets('a newer query is not clobbered by the previous run finishing late', (tester) async {
     final staleCompleter = Completer<ConversationSearchResult>();
     final source = _ScriptedSource()

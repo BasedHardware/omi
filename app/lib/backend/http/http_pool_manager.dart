@@ -91,7 +91,10 @@ class HttpPoolManager {
         stampRequestTime(request);
         _applyJourneyFaults(request);
         final streamed = await _client.send(request).timeout(timeout);
-        lastResponse = await http.Response.fromStream(streamed);
+        // The deadline must cover body consumption too: a server that sends
+        // headers and then stalls the body would otherwise leave the caller
+        // pending indefinitely (idle timeouts do not bound an open response).
+        lastResponse = await http.Response.fromStream(streamed).timeout(timeout);
 
         if (lastResponse.statusCode < 500) {
           return lastResponse;

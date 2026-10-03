@@ -115,6 +115,10 @@ extension _MemoriesProviderLoading on MemoriesProvider {
         }
         if (!result.ok) {
           if (all.isNotEmpty) {
+            // The retained partial projection is the same non-authoritative
+            // shape as the final non-complete path: index what is shown so
+            // Siri/search stay consistent with the visible rows.
+            SiriIntegration.current.queueUpsertMemories(all);
             publishProvisional(failed: true);
             return;
           }

@@ -271,6 +271,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     }
     setState(() {
       _scope = null;
+      _searching = true;
       _results = const _Results();
     });
     _debounce = Timer(const Duration(milliseconds: 300), () => _run(query));
@@ -297,26 +298,38 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     var recaps = <DailySummary>[];
     var tasks = <ActionItemWithMetadata>[];
     var memories = <MemorySearchHit>[];
+    // The deadline completes Future.wait, it does not cancel the source futures.
+    // Mark the run settled once its results are committed so a late completion
+    // cannot mutate the captured locals after the UI has settled on them.
+    var settled = false;
     try {
       await Future.wait<void>([
         Future.sync(() => source.conversations(query)).then((r) {
+          if (settled) return;
           conversations = r;
         }).catchError((_) {
+          if (settled) return;
           partial = true;
         }),
         Future.sync(() => source.recaps(query)).then((r) {
+          if (settled) return;
           recaps = rows(r);
         }).catchError((_) {
+          if (settled) return;
           partial = true;
         }),
         Future.sync(() => source.tasks(query)).then((r) {
+          if (settled) return;
           tasks = rows(r);
         }).catchError((_) {
+          if (settled) return;
           partial = true;
         }),
         Future.sync(() => source.memories(query)).then((r) {
+          if (settled) return;
           memories = rows(r);
         }).catchError((_) {
+          if (settled) return;
           partial = true;
         }),
       ]).timeout(const Duration(seconds: 15), onTimeout: () {
@@ -326,6 +339,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     } catch (_) {
       partial = true;
     } finally {
+      settled = true;
       if (mounted && generation == _generation) {
         if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
         setState(() {

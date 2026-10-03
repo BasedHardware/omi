@@ -307,6 +307,32 @@ void main() {
     expect(provider.memories.map((m) => m.id), ['m2']);
   });
 
+  test('a delete-all while a continuation is pending never republishes pre-deletion rows', () async {
+    final gate = Completer<void>();
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
+        GetMemoriesResult([_row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      deleteAllMemoriesRequest: () async => true,
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    expect(provider.memories.map((m) => m.id), ['m1']);
+
+    expect(await provider.deleteAllMemories(), isTrue);
+    gate.complete();
+    await load;
+    await pumpEventQueue();
+
+    expect(provider.memories, isEmpty, reason: 'a successful delete-all must fence the in-flight traversal');
+    expect(provider.loadFailed, isFalse);
+    expect(provider.loading, isFalse);
+  });
+
   test('Siri reconciles only after the traversal completes', () async {
     final host = _RecordingIndex();
     SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);
@@ -353,5 +379,29 @@ void main() {
     expect(provider.loadFailed, isTrue);
     expect(provider.memories.map((m) => m.id), ['m1']);
     expect(host.calls, isNot(contains('reconcile')));
+  });
+
+  test('a partial failure upserts the retained rows so Siri matches what is shown', () async {
+    final host = _RecordingIndex();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);
+    final gate = Completer<void>();
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
+        const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    gate.complete();
+    await load;
+    await pumpEventQueue();
+
+    expect(provider.memories.map((m) => m.id), ['m1']);
+    expect(host.calls, contains('upsert'), reason: 'retained partial rows must reach Siri/search indexing');
+    expect(host.calls, isNot(contains('reconcile')), reason: 'a partial traversal is never authoritative');
   });
 }
