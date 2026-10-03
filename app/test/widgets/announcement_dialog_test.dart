@@ -89,5 +89,13 @@ void main() {
       expect(AnnouncementAction.parse('navigate:'), isNull);
       expect(AnnouncementAction.parse('memories'), isNull);
     });
+
+    test('only http(s) links with a host are opened', () {
+      expect(AnnouncementAction.parse('url:tel:12345'), isNull);
+      expect(AnnouncementAction.parse('url:file:///sdcard/secret.txt'), isNull);
+      expect(AnnouncementAction.parse('url:someapp://open'), isNull);
+      expect(AnnouncementAction.parse('url:https:'), isNull);
+      expect(AnnouncementAction.parse('http://omi.me'), isA<AnnouncementUrl>());
+    });
   });
 }

@@ -843,10 +843,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final isFail = event.eventType == 'fail_to_connect';
     final reason = _formatReason(event.reason);
 
-    // A drop that reconnected on its own is routine (the pendant buffers audio through the gap),
-    // so only failed connects and unrecovered drops keep a status colour.
-    final recovered = event.timeToReconnectMs > 0;
-    final Color dot = isFail ? OmiColors.warning : (isManual || recovered ? OmiColors.textTertiary : OmiColors.danger);
+    // A drop is routine (the pendant buffers audio through the gap, and a missing reconnect time
+    // can just mean the app restarted), so only a failed connect keeps a status colour: red within
+    // the verdict's 24-hour window, amber before it.
+    final recentFail = isFail && event.timestamp >= clock.now().millisecondsSinceEpoch - 24 * 3600 * 1000;
+    final Color dot = recentFail ? OmiColors.danger : (isFail ? OmiColors.warning : OmiColors.textTertiary);
 
     final metaParts = <String>[];
     if (event.rssiTrend.isNotEmpty) metaParts.add(event.rssiTrend);

@@ -158,7 +158,7 @@ class AnnouncementDialog extends StatelessWidget {
 
 /// Where an announcement's call to action leads. The backend writes `navigate:/memories` for an
 /// in-app route and `url:https://…` for a web page (backend/models/announcement.py); a bare
-/// `https://…` or `/route` is accepted too.
+/// `https://…` or `/route` is accepted too. Only http(s) URLs with a host are opened.
 sealed class AnnouncementAction {
   const AnnouncementAction();
 
@@ -170,7 +170,8 @@ sealed class AnnouncementAction {
     }
     if (value.startsWith('/')) return AnnouncementRoute(value);
     final uri = Uri.tryParse(value.startsWith('url:') ? value.substring('url:'.length).trim() : value);
-    if (uri == null || !uri.hasScheme) return null;
+    // Web pages only: a server-written action must not reach tel:, file: or another app's scheme.
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') || uri.host.isEmpty) return null;
     return AnnouncementUrl(uri);
   }
 }

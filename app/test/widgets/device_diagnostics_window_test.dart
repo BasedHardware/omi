@@ -186,6 +186,33 @@ void main() {
     expect(find.byKey(const Key('diagnostics_verdict_ok')), findsNothing);
   });
 
+  testWidgets('history dots: red only for a failed connection in the last 24 hours', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const hour = 3600 * 1000;
+    mockBleHostApi(
+      'getDeviceDiagnostics',
+      diagnostics([
+        _event(now - 48 * hour), // no recorded reconnect time: still routine
+        _event(now - 30 * hour, eventType: 'fail_to_connect'),
+        _event(now - 2 * hour, eventType: 'fail_to_connect'),
+      ], failToConnectCount: 2),
+    );
+    mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({'counters_since': now - 30 * 24 * hour}));
+
+    await pumpPage(tester);
+
+    List<Color?> dots() => tester
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .where((d) => d.shape == BoxShape.circle)
+        .map((d) => d.color)
+        .toList();
+    expect(dots().where((c) => c == OmiColors.danger), hasLength(1));
+    expect(dots().where((c) => c == OmiColors.warning), hasLength(1));
+    expect(dots().where((c) => c == OmiColors.textTertiary), hasLength(1));
+  });
+
   testWidgets("David's week renders healthy: 357 recovered drops, one long gap, no failures", (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     const week = 7 * 24 * 3600 * 1000;

@@ -71,8 +71,9 @@ class ConversationListItem extends StatefulWidget {
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
   final bool allowSelection;
 
-  /// Drawn inside a [LockedConversationRun]: only the card, which the run blurs under its one
-  /// upgrade action, with no gestures, padding or lock of its own.
+  /// Drawn inside a [LockedConversationRun]: the run blurs the card under its one upgrade action,
+  /// so the row draws no padding or lock of its own but keeps its gestures (open, long-press menu,
+  /// swipe-to-delete, selection).
   final bool inLockedRun;
 
   const ConversationListItem({
@@ -295,15 +296,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.inLockedRun) {
-      return DecoratedBox(
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-          child: _buildMobileLayout(context),
-        ),
-      );
-    }
     // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
@@ -362,11 +354,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             child: Stack(
               children: [
                 Padding(
-                  padding: EdgeInsets.only(
-                    top: 8,
-                    left: widget.isFromOnboarding ? 0 : 16,
-                    right: widget.isFromOnboarding ? 0 : 16,
-                  ),
+                  padding: _cardPadding,
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 200),
                     opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
@@ -416,11 +404,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 if (isMerging)
                   Positioned.fill(
                     child: Padding(
-                      padding: EdgeInsets.only(
-                        top: 8,
-                        left: widget.isFromOnboarding ? 0 : 16,
-                        right: widget.isFromOnboarding ? 0 : 16,
-                      ),
+                      padding: _cardPadding,
                       child: _buildMergingOverlay(),
                     ),
                   ),
@@ -432,6 +416,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
+  /// A row inside a [LockedConversationRun] takes its outer spacing from the run.
+  EdgeInsets get _cardPadding {
+    if (widget.inLockedRun) return EdgeInsets.zero;
+    final side = widget.isFromOnboarding ? 0.0 : 16.0;
+    return EdgeInsets.only(top: 8, left: side, right: side);
+  }
+
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
@@ -439,7 +430,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
       padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
       child: _buildMobileLayout(context),
     );
-    if (!widget.conversation.isLocked) return content;
+    // A run frosts its rows together under one action.
+    if (!widget.conversation.isLocked || widget.inLockedRun) return content;
     return OmiLockedPreview(
       label: context.l10n.upgradeToUnlimited,
       onPressed: onTap,
@@ -860,6 +852,12 @@ class LockedConversationRun extends StatelessWidget {
   final DateTime date;
 
   Future<void> _upgrade(BuildContext context) async {
+    // Same as a lone locked row's action: while merging, a locked row can't be picked.
+    if (context.read<ConversationProvider>().isSelectionModeActive) {
+      HapticFeedback.lightImpact();
+      OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
+      return;
+    }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
     PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
     routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -871,6 +869,8 @@ class LockedConversationRun extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: OmiLockedPreview(
         key: const Key('locked_conversation_run'),
+        // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
+        interactive: true,
         label: context.l10n.upgradeToUnlimited,
         onPressed: () => _upgrade(context),
         child: Column(

@@ -189,4 +189,35 @@ void main() {
         isA<UsagePage>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  List<ServerConversation> lockedRun() => [
+        for (var i = 0; i < 2; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+            structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
+
+  testWidgets('rows in a locked run keep their own long-press menu', (tester) async {
+    final run = lockedRun();
+    await pumpRow(tester, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
+    await tester.longPress(find.text('$_title 1'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
+  });
+
+  testWidgets('a locked run upgrade action respects selection mode', (tester) async {
+    final routes = _Routes();
+    final run = lockedRun();
+    await pumpRow(tester, observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
+    conversations.enterSelectionMode();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('locked_preview_action')));
+    await tester.pump();
+    expect(routes.pushed, hasLength(1));
+    expect(conversations.selectedConversationIds, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 }
