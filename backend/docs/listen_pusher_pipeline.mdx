@@ -1985,9 +1985,17 @@ Wire. The listen→pusher opt-in is the bounded `audio_timeline=2` WebSocket
 query parameter on `/v1/trigger/listen`; a capable pusher answers with the
 pusher→listen acknowledgment opcode **202** (`{"type":"audio_timeline_ack",
 "version":2}`) before any v2 audio. An old pusher ignores the unknown query
-key and stays silent: the listen session's bounded 4 s ack timeout then means
-v1 for that new session. The ack is required again on every reconnect; if it
-is missing mid-recording, the recording continues, transcripts and
+key and stays silent: the bounded 4 s ack timeout then leaves the negotiated
+socket *uncertain* — it accepted the query but cannot prove span framing. A
+new session discards it: the uncertain socket is closed (a close failure
+leaves the session disconnected rather than downgrading on it), a replacement
+connects without the `audio_timeline` query, and only that plain v1 socket
+receives the buffered runs — so fallback storage is spanless by construction,
+and the replacement rebinds the conversation before its first audio. If no
+replacement can be established the session stays disconnected and the buffer
+is retained for a later attempt. The ack is required again on every
+reconnect; if it is missing mid-recording after v2 already ran active, the
+recording continues, transcripts and
 finalization keep flowing, but audio is withheld (a coverage gap) and
 audio-linked features are withheld for the gap — the recording is never
 terminated and never silently downgraded. Opcode 101 keeps its 12-byte header
@@ -1999,7 +2007,11 @@ gap larger than 1 ms between runs (a client stall that minted a capture
 anchor, or withheld-then-resumed audio) splits the group so the stored bytes
 never erase the gap while the header claims the first run's position. Opcode
 103 is emitted ahead of each conversation boundary so the pusher flushes
-rather than concatenating across rollovers.
+rather than concatenating across rollovers. The announcement is socket-local:
+every newly installed socket — including each replacement after a reconnect —
+rebinds the current conversation before its first 101, so audio buffered
+across a same-conversation reconnect keeps its binding instead of waiting for
+a new conversation boundary.
 
 The dev qualification probe sends the same 17-word release fixture eight
 times (136 expected words) at the fixture's 100 ms PCM cadence, then
@@ -2115,10 +2127,66 @@ timestamps. This deliberately leaves some real mixed recordings unavailable.
 Sync scopes keep their `sync` reason and the v2 marker still wins wherever it
 exists, so span-bearing mixed live+sync conversations resolve.
 
+A span overlap is not union coverage. When two separate `chunk_spans` entries
+intersect — nested, identical, or chained across more than two — their
+intersection names audio that could have come from either stored object, and
+choosing one silently could crop the wrong PCM. `prepare_audio_coverage`
+indexes each manifest once into validated merged coverage plus merged
+ambiguity intervals, and `locate` refuses any requested window touching an
+ambiguity interval — `uncovered_audio` on the v2 path, `untrusted_clock` on
+the capture-span or saved-sync path — while windows fully outside it still
+place. There is no source-equivalence exception: every cross-entry overlap is
+treated conservatively, including byte-identical ranges, and adjacent
+half-open runs keep the ordinary 1 ms coverage tolerance. Because the refusal
+lives in the shared gate it protects speaker resolution and clip extraction
+alike.
+
+Sync provenance is stamped, never inferred. When resolution rewrites a
+`sync:`-scoped segment onto its own `conversation:` scope it first records a
+private `audio_source` marker — `{'type':'sync','start','end'}` with absolute
+endpoints — which persists like the capture fields: absent from JSON dumps,
+generated client schemas, client projections and integration redaction. A
+later run trusts that marker exactly like a `sync:` scope only while its
+endpoints still equal the segment's position on the conversation origin
+within the 1 ms tolerance: a merged donor re-based onto the survivor clock
+keeps its absolute endpoints and still validates, while retimed, malformed or
+non-sync markers — and live capture fields alone — carry no weight. Ordinary
+text merges keep the marker only when both sides hold valid sync sources on
+the same clock offset whose endpoints match each segment's own duration,
+with contiguous or overlapping absolute windows; a one-sided, inconsistent
+or gapped merge clears it rather than lending one side's proof to the other.
+The marker's reach is strictly additive: it is only ever stamped while a live
+`sync:` scope is visible, so rows resolved before it existed carry none —
+nothing back-fills or re-infers them, and after cache loss they cannot
+re-embed until a fresh sync supplies scope again. Nor does the marker prove
+the bytes there belong to one upload: a manifest whose spans overlap the
+saved window still refuses.
+
 With the consumer flag on, conversation speaker resolution embeds every
 non-Omi embeddable segment only from a `locate()` window — sync, v2, or
 trusted capture span — and refuses before the first diarizer call if any
-required segment is unplaceable. Capture-derived embeddings are cached under
+required segment is unplaceable. Placement cost is paid once per
+conversation, not per segment: the stage builds one `PreparedAudioCoverage`
+index (validated union coverage plus the ambiguity intervals above) and each
+`locate` call probes it with bisect instead of rescanning the manifest. With
+the consumer flag off the same lookups run as a bounded shadow for metrics.
+The manifest is first counted from the raw file entries — one per file plus
+the larger of its `chunk_spans`/`chunk_timestamps` lengths — and a manifest
+over `MAX_PLACEMENT_SPANS` (10 000), or a shadow already past its
+`ADVISORY_PLACEMENT_SECONDS` (0.25 s) budget, is skipped before any
+serialization: the `audio_files` models are never dumped. Admitted manifests
+are prepared with the same bounds inside `prepare_audio_coverage`
+(deadline checked per file, per span, and around the sort and sweep; any
+exceeded bound yields an unvalidated index, never a partial one), and at most
+`MAX_ADVISORY_PLACEMENTS` (1500) segments are measured. Reaching any bound
+stops measurement only, never presents a skipped segment as placed, and the
+legacy embedding deadline is extended by the entire real advisory elapsed —
+counting, dumps, preparation and lookups alike — so the shadow cannot alter
+legacy pending embeddings, status, cache or provider counts. On the
+consumer-ON path preparation and the per-segment loop share the stage
+deadline, so an unfinished preparation or placement fails closed as
+unavailable before any provider call rather than trusting a partial
+placement. Capture-derived embeddings are cached under
 keys prefixed `capture-span:` while sync, v2 and legacy-compatible entries
 keep the bare segment id; the cache holds at most one selected key per
 segment because stale keys are pruned against the current selection, so a
@@ -2131,9 +2199,9 @@ entry — output this stage itself wrote under an earlier resolution — that
 entry is reused as cached compatibility rather than treated as a capture-
 sourced embed; live scopes never get that reuse.
 `omi_audio_placement_total{reason=...}` counts every advisory `locate` per
-embeddable segment per attempt — including with the consumer flag off, where
-the same shadow lookups run purely for measurement and cannot alter the
-legacy resolution — and
+attempt — including with the consumer flag off, where the bounded shadow
+lookups run purely for measurement and cannot alter the legacy resolution —
+and
 `omi_conversation_speaker_resolution_reasons_total{outcome,reason}` breaks
 each stage outcome down by `legacy|capture_span|sync|v2|mixed|cached|none`
 or the first refusal reason.

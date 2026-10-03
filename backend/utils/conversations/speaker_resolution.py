@@ -16,8 +16,10 @@ on capture's ids and ``speaker_resolution`` says whether those ids can be counte
 from __future__ import annotations
 
 import bisect
+from collections.abc import Sequence
 import json
 import logging
+import math
 import os
 import struct
 import time
@@ -32,7 +34,12 @@ import database.users as users_db
 from config.audio_timeline import live_speaker_span_resolution_enabled
 from models.conversation import Conversation, ConversationSpeakers
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
-from utils.conversations.audio_placement import AudioPlacement, locate
+from utils.conversations.audio_placement import (
+    AudioPlacement,
+    PreparedAudioCoverage,
+    locate,
+    prepare_audio_coverage,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
@@ -73,6 +80,9 @@ MATCH_SOURCE = 'conversation_voice'
 # Participants are only counted once voice evidence placed this much of the speech.
 MIN_RESOLVED_COVERAGE = 0.9
 CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
+MAX_ADVISORY_PLACEMENTS = 1500
+MAX_PLACEMENT_SPANS = 10000
+ADVISORY_PLACEMENT_SECONDS = 0.25
 
 
 def resolution_enabled() -> bool:
@@ -133,6 +143,15 @@ def _started_at(conversation: Conversation) -> Optional[float]:
 
 def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
+
+
+def _manifest_span_load(audio_file: Any) -> int:
+    count = 0
+    for key in ('chunk_spans', 'chunk_timestamps'):
+        value = audio_file.get(key) if isinstance(audio_file, Mapping) else getattr(audio_file, key, None)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            count = max(count, len(value))
+    return count
 
 
 def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
@@ -336,10 +355,27 @@ def apply_speaker_resolution(
     identity_statuses: Mapping[int, str],
 ) -> None:
     scope = f'conversation:{conversation.id}'
+    origin = _started_at(conversation)
     for segment in conversation.transcript_segments:
         new_id = speaker_ids.get(segment.id) if segment.id else None
         if new_id is None:
             continue
+        segment_scope = segment.speaker_id_scope or ''
+        if (
+            segment.audio_source is None
+            and origin is not None
+            and segment_scope.startswith('sync:')
+            and len(segment_scope) > len('sync:')
+            and segment.audio_alignment != 'unplaced'
+            and math.isfinite(segment.start)
+            and math.isfinite(segment.end)
+            and 0 <= segment.start < segment.end
+        ):
+            segment.audio_source = {
+                'type': 'sync',
+                'start': origin + segment.start,
+                'end': origin + segment.end,
+            }
         segment.assign_resolved_speaker(new_id, scope)
         identity = identities.get(new_id)
         if identity is not None:
@@ -478,20 +514,82 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
 
     embeddable = [s for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL and _duration(s) >= MIN_EMBED_SECONDS]
     placements: Dict[str, AudioPlacement] = {}
+    advisory_began = time.monotonic()
     if embeddable:
-        conversation_mapping = conversation.model_dump(mode='python')
-        for segment in embeddable:
-            if segment.id is None:
-                continue
+        raw_files = conversation.audio_files or []
+        audio_timeline = conversation.audio_timeline
+        if hasattr(audio_timeline, 'model_dump'):
+            audio_timeline = audio_timeline.model_dump(mode='python')
+
+        def placement_mapping(audio_files: List[Any]) -> Dict[str, Any]:
+            return {
+                'id': conversation.id,
+                'started_at': _started_at(conversation),
+                'audio_timeline': audio_timeline,
+                'audio_files': audio_files,
+            }
+
+        def place_segment(segment: TranscriptSegment, mapping: Dict[str, Any], index) -> AudioPlacement:
             placement = locate(
-                conversation_mapping,
+                mapping,
                 segment.start,
                 segment.end,
                 segments=[segment.model_dump(mode='python')],
                 capture_spans=True,
+                coverage=index,
             )
-            placements[segment.id] = placement
             OMI_AUDIO_PLACEMENT_TOTAL.labels(reason=placement.reason).inc()
+            return placement
+
+        if spans_on:
+            index = PreparedAudioCoverage(validated=False)
+            mapping: Dict[str, Any] = {}
+            span_total = 0
+            for audio_file in raw_files:
+                span_total += 1 + _manifest_span_load(audio_file)
+                if span_total > MAX_PLACEMENT_SPANS:
+                    break
+            if span_total <= MAX_PLACEMENT_SPANS:
+                dumped_files = [f.model_dump(mode='python') if hasattr(f, 'model_dump') else f for f in raw_files]
+                mapping = placement_mapping(dumped_files)
+                index = prepare_audio_coverage(dumped_files, deadline=deadline, max_spans=MAX_PLACEMENT_SPANS)
+            for segment in embeddable:
+                if time.monotonic() >= deadline:
+                    _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
+                    return
+                if segment.id is None:
+                    continue
+                placements[segment.id] = place_segment(segment, mapping, index)
+        else:
+            span_total = 0
+            bounded = True
+            for audio_file in raw_files:
+                span_total += 1 + _manifest_span_load(audio_file)
+                if span_total > MAX_PLACEMENT_SPANS or time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS:
+                    bounded = False
+                    break
+            if bounded and time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS:
+                bounded = False
+            if bounded:
+                dumped_files = [f.model_dump(mode='python') if hasattr(f, 'model_dump') else f for f in raw_files]
+                index = prepare_audio_coverage(
+                    dumped_files,
+                    deadline=advisory_began + ADVISORY_PLACEMENT_SECONDS,
+                    max_spans=MAX_PLACEMENT_SPANS,
+                )
+                mapping = placement_mapping(dumped_files)
+                measured = 0
+                for segment in embeddable:
+                    if (
+                        measured >= MAX_ADVISORY_PLACEMENTS
+                        or time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS
+                    ):
+                        break
+                    if segment.id is None:
+                        continue
+                    placements[segment.id] = place_segment(segment, mapping, index)
+                    measured += 1
+            deadline += time.monotonic() - advisory_began
 
     if not spans_on:
         if not _audio_aligned(conversation):

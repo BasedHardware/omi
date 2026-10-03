@@ -5,17 +5,22 @@ import subprocess
 import time
 import types
 import wave
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+import database.audio_timeline as db_audio_timeline
+import utils.audio_timeline as audio_timeline_module
+import utils.conversations.audio_placement as placement_module
 from models.audio_file import AudioFile, ChunkSpan
 from models.conversation import AudioTimelineProvenance, Conversation
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import speaker_resolution as stage
+from utils.conversations.audio_placement import prepare_audio_coverage
+from utils.conversations.smart_merge_policy import rebase_donor_segments
 from utils.metrics import OMI_AUDIO_PLACEMENT_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL
 
 SR = 16000
@@ -148,6 +153,42 @@ def stage_override(monkeypatch, env):
     )
     monkeypatch.setattr(stage, 'resolve_speakers_for_processing', baseline.resolve_speakers_for_processing)
     return baseline
+
+
+ROUND3_RED_SHA = '50a7193d11'
+ROUND3_RED_ENV = 'OMI_ROUND3_RED'
+
+
+def _round3_module(name, relpath):
+    source = subprocess.run(
+        ['git', 'show', f'{ROUND3_RED_SHA}:backend/{relpath}'],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    module = types.ModuleType(name)
+    exec(compile(source, relpath, 'exec'), module.__dict__)
+    return module
+
+
+@pytest.fixture
+def round3_stage(monkeypatch, env):
+    """OMI_ROUND3_RED=1 pins the stage and placement gate to merged HEAD
+    50a7193d11 (pre-implementation): the same assertions then run red."""
+    if os.environ.get(ROUND3_RED_ENV) != '1':
+        return None
+    store, diarizer = env
+    old_stage = _round3_module('round3_old_speaker_resolution', 'utils/conversations/speaker_resolution.py')
+    old_placement = _round3_module('round3_old_audio_placement', 'utils/conversations/audio_placement.py')
+    monkeypatch.setattr(old_stage, 'locate', old_placement.locate)
+    monkeypatch.setattr(old_stage, 'AudioPlacement', old_placement.AudioPlacement)
+    _patch_stage_deps(monkeypatch, old_stage, store, diarizer)
+    monkeypatch.setattr(
+        old_stage, 'iter_audio_chunk_pcm', lambda *args, **kwargs: stage.iter_audio_chunk_pcm(*args, **kwargs)
+    )
+    monkeypatch.setattr(stage, 'resolve_speakers_for_processing', old_stage.resolve_speakers_for_processing)
+    return old_stage, old_placement
 
 
 def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
@@ -844,6 +885,68 @@ def test_off_shadow_metrics_measure_capture_readiness_without_changing_behavior(
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
+def test_off_shadow_records_sync_reason_without_span_manifest(env, monkeypatch):
+    """Consumer OFF shadow queries the index even when no manifest exists:
+    sync-scoped segments still measure sync, not a skipped measurement."""
+    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    _, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    before = OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='sync')._value.get()
+
+    conversation = _conversation(plan)
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='sync')._value.get() == before + len(plan)
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert diarizer.calls == len(plan)
+
+
+def test_off_shadow_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
+    """Consumer OFF shadow with an unvalidated (absent) manifest still
+    measures each live segment's refusal instead of skipping it."""
+    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    _, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan, offset=180.0)
+    before = OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='untrusted_clock')._value.get()
+
+    conversation = _capture_shifted_conversation(plan, manifest=False)
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='untrusted_clock')._value.get() == before + len(plan)
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == 0
+
+
+def test_off_advisory_zero_budget_never_locates_even_with_empty_manifest(env, monkeypatch):
+    """An already-spent shadow budget skips dumps, preparation and lookups
+    entirely — an empty manifest must not open a free pass."""
+    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    _, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 0.0)
+    locate_calls = []
+    real_locate = stage.locate
+
+    def counting_locate(*args, **kwargs):
+        locate_calls.append(args)
+        return real_locate(*args, **kwargs)
+
+    monkeypatch.setattr(stage, 'locate', counting_locate)
+
+    conversation = _conversation(plan)
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert locate_calls == []
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert diarizer.calls == len(plan)
+
+
 def test_span_on_single_live_scope_unplaceable_is_unavailable_not_capture(env, monkeypatch):
     """One capture scope would normally fall back to 'capture'; a consumer-ON
     refusal for an unplaceable embeddable segment must serialize
@@ -887,3 +990,345 @@ def test_span_on_resolved_own_scope_with_lost_endpoint_or_cache_is_unavailable(e
 
     assert conversation.speaker_resolution.status == 'unavailable'
     assert diarizer.calls == calls_after_on
+
+
+def _span_manifest(origin, spans, *, file_id='af1'):
+    return AudioFile(
+        id=file_id,
+        uid='u1',
+        conversation_id='c1',
+        chunk_timestamps=[start for start, _ in spans],
+        duration=max(end for _, end in spans) - origin,
+        chunk_spans=[ChunkSpan(start=start, end=end) for start, end in spans],
+    )
+
+
+def test_span_on_overlapping_stored_spans_refuse_instead_of_embedding_wrong_voice(env, monkeypatch):
+    """Two uploads whose spans cover the same window could be different PCM.
+    Cutting from the union could feed one speaker's audio to another's
+    embedding; the stage must refuse instead of resolving."""
+    _span_flags(monkeypatch)
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan, offset=180.0)
+    conversation = _capture_shifted_conversation(plan)
+    origin = STARTED.timestamp() + 180.0
+    conversation.audio_files = [
+        _span_manifest(origin, [(origin, origin + 32.0)]),
+        _span_manifest(origin, [(origin + 1.0, origin + 33.0)], file_id='af2'),
+    ]
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == 0
+    assert 'c1' not in store
+
+
+def test_off_resolution_stamps_durable_sync_audio_source(env, monkeypatch):
+    """The provenance stamp lands even on OFF resolutions so a later ON run
+    can recover after the embedding cache is lost."""
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    origin = STARTED.timestamp()
+    for segment in conversation.transcript_segments:
+        assert segment.audio_source == {
+            'type': 'sync',
+            'start': origin + segment.start,
+            'end': origin + segment.end,
+        }
+
+
+@pytest.mark.parametrize('cache_state', ['missing', 'corrupt'])
+def test_on_resolution_recovers_from_saved_source_after_cache_loss(env, monkeypatch, round3_stage, cache_state):
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    first_ids = {segment.id: segment.speaker_id for segment in conversation.transcript_segments}
+    first_sources = {segment.id: segment.audio_source for segment in conversation.transcript_segments}
+    assert diarizer.calls == len(plan)
+
+    conversation = Conversation(**conversation.model_dump(mode='python'))
+    if cache_state == 'missing':
+        store.clear()
+    else:
+        store['c1'] = b'corrupt'
+
+    _span_flags(monkeypatch)
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert diarizer.calls == 2 * len(plan)
+    assert {segment.id: segment.speaker_id for segment in conversation.transcript_segments} == first_ids
+    assert {segment.id: segment.audio_source for segment in conversation.transcript_segments} == first_sources
+
+
+def test_rebased_donor_segments_resolve_exact_pcm_windows(env, monkeypatch, round3_stage):
+    """A merged donor's segments were re-based onto the survivor clock, which
+    orphans the sync: scope; the stamped absolute window is what survives."""
+    store, diarizer = env
+    plan = [0, 1] * 4
+    donor_audio = _install_audio(monkeypatch, plan)
+    donor = _conversation(plan)
+
+    stage.resolve_speakers_for_processing('u1', donor)
+    assert donor.speaker_resolution.status == 'resolved'
+    donor_ids = {segment.id: segment.speaker_id for segment in donor.transcript_segments}
+    donor_sources = {segment.id: segment.audio_source for segment in donor.transcript_segments}
+
+    survivor_started = STARTED - timedelta(hours=1)
+    survivor_audio = FakeAudio([2], offset=-3600.0)
+    survivor = Conversation(
+        id='surv',
+        created_at=survivor_started,
+        started_at=survivor_started,
+        finished_at=survivor_started,
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='surv0',
+                text='survivor',
+                speaker='SPEAKER_0',
+                speaker_id=0,
+                speaker_id_scope='sync:surv',
+                is_user=False,
+                start=0.0,
+                end=3.8,
+            )
+        ],
+        private_cloud_sync_enabled=True,
+    )
+    rebased = rebase_donor_segments(
+        survivor.model_dump(mode='python'),
+        [segment.model_dump(mode='python') for segment in survivor.transcript_segments],
+        donor.model_dump(mode='python'),
+        [segment.model_dump(mode='python') for segment in donor.transcript_segments],
+    )
+    merged = Conversation(
+        id='merged',
+        created_at=survivor_started,
+        started_at=survivor_started,
+        finished_at=donor.finished_at,
+        structured=Structured(),
+        transcript_segments=[TranscriptSegment(**dict(segment)) for segment in rebased],
+        private_cloud_sync_enabled=True,
+    )
+
+    def all_audio(uid, cid, wanted, sample_rate=SR):
+        yield from survivor_audio(uid, cid, wanted, sample_rate)
+        yield from donor_audio(uid, cid, wanted, sample_rate)
+
+    monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', all_audio)
+    store.clear()
+    _span_flags(monkeypatch)
+    stage.resolve_speakers_for_processing('u1', merged)
+
+    assert merged.speaker_resolution.status == 'resolved'
+    donor_segments = [segment for segment in merged.transcript_segments if segment.id in donor_ids]
+    assert len(donor_segments) == len(plan)
+    assert donor_audio.downloads > 0
+    vectors = stage.decode_cache(store['merged'])
+    voice_ids = {}
+    for index, segment in enumerate(donor_segments):
+        voice = plan[index]
+        voice_ids.setdefault(voice, set()).add(segment.speaker_id)
+        assert int(np.argmax(vectors[segment.id][1])) == voice
+        assert segment.audio_source == donor_sources[segment.id]
+    assert all(len(ids) == 1 for ids in voice_ids.values())
+    merged_voice_ids = {next(iter(ids)) for ids in voice_ids.values()}
+    assert len(merged_voice_ids) == len(set(plan))
+    survivor_segment = next(segment for segment in merged.transcript_segments if segment.id == 'surv0')
+    assert int(np.argmax(vectors['surv0'][1])) == 2
+    assert survivor_segment.speaker_id not in merged_voice_ids
+
+
+def test_span_on_prepares_coverage_once_for_many_segments(env, monkeypatch, round3_stage):
+    _span_flags(monkeypatch)
+    store, diarizer = env
+    plan = [0, 1] * 20
+    _install_audio(monkeypatch, plan, offset=180.0)
+    conversation = _capture_shifted_conversation(plan, manifest=False)
+    origin = STARTED.timestamp() + 180.0
+    spans = [(origin + i * 4.0, origin + i * 4.0 + 4.0) for i in range(len(plan))]
+    conversation.audio_files = [_span_manifest(origin, spans)]
+
+    bound_calls = []
+    real_bounds = db_audio_timeline.chunk_span_bounds
+
+    def counting_bounds(span):
+        bound_calls.append(span)
+        return real_bounds(span)
+
+    counted = [placement_module, audio_timeline_module, db_audio_timeline]
+    if round3_stage is not None:
+        counted.append(round3_stage[1])
+    for module in counted:
+        monkeypatch.setattr(module, 'chunk_span_bounds', counting_bounds)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert len(bound_calls) <= 2 * len(spans)
+
+
+def test_span_on_prepares_coverage_once_per_stage(env, monkeypatch):
+    _span_flags(monkeypatch)
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan, offset=180.0)
+    conversation = _capture_shifted_conversation(plan)
+
+    prepare_calls = []
+
+    def counting_prepare(files, **kwargs):
+        prepare_calls.append(files)
+        return prepare_audio_coverage(files, **kwargs)
+
+    monkeypatch.setattr(stage, 'prepare_audio_coverage', counting_prepare)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert len(prepare_calls) == 1
+
+
+def test_off_advisory_is_bounded_and_does_not_delay_legacy_embeddings(env, monkeypatch):
+    """Shadow placement measurement stops at its bounds; legacy embedding,
+    status and cache are exactly what they were without the shadow."""
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    origin = STARTED.timestamp()
+    conversation.audio_files = [_span_manifest(origin, [(origin, origin + len(plan) * 4.0)])]
+    monkeypatch.setattr(stage, 'MAX_ADVISORY_PLACEMENTS', 3)
+    locate_calls = []
+    real_locate = stage.locate
+
+    def counting_locate(*args, **kwargs):
+        locate_calls.append(args)
+        return real_locate(*args, **kwargs)
+
+    monkeypatch.setattr(stage, 'locate', counting_locate)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert diarizer.calls == len(plan)
+    assert len(locate_calls) <= 3
+    assert 'c1' in store
+
+
+@pytest.mark.parametrize('bound', ['count', 'time'])
+def test_off_advisory_bound_skips_manifest_serialization(env, monkeypatch, bound):
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    origin = STARTED.timestamp()
+    conversation.audio_files = [_span_manifest(origin, [(origin + i * 4.0, origin + i * 4.0 + 4.0) for i in range(20)])]
+    if bound == 'count':
+        monkeypatch.setattr(stage, 'MAX_PLACEMENT_SPANS', 10)
+    else:
+        monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 0.0)
+
+    dump_calls = []
+    real_dump = AudioFile.model_dump
+
+    def counting_dump(self, *args, **kwargs):
+        dump_calls.append(self)
+        return real_dump(self, *args, **kwargs)
+
+    monkeypatch.setattr(AudioFile, 'model_dump', counting_dump)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert diarizer.calls == len(plan)
+    assert dump_calls == []
+    assert 'c1' in store
+
+
+def test_off_advisory_elapsed_extends_the_legacy_embedding_deadline(env, monkeypatch):
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    origin = STARTED.timestamp()
+    conversation.audio_files = [_span_manifest(origin, [(origin, origin + len(plan) * 4.0)])]
+    monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 60.0)
+
+    values = []
+    real_monotonic = time.monotonic
+
+    def fake_monotonic():
+        value = real_monotonic() + len(values) * 0.05
+        values.append(value)
+        return value
+
+    monkeypatch.setattr(time, 'monotonic', fake_monotonic)
+
+    captured = {}
+    real_embed = stage._embed_missing
+
+    def spy_embed(uid, conv, pending, cache, deadline, **kwargs):
+        captured['deadline'] = deadline
+        captured['ticks_at_entry'] = len(values)
+        return real_embed(uid, conv, pending, cache, deadline, **kwargs)
+
+    monkeypatch.setattr(stage, '_embed_missing', spy_embed)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert 'deadline' in captured
+    base = values[0] + stage._budget_seconds()
+    advisory_began = values[2]
+    last_advisory_read = values[captured['ticks_at_entry'] - 1]
+    assert captured['deadline'] > base
+    assert captured['deadline'] == pytest.approx(base + (last_advisory_read - advisory_began))
+
+
+def test_on_deadline_expiry_refuses_before_any_embedding(env, monkeypatch):
+    _span_flags(monkeypatch)
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan, offset=180.0)
+    conversation = _capture_shifted_conversation(plan)
+    monkeypatch.setenv('CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS', '0')
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == 0
+
+
+def test_on_saved_sync_source_in_ambiguous_manifest_still_refuses(env, monkeypatch):
+    """A saved sync marker does not launder overlapping spans: the ambiguous
+    stored window refuses rather than trusting the marker's coordinates."""
+    store, diarizer = env
+    plan = [0, 1] * 4
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert conversation.speaker_resolution.status == 'resolved'
+
+    store.clear()
+    _span_flags(monkeypatch)
+    origin = STARTED.timestamp()
+    total = len(plan) * 4.0
+    conversation.audio_files = [
+        _span_manifest(origin, [(origin, origin + total)]),
+        _span_manifest(origin, [(origin + 1.0, origin + total + 1.0)], file_id='af2'),
+    ]
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == len(plan)
