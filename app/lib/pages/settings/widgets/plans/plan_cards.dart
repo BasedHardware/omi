@@ -42,87 +42,81 @@ class PlanOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.lg),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: isSelected ? OmiColors.accent : Colors.transparent, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Main card area — tappable for plan selection.
-          Semantics(
-            button: true,
-            selected: isSelected,
-            inMutuallyExclusiveGroup: true,
-            child: GestureDetector(
-              onTap: onTap,
-              behavior: HitTestBehavior.opaque,
-              child: Column(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      inMutuallyExclusiveGroup: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.lg),
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.lgAll,
+            border: Border.all(color: isSelected ? OmiColors.accent : Colors.transparent, width: 2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isPopular) ...[
+                PlanBadge(label: context.l10n.popularBadge, inverted: true),
+                const SizedBox(height: OmiSpacing.sm),
+              ],
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isPopular) ...[
-                    PlanBadge(label: context.l10n.popularBadge, inverted: true),
-                    const SizedBox(height: OmiSpacing.sm),
-                  ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(title, style: OmiType.headline),
-                            if (subtitle != null) ...[
-                              const SizedBox(height: OmiSpacing.xxs),
-                              Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(price, style: OmiType.headline),
-                          if (saveTag != null) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: saveTag!, color: OmiColors.successSurface),
-                          ],
-                          if (endsOnDate != null) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: context.l10n.endsOnDate(endsOnDate!), color: OmiColors.dangerSurface),
-                          ] else if (isActive) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: context.l10n.active, color: OmiColors.surface3),
-                          ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: OmiType.headline),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: OmiSpacing.xxs),
+                          Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                         ],
-                      ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(price, style: OmiType.headline),
+                      if (saveTag != null) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        PlanBadge(label: saveTag!, color: OmiColors.successSurface),
+                      ],
+                      if (endsOnDate != null) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        PlanBadge(label: context.l10n.endsOnDate(endsOnDate!), color: OmiColors.dangerSurface),
+                      ] else if (isActive) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        PlanBadge(label: context.l10n.active, color: OmiColors.surface3),
+                      ],
                     ],
                   ),
                 ],
               ),
-            ),
+              // Plan details are visible, so they must be part of the same tap target.
+              if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                if (featureSummary != null)
+                  Text(featureSummary!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                if (featureSummary != null && (desktopAccess != null || features.isNotEmpty))
+                  const SizedBox(height: OmiSpacing.xs),
+                // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly distinguished from
+                // Operator/Architect.
+                if (desktopAccess != null)
+                  _CheckLine(
+                    granted: desktopAccess!,
+                    text: desktopAccess! ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
+                  ),
+                ...features.map((f) => _CheckLine(granted: true, text: f)),
+              ],
+            ],
           ),
-          // Plan details — always visible (no expand/collapse toggle).
-          if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            if (featureSummary != null)
-              Text(featureSummary!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            if (featureSummary != null && (desktopAccess != null || features.isNotEmpty))
-              const SizedBox(height: OmiSpacing.xs),
-            // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly distinguished from
-            // Operator/Architect.
-            if (desktopAccess != null)
-              _CheckLine(
-                granted: desktopAccess!,
-                text: desktopAccess! ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
-              ),
-            ...features.map((f) => _CheckLine(granted: true, text: f)),
-          ],
-        ],
+        ),
       ),
     );
   }
