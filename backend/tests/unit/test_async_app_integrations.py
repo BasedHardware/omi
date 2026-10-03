@@ -5,6 +5,7 @@ use asyncio.gather + httpx instead of Thread+join + requests.
 """
 
 import inspect
+import json
 import os
 import sys
 import types
@@ -344,7 +345,10 @@ class TestDurableExternalIntegrationFanout:
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
 
-        assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+        assert client.post.call_args.kwargs['headers'] == {
+            'Content-Type': 'application/json',
+            'X-Omi-Idempotency-Key': 'fanout-1',
+        }
         journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
         attempt.succeed.assert_called_once_with()
         attempt.fail.assert_not_called()
@@ -368,7 +372,7 @@ class TestDurableExternalIntegrationFanout:
         ):
             await app_integrations.trigger_external_integrations('uid-1', conversation)
 
-        payload = client.post.call_args.kwargs['json']
+        payload = json.loads(client.post.call_args.kwargs['content'])
         assert 'geolocation' not in payload
 
     @pytest.mark.asyncio

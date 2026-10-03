@@ -16,6 +16,8 @@ test_github_client.py.
 """
 import asyncio
 import importlib.util
+import json
+import os
 import sys
 import types
 import unittest
@@ -42,11 +44,34 @@ class _HTTPException(Exception):
 
 
 class _Request:
+    """Fake Starlette-style request.
+
+    Carries a JSON payload plus the HMAC plugin-auth headers the app now
+    requires, signed over the serialized body for the payload's uid using the
+    real SDK auth module (mirrors what the Omi backend sends). Requests whose
+    payload has no uid are unsigned and must fail closed.
+    """
+
     def __init__(self, payload=None):
         self._payload = payload or {}
+        self.query_params = {}
+        uid = self._payload.get("uid") if isinstance(self._payload, dict) else None
+        if uid:
+            secret = os.environ.get(_sdk_auth.WEBHOOK_SECRET_ENV, "")
+            self.headers = _sdk_auth.build_auth_headers(
+                secret=secret, uid=str(uid), body=self._raw_body()
+            )
+        else:
+            self.headers = {}
+
+    def _raw_body(self):
+        return json.dumps(self._payload).encode("utf-8")
 
     async def json(self):
         return self._payload
+
+    async def body(self):
+        return self._raw_body()
 
 
 def _Query(default=None, **kwargs):
@@ -166,6 +191,21 @@ async def _ai_select_labels(*args, **kwargs):
 
 _issue_detector.ai_select_labels = _ai_select_labels
 
+# main.py imports omi_plugin_sdk.auth. The package __init__ pulls
+# pydantic-dependent models, but auth.py itself is stdlib-only, so load the
+# real auth module from disk: hermetic runs exercise the real HMAC scheme.
+_sdk_auth_spec = importlib.util.spec_from_file_location(
+    "omi_plugin_sdk.auth",
+    PLUGIN_DIR.parent / "omi-plugin-sdk" / "src" / "omi_plugin_sdk" / "auth.py",
+)
+_sdk_auth = importlib.util.module_from_spec(_sdk_auth_spec)
+_sdk_auth_spec.loader.exec_module(_sdk_auth)
+_omi_plugin_sdk = types.ModuleType("omi_plugin_sdk")
+_omi_plugin_sdk.auth = _sdk_auth
+# The app reads the plugin webhook secret from the environment at call time;
+# pin one here so signed test requests and the app's verifier agree.
+os.environ.setdefault(_sdk_auth.WEBHOOK_SECRET_ENV, "github-app-test-webhook-secret")
+
 STUBS = {
     "requests": _requests,
     "dotenv": _dotenv,
@@ -174,6 +214,8 @@ STUBS = {
     "pydantic": _pydantic,
     "simple_storage": _simple_storage,
     "issue_detector": _issue_detector,
+    "omi_plugin_sdk": _omi_plugin_sdk,
+    "omi_plugin_sdk.auth": _sdk_auth,
 }
 
 
@@ -778,14 +820,14 @@ class OwnerRepoValidationTests(unittest.TestCase):
 class UpdateRepoEndpointTests(unittest.TestCase):
     def test_update_repo_user_not_found(self):
         with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
-            resp = asyncio.run(main.update_repo(uid="nonexistent", repo="owner/repo"))
+            resp = asyncio.run(main.update_repo(_Request({"uid": "nonexistent", "repo": "owner/repo"})))
             self.assertFalse(resp["success"])
             self.assertEqual(resp["error"], "User not found")
 
     def test_update_repo_invalid_format(self):
         user = {"uid": "u1", "available_repos": []}
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
-            resp = asyncio.run(main.update_repo(uid="u1", repo="invalid..format//bad"))
+            resp = asyncio.run(main.update_repo(_Request({"uid": "u1", "repo": "invalid..format//bad"})))
             self.assertFalse(resp["success"])
             self.assertIn("Invalid repository", resp["error"])
 
@@ -796,7 +838,7 @@ class UpdateRepoEndpointTests(unittest.TestCase):
         }
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
              patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
-            resp = asyncio.run(main.update_repo(uid="u1", repo="omi"))
+            resp = asyncio.run(main.update_repo(_Request({"uid": "u1", "repo": "omi"})))
             self.assertTrue(resp["success"])
             self.assertIn("BasedHardware/omi", resp["message"])
             mock_update.assert_called_once_with("u1", "BasedHardware/omi")
@@ -805,15 +847,17 @@ class UpdateRepoEndpointTests(unittest.TestCase):
         user = {"uid": "u1", "available_repos": []}
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
              patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
-            resp = asyncio.run(main.update_repo(uid="u1", repo="org/my-project"))
+            resp = asyncio.run(main.update_repo(_Request({"uid": "u1", "repo": "org/my-project"})))
             self.assertTrue(resp["success"])
             mock_update.assert_called_once_with("u1", "org/my-project")
 
 
 class CreateIssueToolTests(unittest.TestCase):
     def test_missing_uid_fails(self):
+        # A payload without uid is sent unsigned, so it must fail closed at
+        # the HMAC gate instead of reaching issue creation.
         resp = call_tool("/tools/create_issue", {"title": "Test"})
-        self.assertEqual(resp.error, "User ID is required")
+        self.assertIsNotNone(resp.error)
 
     def test_missing_title_fails(self):
         resp = call_tool("/tools/create_issue", {"uid": "u1"})
@@ -1071,32 +1115,32 @@ class OAuthAndHtmlSinkSanitizationTests(unittest.TestCase):
 class JsonEndpointErrorHandlingTests(unittest.TestCase):
     def test_update_repo_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.update_repo(uid="u1", repo="owner/repo"))
+            resp = asyncio.run(main.update_repo(_Request({"uid": "u1", "repo": "owner/repo"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to update repository"})
 
     def test_refresh_repos_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.refresh_repos(uid="u1"))
+            resp = asyncio.run(main.refresh_repos(_Request({"uid": "u1"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to refresh repositories"})
 
     def test_check_repo_access_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.check_repo_access(uid="u1", repo="owner/repo"))
+            resp = asyncio.run(main.check_repo_access(_Request({"uid": "u1", "repo": "owner/repo"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to check repository access"})
 
     def test_save_agent_provider_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.save_agent_provider(uid="u1", provider="cursor"))
+            resp = asyncio.run(main.save_agent_provider(_Request({"uid": "u1", "provider": "cursor"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to save agent provider"})
 
     def test_save_agent_key_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.save_agent_key(uid="u1", provider="cursor", key="secret-key"))
+            resp = asyncio.run(main.save_agent_key(_Request({"uid": "u1", "provider": "cursor", "key": "secret-key"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to save agent key"})
 
     def test_delete_agent_key_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "delete_agent_api_key", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.delete_agent_key(uid="u1", provider="cursor"))
+            resp = asyncio.run(main.delete_agent_key(_Request({"uid": "u1", "provider": "cursor"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to delete agent key"})
 
     def test_test_agent_exception_returns_stable_error(self):

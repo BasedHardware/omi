@@ -26,12 +26,25 @@ Run: python3 plugins/test_uid_reflection_remaining_apps.py
 import asyncio
 import ast
 import importlib.util
+import os
 import sys
 import types
 from pathlib import Path
 from unittest import mock
 
 PLUGINS_DIR = Path(__file__).resolve().parent
+
+# Apps import omi_plugin_sdk.auth; the package __init__ pulls pydantic-dependent
+# models, but auth.py itself is stdlib-only. Load the real auth module so
+# hermetic runs exercise the real HMAC scheme instead of a permissive stub.
+_SDK_AUTH_SPEC = importlib.util.spec_from_file_location(
+    'omi_plugin_sdk.auth',
+    PLUGINS_DIR / 'omi-plugin-sdk' / 'src' / 'omi_plugin_sdk' / 'auth.py',
+)
+SDK_AUTH = importlib.util.module_from_spec(_SDK_AUTH_SPEC)
+_SDK_AUTH_SPEC.loader.exec_module(SDK_AUTH)
+_SDK_PKG = types.ModuleType('omi_plugin_sdk')
+_SDK_PKG.auth = SDK_AUTH
 
 STDLIB = {
     'os', 'sys', 'json', 're', 'base64', 'secrets', 'struct', 'wave', 'io',
@@ -131,6 +144,10 @@ def _stub_modules_for(app_main: Path):
     exceptions.RequestValidationError = type('RequestValidationError', (Exception,), {})
     stubs['fastapi.exceptions'] = exceptions
     stubs['dotenv'].load_dotenv = lambda *a, **k: None
+    if 'omi_plugin_sdk' in stubs:
+        # the app verifies plugin HMAC auth; use the real stdlib-only module
+        stubs['omi_plugin_sdk'] = _SDK_PKG
+        stubs['omi_plugin_sdk.auth'] = SDK_AUTH
     return stubs
 
 
@@ -177,8 +194,15 @@ def test_dropbox_disconnect_redirect_encodes_uid():
     module = load_app('omi-dropbox-app')
     deleted = []
     module.delete_dropbox_tokens = lambda uid: deleted.append(uid)
-    response = asyncio.run(module.disconnect(uid=HOSTILE_UID))
+    # disconnect now requires plugin HMAC auth: sign with the real scheme the
+    # app verifies (query uid stays an identity hint only)
+    with mock.patch.dict(os.environ, {'OMI_PLUGIN_WEBHOOK_SECRET': 'test-plugin-secret'}):
+        headers = SDK_AUTH.build_auth_headers(
+            secret='test-plugin-secret', uid=HOSTILE_UID)
+        response = asyncio.run(module.disconnect(
+            request=types.SimpleNamespace(headers=headers), uid=HOSTILE_UID))
     assert_encoded(response.url, 'dropbox disconnect redirect')
+    assert deleted == [HOSTILE_UID]
 
 
 def test_gcal_pages_encode_uid():

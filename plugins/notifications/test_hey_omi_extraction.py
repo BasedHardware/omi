@@ -108,6 +108,19 @@ _install_module_stubs()
 import hey_omi  # noqa: E402
 
 
+def _authed_http_request():
+    """Starlette-style request carrying the inbound webhook bearer auth."""
+    return types.SimpleNamespace(
+        headers={"Authorization": f"Bearer {hey_omi.omi_app_secret}"}
+    )
+
+
+# Pin a non-empty secret: with an empty secret the guard's `.strip()` rejects
+# every request (fail-closed by design), which would mask the extraction
+# behavior these suites exercise.
+hey_omi.omi_app_secret = "test-hey-omi-secret"
+
+
 class _Clock:
     """Controllable time source patched over hey_omi.time.time."""
 
@@ -147,7 +160,19 @@ class HeyOmiQuestionExtractionTests(unittest.TestCase):
         request = hey_omi.WebhookRequest(
             session_id=session_id, segments=segments, uid=uid
         )
-        return asyncio.run(hey_omi.webhook(request))
+        # webhook() now requires inbound auth: a Starlette-style request whose
+        # Authorization header matches the app secret (empty by default here).
+        return asyncio.run(hey_omi.webhook(_authed_http_request(), request))
+
+    def test_webhook_rejects_missing_auth(self):
+        request = hey_omi.WebhookRequest(
+            session_id="s1", segments=[{"text": "hey omi hello"}], uid="u1"
+        )
+        with self.assertRaises(hey_omi.HTTPException) as ctx:
+            asyncio.run(
+                hey_omi.webhook(types.SimpleNamespace(headers={}), request)
+            )
+        self.assertEqual(ctx.exception.status_code, 401)
 
     def _buffer(self, session_id):
         return hey_omi.message_buffer.buffers[session_id]
@@ -264,13 +289,13 @@ class HeyOmiHardeningTests(unittest.TestCase):
         self.assertEqual(cleaned, [])
 
         req = hey_omi.WebhookRequest(session_id="s-malformed", segments=malformed, uid="u1")
-        resp = asyncio.run(hey_omi.webhook(req))
+        resp = asyncio.run(hey_omi.webhook(_authed_http_request(), req))
         self.assertEqual(resp.status, "success")
 
     def test_missing_session_id_raises_http_400(self):
         req = hey_omi.WebhookRequest(session_id="", segments=[], uid="u1")
         with self.assertRaises(hey_omi.HTTPException) as ctx:
-            asyncio.run(hey_omi.webhook(req))
+            asyncio.run(hey_omi.webhook(_authed_http_request(), req))
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_cooldown_blocks_rapid_duplicate_dispatch(self):
@@ -281,7 +306,7 @@ class HeyOmiHardeningTests(unittest.TestCase):
         hey_omi.notification_cooldowns[session_id] = self.clock.now - 5.0  # 5s ago (cooldown is 15s)
 
         req = hey_omi.WebhookRequest(session_id=session_id, segments=[{"text": "more words"}], uid="u1")
-        resp = asyncio.run(hey_omi.webhook(req))
+        resp = asyncio.run(hey_omi.webhook(_authed_http_request(), req))
         self.assertEqual(resp.status, "success")
         self.assertTrue(buf["trigger_detected"])
 

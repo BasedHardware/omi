@@ -217,6 +217,7 @@ class Stack:
                 'FIRESTORE_DATABASE_ID': '(default)',
                 'ENCRYPTION_SECRET': 'omi_listen_pusher_stack_test_secret_32_bytes',
                 'ADMIN_KEY': ADMIN_KEY,
+                'ADMIN_KEY_AUTH_ENABLED': 'true',
                 'METRICS_SECRET': METRICS_SECRET,
                 'REDIS_DB_HOST': '127.0.0.1',
                 'REDIS_DB_PORT': str(self.redis_port),
