@@ -729,3 +729,68 @@ async def test_real_stt_callback_remembers_notes_and_persists_committed_frames(m
         assert [(r['source_frame_start'], r['source_frame_end']) for r in evidence['runs']] == [(0, 1)]
     finally:
         stack.restore()
+
+
+def _forbidden_receipt_snapshot(self, *args, **kwargs):
+    raise AssertionError('receipt snapshot must not run while committed coverage is enabled')
+
+
+@pytest.mark.parametrize('unavailable', ['missing_note', 'conflict', 'incomplete', 'overflow'])
+async def test_flag_on_unavailable_proof_persists_unknown_without_receipt_snapshot(monkeypatch, unavailable):
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+    store = StrictFirestore()
+    cid = f'conv-unavailable-{unavailable}'
+    processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)
+    if unavailable == 'overflow':
+        source_map = SourcePositionMap(committed=True)
+        committed = source_map._committed
+        for i in range(16):
+            root = str(uuid.uuid4())
+            for ordinal, offset, wall in ((0, 0, i * 1.0), (5, 5, i * 1.0 + 0.05)):
+                source_map.accept(
+                    _claim(ordinal, root=root),
+                    sample_start=(i * 10 + offset) * SPF,
+                    sample_count=SPF,
+                    rate_hz=RATE,
+                    payload=b'\x01\x00' * SPF,
+                    receipt_wall_time=1000.0 + wall,
+                )
+        assert len(committed.runs) == 32
+        processor.host.state.source_position_map = source_map
+        raw = [{'_capture_start_sample': 0, '_capture_end_sample': 160 * SPF}]
+        source_map.remember_transcripts(raw)
+        sid = raw[0]['id']
+    elif unavailable == 'missing_note':
+        sid = 's-no-note'
+    else:
+        raw = [{'_capture_start_sample': 2 * SPF, '_capture_end_sample': 4 * SPF}]
+        source_map.remember_transcripts(raw)
+        sid = raw[0]['id']
+        if unavailable == 'conflict':
+            committed.accept(_claim(0), sample_start=11 * SPF, sample_count=SPF, rate_hz=RATE, receipt_wall_time=1001.0)
+            assert committed.conflicts > 0
+        else:
+            committed.accept(None, sample_start=11 * SPF, sample_count=SPF, rate_hz=RATE, receipt_wall_time=1001.0)
+            assert committed.complete is False
+    segments = [_transcript_segment(sid)]
+    assert source_map.committed_snapshot(cid, segments) is None
+    monkeypatch.setattr(SourcePositionMap, 'snapshot', _forbidden_receipt_snapshot)
+    conversation = _conversation(cid, T0)
+    result = await processor._update_live_conversation(
+        conversation,
+        segments,
+        [],
+        datetime.fromtimestamp(T0 + 30, tz=timezone.utc),
+        datetime.fromtimestamp(T0, tz=timezone.utc),
+        update_finished_at=False,
+    )
+    assert result is not None
+    row = store.rows[('users', UID, 'conversations', cid)]
+    assert row['transcript_segments']
+    evidence = row['capture_evidence']
+    assert evidence['capability'] == 'unknown'
+    assert evidence['coverage'] in ('unknown', 'incomplete')
+    assert 'proof' not in evidence
+    assert 'runs' not in evidence
+    assert committed._acks == {}

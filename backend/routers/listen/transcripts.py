@@ -419,12 +419,15 @@ class TranscriptProcessor:
             if capture_evidence_dark_write_enabled():
                 if source_map is not None:
                     if listen_committed_capture_coverage_enabled():
-                        capture_evidence = source_map.committed_snapshot(conversation.id, segments)
-                    capture_evidence = capture_evidence or source_map.snapshot(
-                        (start, end)
-                        for start, end, owner in (self.host.state.conversation_sample_ranges or ())
-                        if owner == conversation.id
-                    )
+                        capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
+                            'missing_source_position', origin='live'
+                        )
+                    else:
+                        capture_evidence = source_map.snapshot(
+                            (start, end)
+                            for start, end, owner in (self.host.state.conversation_sample_ranges or ())
+                            if owner == conversation.id
+                        )
                 else:
                     capture_evidence = unknown_envelope(
                         'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
