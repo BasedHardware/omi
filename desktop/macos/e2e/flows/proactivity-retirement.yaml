@@ -1,0 +1,29 @@
+version: 2
+name: proactivity-retirement
+tier: manual
+description: Synthetic migration, preserved rollout authority and generated-feed notification adapter contracts
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyReplyTokenSanitizer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProactivityNotificationAdapter.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutFlags.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/LegacyContextBucketMigrations.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/LegacyJITMigrations.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactivityRetirementMigration.swift
+preconditions:
+  - isolated_test_storage
+steps:
+  - id: S1
+    name: Upgrade synthetic historical databases
+    do: "Build tests with xcrun swift build --build-tests --jobs 2 --package-path Desktop, then run xcrun swift test --skip-build --package-path Desktop --filter ProactivityRetirementMigrationTests. Verify retired tables disappear while subject bindings, canonical mirror members/aliases and KEEP sentinel rows survive; fresh and repeated migration must pass with no foreign-key violations. Never use an installed user database."
+  - id: S2
+    name: Preserve canonical rollout authority
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter JITRolloutClientTests and --filter MemoryLedgerMirrorTests. Verify disabled/incomplete decisions remain fail-closed and canonical mirror round trips retain their metadata. These tests use synthetic owners and isolated storage."
+  - id: S3
+    name: Validate generated feed projection and owner fences
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter ProactivityNotificationAdapterTests and --filter ProactivityWireTests. Verify conversation/task targets, terminal-item rejection, foreign-owner rejection, stable outcome identity and no duplicate chat journaling. Feed polling and receipt persistence belong to the feed consumer."
+  - id: S4
+    name: Preserve shared display behavior
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter NotificationDisplayTimerTests and --filter LegacyReplyTokenSanitizerTests. Verify hover pauses the shared display timer and historical reply machine tokens remain hidden. Use floating-bar-functional for live renderer acceptance; unit results alone do not establish visible app acceptance."
