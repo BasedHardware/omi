@@ -410,5 +410,38 @@ void main() {
         reason: 'loadMoreActionItems must filter out pending-deletion items',
       );
     });
+
+    test('deleting a task during pagination does not duplicate an already displayed task', () async {
+      final deleted = _item('deleted');
+      final retained = _item('retained');
+      final overlap = _item('overlap');
+      final next = _item('next');
+      final provider = newProvider(
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async {
+          if (offset == 0) {
+            return ActionItemsResponse(actionItems: [deleted, retained, overlap], hasMore: true);
+          }
+          // The server still includes the staged deletion while its Undo toast is open.
+          // The shorter visible list requests an overlapping page.
+          expect(offset, 2);
+          return ActionItemsResponse(actionItems: [overlap, next]);
+        },
+      );
+
+      await provider.fetchActionItems();
+      provider.stageDeleteActionItem(deleted);
+      await provider.loadMoreActionItems();
+
+      expect(provider.actionItems.map((item) => item.id).toList(), ['retained', 'overlap', 'next']);
+    });
   });
 }
