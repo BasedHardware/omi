@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,8 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+
+import '../support/crashlytics_recorder.dart';
 
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
@@ -35,15 +38,17 @@ class _RecordingActions extends NoopCaptureExternalActions {
 }
 
 class _GatedPhoneSync {
-  _GatedPhoneSync(this.finalizeGate);
+  _GatedPhoneSync(this.finalizeGate, {this.stampError});
 
   final Completer<void> finalizeGate;
+  final Object? stampError;
   var stampCalls = 0;
 
   Future<void> finalizeCurrentSession() => finalizeGate.future;
 
   Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {
     stampCalls++;
+    if (stampError != null) throw stampError!;
   }
 
   int getInFlightSeconds() => 0;
@@ -111,11 +116,12 @@ CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
   required Future<CreateConversationResponse?> Function() process,
+  _GatedPhoneSync? phone,
 }) {
-  final phone = _GatedPhoneSync(finalizeGate);
+  final resolvedPhone = phone ?? _GatedPhoneSync(finalizeGate);
   return CaptureProvider(
     externalActions: actions,
-    walService: _GatedWal(phone),
+    walService: _GatedWal(resolvedPhone),
     processInProgressConversation: process,
     connectivity: CaptureConnectivityBoundary(
       initiallyConnected: true,
@@ -142,8 +148,24 @@ ServerConversation _conversation({
   );
 }
 
+late CrashlyticsRecorder crashlytics;
+
+void _expectSingleReport(String exception) {
+  expect(crashlytics.recordErrors, hasLength(1));
+  final args = crashlytics.recordErrors.single.arguments as Map<dynamic, dynamic>;
+  expect(args['exception'], exception);
+  expect(args['fatal'], isFalse);
+  expect(args['stackTraceElements'], isNotEmpty);
+}
+
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    crashlytics = await installCrashlyticsRecorder();
+  });
+
   setUp(() async {
+    crashlytics.reset();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
@@ -236,6 +258,7 @@ void main() {
 
   test('a failed process request is handled by the in-flight listener without an unhandled zone error', () async {
     final sentinel = StateError('process-boom');
+    final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
     final finalize = Completer<void>();
     late Completer<CreateConversationResponse?> processGate;
     final provider = _provider(
@@ -249,13 +272,16 @@ void main() {
       final pending = provider.forceProcessingCurrentConversation();
       finalize.complete();
       await pending;
-      processGate.completeError(sentinel);
+      processGate.completeError(sentinel, deterministicStack);
       await _flushEventQueue();
       provider.dispose();
     });
 
     expect(outcome.harnessError, isNull);
     expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+    final elements = crashlytics.recordErrors.single.arguments['stackTraceElements'] as List<dynamic>;
+    expect(elements.single['file'], 'package:omi/fake.dart');
   });
 
   test('a throwing processing-list update does not escape as an unhandled zone error', () async {
@@ -277,5 +303,59 @@ void main() {
 
     expect(outcome.harnessError, isNull);
     expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+  });
+
+  test('a failed WAL stamp after processing reports once without an unhandled zone error', () async {
+    final sentinel = StateError('stamp-boom');
+    final finalize = Completer<void>();
+    final phone = _GatedPhoneSync(finalize, stampError: sentinel);
+    final contentless = _conversation(id: 'real', status: ConversationStatus.completed);
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      process: () async => CreateConversationResponse(messages: <ServerMessage>[], conversation: contentless),
+      phone: phone,
+    );
+    provider.testSessionStartSeconds = 777;
+
+    final outcome = await _runInGuardedZone(() async {
+      final pending = provider.forceProcessingCurrentConversation();
+      finalize.complete();
+      await pending;
+      await _flushEventQueue();
+      provider.dispose();
+    });
+
+    expect(phone.stampCalls, 1);
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+  });
+
+  test('a Crashlytics transport failure stays contained and the original error remains consumed', () async {
+    final sentinel = StateError('process-boom');
+    crashlytics.recordErrorFailure = PlatformException(code: 'unavailable', message: 'transport down');
+    final finalize = Completer<void>();
+    late Completer<CreateConversationResponse?> processGate;
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      process: () => processGate.future,
+    );
+
+    final outcome = await _runInGuardedZone(() async {
+      processGate = Completer<CreateConversationResponse?>();
+      final pending = provider.forceProcessingCurrentConversation();
+      finalize.complete();
+      await pending;
+      processGate.completeError(sentinel);
+      await _flushEventQueue();
+      provider.dispose();
+    });
+
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+    expect(crashlytics.recordErrors, hasLength(1));
   });
 }
