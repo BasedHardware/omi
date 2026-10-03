@@ -24,6 +24,7 @@ from llm_gateway.gateway.accounting import (
     jit_gateway_receipt_sse_frame,
     openai_usage_from_sse_payload,
 )
+from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
@@ -118,7 +119,10 @@ async def create_chat_completion(
             fallback_feature=resolved_route.lane.lane_id,
             jit_budget=jit_budget,
         )
+        proactivity = context_from_request(request, caller, accounting_context)
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
+        if proactivity is not None and (is_streaming or jit_budget is not None):
+            raise GatewayInvalidRequestError('proactivity requires a nonstreaming exclusive budget')
         if is_streaming:
             return await _streaming_response(
                 resolved_route,
@@ -134,17 +138,18 @@ async def create_chat_completion(
                 jit_run_id=jit_budget.run_id if jit_budget is not None else None,
                 jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
             )
-        result = await execute_chat_completion(
-            resolved_route,
-            credentials,
-            provider_registry,
-            attempt_trace=attempt_trace,
-            max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
-            jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
-            jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-            jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
-            jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
-        )
+        with attempt_scope(proactivity):
+            result = await execute_chat_completion(
+                resolved_route,
+                credentials,
+                provider_registry,
+                attempt_trace=attempt_trace,
+                max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
+                jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
+                jit_run_id=jit_budget.run_id if jit_budget is not None else None,
+                jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
+                jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
+            )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
             lambda: observe_success(

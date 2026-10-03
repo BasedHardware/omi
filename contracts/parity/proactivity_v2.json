@@ -1,0 +1,26 @@
+{
+  "feed": {
+    "schema_version": 1,
+    "enabled": true,
+    "items": [{
+      "id": "0123456789abcdef0123456789abcdef",
+      "producer": "future_registered_producer",
+      "created_at": "2026-10-03T12:00:00Z",
+      "title": "Synthetic follow-up",
+      "body": "Revisit this saved item.",
+      "target": {"kind": "action_item", "id": "synthetic-task"},
+      "acted": false,
+      "dismissed": false,
+      "feedback": "none"
+    }],
+    "next_cursor": "",
+    "has_more": false,
+    "server_time": "2026-10-03T12:01:00Z"
+  },
+  "outcome": {
+    "item_id": "0123456789abcdef0123456789abcdef",
+    "recorded": true,
+    "acted_24h": true,
+    "negative": false
+  }
+}

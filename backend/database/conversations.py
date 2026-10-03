@@ -1753,6 +1753,9 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='conversation', source_id=conversation_id, firestore_client=db)
     # A shadow metric writer can have read the parent just before deletion and
     # committed a child after our first enumeration. Its transaction prevents
     # writes once the parent is gone; this second sweep catches that narrow

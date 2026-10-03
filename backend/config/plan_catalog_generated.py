@@ -25,7 +25,7 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'faa5baad5119b596a5256cd1eb552ddf93f00aef37c560f558aabcf7eabc1831'
+CATALOG_SHA256: Final = 'dfb358c0edaffd0279229da3f31fb49ba35fea66c9ecc98141e579eee008ab20'
 CATALOG_REVISION: Final = 3
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
@@ -33,6 +33,14 @@ CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'stripe_role': 'price_amount_authority',
  'unknown_caller_policy': 'legacy_contract'}
 OPEN_PLAN_DECISIONS: Final = {}
+PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
+ 'days_per_month': 30,
+ 'monthly_reference_cents': {'basic': 0,
+                             'operator': 4900,
+                             'architect': 19900,
+                             'unlimited_v2': 2999,
+                             'unlimited': 2000,
+                             'plus': 2000}}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
                    'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',

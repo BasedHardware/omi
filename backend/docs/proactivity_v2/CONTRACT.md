@@ -278,7 +278,7 @@ the existing claimed item, and rejects partial metadata. Public proxies must not
 forward client-provided proactivity headers. Producer calls use:
 
 ```python
-item = claim_item(uid=uid, producer=name, source=source_event)
+item = await claim_item(uid=uid, producer=name, source=source_event)
 result = await run_proactivity_model(item=item, step="phrase", request=request)
 # This function is gateway-only and propagates typed denied/unknown results.
 await publish_item(item=item, content=content, target=target)
@@ -514,7 +514,7 @@ never refunds spend. Money/outcome truth is Firestore, not analytics arrival.
 ## 10. Migration, compatibility and rollback
 
 1. Coordinator reviews this contract; only then resume spine implementation.
-2. Add disabled registry/cap policy, durable budget and item storage, gateway hook,
+2. Add flag-gated registry/cap policy, durable budget and item storage, gateway hook,
    routes, generated clients and hermetic fixtures. Provision indexes/TTL through
    existing repository mechanism before enablement; this lane does not deploy.
 3. Integrate after #20184 vocabulary settles. Its required one-week baseline and
@@ -551,6 +551,7 @@ Phase 1 changes **only this file**. Phase 2 spine additions:
 - `backend/tests/unit/test_proactivity_v2_gateway.py`
 - `backend/tests/unit/test_proactivity_v2_routes.py`
 - `backend/tests/unit/test_proactivity_v2_metrics.py`
+- `backend/tests/integration/test_proactivity_v2_budget_emulator.py` — real contention and source purge proof
 - `contracts/parity/proactivity_v2.json`
 - `app/lib/backend/http/proactivity.dart` — transport adapter only, no card
 - `app/lib/backend/schema/gen/proactivity_wire.g.dart` — generated
@@ -559,12 +560,15 @@ Phase 1 changes **only this file**. Phase 2 spine additions:
 
 Phase 2 spine modifications:
 
+- `backend/database/action_items.py`, `backend/database/conversations.py` — canonical deletion clears derived ledger content; source visibility also fences reads/writes
+
 - `backend/llm_gateway/config/cost_rate_cards.yaml` — Jev input pricing
 
 - `backend/config/plan_catalog.json`, `backend/scripts/generate_plan_catalog.py`,
   `backend/config/plan_catalog_generated.py` — validated cap policy/projection
 - `backend/llm_gateway/gateway/executor.py`,
-  `backend/llm_gateway/gateway/request_context.py`, `backend/llm_gateway/main.py`
+  `backend/llm_gateway/routers/openai_compatible.py`,
+  `backend/llm_gateway/routers/systemone.py`, `backend/llm_gateway/gateway/providers.py`
   — trusted metadata, reserved provider boundary, same immutable event settlement
 - `backend/utils/llm/gateway_client.py` — bounded nonstreaming v2 call, no fallback
 - `backend/utils/notification_dispatch.py` — v2 kind through existing transport
@@ -646,3 +650,19 @@ producer defaults. Measurement lanes replace provisional estimates/thresholds
 with evidence; coordinator owns Focus's legacy exception and assigns
 TTL/index deployment. These are concrete design choices for this requested
 contract checkpoint, not additional implementation approval stages.
+
+### Implementation boundary clarifications
+
+The v2 metadata is parsed in the existing authenticated chat/systemone routers,
+not gateway main. Jev's provider adapter must preserve absent usage as unknown
+instead of synthesizing zero tokens. These are necessary additions to the exact
+file list for G1 prefilter coverage. Existing Firestore rules already deny all
+user subcollections; the existing recursive account wipe includes v2 rows.
+No new rules or deletion framework is required. Initial push quiet hours are
+22:00–08:00 in the stored user timezone; unknown timezone suppresses push.
+
+Canonical deletion hooks call `purge_source_items` after deleting the source, with transactional source rechecks so a concurrent publication cannot retain derived content. Soft-deleted sources are immediately hidden at every ledger boundary; canonical action-item retirement also purges content. Each affected item adds one privacy-cleanup write. The emulator proof uses `backend/test.sh` with the integration marker and a loopback-only Firebase project.
+
+Server completion of a feed-only follow-up requires an existing confirmed exposure; an independently completed task cannot manufacture exposure or value credit. The canonical API may retry its deterministic server event after confirmation.
+
+Validation-driven file addition: `backend/scripts/support/find_stripe_entitlement_mismatches.py` defers the Firestore import until its executable entrypoint, so reading catalog-derived constants does not load the cloud SDK inside a fast unit test. The support scanner behavior is unchanged and is not invoked against any account data.
