@@ -82,22 +82,21 @@ void main() {
   });
 
   test('the catalog loads even when start-up already filled apps from the cache', () async {
-    SharedPreferencesUtil().appsList = [
-      App.fromJson({
-        'id': 'app_journal',
-        'name': 'Journal',
-        'author': 'Test Author',
-        'description': 'test',
-        'image': '',
-        'capabilities': ['memories'],
-        'status': 'approved',
-        'category': 'productivity',
-        'approved': true,
-        'private': false,
-        'enabled': true,
-        'deleted': false,
-      }),
-    ];
+    App app(String id, String name) => App.fromJson({
+          'id': id,
+          'name': name,
+          'author': 'Test Author',
+          'description': 'test',
+          'image': '',
+          'capabilities': ['external_integration'],
+          'status': 'approved',
+          'category': 'productivity',
+          'approved': true,
+          'private': false,
+          'enabled': false,
+          'deleted': false,
+        });
+    SharedPreferencesUtil().appsList = [app('app_journal', 'Journal')];
     final provider = AppProvider();
     addTearDown(provider.dispose);
     var catalogRequests = 0;
@@ -106,7 +105,7 @@ void main() {
       return [
         {
           'capability': {'id': 'external_integration', 'title': 'Integrations'},
-          'data': <App>[],
+          'data': <App>[app('app_notion', 'Notion')],
         },
       ];
     };
@@ -114,12 +113,14 @@ void main() {
     provider.retrievePopularAppsOverride = () async => <App>[];
 
     provider.setAppsFromCache();
-    expect(provider.apps, isNotEmpty);
+    expect(provider.apps.map((a) => a.id), ['app_journal']);
     expect(provider.groupedApps, isEmpty);
 
     await provider.ensureCatalogLoaded();
 
     expect(catalogRequests, 1);
     expect(provider.groupedApps, hasLength(1));
+    expect((provider.groupedApps.single['data'] as List<App>).map((a) => a.id), ['app_notion']);
+    expect(provider.apps.map((a) => a.id), ['app_notion']);
   });
 }
