@@ -3,26 +3,25 @@ import { ipcMain } from 'electron'
 import { getInsightSettings, updateInsightSettings } from '../insight/state'
 import {
   showInsightToast,
-  hideInsightToast,
   pauseInsightDismiss,
-  resumeInsightDismiss
+  resumeInsightDismiss,
+  dismissInsightToast,
+  openProactivityToast,
+  isInsightToastSender
 } from '../insight/toastWindow'
+import type { ToastDeliveryHooks } from '../insight/deliveryHooks'
 import { fireNativeInsight } from '../insight/notification'
-import {
-  insertInsight,
-  recentInsights,
-  dismissInsight,
-  dismissAllInsights,
-  clearInsights
-} from './db'
 import type { InsightPayload, InsightSettings } from '../../shared/types'
 
 // Show an insight using the user's chosen style: the in-app acrylic toast
 // ('omi') or a native Windows notification ('native'). Exported so the proactive
 // assistants' notification throttle (assistants/core/notify.ts) delivers through
 // the same one place, rather than growing a second toast path.
-export function deliverInsight(p: InsightPayload): void {
-  if (getInsightSettings().notificationStyle === 'native') fireNativeInsight(p)
+export function deliverInsight(p: InsightPayload, hooks?: ToastDeliveryHooks): void {
+  if (getInsightSettings().notificationStyle === 'native') {
+    if (hooks) fireNativeInsight(p, hooks)
+    else fireNativeInsight(p)
+  } else if (hooks) showInsightToast(p, hooks)
   else showInsightToast(p)
 }
 
@@ -31,18 +30,12 @@ export function registerInsightHandlers(): void {
   ipcMain.handle('insight:setSettings', async (_e, patch: Partial<InsightSettings>) =>
     updateInsightSettings(patch)
   )
-  ipcMain.handle('insight:add', async (_e, p: InsightPayload) => {
-    insertInsight(p)
+  ipcMain.on('insight:dismiss', (event) => {
+    if (isInsightToastSender(event.sender.id)) dismissInsightToast('dismissed')
   })
-  ipcMain.handle('insight:recent', async (_e, limit: number) => recentInsights(limit))
-  // History-page mutations over the same SQLite `insights` table. `dismissed` is
-  // the read/handled marker — dismissAll is Mac's "Mark All Read", clearAll is
-  // "Clear All History".
-  ipcMain.handle('insight:dismissRecord', async (_e, id: number) => dismissInsight(id))
-  ipcMain.handle('insight:dismissAll', async () => dismissAllInsights())
-  ipcMain.handle('insight:clearAll', async () => clearInsights())
-  ipcMain.on('insight:show', (_e, p: InsightPayload) => deliverInsight(p))
-  ipcMain.on('insight:dismiss', () => hideInsightToast())
+  ipcMain.on('insight:proactivity-open', (event, itemID: string) => {
+    if (isInsightToastSender(event.sender.id)) openProactivityToast(itemID)
+  })
   ipcMain.on('insight:hoverStart', () => pauseInsightDismiss())
   ipcMain.on('insight:hoverEnd', () => resumeInsightDismiss())
   // Settings "test notification": show an example in the user's chosen style.
@@ -57,3 +50,6 @@ export function registerInsightHandlers(): void {
     })
   )
 }
+
+// Public main-process seam for the v2 feed consumer; wire types come from the spine.
+export { presentProactivityNotification } from '../proactivity/notificationAdapter'

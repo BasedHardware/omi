@@ -1031,17 +1031,7 @@ export type OmiBridgeApi = {
   relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
-  insightAdd: (p: InsightPayload) => Promise<void>
-  insightRecent: (limit: number) => Promise<InsightRecord[]>
-  /** Insights page: mark one record dismissed (read/handled). */
-  insightDismissRecord: (id: number) => Promise<boolean>
-  /** Insights page: mark all records dismissed (Mac's "Mark All Read"). */
-  insightDismissAll: () => Promise<number>
-  /** Insights page: delete all insight history (Mac's "Clear All History"). */
-  insightClearAll: () => Promise<number>
-  /** Engine → main: deliver this insight in the user's chosen style. */
-  insightShow: (p: InsightPayload) => void
-  /** Toast renderer → main: dismiss now. */
+  proactivityNotificationOpen: (itemID: string) => void
   insightDismiss: () => void
   /** Toast renderer → main: pause/resume the auto-dismiss while hovered. */
   insightHoverStart: () => void
@@ -2192,13 +2182,14 @@ export type AssistantSettingsView = {
 }
 
 export type InsightPayload = {
+  /** Main-owned v2 identity; renderer sends only this ID back, never a destination. */
+  proactivityItemID?: string
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars
   reasoning: string
   category: InsightCategory
   sourceApp: string
   confidence: number // 0..1
-
 }
 
 // Stored row: powers both toast dedupe and the Insights history page. `dismissed`

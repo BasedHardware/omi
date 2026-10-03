@@ -182,7 +182,14 @@ export function InsightToast(): React.JSX.Element {
       <div className="insight-headline">{insight.headline}</div>
       <div className="insight-advice">{insight.advice}</div>
       <div className="insight-foot">{insight.sourceApp}</div>
-
+      {insight.proactivityItemID ? (
+        <button
+          className="meeting-btn meeting-btn-primary"
+          onClick={() => window.omi.proactivityNotificationOpen(insight.proactivityItemID!)}
+        >
+          Open
+        </button>
+      ) : null}
     </div>
   )
 }

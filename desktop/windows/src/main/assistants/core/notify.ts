@@ -20,6 +20,7 @@
 //
 // The decision logic is pure and clock-injected; only `notifyProactive` below
 // touches real state and real delivery.
+import type { ToastDeliveryHooks } from '../../insight/deliveryHooks'
 import { getAppSettings } from '../../appSettings'
 import { deliverInsight } from '../../ipc/insight'
 import type { InsightPayload } from '../../../shared/types'
@@ -212,7 +213,7 @@ export function notificationsActive(_assistantId: string, now: number = Date.now
 export function notifyProactive(
   assistantId: string,
   payload: InsightPayload,
-  opts: { respectFrequency?: boolean; now?: number } = {}
+  opts: { respectFrequency?: boolean; now?: number; deliveryHooks?: ToastDeliveryHooks } = {}
 ): boolean {
   const settings = getAppSettings()
   const now = opts.now ?? Date.now()
@@ -228,7 +229,8 @@ export function notifyProactive(
     console.log(`[assistants] notification from ${assistantId} suppressed: ${decision.reason}`)
     return false
   }
-  deliverInsight(payload)
+  if (opts.deliveryHooks) deliverInsight(payload, opts.deliveryHooks)
+  else deliverInsight(payload)
   return true
 }
 

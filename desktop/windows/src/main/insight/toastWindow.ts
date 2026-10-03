@@ -15,6 +15,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import iconPath from '../../../resources/icon.png?asset'
 import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
+import type { ToastDeliveryHooks } from './deliveryHooks'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
@@ -32,6 +33,7 @@ const MEETING_ASK_DISMISS_MS = 30_000
 // longer than an insight so it isn't gone before it's read.
 const WHATS_NEW_DISMISS_MS = 20_000
 
+let activeDelivery: { itemID: string; hooks: ToastDeliveryHooks } | null = null
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
 // Dismiss duration of the toast currently shown — hover-resume must re-arm
@@ -41,7 +43,7 @@ let currentDismissMs = AUTO_DISMISS_MS
 function armDismiss(ms: number): void {
   currentDismissMs = ms
   if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, ms)
+  dismissTimer = setTimeout(() => dismissInsightToast('timeout'), ms)
 }
 // The meeting payload currently on screen. Kept so the toast renderer can PULL
 // it on mount ('meeting:getToast'): a push sent between the window's
@@ -137,7 +139,10 @@ function position(win: BrowserWindow, height: number = HEIGHT): void {
   })
 }
 
-export function showInsightToast(payload: InsightPayload): void {
+export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryHooks): void {
+  if (hooks && !hooks.isCurrent()) return
+  activeDelivery =
+    hooks && payload.proactivityItemID ? { itemID: payload.proactivityItemID, hooks } : null
   const win = ensureWindow()
   position(win)
   // An insight replaces whatever is on the shared toast — clear any meeting /
@@ -146,9 +151,13 @@ export function showInsightToast(payload: InsightPayload): void {
   currentMeetingToast = null
   currentWhatsNew = null
   // showInactive: appear on top without taking focus from the user's current app.
-  win.showInactive()
+  if (!hooks) win.showInactive()
   const send = (): void => {
-    if (!win.isDestroyed()) win.webContents.send('insight:payload', payload)
+    if (win.isDestroyed() || (hooks && (!hooks.isCurrent() || activeDelivery?.hooks !== hooks)))
+      return
+    if (hooks) win.showInactive()
+    win.webContents.send('insight:payload', payload)
+    hooks?.onPresented()
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
@@ -159,6 +168,7 @@ export function showInsightToast(payload: InsightPayload): void {
  *  linger longer (a decision prompt); capture notices use the standard timeout.
  *  Never silent capture: every auto-start goes through here. */
 export function showMeetingToast(payload: MeetingToastPayload): void {
+  activeDelivery = null
   const win = ensureWindow()
   position(win)
   win.showInactive()
@@ -177,6 +187,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
 /** Show the post-update what's-new card in the shared toast window (Phase 8).
  *  Informational, so it uses a longer dismiss and never steals focus. */
 export function showWhatsNewToast(payload: WhatsNewPayload): void {
+  activeDelivery = null
   const win = ensureWindow()
   position(win, WHATS_NEW_HEIGHT)
   win.showInactive()
@@ -196,6 +207,7 @@ export function hideMeetingToast(): void {
 }
 
 export function hideInsightToast(): void {
+  activeDelivery = null
   currentMeetingToast = null
   currentWhatsNew = null
   if (dismissTimer) {
@@ -223,4 +235,22 @@ export function resumeInsightDismiss(): void {
 /** Pre-create the (hidden) toast window so the first insight shows instantly. */
 export function createInsightToastWindow(): void {
   ensureWindow()
+}
+
+/** IPC cannot supply a target or report outcomes for another toast/owner. */
+export function isInsightToastSender(senderID: number): boolean {
+  return !!toastWindow && !toastWindow.isDestroyed() && toastWindow.webContents.id === senderID
+}
+
+export function openProactivityToast(itemID: string): void {
+  const delivery = activeDelivery
+  if (!delivery || delivery.itemID !== itemID || !delivery.hooks.isCurrent()) return
+  delivery.hooks.onOpened()
+  hideInsightToast()
+}
+
+export function dismissInsightToast(reason: 'dismissed' | 'timeout'): void {
+  const delivery = activeDelivery
+  if (delivery?.hooks.isCurrent()) delivery.hooks.onDismissed(reason)
+  hideInsightToast()
 }
