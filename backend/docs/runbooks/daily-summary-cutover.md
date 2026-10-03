@@ -34,7 +34,18 @@ task retries and should be compared with Scheduler/audit execution counts.
   release the owned day lock. Failed pushes retain a delivery-retry marker:
   retry the stored recap without regenerating it, while ordinary repeat ticks
   still suppress the push. Zero successful FCM sends count as a failed push;
-  any successful device delivery completes it to avoid repushing to that device.
+  any FCM-accepted device send completes it to avoid repushing that notification.
+  Timeouts before confirmed push handling are uncertain delivery outcomes and
+  retry the saved recap. An in-process acknowledgement and a metadata-only
+  `notification_delivery_completed` receipt are recorded before backfill/webhook
+  work. Later errors/timeouts clear the push-retry flag; a late abandoned worker's
+  persisted receipt overrides even a stale cursor's true flag. Tokenless skips
+  also complete push handling. This adds one receipt write per completed attempt.
+  Delivery retries choose **at-least-once attempts for uncertain outcomes** over
+  at-most-once attempts that could silently lose a recap. A crash or failed
+  receipt write after FCM accepts the send can still cause a duplicate on retry.
+  FCM acknowledgement does not prove device receipt; this is neither an
+  exactly-once guarantee nor an unconditional retry queue through Redis outages.
   A contended retry remains pending until its outstanding worker finishes.
   Successful timezone chunks still run. The run lock prevents concurrent
   notification sweeps; the per-user/day lock and durable existing-record check

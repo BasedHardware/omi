@@ -4,6 +4,7 @@ import asyncio
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
+from threading import Event
 from time import monotonic
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -801,6 +802,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     tokens = user_data[1] if len(user_data) > 1 else None
     retry_delivery = bool(user_data[4]) if len(user_data) > 4 else False
     retry_attempt = bool(user_data[5]) if len(user_data) > 5 else False
+    delivery_completed: Optional[Event] = user_data[6] if len(user_data) > 6 else None
 
     def prepare_delivery() -> None:
         nonlocal tokens
@@ -819,13 +821,23 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # A timed-out worker may still own the day. Keep its recipient pending
         # until that worker finishes, rather than treating contention as delivery.
         raise RuntimeError('daily summary retry still locked')
-    if (created or retry_delivery) and summary_data:
+    if summary_data and summary_data.get('notification_delivery_completed'):
+        # An abandoned worker may have delivered after wait_for timed out and
+        # after its coordinator saved an uncertain outcome. The receipt wins.
+        if delivery_completed is not None:
+            delivery_completed.set()
+    elif (created or retry_delivery) and summary_data:
         try:
             prepare_delivery()
             _deliver_current_day_summary(uid, date_str, summary_data, tokens)
         except Exception as exc:
             release_daily_summary_lock(uid, date_str)
             raise DailySummaryDeliveryError(str(exc)) from exc
+        # Set the local acknowledgement before any further work. Even receipt
+        # persistence or backfill/webhook failure must not restore a send retry.
+        if delivery_completed is not None:
+            delivery_completed.set()
+        daily_summaries_db.mark_daily_summary_delivery_completed(uid, str(summary_data['id']))
         # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
         pending_webhook = summary_data
 
@@ -898,24 +910,30 @@ async def _send_bulk_summary_notification(
             return False
 
         batch = users[i : i + _BATCH_SIZE]
+        delivery_completed = [Event() for _user in batch]
         per_user_timeout = DAILY_SUMMARY_USER_BUDGET_SECONDS
         if deadline is not None:
             per_user_timeout = max(1.0, min(per_user_timeout, deadline - monotonic()))
 
         tasks = [
             asyncio.wait_for(
-                run_blocking(postprocess_executor, _send_summary_notification, user_tokens),
+                run_blocking(
+                    postprocess_executor,
+                    _send_summary_notification,
+                    (*user_tokens, *(None for _ in range(max(0, 6 - len(user_tokens)))), delivery_completed[j]),
+                ),
                 timeout=per_user_timeout,
             )
-            for user_tokens in batch
+            for j, user_tokens in enumerate(batch)
         ]
         counters.attempted += len(batch)
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             uid = str(batch[j][0])
             if isinstance(result, BaseException):
-                counters.retry_recipients[uid] = counters.retry_recipients.get(uid, False) or isinstance(
-                    result, DailySummaryDeliveryError
+                counters.retry_recipients[uid] = not delivery_completed[j].is_set() and (
+                    counters.retry_recipients.get(uid, False)
+                    or isinstance(result, (DailySummaryDeliveryError, asyncio.TimeoutError, TimeoutError))
                 )
                 if counters.retry_uid is None:
                     counters.retry_hour, counters.retry_uid = target_hour, uid

@@ -146,6 +146,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
 
@@ -555,6 +556,7 @@ def _loaded_send_path(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
     with stub_modules(stubs):
@@ -777,7 +779,7 @@ def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure
             assert not outcome.ok and not outcome.complete
             saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
             assert saved['uid'] == 'uid-00', 'later batch progress must not overwrite the failed recipient'
-            assert saved['retry_recipients'] == {'uid-00': failure_kind == 'delivery'}
+            assert saved['retry_recipients'] == {'uid-00': failure_kind in ('delivery', 'timeout')}
             assert notifications.summary_budget.cursor_cohort_utc(saved) == original
 
         now = original + timedelta(minutes=30)
@@ -788,5 +790,5 @@ def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure
         retries = [attempt for attempt in attempts if attempt[0] == 'uid-00']
         assert len(retries) == 3
         assert {attempt[1] for attempt in retries} == {original.date() - timedelta(days=1)}
-        assert retries[1][2:] == (failure_kind == 'delivery', True)
+        assert retries[1][2:] == (failure_kind in ('delivery', 'timeout'), True)
         assert {'uid-08', 'uid-11'} <= {attempt[0] for attempt in attempts}, 'healthy later batches still run'

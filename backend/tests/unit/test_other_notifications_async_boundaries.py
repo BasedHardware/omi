@@ -87,6 +87,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
 
