@@ -115,11 +115,10 @@ def send_app_notification_to_user(
     if not verify_api_key(aid, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
-    # Get app details and convert to App model
-    app_data = get_available_app_by_id(aid, uid)
-    if not app_data:
+    # Get app details and convert to App model; a malformed stored app is treated as missing, not a 500.
+    app = App.deserialize_safe(get_available_app_by_id(aid, uid))
+    if not app:
         raise HTTPException(status_code=404, detail='App not found')
-    app = App(**app_data)
 
     # Check if user has app installed
     user_enabled = set(get_enabled_apps(uid))
