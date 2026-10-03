@@ -172,8 +172,7 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
-  /// Durable lookup key into `proactive_deliveries`. Unlike the legacy card
-  /// context, this survives the old 60-second follow-up window.
+  /// Producer-owned durable identity, such as a proactivity v2 feed item ID.
   let provenanceRef: String?
 
   init(
@@ -221,6 +220,7 @@ enum FloatingBarNotificationQueuePolicy {
 }
 
 enum FloatingBarNotificationAction: Equatable {
+  case openProactivityItem(ProactivityNotificationTarget)
   case openWhatMattersNow(recommendationID: String)
   /// Offer to connect an integration the user has open but has not set up.
   /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),
@@ -248,9 +248,19 @@ enum FloatingBarNotificationAction: Equatable {
   case contextReminder(reminderID: String)
 }
 
+enum NotificationInteraction: String {
+  case opened
+  case dismissed
+  case timeout
+  case thumbsUp = "thumbs_up"
+  case thumbsDown = "thumbs_down"
+}
+
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
-  let id = UUID()
+  let id: UUID
+  let expiresAt: Date?
+  let onInteraction: ((NotificationInteraction) -> Void)?
   /// Immutable owner provenance captured before the workflow that produced
   /// this notification crossed an async boundary.
   let ownerID: String
@@ -260,17 +270,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
-  /// Explicit feedback controls for a planned JIT trigger. This is opaque
-  /// provenance only; action labels are rendered by the card.
-  let jitFeedbackContext: JITTriggerFeedbackContext?
-  /// Ambient JIT feedback is delivery-scoped and has no standing trigger.
-  let jitAmbientFeedbackContext: JITAmbientFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
-  /// Optional opaque Advice delivery key. It is consumed only at the actual
-  /// floating-bar presentation boundary and carries no advice or screen content.
-  let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
   /// A persistent card never times out: it stays presented until the user
@@ -284,15 +286,18 @@ struct FloatingBarNotification: Identifiable, Equatable {
     message: String,
     assistantId: String,
     kind: ProactiveNotificationKind,
+    id: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
-    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
-    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false
   ) {
+    self.id = id
+    self.onInteraction = onInteraction
+    self.expiresAt = expiresAt
     self.ownerID = ownerID
     self.title = title
     self.message = message
@@ -303,10 +308,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.kind = kind
     self.context = context
     self.action = action
-    self.jitFeedbackContext = jitFeedbackContext
-    self.jitAmbientFeedbackContext = jitAmbientFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
-    self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
   }
@@ -317,8 +319,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
     if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
     let evaluationID =
-      insightDeliveryID
-      ?? UUID(uuidString: context?.provenanceRef ?? "")
+      UUID(uuidString: context?.provenanceRef ?? "")
       ?? id
     return SuggestionAssistantTelemetry.NotificationIdentity(
       evaluationID: evaluationID, suggestionID: id)
@@ -341,11 +342,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published var isHoveringBar: Bool = false
   @Published var requiresHoverReset: Bool = false
   @Published var currentNotification: FloatingBarNotification? = nil
-  /// Visible while PTT is live inside the 60s card-context window.
-  @Published var interjectReplyingToTitle: String? = nil
-  /// Same hover signal the Interject dismiss timer pauses on. Notch hover
-  /// never sets `isHoveringBar`; insight teasers key off this instead.
-  @Published var interjectBarHovering: Bool = false
 
   /// Onboarding-only: pulse a glowing border on the bar so first-run users
   /// notice it. Cleared automatically once they start typing.

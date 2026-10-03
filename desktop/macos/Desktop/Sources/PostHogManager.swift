@@ -114,7 +114,7 @@ class PostHogManager {
 
   /// EXP-002: attach `experiment_id` + `variant` to every captured event as
   /// super-properties, so all product events (`question_asked`/`question_answered`,
-  /// `desktop_daily_summary`, PTT lifecycle, Interject teach) are sliceable by
+  /// `desktop_daily_summary`, PTT lifecycle) are sliceable by
   /// arm without per-event plumbing. Distinct id stays the uid — the variant is
   /// a property, never an identity. Called once the launch's arm resolves.
   func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
@@ -1094,31 +1094,6 @@ extension PostHogManager {
     )
   }
 
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    var properties: [String: Any] = [:]
-    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
-    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
-    track("Advice Generated", properties: properties.isEmpty ? nil : properties)
-  }
-
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    track(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
-        outcome,
-        reason: reason,
-        identity: identity,
-        surface: surface
-      )
-    )
-  }
-
   // MARK: - Apps Events
 
   func appEnabled(appId: String, appName: String) {
@@ -1248,8 +1223,7 @@ extension PostHogManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1258,45 +1232,10 @@ extension PostHogManager {
       surface: surface
     )
     properties["dismissal_kind"] = dismissalKind.rawValue
-    if let attention {
-      properties["attention"] = attention.rawValue
-    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    var properties: [String: Any] = [
-      "notification_id": notificationId,
-      "assistant_id": assistantId,
-    ]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    track("Notification Hovered", properties: properties)
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    var properties: [String: Any] = ["verb": verb]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    if let provenance {
-      // Keep account identity out of event properties; PostHog already binds
-      // events to the authenticated installation. These opaque joins are
-      // sufficient for receipt correlation without copying owner IDs.
-      properties["feedback_lane"] = provenance.lane
-      properties["feedback_delivery_id"] = provenance.deliveryID
-      properties["feedback_candidate_id"] = provenance.candidateID
-      properties["feedback_account_generation"] = provenance.accountGeneration
-    }
-    track("Suggestion Feedback Recorded", properties: properties)
   }
 
   private func notificationProperties(

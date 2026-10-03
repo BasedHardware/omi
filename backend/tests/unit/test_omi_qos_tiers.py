@@ -332,7 +332,6 @@ class TestModelQosProfiles:
             'app_generator',
             'persona_clone',
             'persona_chat_premium',
-            'desktop_proactive_reasoning',
             'file_chat_vision',
             'file_chat_documents',
             'chat_agent',
@@ -345,7 +344,6 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
-            'desktop_proactive_extraction',
         }
         expected_openai = {
             **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},
@@ -1173,8 +1171,6 @@ class TestStructuredOutputFeatureTracking:
         expected = {
             'chat_extraction',
             'proactive_notification',
-            'desktop_proactive_extraction',
-            'desktop_proactive_reasoning',
             'translation',
             'conv_app_select',
             'external_structure',

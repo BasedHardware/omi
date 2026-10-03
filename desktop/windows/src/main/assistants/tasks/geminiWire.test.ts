@@ -11,7 +11,7 @@ vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
 
 import { sendInitialTurn, sendToolResponseTurn, GeminiHttpError, TASK_MODEL } from './geminiWire'
 import type { BackendSession } from '../core/session'
-import type { GeminiTool } from '../insight/models'
+import type { GeminiTool } from '../core/geminiTypes'
 import { geminiClientPlatform } from '../../../shared/geminiProxy'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })

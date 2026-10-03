@@ -21,7 +21,7 @@ enum OmiToolManifest {
     ),
     LocalAgentTool(
       name: "execute_sql",
-      description: "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. The durable work index is context_visits(handlesJson) joined to context_buckets. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
+      description: "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
       properties: [
         "query": [
           "type": "string",

@@ -12390,4 +12390,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Sjekk tilkoblingen';
+
+  @override
+  String get forYou => 'For deg';
+
+  @override
+  String get stopThese => 'Stopp disse';
+
+  @override
+  String get dismiss => 'Avvis';
 }

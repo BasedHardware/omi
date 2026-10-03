@@ -3317,3 +3317,16 @@ def test_deploy_actions_remove_the_retired_jev_allowlist_env():
     for line in clone_removals:
         assert f"inputs.project_id == 'based-hardware' && ',{name}'" in line
         assert line.count(name) == 1
+
+
+@pytest.mark.parametrize('pipeline', ['legacy', 'v2', 'cohort', 'typo'])
+@pytest.mark.parametrize('kind', ['manifest', 'rendered', 'binding'])
+def test_mentor_pipeline_runtime_values(pipeline, kind):
+    from scripts.runtime_env_validation.common import validate_mentor_pipeline
+
+    config = {'MENTOR_PIPELINE': {'value': pipeline}}
+    if kind == 'rendered':
+        config = [{'name': 'MENTOR_PIPELINE', 'value': pipeline}]
+    elif kind == 'binding':
+        config = {'MENTOR_PIPELINE': {'env_var': 'MENTOR_PIPELINE', 'default': pipeline}}
+    assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline == 'typo')

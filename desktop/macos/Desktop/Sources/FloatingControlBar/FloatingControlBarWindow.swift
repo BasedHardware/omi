@@ -959,7 +959,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   /// Shared closed-conversation size: a mounted notification card wins over
-  /// the listening/thinking island so Interject PTT cannot crush the card.
+  /// the listening/thinking island so voice capture cannot crush the card.
   private func collapsedChromeSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
     let notificationSize = notificationSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
     let listeningSize: NSSize
@@ -2363,12 +2363,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
   ///
-  /// A mounted notification card outlives the voice turn on purpose: Interject
-  /// keeps it up so "hold fn to reply" has a referent while the user speaks and
-  /// while the answer is thinking. So the PTT surface is *unioned* with the
-  /// card rather than substituted for it — swapping in the bare voice island
-  /// crushed a 508pt card into the ~270pt notch lobe for the whole turn, which
-  /// is the scrunched notch users reported.
+  /// Keep a mounted notification visible while the voice surface changes size.
   func resizeForPTTState(expanded: Bool) {
     if expanded { cancelPendingRetraction() }
     let usesNotchIsland = notchModeEnabled
@@ -3149,14 +3144,9 @@ class FloatingControlBarManager {
   }
   private var pendingNotifications: [FloatingBarNotification] = []
   private var notificationDismissWorkItem: DispatchWorkItem?
-  private var interjectDisplayTimer: InterjectDisplayTimer?
-  private var interjectTimerTask: Task<Void, Never>?
-  private var interjectGraceWindow = InterjectGraceWindow()
-  private var interjectGraceCard: FloatingBarNotification?
-  private var interjectCardDidHover = false
-  private var interjectHoverRecordedForID: UUID?
-  private var interjectPTTHoldActive = false
-  private var interjectBarHovering = false
+  private var notificationDisplayTimer: NotificationDisplayTimer?
+  private var notificationTimerTask: Task<Void, Never>?
+  private var notificationBarHovering = false
   private var notificationWasTemporarilyShown = false
   private var storedNotificationMessages: [OwnerNotificationKey: StoredNotificationMessage] = [:]
   private var pendingNotificationJournalWrites: Set<OwnerNotificationKey> = []
@@ -3271,12 +3261,7 @@ class FloatingControlBarManager {
   func resetOwnerProjection() {
     activeQueryGeneration &+= 1
     cancelNotificationDismissTimer()
-    clearInterjectGrace()
-    window?.state.interjectReplyingToTitle = nil
-    window?.state.interjectBarHovering = false
-    interjectBarHovering = false
-    interjectPTTHoldActive = false
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
+    notificationBarHovering = false
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
@@ -3743,15 +3728,15 @@ class FloatingControlBarManager {
     kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
-    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
-    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
-    onDropped: (() -> Void)? = nil
+    onDropped: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -3769,12 +3754,12 @@ class FloatingControlBarManager {
       message: message,
       assistantId: assistantId,
       kind: kind,
+      id: notificationID,
+      onInteraction: onInteraction,
+      expiresAt: expiresAt,
       context: context,
       action: action,
-      jitFeedbackContext: jitFeedbackContext,
-      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity ?? jitAmbientFeedbackContext?.suggestionIdentity,
-      insightDeliveryID: insightDeliveryID,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       screenshotData: screenshotData,
       isPersistent: FloatingBarNoticePolicy.persists(kind: kind, requestedPersistent: isPersistent)
     )
@@ -3783,6 +3768,10 @@ class FloatingControlBarManager {
       onDropped?()
       return .windowUnavailable
     }
+
+    // Feed refresh and push can race with the same stable presentation identity.
+    if window.state.currentNotification?.id == notification.id { return .presented }
+    if pendingNotifications.contains(where: { $0.id == notification.id }) { return .queued }
 
     notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
 
@@ -3850,25 +3839,6 @@ class FloatingControlBarManager {
     return .presented
   }
 
-  /// Read-only presentation check used before context-director candidate
-  /// graduation. It prevents expensive/durable work when the bar cannot accept
-  /// a notification, while `showNotification` remains the final race-safe gate.
-  func contextNotificationPreflight(
-    ownerID: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) -> OwnerBoundNotificationPresentationResult {
-    guard !ownerID.isEmpty,
-      authorizationSnapshot.ownerID == ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-    else { return .rejectedOwnerChange }
-    guard window != nil else { return .windowUnavailable }
-    return .queued
-  }
-
-  /// Let a card own the keyboard. The bar is ordinarily a non-activating
-  /// panel, so a text field inside a notification would silently swallow every
-  /// keystroke; the Share card's address field needs the panel to be key while
-  /// the owner types, and only while they type.
   func focusBarWindowForTextEntry() {
     guard let window else { return }
     NSApp.activate(ignoringOtherApps: true)
@@ -3887,39 +3857,31 @@ class FloatingControlBarManager {
   private func cancelNotificationDismissTimer() {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    interjectTimerTask?.cancel()
-    interjectTimerTask = nil
-    interjectDisplayTimer = nil
-  }
-
-  private func clearInterjectGrace() {
-    interjectGraceWindow.clear()
-    interjectGraceCard = nil
+    notificationTimerTask?.cancel()
+    notificationTimerTask = nil
+    notificationDisplayTimer = nil
   }
 
   private func scheduleNotificationAutoDismiss(for notification: FloatingBarNotification) {
     cancelNotificationDismissTimer()
-    interjectCardDidHover = false
-    interjectHoverRecordedForID = nil
-    // One timing table (FloatingBarNoticePolicy): Interject only changes the duration; both
-    // paths pause while the bar is hovered, and persistent cards never start a timer.
+    // Pause timed cards while hovered; persistent cards never start a timer.
     guard
       case .timed(let duration) = FloatingBarNoticePolicy.lifetime(
-        for: notification, interjectEnabled: InterjectFeature.isEnabled)
+        for: notification)
     else { return }
     let dismissWorkItem = DispatchWorkItem { [weak self] in
       self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
     }
     notificationDismissWorkItem = dismissWorkItem
-    interjectDisplayTimer = InterjectDisplayTimer.start(duration: duration, now: Date())
-    interjectTimerTask = Task { @MainActor [weak self] in
-      await self?.runInterjectDismissLoop(workItem: dismissWorkItem)
+    notificationDisplayTimer = NotificationDisplayTimer.start(duration: duration, now: Date())
+    notificationTimerTask = Task { @MainActor [weak self] in
+      await self?.runNotificationDismissLoop(workItem: dismissWorkItem)
     }
   }
 
-  private func runInterjectDismissLoop(workItem: DispatchWorkItem) async {
+  private func runNotificationDismissLoop(workItem: DispatchWorkItem) async {
     while !Task.isCancelled, !workItem.isCancelled {
-      guard let timer = interjectDisplayTimer else { return }
+      guard let timer = notificationDisplayTimer else { return }
       let now = Date()
       if timer.isExpired(at: now) {
         workItem.perform()
@@ -3935,111 +3897,22 @@ class FloatingControlBarManager {
     }
   }
 
-  private func pauseInterjectTimer() {
-    guard var timer = interjectDisplayTimer else { return }
+  private func pauseNotificationTimer() {
+    guard var timer = notificationDisplayTimer else { return }
     timer.pause(now: Date())
-    interjectDisplayTimer = timer
+    notificationDisplayTimer = timer
   }
 
-  private func resumeInterjectTimerIfIdle() {
-    guard !interjectPTTHoldActive, !interjectBarHovering else { return }
-    guard var timer = interjectDisplayTimer else { return }
+  private func resumeNotificationTimerIfIdle() {
+    guard !notificationBarHovering else { return }
+    guard var timer = notificationDisplayTimer else { return }
     timer.resume(now: Date())
-    interjectDisplayTimer = timer
+    notificationDisplayTimer = timer
   }
 
-  private func markInterjectHover(for notification: FloatingBarNotification) {
-    interjectCardDidHover = true
-    guard interjectHoverRecordedForID != notification.id else { return }
-    interjectHoverRecordedForID = notification.id
-    AnalyticsManager.shared.notificationHovered(
-      notificationId: notification.id.uuidString,
-      assistantId: notification.assistantId,
-      suggestionIdentity: notification.suggestionTelemetryIdentity
-    )
-  }
-
-  private func reShowInterjectCard(_ notification: FloatingBarNotification) {
-    guard let window else { return }
-    interjectGraceCard = nil
-    window.showNotification(notification)
-    if !notification.isPersistent {
-      scheduleNotificationAutoDismiss(for: notification)
-    }
-  }
-
-  func interjectBarHoverChanged(_ hovering: Bool) {
-    guard InterjectFeature.isEnabled else {
-      // Flag off: no grace re-show or hover telemetry, but the card's countdown still pauses.
-      interjectBarHovering = hovering
-      if hovering { pauseInterjectTimer() } else { resumeInterjectTimerIfIdle() }
-      return
-    }
-    interjectBarHovering = hovering
-    window?.state.interjectBarHovering = hovering
-    if hovering {
-      if let card = window?.state.currentNotification {
-        markInterjectHover(for: card)
-        pauseInterjectTimer()
-      } else if interjectGraceWindow.consume(at: Date()), let card = interjectGraceCard {
-        reShowInterjectCard(card)
-        markInterjectHover(for: card)
-        pauseInterjectTimer()
-      }
-    } else {
-      resumeInterjectTimerIfIdle()
-    }
-  }
-
-  func interjectPushToTalkDidStart() {
-    guard InterjectFeature.isEnabled else { return }
-    interjectPTTHoldActive = true
-    if let card = window?.state.currentNotification {
-      pauseInterjectTimer()
-      window?.state.interjectReplyingToTitle = card.title
-    } else if interjectGraceWindow.consume(at: Date()), let card = interjectGraceCard {
-      reShowInterjectCard(card)
-      pauseInterjectTimer()
-      window?.state.interjectReplyingToTitle = card.title
-    } else if let title = recentNotchCardTitle() {
-      window?.state.interjectReplyingToTitle = title
-    }
-    InterjectClassificationDelivery.shared.pttDidStart(
-      shouldAttach: shouldAttachInterjectClassification()
-    )
-  }
-
-  func interjectPushToTalkDidEnd() {
-    endInterjectHoldVisually()
-    // Finalize / PTT-up: keep an unconfirmed classification inject so this
-    // turn's input window can still accept it.
-    InterjectClassificationDelivery.shared.pttDidRelease()
-  }
-
-  func interjectPushToTalkDidCancel() {
-    endInterjectHoldVisually()
-    InterjectClassificationDelivery.shared.pttDidCancel()
-  }
-
-  private func endInterjectHoldVisually() {
-    interjectPTTHoldActive = false
-    window?.state.interjectReplyingToTitle = nil
-    resumeInterjectTimerIfIdle()
-  }
-
-  func recentNotchCardTitle() -> String? {
-    guard let stored = recentInterjectReplyCard() else { return nil }
-    let title = stored.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return title.isEmpty ? nil : title
-  }
-
-  func recentNotchCardFeedbackIdentity() -> SuggestionAssistantTelemetry.NotificationIdentity? {
-    guard let stored = recentInterjectReplyCard() else { return nil }
-    if let identity = stored.suggestionIdentity { return identity }
-    let evaluation =
-      UUID(uuidString: stored.context?.provenanceRef ?? "") ?? stored.notificationID
-    return SuggestionAssistantTelemetry.NotificationIdentity(
-      evaluationID: evaluation, suggestionID: stored.notificationID)
+  func notificationBarHoverChanged(_ hovering: Bool) {
+    notificationBarHovering = hovering
+    if hovering { pauseNotificationTimer() } else { resumeNotificationTimerIfIdle() }
   }
 
   private func storedNotification(forContinuityKey key: String?) -> StoredNotificationMessage? {
@@ -4062,90 +3935,6 @@ class FloatingControlBarManager {
     storedNotification(forContinuityKey: key)?.context?.detail
   }
 
-  /// Hub classification writes through `record_interject_feedback`. Parsing a
-  /// leftover token here would double-fire the ledger against the silent tool.
-  func consumeInterjectHubTranscript(_ text: String) async {
-    _ = text
-  }
-
-  func consumeInterjectVoiceReply(_ text: String) {
-    Task { await consumeInterjectVoiceReplyAsync(text) }
-  }
-
-  /// JIT verdict buttons share the Interject ledger only when the flag is on.
-  /// Flag-off must stay byte-identical: no store row, no
-  /// `Suggestion Feedback Recorded`. The pre-existing
-  /// `JITTriggerFeedbackActionRouter.record` call is unchanged.
-  func recordInterjectJITVerdictIfEnabled(
-    identity: SuggestionAssistantTelemetry.NotificationIdentity,
-    verb: InterjectFeedbackVerb
-  ) async {
-    guard InterjectFeature.isEnabled else { return }
-    _ = await InterjectSuggestionFeedbackMutation.record(
-      evaluationID: identity.evaluationID,
-      suggestionID: identity.suggestionID,
-      verb: verb
-    )
-    SuggestionTaskNudgeEngagement.record(fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
-  }
-
-  func consumeInterjectVoiceReplyAsync(_ text: String) async {
-    guard InterjectFeature.isEnabled else { return }
-    let parsed = InterjectVoiceFeedbackRouting.parse(text)
-    guard let verb = parsed.verb,
-      let identity = recentNotchCardFeedbackIdentity()
-    else { return }
-    _ = await InterjectSuggestionFeedbackMutation.record(
-      evaluationID: identity.evaluationID,
-      suggestionID: identity.suggestionID,
-      verb: verb
-    )
-    SuggestionTaskNudgeEngagement.record(
-      fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
-  }
-
-  func shouldAttachInterjectClassification(createdAt: Date? = nil, now: Date = Date()) -> Bool {
-    guard InterjectFeature.isEnabled else { return false }
-    if let createdAt { return InterjectReplyWindow.contains(createdAt: createdAt, now: now) }
-    guard let stored = recentInterjectReplyCard(now: now) else { return false }
-    return InterjectReplyWindow.contains(createdAt: stored.createdAt, now: now)
-  }
-
-  private func recentInterjectReplyCard(now: Date = Date()) -> StoredNotificationMessage? {
-    purgeExpiredNotificationMessages()
-    guard let key = mostRecentNotificationKey,
-      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      key.ownerID == ownerID,
-      let stored = storedNotificationMessages[key],
-      stored.ownerID == ownerID,
-      InterjectReplyWindow.contains(createdAt: stored.createdAt, now: now)
-    else { return nil }
-    return stored
-  }
-
-  func seedInterjectRecentCardForTests(
-    ownerID: String,
-    title: String,
-    createdAt: Date,
-    context: FloatingBarNotificationContext?,
-    identity: SuggestionAssistantTelemetry.NotificationIdentity?,
-    notificationID: UUID = UUID()
-  ) {
-    let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
-    storedNotificationMessages[key] = StoredNotificationMessage(
-      ownerID: ownerID,
-      notificationID: notificationID,
-      context: context,
-      messageClientTurnId: "interject-test",
-      createdAt: createdAt,
-      title: title,
-      suggestionIdentity: identity
-    )
-    mostRecentNotificationKey = key
-  }
-
-  var interjectPTTHoldActiveForTests: Bool { interjectPTTHoldActive }
-
   func flushQueuedNotificationsIfPossible() {
     guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
     else { return }
@@ -4159,13 +3948,11 @@ class FloatingControlBarManager {
         notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
         notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
         log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-        Self.recordInsightDeliveryOutcome(
-          for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
       if presentNotification(nextNotification, in: window) { return }
       // The final presentation seam can reject a card after it has left the
-      // queue (for example, when its JIT account generation became stale).
+      // queue (for example, when its owner session became stale).
       // Keep draining so one rejected card cannot strand newer work.
     }
   }
@@ -4700,6 +4487,12 @@ class FloatingControlBarManager {
       let window
     else { return }
 
+    if case .openProactivityItem = notification.action {
+      guard let authorization = notificationAuthorizationSnapshots[notification.id],
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      else { return }
+    }
+    if notification.kind != .proactivityV2 { notification.onInteraction?(.opened) }
     DesktopUsageDailyReporter.shared.recordProactiveCardActed()
 
     AnalyticsManager.shared.notificationClicked(
@@ -4711,9 +4504,11 @@ class FloatingControlBarManager {
     )
 
     cancelNotificationDismissTimer()
-    clearInterjectGrace()
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
     switch notification.action {
+    case .openProactivityItem(let target):
+      ProactivityNotificationAdapter.open(target) { notification.onInteraction?(.opened) }
+      return
     case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
@@ -4766,37 +4561,32 @@ class FloatingControlBarManager {
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
 
+  func notificationDidRender(_ notification: FloatingBarNotification) {
+    guard window?.isVisible == true, window?.state.currentNotification?.id == notification.id,
+      notification.ownerID == RuntimeOwnerIdentity.currentOwnerId(),
+      notification.expiresAt.map({ $0 > Date() }) ?? true
+    else { return }
+    notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onPresented()
+  }
+
   @discardableResult
   private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
   {
     guard
       let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      notification.ownerID == authorizationSnapshot.ownerID
+      notification.ownerID == authorizationSnapshot.ownerID,
+      notification.expiresAt.map({ $0 > Date() }) ?? true
     else {
       notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
       notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
       log("FloatingControlBarManager: refusing to present stale-owner notification")
-      Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
-      return false
-    }
-    guard
-      NotificationService.jitFeedbackGenerationsMatch(
-        jitFeedbackContext: notification.jitFeedbackContext,
-        jitAmbientFeedbackContext: notification.jitAmbientFeedbackContext,
-        currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
-    else {
-      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
-      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
-      log("FloatingControlBarManager: refusing to present stale JIT generation")
       return false
     }
     persistNotificationMessageIfNeeded(notification)
-    clearInterjectGrace()
 
     if let existing = window.state.currentNotification, existing.id != notification.id {
       cancelNotificationDismissTimer()
-      clearInterjectGrace()
       AnalyticsManager.shared.notificationDismissed(
         notificationId: existing.id.uuidString,
         title: existing.title,
@@ -4841,12 +4631,10 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
-    let callbacks = notificationPresentationCallbacks.removeValue(forKey: notification.id)
-    callbacks?.onPresented()
+    if notification.kind != .proactivityV2 { notificationDidRender(notification) }
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
-    Self.recordAdvicePresentation(notification)
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4880,26 +4668,21 @@ class FloatingControlBarManager {
     }
 
     if trackDismissal, let dismissedNotification {
+      if dismissedNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() {
+        if kind == .user { dismissedNotification.onInteraction?(.dismissed) }
+        if kind == .timeout { dismissedNotification.onInteraction?(.timeout) }
+      }
       if kind == .user {
         SuggestionTaskNudgeEngagement.record(from: dismissedNotification)
       }
-      let attention: InterjectAttention? =
-        InterjectFeature.isEnabled && kind == .timeout
-        ? InterjectAttention.timeoutAttention(didHover: interjectCardDidHover)
-        : nil
       AnalyticsManager.shared.notificationDismissed(
         notificationId: dismissedNotification.id.uuidString,
         title: dismissedNotification.title,
         assistantId: dismissedNotification.assistantId,
         surface: "floating_bar",
         dismissalKind: kind,
-        suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity,
-        attention: attention
+        suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity
       )
-      if InterjectFeature.isEnabled, kind != .replaced {
-        interjectGraceCard = dismissedNotification
-        interjectGraceWindow.arm(now: Date())
-      }
     }
 
     if !window.state.showingAIConversation {
@@ -4913,13 +4696,11 @@ class FloatingControlBarManager {
           notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
           notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
           log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-          Self.recordInsightDeliveryOutcome(
-            for: nextNotification, outcome: .suppressed, reason: .staleOwner)
           continue
         }
         if presentNotification(nextNotification, in: window) { return }
         // The final presentation seam can reject a card after it has left the
-        // queue (for example, when its JIT account generation became stale).
+        // queue (for example, when its owner session became stale).
         // Keep draining so one rejected card cannot strand newer work.
       }
     }
@@ -5227,10 +5008,7 @@ class FloatingControlBarManager {
     else { return nil }
 
     let block = notificationContextSuffix(message: message, context: stored.context)
-    return InterjectVoiceFeedbackRouting.composePromptSuffix(
-      cardBlock: block,
-      attachClassification: shouldAttachInterjectClassification(createdAt: stored.createdAt)
-    )
+    return block
   }
 
   @discardableResult
@@ -5250,8 +5028,6 @@ class FloatingControlBarManager {
       return false
     }
     cancelNotificationDismissTimer()
-    let cancelledNotifications = pendingNotifications.filter { $0.id == notificationID }
-    Self.recordQueuedInsightOutcomes(cancelledNotifications, reason: .queueCancelled)
     pendingNotifications.removeAll { $0.id == notificationID }
     if window.state.currentNotification != nil {
       window.dismissNotification()
@@ -5628,7 +5404,6 @@ class FloatingControlBarManager {
       $0.clientTurnId == clientTurnId && $0.sender == .ai
     }) {
       barWindow.state.bindAnswerMessage(finalAIMessage)
-      await consumeInterjectVoiceReplyAsync(finalAIMessage.text)
     }
     // Cancel the messages subscription now that streaming is done.
     // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -5811,7 +5586,6 @@ class FloatingControlBarManager {
     if let finalAIMessage = provider.messages.last(where: {
       $0.clientTurnId == clientTurnId && $0.sender == .ai
     }) {
-      await consumeInterjectVoiceReplyAsync(finalAIMessage.text)
       FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
       if journalAccepted == false {
         appendJournalSaveWarning(in: barWindow, provider: provider)
@@ -5836,22 +5610,14 @@ class FloatingControlBarManager {
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
-    let durableProvenance: String? =
-      if let ref = pendingNotificationContext.context?.provenanceRef {
-        await ContextBucketStore.shared.deliveryProvenance(id: ref)
-      } else {
-        nil
-      }
+    let durableProvenance: String? = nil
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     let block = notificationContextSuffix(
       message: pendingNotificationContext.message,
       context: pendingNotificationContext.context,
       durableProvenance: durableProvenance
     )
-    return InterjectVoiceFeedbackRouting.composePromptSuffix(
-      cardBlock: block,
-      attachClassification: InterjectFeature.isEnabled
-    )
+    return block
   }
 
   /// Renders the card, plus whatever provenance it carried, as the model-facing block.
@@ -5887,7 +5653,7 @@ class FloatingControlBarManager {
         provenanceLines.append("detail: \(detail)")
       }
       if let provenanceRef = context.provenanceRef, !provenanceRef.isEmpty {
-        provenanceLines.append("provenance_ref: proactive_deliveries/\(provenanceRef)")
+        provenanceLines.append("provenance_ref: \(provenanceRef)")
       }
     }
     if let durableProvenance, !durableProvenance.isEmpty {

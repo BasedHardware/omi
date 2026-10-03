@@ -12394,4 +12394,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Tarkista yhteys';
+
+  @override
+  String get forYou => 'Sinulle';
+
+  @override
+  String get stopThese => 'Lopeta nämä';
+
+  @override
+  String get dismiss => 'Hylkää';
 }

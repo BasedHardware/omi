@@ -11,12 +11,11 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from llm_gateway.gateway.proactivity_budget import current_attempt, execute_budgeted_provider
 from llm_gateway.gateway.accounting import (
     AttemptTrace,
-    CostStatus,
     ProviderResponseMetadata,
     UsageStatus,
-    estimated_provider_cost_micro_usd,
 )
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
@@ -36,11 +35,6 @@ from llm_gateway.gateway.providers import (
     ProviderResponse,
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
-from llm_gateway.gateway.jit_budget import (
-    JITAttemptReservation,
-    reserve_jit_provider_attempt,
-    settle_jit_provider_attempt,
-)
 from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
@@ -57,7 +51,6 @@ from llm_gateway.gateway.schemas import (
     RouteServingClass,
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
-from utils.executors import db_executor, run_blocking
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
 
@@ -123,11 +116,9 @@ async def execute_chat_completion(
     *,
     attempt_trace: AttemptTrace | None = None,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> ExecutorResult:
+    if current_attempt() is not None:
+        max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
@@ -146,10 +137,6 @@ async def execute_chat_completion(
             fallback_from_route_artifact_id=None,
             attempt_trace=attempt_trace,
             max_provider_attempts=max_provider_attempts,
-            jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-            jit_owner_uid=jit_owner_uid,
-            jit_run_id=jit_run_id,
-            jit_contract_version=jit_contract_version,
             deadline_monotonic=deadline_monotonic,
         )
     except GatewayError as exc:
@@ -173,10 +160,6 @@ async def execute_chat_completion(
                 fallback_from_route_artifact_id=serving_route.route_artifact_id,
                 attempt_trace=attempt_trace,
                 max_provider_attempts=max_provider_attempts,
-                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-                jit_owner_uid=jit_owner_uid,
-                jit_run_id=jit_run_id,
-                jit_contract_version=jit_contract_version,
                 deadline_monotonic=deadline_monotonic,
             )
         except GatewayError as exc:
@@ -297,6 +280,19 @@ async def execute_systemone(
 
     validated = resolved_route.validated_request
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            raise GatewayInvalidRequestError('proactivity attempt already consumed')
+        response = await execute_budgeted_provider(
+            request=request,
+            provider_ref=provider_ref,
+            route=route,
+            credentials=credential_context,
+            provider_call=create_systemone,
+            timeout_ms=route.timeouts.request_ms,
+            attempt_trace=attempt_trace,
+        )
+        return dict(response.response)
     try:
         # The provider timeout bounds per-phase httpx inactivity, not total
         # elapsed time: a trickled response body can hold the lane's worker
@@ -509,10 +505,6 @@ async def _execute_route(
     fallback_from_route_artifact_id: str | None,
     attempt_trace: AttemptTrace | None,
     max_provider_attempts: int | None,
-    jit_max_spend_micro_usd: int | None,
-    jit_owner_uid: str | None,
-    jit_run_id: str | None,
-    jit_contract_version: str | None,
     deadline_monotonic: float,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
@@ -541,10 +533,6 @@ async def _execute_route(
                 credential_context,
                 attempt_trace=attempt_trace,
                 max_provider_attempts=max_provider_attempts,
-                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-                jit_owner_uid=jit_owner_uid,
-                jit_run_id=jit_run_id,
-                jit_contract_version=jit_contract_version,
                 fallback_reason=current_fallback_reason,
                 deadline_monotonic=deadline_monotonic,
             )
@@ -598,102 +586,6 @@ async def _execute_route(
     raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
 
 
-def jit_reservation_units(request: Mapping[str, Any]) -> dict[str, int | str | None]:
-    """Build conservative units for the shared JIT reservation authority.
-
-    The router has already applied the qualification input/output caps. The
-    provider request includes the full system, tool, and message payload after
-    route enrichment, so its UTF-8 byte length is a tokenizer-independent
-    upper bound for input tokens. Cache hits and writes are unknown before the
-    provider responds; reserving the whole bound as uncached input is the safe
-    worst case, while settlement uses the provider's normalized receipt.
-    """
-    serialized = json.dumps(request, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
-    output_tokens = request.get('max_completion_tokens', request.get('max_tokens', 2_048))
-    if not isinstance(output_tokens, int) or isinstance(output_tokens, bool) or output_tokens < 0:
-        output_tokens = 2_048
-    return {
-        'input_tokens': max(len(serialized), 1),
-        'cached_input_tokens': 0,
-        'output_tokens': output_tokens,
-        'cache_write_tokens': 0,
-        'cache_ttl': None,
-    }
-
-
-async def reserve_jit_attempt(
-    *,
-    owner_uid: str,
-    run_id: str,
-    contract_version: str,
-    max_attempts: int,
-    max_spend_micro_usd: int,
-    provider: str,
-    model: str,
-    input_tokens: int,
-    cached_input_tokens: int,
-    output_tokens: int,
-    cache_write_tokens: int,
-    cache_ttl: str | None,
-) -> JITAttemptReservation | None:
-    """Reserve a JIT provider attempt without blocking the gateway loop."""
-    return await run_blocking(
-        db_executor,
-        reserve_jit_provider_attempt,
-        owner_uid=owner_uid,
-        run_id=run_id,
-        contract_version=contract_version,
-        max_attempts=max_attempts,
-        max_spend_micro_usd=max_spend_micro_usd,
-        provider=provider,
-        model=model,
-        input_tokens=input_tokens,
-        cached_input_tokens=cached_input_tokens,
-        output_tokens=output_tokens,
-        cache_write_tokens=cache_write_tokens,
-        cache_ttl=cache_ttl,
-    )
-
-
-async def settle_jit_attempt(
-    reservation: JITAttemptReservation | None,
-    *,
-    provider: str,
-    model: str,
-    metadata: ProviderResponseMetadata | None,
-    status: str,
-    release_without_provider: bool = False,
-) -> bool:
-    """Settle one reservation before allowing another provider attempt."""
-    if reservation is None:
-        return True
-    if release_without_provider and (metadata is not None or status != 'released'):
-        raise ValueError('a provider-less JIT release must have status=released and no metadata')
-    cost_micro_usd: int | None = 0 if release_without_provider else None
-    if metadata is not None:
-        cost_status, estimated_cost = estimated_provider_cost_micro_usd(
-            payer='omi',
-            provider=provider,
-            model=model,
-            metadata=metadata,
-        )
-        if cost_status == CostStatus.ESTIMATED and estimated_cost is not None:
-            cost_micro_usd = estimated_cost
-    try:
-        return await run_blocking(
-            db_executor,
-            settle_jit_provider_attempt,
-            reservation=reservation,
-            cost_micro_usd=cost_micro_usd,
-            status=status,  # type: ignore[arg-type]
-        )
-    except Exception:
-        # A missing settlement receipt must leave the reservation active. The
-        # shared authority then blocks another paid attempt instead of letting
-        # a transient Firestore failure turn into an unaccounted retry.
-        return False
-
-
 async def _attempt_provider(
     resolved_route: ResolvedRoute,
     route: RouteArtifact,
@@ -703,10 +595,6 @@ async def _attempt_provider(
     *,
     attempt_trace: AttemptTrace | None,
     max_provider_attempts: int | None,
-    jit_max_spend_micro_usd: int | None,
-    jit_owner_uid: str | None,
-    jit_run_id: str | None,
-    jit_contract_version: str | None,
     fallback_reason: FailureClass | None,
     deadline_monotonic: float,
 ) -> tuple[ProviderResponse | None, GatewayError | None]:
@@ -715,6 +603,23 @@ async def _attempt_provider(
     Returns ``(response, None)`` on success, or ``(None, error)`` if all
     attempts fail.
     """
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            return None, GatewayInvalidRequestError('proactivity attempt already consumed')
+        request = _provider_request(resolved_route, provider_ref, route=route)
+        try:
+            response = await execute_budgeted_provider(
+                request=request,
+                provider_ref=provider_ref,
+                route=route,
+                credentials=credential_context,
+                provider_call=provider.create_chat_completion,
+                timeout_ms=int((deadline_monotonic - monotonic()) * 1000),
+                attempt_trace=attempt_trace,
+            )
+            return response, None
+        except GatewayError as exc:
+            return None, exc
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
@@ -725,47 +630,8 @@ async def _attempt_provider(
         ):
             return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         provider_request = _provider_request(resolved_route, provider_ref, route=route)
-        reservation: JITAttemptReservation | None = None
-        if jit_run_id is not None:
-            if deadline_monotonic <= monotonic():
-                return None, GatewayProviderFailureError(
-                    'provider request deadline exhausted',
-                    failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
-                )
-            try:
-                units = jit_reservation_units(provider_request)
-                reservation = await reserve_jit_attempt(
-                    owner_uid=cast(str, jit_owner_uid),
-                    run_id=jit_run_id,
-                    contract_version=cast(str, jit_contract_version),
-                    max_attempts=cast(int, max_provider_attempts),
-                    max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
-                    provider=provider_ref.provider,
-                    model=provider_ref.model,
-                    input_tokens=int(cast(int | str, units['input_tokens'])),
-                    cached_input_tokens=int(cast(int | str, units['cached_input_tokens'])),
-                    output_tokens=int(cast(int | str, units['output_tokens'])),
-                    cache_write_tokens=int(cast(int | str, units['cache_write_tokens'])),
-                    cache_ttl=cast(str | None, units['cache_ttl']),
-                )
-            except ValueError as exc:
-                return None, GatewayInvalidRequestError(str(exc))
-            except Exception as exc:
-                return None, GatewayInvalidRequestError('JIT budget authority unavailable')
-            if reservation is None:
-                return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
-            settled = await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='released',
-                release_without_provider=True,
-            )
-            if not settled:
-                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             return None, GatewayProviderFailureError(
                 'provider request deadline exhausted',
                 failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
@@ -777,29 +643,6 @@ async def _attempt_provider(
                 credentials=credential_context,
                 timeout_ms=timeout_ms,
             )
-            settlement_ok = await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=response.accounting,
-                status='succeeded',
-            )
-            if not settlement_ok:
-                if attempt_trace is not None:
-                    attempt_trace.record(
-                        provider=provider_ref.provider,
-                        configured_model=provider_ref.model,
-                        route_artifact_id=route.route_artifact_id,
-                        fallback_reason=fallback_reason.value if fallback_reason is not None else None,
-                        retry_ordinal=retry_ordinal,
-                        outcome='error',
-                        error_class='jit_budget_settlement_failed',
-                        metadata=response.accounting,
-                        usage_status=(
-                            UsageStatus.CONFIRMED if response.accounting.usage is not None else UsageStatus.NOT_REPORTED
-                        ),
-                    )
-                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -813,13 +656,6 @@ async def _attempt_provider(
                 )
             return response, None
         except ProviderFailure as exc:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             error = _map_provider_failure(exc, credential_context, provider_ref)
             if attempt_trace is not None:
                 attempt_trace.record(
@@ -832,12 +668,6 @@ async def _attempt_provider(
                     error_class=exc.failure_class.value,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
-            if jit_run_id is not None:
-                # The provider may have consumed input or output before
-                # returning a retryable error.  The authority intentionally
-                # blocks an unknown-cost reservation; never reopen it for a
-                # retry or fallback that could spend around that fact.
-                return None, error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
             await _pause_before_provider_429_retry(
@@ -847,13 +677,6 @@ async def _attempt_provider(
                 deadline_monotonic=deadline_monotonic,
             )
         except asyncio.CancelledError:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='cancelled',
-            )
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -867,13 +690,6 @@ async def _attempt_provider(
                 )
             raise
         except Exception:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
