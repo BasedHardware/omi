@@ -234,13 +234,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-      );
+            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+          );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-    );
+          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+        );
 
     if (selectedPlanData == null) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
@@ -713,9 +713,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Widget _buildPromoCodeField() {
     OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: OmiRadius.mdAll,
-      borderSide: BorderSide(color: color),
-    );
+          borderRadius: OmiRadius.mdAll,
+          borderSide: BorderSide(color: color),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

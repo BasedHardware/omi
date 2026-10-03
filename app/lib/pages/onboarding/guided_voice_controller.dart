@@ -152,16 +152,16 @@ class GuidedVoiceController extends ChangeNotifier {
       voiceResult: voiceSaved
           ? 'success'
           : completionMode == 'saved'
-          ? 'failed'
-          : 'skipped',
+              ? 'failed'
+              : 'skipped',
       memorySaved: savedMemoryCount,
       goalResult: goal == null
           ? 'not_present'
           : goal.saved
-          ? 'saved'
-          : goal.keep
-          ? 'failed'
-          : 'skipped',
+              ? 'saved'
+              : goal.keep
+                  ? 'failed'
+                  : 'skipped',
       elapsedMs: _startedAt == null ? 0 : DateTime.now().difference(_startedAt!).inMilliseconds,
     );
   }
@@ -556,9 +556,8 @@ class GuidedVoiceController extends ChangeNotifier {
           memoryAttempted++;
         }
         if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
-        final saved = answer.isGoal
-            ? await io.saveGoal(answer.submittedGoal!, answer.id)
-            : await io.remember(answer.text.trim());
+        final saved =
+            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {

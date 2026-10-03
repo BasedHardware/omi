@@ -37,24 +37,24 @@ Future<Map<String, dynamic>> _graphNeverLoads() => Completer<Map<String, dynamic
 Future<Map<String, dynamic>> _graphFails() async => throw Exception('graph fixture failure');
 
 Future<Map<String, dynamic>> _graphLoaded() async => {
-  'nodes': [
-    {'id': 'me', 'label': 'Me', 'node_type': 'user'},
-    {'id': 'meetings', 'label': 'Meetings', 'node_type': 'concept'},
-    {'id': 'fridays', 'label': 'Fridays', 'node_type': 'concept'},
-    {'id': 'running', 'label': 'Half marathon', 'node_type': 'concept'},
-    {'id': 'priya', 'label': 'Priya', 'node_type': 'person'},
-    {'id': 'austin', 'label': 'Austin', 'node_type': 'place'},
-    {'id': 'pendant', 'label': 'Pendant', 'node_type': 'thing'},
-  ],
-  'edges': [
-    {'id': 'e1', 'source_id': 'me', 'target_id': 'meetings', 'label': 'prefers'},
-    {'id': 'e2', 'source_id': 'meetings', 'target_id': 'fridays', 'label': 'avoids'},
-    {'id': 'e3', 'source_id': 'me', 'target_id': 'running', 'label': 'trains for'},
-    {'id': 'e4', 'source_id': 'me', 'target_id': 'priya', 'label': 'sister'},
-    {'id': 'e5', 'source_id': 'priya', 'target_id': 'austin', 'label': 'lives in'},
-    {'id': 'e6', 'source_id': 'me', 'target_id': 'pendant', 'label': 'uses'},
-  ],
-};
+      'nodes': [
+        {'id': 'me', 'label': 'Me', 'node_type': 'user'},
+        {'id': 'meetings', 'label': 'Meetings', 'node_type': 'concept'},
+        {'id': 'fridays', 'label': 'Fridays', 'node_type': 'concept'},
+        {'id': 'running', 'label': 'Half marathon', 'node_type': 'concept'},
+        {'id': 'priya', 'label': 'Priya', 'node_type': 'person'},
+        {'id': 'austin', 'label': 'Austin', 'node_type': 'place'},
+        {'id': 'pendant', 'label': 'Pendant', 'node_type': 'thing'},
+      ],
+      'edges': [
+        {'id': 'e1', 'source_id': 'me', 'target_id': 'meetings', 'label': 'prefers'},
+        {'id': 'e2', 'source_id': 'meetings', 'target_id': 'fridays', 'label': 'avoids'},
+        {'id': 'e3', 'source_id': 'me', 'target_id': 'running', 'label': 'trains for'},
+        {'id': 'e4', 'source_id': 'me', 'target_id': 'priya', 'label': 'sister'},
+        {'id': 'e5', 'source_id': 'priya', 'target_id': 'austin', 'label': 'lives in'},
+        {'id': 'e6', 'source_id': 'me', 'target_id': 'pendant', 'label': 'uses'},
+      ],
+    };
 
 final memoriesScenarios = <AuditScenario>[
   AuditScenario(

@@ -78,28 +78,28 @@ final tasksScenarios = <AuditScenario>[
     state: 'The shell with Tasks selected; a parent task and one indented child',
     run: (a) async {
       final actionItems = ActionItemsProvider(
-        getActionItems:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async => const ActionItemsResponse(
-              actionItems: [
-                ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
-                ActionItemWithMetadata(
-                  id: 'child',
-                  description: 'Book the venue',
-                  completed: false,
-                  sortOrder: 2000,
-                  indentLevel: 1,
-                ),
-              ],
+        getActionItems: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async =>
+            const ActionItemsResponse(
+          actionItems: [
+            ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+            ActionItemWithMetadata(
+              id: 'child',
+              description: 'Book the venue',
+              completed: false,
+              sortOrder: 2000,
+              indentLevel: 1,
             ),
+          ],
+        ),
       );
       await a.tester.runAsync(actionItems.ensureLoaded);
       await a.pump(
@@ -130,18 +130,19 @@ final tasksScenarios = <AuditScenario>[
         DateTime? endDate,
         DateTime? dueStartDate,
         DateTime? dueEndDate,
-      }) async => const ActionItemsResponse(
-        actionItems: [
-          ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
-          ActionItemWithMetadata(
-            id: 'child',
-            description: 'Book the venue',
-            completed: false,
-            sortOrder: 2000,
-            indentLevel: 1,
-          ),
-        ],
-      );
+      }) async =>
+          const ActionItemsResponse(
+            actionItems: [
+              ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+              ActionItemWithMetadata(
+                id: 'child',
+                description: 'Book the venue',
+                completed: false,
+                sortOrder: 2000,
+                indentLevel: 1,
+              ),
+            ],
+          );
       final actionItems = ActionItemsProvider(getActionItems: items);
       await a.tester.runAsync(actionItems.ensureLoaded);
       await a.pump(

@@ -56,15 +56,15 @@ void main() {
   }
 
   TranscriptSegment segment(String conversationId, int index, (double, double) span) => TranscriptSegment(
-    id: '$conversationId-s$index',
-    text: 'words',
-    speaker: 'SPEAKER_00',
-    isUser: false,
-    personId: null,
-    start: span.$1,
-    end: span.$2,
-    translations: [],
-  );
+        id: '$conversationId-s$index',
+        text: 'words',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: span.$1,
+        end: span.$2,
+        translations: [],
+      );
 
   /// A conversation whose saved transcript has one segment per [spans] entry, in seconds from [startedAt].
   ServerConversation conversation(
@@ -73,13 +73,14 @@ void main() {
     List<(double, double)> spans, {
     DateTime? createdAt,
     bool hasStart = true,
-  }) => ServerConversation(
-    id: id,
-    createdAt: createdAt ?? startedAt,
-    startedAt: hasStart ? startedAt : null,
-    structured: Structured('fixture', 'fixture'),
-    transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
-  );
+  }) =>
+      ServerConversation(
+        id: id,
+        createdAt: createdAt ?? startedAt,
+        startedAt: hasStart ? startedAt : null,
+        structured: Structured('fixture', 'fixture'),
+        transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
+      );
 
   /// Streams the pendant for [seconds] while the server sends [spans] as live segments of conversation
   /// [id], each two seconds after it ends, as transcription does. When [anchorEstimates] is given it
@@ -171,14 +172,14 @@ void main() {
 
   /// Names of the audio files physically on disk.
   Set<String> audioFilesOnDisk() => {
-    for (final entity in directory.listSync())
-      if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
-  };
+        for (final entity in directory.listSync())
+          if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
+      };
 
   /// WAL statuses persisted in the durable index, by WAL id.
   Future<Map<String, WalStatus>> persistedStatuses() async => {
-    for (final wal in await WalFileManager.loadWals()) wal.id: wal.status,
-  };
+        for (final wal in await WalFileManager.loadWals()) wal.id: wal.status,
+      };
 
   /// Waits until every stamped WAL is judged, then splits them: covered copies
   /// retained-synced vs uncovered copies still miss and marked for repair.
@@ -389,9 +390,12 @@ void main() {
     await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'even a forced recovery pass finds nothing to repair');
     expect(audioFilesOnDisk(), retainedNames);
-    expect(await persistedStatuses(), {
-      for (final wal in covered) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees every covered copy is synced');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in covered) wal.id: WalStatus.synced,
+        },
+        reason: 'the durable index agrees every covered copy is synced');
     await telemetryReaches(() => world.coverageEvents.any((event) => event['phase'] == 'confirmation'));
     final confirmation = world.coverageEvents.lastWhere((event) => event['phase'] == 'confirmation');
     expect(confirmation['retained_covered_count'], covered.length);
@@ -414,17 +418,23 @@ void main() {
       reason: 'covered copies are retained, not deleted; hole copies stay for repair',
     );
     await expectRecoveryUploads('c1', hole);
-    expect(await persistedStatuses(), {
-      for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
+        },
+        reason: 'the durable index agrees');
   });
 
   test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
     // The saved transcript never mentions the opening; its first anchored utterance lands 36 s in — past the pause tolerance.
     final (origin, covered, hole) = await judgedReplay(202, fullSpans.where((span) => span.$1 >= 34).toList());
-    expect(offsetsOf(hole, origin), [
-      0,
-    ], reason: 'the opening the transcript reaches only after 36s is kept for repair');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          0,
+        ],
+        reason: 'the opening the transcript reaches only after 36s is kept for repair');
     expect(offsetsOf(covered, origin), [60, 135]);
     await expectRecoveryUploads('c1', hole);
   });
@@ -515,9 +525,12 @@ void main() {
   test('pendant: a conversation with no live arrivals and no start time still covers via the session start', () async {
     // An old row without started_at and no live anchor; the session-start fallback anchors the
     // spans, and their five-second pauses fall inside the tolerance.
-    final (_, covered, hole) = await plainJudgedReplay(140, [
-      for (var t = 1.0; t < 130; t += 20) (t, t + 15),
-    ], hasStart: false);
+    final (_, covered, hole) = await plainJudgedReplay(
+        140,
+        [
+          for (var t = 1.0; t < 130; t += 20) (t, t + 15),
+        ],
+        hasStart: false);
     expect(hole, isEmpty);
     expect(covered, isNotEmpty);
     await expectRecoveryUploads('c1', hole);

@@ -623,10 +623,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     RecentReviewsSection(
-                                      reviews: app.reviews
-                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
-                                          .take(3)
-                                          .toList(),
+                                      reviews:
+                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () => setState(() {}),

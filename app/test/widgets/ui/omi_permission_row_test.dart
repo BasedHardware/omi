@@ -9,10 +9,10 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/ui/components/omi_permission_row.dart';
 
 Widget _app(Widget child) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 class _FakeSource implements OnboardingPermissionsSource {
   final Map<OnboardingPermission, OmiPermissionStatus> statuses = {
@@ -23,9 +23,9 @@ class _FakeSource implements OnboardingPermissionsSource {
 
   @override
   List<OnboardingPermission> get permissions => const [
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+        OnboardingPermission.location,
+        OnboardingPermission.notifications,
+      ];
 
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async => statuses[permission]!;

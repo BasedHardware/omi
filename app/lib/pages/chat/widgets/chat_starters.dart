@@ -30,12 +30,11 @@ class ChatGreeting extends StatelessWidget {
     final greeting = h < 12
         ? l10n.greetingMorning
         : h < 18
-        ? l10n.greetingAfternoon
-        : l10n.greetingEvening;
+            ? l10n.greetingAfternoon
+            : l10n.greetingEvening;
     final heading = OmiType.title1.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.7, height: 1.2);
     final hello = name.trim().isEmpty ? greeting : l10n.greetingWithName(greeting, name.trim());
-    final count =
-        todayCount ??
+    final count = todayCount ??
         context.select<ConversationProvider?, int>(
           (provider) => countConversationsForLocalDay(provider?.conversations ?? const [], DateTime.now()),
         );
@@ -90,10 +89,10 @@ class _ConversationCount extends StatelessWidget {
     final animation = ChatEntrance.animationOf(context);
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     Widget label(double progress) => Text(
-      l10n.conversationsTodayCount((count * progress).round()),
-      key: const Key('chat_today_count'),
-      style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-    );
+          l10n.conversationsTodayCount((count * progress).round()),
+          key: const Key('chat_today_count'),
+          style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        );
     return Semantics(
       label: l10n.conversationsTodayCount(count),
       excludeSemantics: true,

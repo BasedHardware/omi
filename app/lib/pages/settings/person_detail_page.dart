@@ -208,8 +208,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                   PersonSampleRow(
                     title: l10n.sampleNumber(j + 1),
                     transcript: j < transcripts.length ? transcripts[j] : null,
-                    playing:
-                        provider.currentPlayingPersonIndex == index &&
+                    playing: provider.currentPlayingPersonIndex == index &&
                         provider.currentPlayingIndex == j &&
                         provider.isPlaying,
                     onPlayPause: () => provider.playPause(index, j, sample),

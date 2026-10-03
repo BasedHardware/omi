@@ -291,10 +291,10 @@ class NotificationsDisplayGroupPage extends StatefulWidget {
 
 class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGroupPage> with _GroupRows {
   String _appearanceLabel(ThemeMode mode) => switch (mode) {
-    ThemeMode.system => context.l10n.appearanceSystem,
-    ThemeMode.light => context.l10n.appearanceLight,
-    ThemeMode.dark => context.l10n.appearanceDark,
-  };
+        ThemeMode.system => context.l10n.appearanceSystem,
+        ThemeMode.light => context.l10n.appearanceLight,
+        ThemeMode.dark => context.l10n.appearanceDark,
+      };
 
   Future<void> _showAppearancePicker() async {
     final provider = context.read<AppearanceProvider>();

@@ -18,13 +18,12 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/preferences.dart';
 
-typedef ExportDownload =
-    Future<String?> Function(
-      String filePath, {
-      void Function(int bytesReceived)? onProgress,
-      Future<void>? abortTrigger,
-      AuthSessionSnapshot? authorizationSnapshot,
-    });
+typedef ExportDownload = Future<String?> Function(
+  String filePath, {
+  void Function(int bytesReceived)? onProgress,
+  Future<void>? abortTrigger,
+  AuthSessionSnapshot? authorizationSnapshot,
+});
 
 typedef ShareLeaseTouch = Future<void> Function(Directory directory);
 
@@ -70,9 +69,8 @@ class DataExport {
     final readOwner = ownerId ?? () => SharedPreferencesUtil().uid;
     final service = authService ?? AuthService.instance;
     final ownerAtStart = readOwner();
-    final snapshot = ownerAtStart == null || ownerAtStart.isEmpty
-        ? null
-        : service.captureSessionSnapshot(expectedUid: ownerAtStart);
+    final snapshot =
+        ownerAtStart == null || ownerAtStart.isEmpty ? null : service.captureSessionSnapshot(expectedUid: ownerAtStart);
     final abort = Completer<void>();
     final bytesReceived = ValueNotifier<int>(0);
     var bytesDisposed = false;
@@ -97,21 +95,20 @@ class DataExport {
           context,
           failed,
           actionLabel: l10n.tryAgain,
-          onAction:
-              retry ??
+          onAction: retry ??
               () => run(
-                context,
-                shareOrigin: shareOrigin,
-                exportDirectory: exportDirectory,
-                cleanupDirectory: cleanupDirectory,
-                download: download,
-                share: share,
-                ownerId: ownerId,
-                onExported: onExported,
-                authService: authService,
-                sweepStaleExports: sweepStaleExports,
-                shareLease: shareLease,
-              ),
+                    context,
+                    shareOrigin: shareOrigin,
+                    exportDirectory: exportDirectory,
+                    cleanupDirectory: cleanupDirectory,
+                    download: download,
+                    share: share,
+                    ownerId: ownerId,
+                    onExported: onExported,
+                    authService: authService,
+                    sweepStaleExports: sweepStaleExports,
+                    shareLease: shareLease,
+                  ),
         );
       }
     }
@@ -220,9 +217,8 @@ class DataExport {
           if (retainedShareNeedsSweepProtection) retainedShare!.directory.path,
         },
       );
-      exportDir = exportDirectory != null
-          ? await exportDirectory()
-          : await _newExportDir(await getTemporaryDirectory());
+      exportDir =
+          exportDirectory != null ? await exportDirectory() : await _newExportDir(await getTemporaryDirectory());
       final filePath = '${exportDir!.path}/omi-export.json';
       final exportedPath = await (download ?? exportUserDataToFile)(
         filePath,
@@ -258,21 +254,21 @@ class DataExport {
       }
 
       void reportShareError() => reportError(
-        retry: () => _retryShare(
-          context,
-          retained!,
-          shareOrigin: shareOrigin,
-          share: share,
-          onExported: onExported,
-          authService: service,
-          exportDirectory: exportDirectory,
-          cleanupDirectory: cleanupDirectory,
-          download: download,
-          ownerId: ownerId,
-          sweepStaleExports: sweepStaleExports,
-          shareLease: shareLease,
-        ),
-      );
+            retry: () => _retryShare(
+              context,
+              retained!,
+              shareOrigin: shareOrigin,
+              share: share,
+              onExported: onExported,
+              authService: service,
+              exportDirectory: exportDirectory,
+              cleanupDirectory: cleanupDirectory,
+              download: download,
+              ownerId: ownerId,
+              sweepStaleExports: sweepStaleExports,
+              shareLease: shareLease,
+            ),
+          );
 
       ShareResult result;
       try {
@@ -356,37 +352,37 @@ class DataExport {
       }
 
       void reportRetryError() => showRetryError(
-        () => _retryShare(
-          context,
-          retained,
-          shareOrigin: shareOrigin,
-          share: share,
-          onExported: onExported,
-          authService: authService,
-          exportDirectory: exportDirectory,
-          cleanupDirectory: cleanupDirectory,
-          download: download,
-          ownerId: ownerId,
-          sweepStaleExports: sweepStaleExports,
-          shareLease: shareLease,
-        ),
-      );
+            () => _retryShare(
+              context,
+              retained,
+              shareOrigin: shareOrigin,
+              share: share,
+              onExported: onExported,
+              authService: authService,
+              exportDirectory: exportDirectory,
+              cleanupDirectory: cleanupDirectory,
+              download: download,
+              ownerId: ownerId,
+              sweepStaleExports: sweepStaleExports,
+              shareLease: shareLease,
+            ),
+          );
 
       void offerFreshExport() => showRetryError(
-        () => run(
-          context,
-          shareOrigin: shareOrigin,
-          exportDirectory: exportDirectory,
-          cleanupDirectory: cleanupDirectory,
-          download: download,
-          share: share,
-          ownerId: ownerId,
-          onExported: onExported,
-          authService: authService,
-          sweepStaleExports: sweepStaleExports,
-          shareLease: shareLease,
-        ),
-      );
+            () => run(
+              context,
+              shareOrigin: shareOrigin,
+              exportDirectory: exportDirectory,
+              cleanupDirectory: cleanupDirectory,
+              download: download,
+              share: share,
+              ownerId: ownerId,
+              onExported: onExported,
+              authService: authService,
+              sweepStaleExports: sweepStaleExports,
+              shareLease: shareLease,
+            ),
+          );
 
       if (!authService.isSessionSnapshotCurrent(retained.snapshot)) {
         if (identical(_retainedShare, retained)) _retainedShare = null;

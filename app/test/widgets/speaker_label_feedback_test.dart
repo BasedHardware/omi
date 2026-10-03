@@ -40,25 +40,25 @@ TranscriptSegment _line(String id, int speaker, {bool isUser = false, String? pe
     );
 
 Widget _app(Widget child, {List<Person> people = const []}) => ChangeNotifierProvider.value(
-  value: PeopleProvider()..people = people,
-  child: MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(body: child),
-  ),
-);
+      value: PeopleProvider()..people = people,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: child),
+      ),
+    );
 
 PersonVoiceMatch _match(String conversationId) => PersonVoiceMatch(
-  conversationId: conversationId,
-  title: 'Lunch planning',
-  startedAt: DateTime(2026, 9, 30, 12),
-  speakerId: 2,
-  talkSeconds: 840,
-  segmentIds: const ['e1'],
-  clipStart: 1,
-  clipEnd: 9,
-  matchLevel: 'strong',
-);
+      conversationId: conversationId,
+      title: 'Lunch planning',
+      startedAt: DateTime(2026, 9, 30, 12),
+      speakerId: 2,
+      talkSeconds: 840,
+      segmentIds: const ['e1'],
+      clipStart: 1,
+      clipEnd: 9,
+      matchLevel: 'strong',
+    );
 
 void main() {
   setUp(() async {
@@ -120,17 +120,17 @@ void main() {
 
   group('rejecting a label', () {
     ServerConversation conversation() => ServerConversation(
-      id: 'c',
-      createdAt: DateTime(2026),
-      structured: Structured('Title', 'Summary'),
-      status: ConversationStatus.completed,
-      transcriptSegments: [
-        _line('a', 1, personId: 'jordan', source: 'auto'),
-        _line('b', 1, personId: 'jordan', source: 'auto'),
-        _line('c', 2, personId: 'jordan', source: 'manual'),
-        _line('d', 0, isUser: true, source: 'auto'),
-      ],
-    );
+          id: 'c',
+          createdAt: DateTime(2026),
+          structured: Structured('Title', 'Summary'),
+          status: ConversationStatus.completed,
+          transcriptSegments: [
+            _line('a', 1, personId: 'jordan', source: 'auto'),
+            _line('b', 1, personId: 'jordan', source: 'auto'),
+            _line('c', 2, personId: 'jordan', source: 'manual'),
+            _line('d', 0, isUser: true, source: 'auto'),
+          ],
+        );
 
     ConversationDetailProvider provider(ServerConversation value, SpeakerRejectionCall reject) {
       final provider = ConversationDetailProvider(rejectSpeaker: reject)..selectedDate = value.createdAt;
@@ -205,19 +205,18 @@ void main() {
       final value = conversation();
       final assigned = Completer<bool>();
       final calls = <String>[];
-      final detail =
-          ConversationDetailProvider(
-              assignSpeaker: (_, __, {isUser, personId, speakerId}) {
-                calls.add('assign');
-                return assigned.future;
-              },
-              rejectSpeaker: (_, __, ___, {personId, segmentIds}) async {
-                calls.add('reject');
-                return ApiSuccess(value);
-              },
-            )
-            ..selectedDate = value.createdAt
-            ..setCachedConversation(value);
+      final detail = ConversationDetailProvider(
+        assignSpeaker: (_, __, {isUser, personId, speakerId}) {
+          calls.add('assign');
+          return assigned.future;
+        },
+        rejectSpeaker: (_, __, ___, {personId, segmentIds}) async {
+          calls.add('reject');
+          return ApiSuccess(value);
+        },
+      )
+        ..selectedDate = value.createdAt
+        ..setCachedConversation(value);
       final first = detail.assignSpeaker(['a'], 'maya', speakerId: 1);
       await Future<void>.delayed(Duration.zero);
       final rejection = detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson);
