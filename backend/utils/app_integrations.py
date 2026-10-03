@@ -435,9 +435,27 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context: Any) -> list:
     if not isinstance(user_context, Mapping):
-        user_context = {}
+        return []
     raw_question = user_context.get('question')
     question = raw_question if isinstance(raw_question, str) else ''
+
+    raw_filters = user_context.get('filters')
+    filters = raw_filters if isinstance(raw_filters, Mapping) else {}
+
+    def _extract_str_list(val: Any) -> list[str]:
+        if not isinstance(val, list):
+            return []
+        return [item for item in val if isinstance(item, str)]
+
+    people = _extract_str_list(filters.get("people"))
+    topics = _extract_str_list(filters.get("topics"))
+    entities = _extract_str_list(filters.get("entities"))
+    dates = _extract_str_list(filters.get("dates"))
+
+    # Skip vector retrieval if there is no question and no metadata filters
+    if not question.strip() and not (people or topics or entities or dates):
+        return []
+
     vector = (
         generate_embedding(question)
         if question.strip()
@@ -446,22 +464,15 @@ def _retrieve_contextual_memories(uid: str, user_context: Any) -> list:
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters: dict[str, Any] = {}  # not support yet
-    raw_filters = user_context.get('filters')
-    filters = raw_filters if isinstance(raw_filters, Mapping) else {}
-
-    def _extract_str_list(val: Any) -> list[str]:
-        if not isinstance(val, list):
-            return []
-        return [str(item) for item in val if item is not None]
 
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=_extract_str_list(filters.get("people")),
-        topics=_extract_str_list(filters.get("topics")),
-        entities=_extract_str_list(filters.get("entities")),
-        dates=_extract_str_list(filters.get("dates")),
+        people=people,
+        topics=topics,
+        entities=entities,
+        dates=dates,
     )
     convos = conversations_db.get_conversations_by_id(uid, memories_id) or []
     return [
