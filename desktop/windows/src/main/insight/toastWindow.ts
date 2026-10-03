@@ -20,6 +20,8 @@ import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
+// V2 adds a source-opening action below bounded title/body previews.
+const PROACTIVITY_HEIGHT = 236
 // The what's-new card carries more copy (a 3-item changelog + a button) than an
 // insight/meeting toast, so it gets a taller window sized to its content — three
 // changes each wrapping to two lines, the headline, and the release-notes button
@@ -144,7 +146,7 @@ export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryH
   activeDelivery =
     hooks && payload.proactivityItemID ? { itemID: payload.proactivityItemID, hooks } : null
   const win = ensureWindow()
-  position(win)
+  position(win, payload.proactivityItemID ? PROACTIVITY_HEIGHT : HEIGHT)
   // An insight replaces whatever is on the shared toast — clear any meeting /
   // what's-new payload so a later toast-window reload can't resurface a stale card
   // via meeting:getToast / whatsnew:getPending.

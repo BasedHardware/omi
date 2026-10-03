@@ -165,7 +165,7 @@ export function InsightToast(): React.JSX.Element {
   const insight = content.p
   return (
     <div
-      className="insight-card"
+      className={insight.proactivityItemID ? "insight-card insight-card--proactivity" : "insight-card"}
       onMouseEnter={() => window.omi.insightHoverStart()}
       onMouseLeave={() => window.omi.insightHoverEnd()}
     >
