@@ -360,10 +360,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cannotBeUndone => 'Acest lucru nu poate fi anulat.';
 
   @override
-  String get allDataErased => 'Toate amintirile și conversațiile tale vor fi șterse permanent.';
+  String get allDataErased => 'Amintirile și conversațiile tale vor fi șterse.';
 
   @override
-  String get appsDisconnected => 'Aplicațiile și integrările tale vor fi deconectate imediat.';
+  String get appsDisconnected => 'Aplicațiile și integrările tale vor fi deconectate.';
 
   @override
   String get exportBeforeDelete =>
@@ -2238,14 +2238,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appLanguage => 'Limba aplicației';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFAȚĂ APLICAȚIE';
+  String get appInterfaceSectionTitle => 'Interfață aplicație';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VORBIRE ȘI TRANSCRIERE';
+  String get speechTranscriptionSectionTitle => 'Vorbire și transcriere';
 
   @override
   String get languageSettingsHelperText =>
-      'Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările.';
+      'Limba aplicației schimbă meniurile și butoanele. Limba principală afectează modul în care sunt transcrise înregistrările.';
 
   @override
   String get translationNotice => 'Notificare de traducere';
@@ -4552,7 +4552,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get askOmiAnything => 'Întrebați Omi orice despre viața dvs.';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Deblocați memoria infinită a lui Omi';
+  String get unlockOmiInfiniteMemory => 'Amintiri nelimitate';
 
   @override
   String get youreOnAnnualPlan => 'Sunteți pe planul anual';
@@ -4564,7 +4564,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get unableToLoadPlans => 'Nu s-au putut încărca planurile';
 
   @override
-  String get checkConnectionTryAgain => 'Verificați conexiunea și încercați din nou';
+  String get checkConnectionTryAgain => 'Verifică conexiunea și încearcă din nou.';
 
   @override
   String get useFreePlan => 'Folosește planul gratuit';
@@ -5998,7 +5998,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo => '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo =>
+      '300 de minute premium pe lună. Alege „Pe dispozitiv” pentru transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6081,7 +6082,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '300 de minute premium pe lună. Alege „Pe dispozitiv” pentru transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6136,7 +6137,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Transcrierea live integrată a Omi este optimizată pentru conversații în timp real cu detectarea automată a vorbitorului și diarizare.';
+      'Transcrierea live Omi este creată pentru conversații în timp real și arată cine ce a spus.';
 
   @override
   String get reset => 'Resetează';
@@ -8513,7 +8514,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tipAutoSync => 'Înregistrările se sincronizează automat';
 
   @override
-  String get storageSection => 'STOCARE';
+  String get storageSection => 'Stocare';
 
   @override
   String get permissions => 'Permisiuni';
@@ -8940,10 +8941,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Opțional — ideile tale ne ajută să construim un produs mai bun.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Acest lucru este permanent';
+  String get deleteFlowConfirmTitle => 'Ștergi contul?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Odată ce îți ștergi contul, nu mai poate fi recuperat.';
+  String get deleteFlowConfirmSubtitle => 'Acțiunea nu poate fi anulată, nici măcar de echipa de asistență.';
 
   @override
   String get deleteConsequenceSubscription => 'Orice abonament activ va fi anulat.';
@@ -9389,7 +9390,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.';
+      'Înregistrează acum, transcrie când vrei. Până atunci, audio rămâne pe telefonul tău.';
 
   @override
   String get transcribeLaterNote =>
@@ -9828,7 +9829,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
 
   @override
-  String get planSheetChooseYourPlan => 'Alege-ți planul pentru a debloca Omi nelimitat.';
+  String get planSheetChooseYourPlan => 'Alege planul potrivit pentru tine.';
 
   @override
   String get availableOnMacMobileWeb => 'Disponibil pe Mac, mobil și web';
@@ -10495,8 +10496,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Uitați dispozitivul?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi nu se va mai conecta la acest dispozitiv. Pentru a-l folosi din nou, va trebui să-l asociați din nou.';
+  String get forgetDeviceConfirmMessage => 'Omi nu se va mai conecta la acest dispozitiv.';
 
   @override
   String get deviceForgottenMessage => 'Dispozitiv uitat';
@@ -11926,7 +11926,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi îți va cere să confirmi potrivirile apropiate, în loc să ghicească.';
+  String get pinPersonHonestLine => 'Omi întreabă înainte de a potrivi voci asemănătoare.';
 
   @override
   String get pinAction => 'Fixează';
@@ -12277,4 +12277,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Cheile API nu au putut fi încărcate.';
 }

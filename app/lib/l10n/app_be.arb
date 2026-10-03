@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Усе вашы ўспаміны і размовы будуць безвяртана выданы.",
+    "allDataErased": "Вашы ўспаміны і размовы будуць сцёртыя.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Вашы дадатыі і інтэграцыі будуць адключаны адразу.",
+    "appsDisconnected": "Вашы праграмы і інтэграцыі будуць адключаныя.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ІНТЭРФЕЙС ПРЫКЛАДАННЯ",
+    "appInterfaceSectionTitle": "Інтэрфейс прыкладання",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "МОВ І РАСШЫФРОЎКА",
+    "speechTranscriptionSectionTitle": "Маўленне і расшыфроўка",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Мова прыкладання змяняе меню і кнопкі. Мова маўлення влывае на тое, як вашы запісы расшыфроўваюцца.",
+    "languageSettingsHelperText": "Мова прыкладання змяняе меню і кнопкі. Першасная мова ўплывае на тое, як вашы запісы расшыфроўваюцца.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Разблакуйце бясконцую память Omi",
+    "unlockOmiInfiniteMemory": "Неабмежаваныя ўспаміны",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Праверце падключэнне і паспрабуйце зноў",
+    "checkConnectionTryAgain": "Праверце злучэнне і паспрабуйце яшчэ раз.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
+    "premiumMinutesInfo": "300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
+    "premiumMinutesMonth": "300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Убудаваная жывая транскрыпцыя Omi аптымізавана для разговораў у рэальным часе з аўтаматычным распазнаваннем дыктарыў і дыяризацыяй.",
+    "omiTranscriptionOptimized": "Жывая расшыфроўка Omi створана для размоў у рэальным часе і пазначае, хто што сказаў.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "СХОВІШЧА",
+    "storageSection": "Сховішча",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Раскажыце падрабязней",
     "deleteFlowFeedbackSubtitle": "Што прымусіла б Omi працаваць для вас?",
     "deleteFlowFeedbackHint": "Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.",
-    "deleteFlowConfirmTitle": "Гэта назаўсёды",
-    "deleteFlowConfirmSubtitle": "Пасля выдалення ўліковага запісу аднавіць яго немагчыма.",
+    "deleteFlowConfirmTitle": "Выдаліць ваш уліковы запіс?",
+    "deleteFlowConfirmSubtitle": "Гэта нельга адмяніць, нават службе падтрымкі.",
     "deleteConsequenceSubscription": "Любая актыўная падпіска будзе скасавана.",
     "deleteConsequenceNoRecovery": "Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.",
     "deleteTypeToConfirm": "Увядзіце DELETE для пацвярджэння",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Сінхранізацыя выкарыстоўвае транскрыпцыю Omi",
     "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.",
     "transcribeLaterTitle": "Транскрыпцыя пазней",
-    "transcribeLaterDescription": "Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.",
+    "transcribeLaterDescription": "Запісвайце зараз, расшыфроўвайце, калі захочаце. Да таго часу аўдыя застаецца на тэлефоне.",
     "transcribeLaterNote": "Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
     "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
     "unmute": "Уключыць гук",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "Сярэдняя",
     "whisperModelSizeSmall": "Малая",
     "whisperModelSizeTiny": "Мініяцюрная",
-    "planSheetChooseYourPlan": "Выберыце свой план, каб адкрыць безмежны Omi.",
+    "planSheetChooseYourPlan": "Выберыце план, які вам падыходзіць.",
     "availableOnMacMobileWeb": "Даступна на Mac, мабільным і ў вэбе",
     "popularBadge": "ПАПУЛЯРНЫ",
     "worksOnDesktop": "Працуе на камп'ютары",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Пацвердзіце свой нумар, каб тэлефанаваць праз Omi.",
     "phoneDeleteNumberFailed": "Не ўдалося выдаліць гэты нумар",
     "forgetDeviceConfirmTitle": "Забыць прыладу?",
-    "forgetDeviceConfirmMessage": "Omi перастане падключацца да гэтай прылады. Каб карыстацца ёй зноў, трэба будзе спалучыць яе нанова.",
+    "forgetDeviceConfirmMessage": "Omi перастане падключацца да гэтай прылады.",
     "deviceForgottenMessage": "Прылада забыта",
     "unpairDeviceConfirmTitle": "Разарваць спалучэнне з прыладай?",
     "rollBack": "Адкаціць",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "Чаму?",
     "pinPersonTitle": "Замацаваць {name}",
     "pinPersonSubtitle": "Захаваць {name} і чакаць у вашых размовах",
-    "pinPersonHonestLine": "Omi будзе прасіць вас пацвердзіць блізкія супадзенні, а не здагадвацца.",
+    "pinPersonHonestLine": "Omi пытаецца, перш чым супаставіць падобныя галасы.",
     "pinAction": "Замацаваць",
     "unpinAction": "Зняць замацаванне",
     "personPinnedToast": "Замацавана: {name}",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
     "speakerLabelEarlierMatches": "Ранейшыя размовы з гэтым голасам: {count}",
     "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
-    "speakerLabelTalkTime": "{duration} гэтага голасу"
+    "speakerLabelTalkTime": "{duration} гэтага голасу",
+    "couldNotLoadApiKeys": "Не ўдалося загрузіць ключы API."
 }

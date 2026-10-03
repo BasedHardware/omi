@@ -358,10 +358,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get cannotBeUndone => 'Šio veiksmo negalima atšaukti.';
 
   @override
-  String get allDataErased => 'Visi jūsų prisiminimai ir pokalbiai bus negrįžtamai ištrinti.';
+  String get allDataErased => 'Jūsų prisiminimai ir pokalbiai bus ištrinti.';
 
   @override
-  String get appsDisconnected => 'Jūsų programėlės ir integracijos bus nedelsiant atjungtos.';
+  String get appsDisconnected => 'Jūsų programos ir integracijos bus atjungtos.';
 
   @override
   String get exportBeforeDelete =>
@@ -2226,14 +2226,14 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appLanguage => 'Programėlės kalba';
 
   @override
-  String get appInterfaceSectionTitle => 'PROGRAMOS SĄSAJA';
+  String get appInterfaceSectionTitle => 'Programos sąsaja';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KALBA IR TRANSKRIBAVIMAS';
+  String get speechTranscriptionSectionTitle => 'Kalba ir transkribavimas';
 
   @override
   String get languageSettingsHelperText =>
-      'Programos kalba keičia meniu ir mygtukus. Kalbos kalba įtakoja, kaip transkribuojami jūsų įrašai.';
+      'Programėlės kalba keičia meniu ir mygtukus. Pagrindinė kalba lemia, kaip transkribuojami jūsų įrašai.';
 
   @override
   String get translationNotice => 'Vertimo pranešimas';
@@ -4526,7 +4526,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get askOmiAnything => 'Paklauskite Omi bet ko apie savo gyvenimą';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Atrakinkite Omi begalinę atmintį';
+  String get unlockOmiInfiniteMemory => 'Neriboti prisiminimai';
 
   @override
   String get youreOnAnnualPlan => 'Jūs esate metiniame plane';
@@ -4538,7 +4538,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get unableToLoadPlans => 'Nepavyko įkelti planų';
 
   @override
-  String get checkConnectionTryAgain => 'Patikrinkite ryšį ir bandykite dar kartą';
+  String get checkConnectionTryAgain => 'Patikrinkite ryšį ir bandykite dar kartą.';
 
   @override
   String get useFreePlan => 'Naudoti nemokamą planą';
@@ -5970,7 +5970,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.';
+      '300 premium minučių per mėnesį. Neribotai nemokamai transkripcijai pasirinkite „Įrenginyje“.';
 
   @override
   String get viewUsage => 'Peržiūrėti naudojimą';
@@ -6052,7 +6052,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '300 premium minučių per mėnesį. Neribotai nemokamai transkripcijai pasirinkite „Įrenginyje“. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6107,7 +6107,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi integruota tiesioginė transkripcija optimizuota realaus laiko pokalbiams su automatiniu kalbėtojų aptikimu ir diarizacija.';
+      'Omi tiesioginė transkripcija sukurta realaus laiko pokalbiams ir pažymi, kas ką pasakė.';
 
   @override
   String get reset => 'Atstatyti';
@@ -8479,7 +8479,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tipAutoSync => 'Įrašai sinchronizuojami automatiškai';
 
   @override
-  String get storageSection => 'SAUGYKLA';
+  String get storageSection => 'Saugykla';
 
   @override
   String get permissions => 'Leidimai';
@@ -8906,10 +8906,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Neprivaloma — tavo mintys padeda mums sukurti geresnį produktą.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Tai negrįžtama';
+  String get deleteFlowConfirmTitle => 'Ištrinti paskyrą?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Ištrynus paskyrą jos nebus galima atkurti.';
+  String get deleteFlowConfirmSubtitle => 'To negalima atšaukti, net ir padedant pagalbos tarnybai.';
 
   @override
   String get deleteConsequenceSubscription => 'Bet kokia aktyvi prenumerata bus atšaukta.';
@@ -9356,7 +9356,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.';
+      'Įrašykite dabar, transkribuokite, kai norėsite. Iki tol garsas lieka jūsų telefone.';
 
   @override
   String get transcribeLaterNote =>
@@ -9796,7 +9796,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
 
   @override
-  String get planSheetChooseYourPlan => 'Pasirinkite planą ir atrakinkite neribotą Omi.';
+  String get planSheetChooseYourPlan => 'Pasirinkite jums tinkantį planą.';
 
   @override
   String get availableOnMacMobileWeb => 'Pasiekiama Mac, mobiliajame ir žiniatinklyje';
@@ -10463,8 +10463,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Pamiršti įrenginį?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi nebesijungs prie šio įrenginio. Norėdami vėl juo naudotis, turėsite jį susieti iš naujo.';
+  String get forgetDeviceConfirmMessage => 'Omi nebesijungs prie šio įrenginio.';
 
   @override
   String get deviceForgottenMessage => 'Įrenginys pamirštas';
@@ -11890,7 +11889,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi paprašys jūsų patvirtinti artimus atitikmenis, o ne spėlios.';
+  String get pinPersonHonestLine => 'Prieš susiedama panašius balsus, Omi paklausia.';
 
   @override
   String get pinAction => 'Prisegti';
@@ -12243,4 +12242,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Nepavyko įkelti API raktų.';
 }

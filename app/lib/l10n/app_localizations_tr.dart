@@ -359,10 +359,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cannotBeUndone => 'Bu işlem geri alınamaz.';
 
   @override
-  String get allDataErased => 'Tüm anılarınız ve konuşmalarınız kalıcı olarak silinecek.';
+  String get allDataErased => 'Anıların ve konuşmaların silinecek.';
 
   @override
-  String get appsDisconnected => 'Uygulamalarınız ve Entegrasyonlarınızın bağlantısı derhal kesilecek.';
+  String get appsDisconnected => 'Uygulamalarının ve entegrasyonlarının bağlantısı kesilecek.';
 
   @override
   String get exportBeforeDelete =>
@@ -2234,14 +2234,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appLanguage => 'Uygulama Dili';
 
   @override
-  String get appInterfaceSectionTitle => 'UYGULAMA ARAYÜZÜ';
+  String get appInterfaceSectionTitle => 'Uygulama arayüzü';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KONUŞMA VE TRANSKRİPSİYON';
+  String get speechTranscriptionSectionTitle => 'Konuşma ve transkripsiyon';
 
   @override
   String get languageSettingsHelperText =>
-      'Uygulama Dili menüleri ve düğmeleri değiştirir. Konuşma Dili, kayıtlarınızın nasıl transkribe edildiğini etkiler.';
+      'Uygulama Dili menüleri ve düğmeleri değiştirir. Birincil Dil, kayıtlarınızın nasıl transkribe edildiğini etkiler.';
 
   @override
   String get translationNotice => 'Çeviri Bildirimi';
@@ -4538,7 +4538,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get askOmiAnything => 'Hayatınız hakkında Omi\'ye her şeyi sorun';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omi\'nin sonsuz hafızasını açın';
+  String get unlockOmiInfiniteMemory => 'Sınırsız anı';
 
   @override
   String get youreOnAnnualPlan => 'Yıllık Plan\'dasınız';
@@ -4550,7 +4550,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get unableToLoadPlans => 'Planlar yüklenemedi';
 
   @override
-  String get checkConnectionTryAgain => 'Bağlantınızı kontrol edin ve tekrar deneyin';
+  String get checkConnectionTryAgain => 'Bağlantını kontrol edip tekrar dene.';
 
   @override
   String get useFreePlan => 'Ücretsiz Planı Kullan';
@@ -5981,8 +5981,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cloudProvider => 'Bulut Sağlayıcı';
 
   @override
-  String get premiumMinutesInfo =>
-      'Ayda 300 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+  String get premiumMinutesInfo => 'Ayda 300 premium dakika. Sınırsız ücretsiz transkripsiyon için Cihazda\'yı seçin.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6063,7 +6062,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 300 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 300 premium dakika. Sınırsız ücretsiz transkripsiyon için Cihazda\'yı seçin. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6117,7 +6116,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Ominin yerleşik canlı transkripsiyonu, otomatik konuşmacı algılama ve diarizasyon ile gerçek zamanlı konuşmalar için optimize edilmiştir.';
+      'Omi\'nin canlı transkripsiyonu gerçek zamanlı konuşmalar için tasarlandı ve kimin ne söylediğini gösterir.';
 
   @override
   String get reset => 'Sıfırla';
@@ -8485,7 +8484,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tipAutoSync => 'Kayıtlar otomatik olarak senkronize edilir';
 
   @override
-  String get storageSection => 'DEPOLAMA';
+  String get storageSection => 'Depolama';
 
   @override
   String get permissions => 'İzinler';
@@ -8912,10 +8911,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'İsteğe bağlı — düşünceleriniz daha iyi bir ürün oluşturmamıza yardımcı olur.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Bu kalıcıdır';
+  String get deleteFlowConfirmTitle => 'Hesabınız silinsin mi?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Hesabınızı sildiğinizde, kurtarmanın bir yolu yoktur.';
+  String get deleteFlowConfirmSubtitle => 'Bu işlem geri alınamaz, destek ekibi tarafından bile.';
 
   @override
   String get deleteConsequenceSubscription => 'Etkin abonelik iptal edilecektir.';
@@ -9356,7 +9355,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
+      'Şimdi kaydet, istediğin zaman metne dönüştür. O zamana kadar ses telefonunda kalır.';
 
   @override
   String get transcribeLaterNote =>
@@ -9794,7 +9793,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';
 
   @override
-  String get planSheetChooseYourPlan => 'Sınırsız Omi\'nin kilidini açmak için planını seç.';
+  String get planSheetChooseYourPlan => 'Sana uygun planı seç.';
 
   @override
   String get availableOnMacMobileWeb => 'Mac, mobil ve web\'de kullanılabilir';
@@ -10458,8 +10457,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Cihaz unutulsun mu?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi bu cihaza bağlanmayı bırakacak. Tekrar kullanmak için yeniden eşleştirmeniz gerekecek.';
+  String get forgetDeviceConfirmMessage => 'Omi bu cihaza bağlanmayı bırakacak.';
 
   @override
   String get deviceForgottenMessage => 'Cihaz unutuldu';
@@ -11884,7 +11882,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi tahmin yürütmek yerine yakın eşleşmeleri onaylamanızı isteyecek.';
+  String get pinPersonHonestLine => 'Omi, benzer sesleri eşleştirmeden önce sorar.';
 
   @override
   String get pinAction => 'Sabitle';
@@ -12235,4 +12233,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API anahtarları yüklenemedi.';
 }

@@ -361,10 +361,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get cannotBeUndone => 'Αυτό δεν μπορεί να αναιρεθεί.';
 
   @override
-  String get allDataErased => 'Όλες οι αναμνήσεις και οι συνομιλίες σας θα διαγραφούν μόνιμα.';
+  String get allDataErased => 'Οι αναμνήσεις και οι συνομιλίες σας θα διαγραφούν.';
 
   @override
-  String get appsDisconnected => 'Οι Εφαρμογές και οι Ενσωματώσεις σας θα αποσυνδεθούν αμέσως.';
+  String get appsDisconnected => 'Οι εφαρμογές και οι ενσωματώσεις σας θα αποσυνδεθούν.';
 
   @override
   String get exportBeforeDelete =>
@@ -2246,14 +2246,14 @@ class AppLocalizationsEl extends AppLocalizations {
   String get appLanguage => 'Γλώσσα Εφαρμογής';
 
   @override
-  String get appInterfaceSectionTitle => 'ΔΙΕΠΑΦΉ ΕΦΑΡΜΟΓΉΣ';
+  String get appInterfaceSectionTitle => 'Διεπαφή εφαρμογής';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ΟΜΙΛΊΑ ΚΑΙ ΜΕΤΑΓΡΑΦΉ';
+  String get speechTranscriptionSectionTitle => 'Ομιλία και μεταγραφή';
 
   @override
   String get languageSettingsHelperText =>
-      'Η γλώσσα της εφαρμογής αλλάζει τα μενού και τα κουμπιά. Η γλώσσα ομιλίας επηρεάζει τον τρόπο μεταγραφής των ηχογραφήσεών σας.';
+      'Η γλώσσα της εφαρμογής αλλάζει τα μενού και τα κουμπιά. Η κύρια γλώσσα επηρεάζει τον τρόπο μεταγραφής των ηχογραφήσεών σας.';
 
   @override
   String get translationNotice => 'Ειδοποίηση μετάφρασης';
@@ -4566,7 +4566,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get askOmiAnything => 'Ρωτήστε το Omi οτιδήποτε για τη ζωή σας';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Ξεκλειδώστε την άπειρη μνήμη του Omi';
+  String get unlockOmiInfiniteMemory => 'Απεριόριστες αναμνήσεις';
 
   @override
   String get youreOnAnnualPlan => 'Είστε στο ετήσιο πρόγραμμα';
@@ -4578,7 +4578,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get unableToLoadPlans => 'Αδυναμία φόρτωσης πλάνων';
 
   @override
-  String get checkConnectionTryAgain => 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά';
+  String get checkConnectionTryAgain => 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
 
   @override
   String get useFreePlan => 'Χρήση δωρεάν προγράμματος';
@@ -6016,7 +6016,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.';
+      '300 premium λεπτά τον μήνα. Επιλέξτε «Στη Συσκευή» για απεριόριστη δωρεάν μεταγραφή.';
 
   @override
   String get viewUsage => 'Προβολή χρήσης';
@@ -6098,7 +6098,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ';
+      '300 premium λεπτά τον μήνα. Επιλέξτε «Στη Συσκευή» για απεριόριστη δωρεάν μεταγραφή. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6153,7 +6153,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Η ενσωματωμένη ζωντανή μεταγραφή του Omi είναι βελτιστοποιημένη για συνομιλίες σε πραγματικό χρόνο με αυτόματη ανίχνευση και διαχωρισμό ομιλητών.';
+      'Η ζωντανή μεταγραφή του Omi είναι φτιαγμένη για συνομιλίες σε πραγματικό χρόνο και δείχνει ποιος είπε τι.';
 
   @override
   String get reset => 'Επαναφορά';
@@ -8535,7 +8535,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tipAutoSync => 'Οι εγγραφές συγχρονίζονται αυτόματα';
 
   @override
-  String get storageSection => 'ΑΠΟΘΗΚΕΥΣΗ';
+  String get storageSection => 'Αποθήκευση';
 
   @override
   String get permissions => 'Δικαιώματα';
@@ -8964,10 +8964,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Προαιρετικό — οι σκέψεις σας μας βοηθούν να φτιάξουμε ένα καλύτερο προϊόν.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Αυτό είναι μόνιμο';
+  String get deleteFlowConfirmTitle => 'Διαγραφή του λογαριασμού σας;';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Μόλις διαγράψετε τον λογαριασμό σας, δεν μπορεί να ανακτηθεί.';
+  String get deleteFlowConfirmSubtitle => 'Αυτό δεν μπορεί να αναιρεθεί, ούτε από την υποστήριξη.';
 
   @override
   String get deleteConsequenceSubscription => 'Κάθε ενεργή συνδρομή θα ακυρωθεί.';
@@ -9412,7 +9412,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Ηχογραφήστε τώρα και κάντε τη μεταγραφή αργότερα, όποτε θέλετε, αντί σε πραγματικό χρόνο. Οι ηχογραφήσεις αποθηκεύονται στο τηλέφωνό σας και τις ανεβάζετε για να δημιουργηθούν συνομιλίες.';
+      'Ηχογραφήστε τώρα, μεταγράψτε όποτε θέλετε. Μέχρι τότε ο ήχος μένει στο τηλέφωνό σας.';
 
   @override
   String get transcribeLaterNote =>
@@ -9852,7 +9852,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';
 
   @override
-  String get planSheetChooseYourPlan => 'Επίλεξε το πρόγραμμά σου για να ξεκλειδώσεις το Omi χωρίς όρια.';
+  String get planSheetChooseYourPlan => 'Επιλέξτε το πρόγραμμα που σας ταιριάζει.';
 
   @override
   String get availableOnMacMobileWeb => 'Διαθέσιμο σε Mac, κινητό και web';
@@ -10519,8 +10519,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Διαγραφή συσκευής;';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Το Omi θα σταματήσει να συνδέεται με αυτή τη συσκευή. Για να τη χρησιμοποιήσετε ξανά, θα πρέπει να την αντιστοιχίσετε ξανά.';
+  String get forgetDeviceConfirmMessage => 'Το Omi θα σταματήσει να συνδέεται με αυτή τη συσκευή.';
 
   @override
   String get deviceForgottenMessage => 'Η συσκευή διαγράφηκε';
@@ -11950,7 +11949,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Το Omi θα σας ζητά να επιβεβαιώνετε τις στενές αντιστοιχίσεις αντί να μαντεύει.';
+  String get pinPersonHonestLine => 'Το Omi ρωτά πριν αντιστοιχίσει παρόμοιες φωνές.';
 
   @override
   String get pinAction => 'Καρφίτσωμα';
@@ -12304,4 +12303,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Δεν ήταν δυνατή η φόρτωση των κλειδιών API.';
 }

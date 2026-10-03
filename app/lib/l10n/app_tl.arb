@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Lahat ng iyong mga alaala at pag-uusap ay permanenteng buburahin.",
+    "allDataErased": "Mabubura ang iyong mga alaala at conversation.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Ang iyong Mga App at Integrations ay mawawalan ng koneksyon kaagad.",
+    "appsDisconnected": "Madidiskonekta ang iyong mga app at integration.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App Interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & Transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Ang App Language ay nagbabago ng mga menu at button. Ang Speech Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.",
+    "languageSettingsHelperText": "Ang App Language ay nagbabago ng mga menu at button. Ang Primary Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "I-unlock ang walang hanggang memorya ng Omi",
+    "unlockOmiInfiniteMemory": "Walang limitasyong alaala",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Suriin ang koneksyon at subukan ulit",
+    "checkConnectionTryAgain": "Suriin ang iyong koneksyon at subukang muli.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
+    "premiumMinutesInfo": "300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
+    "premiumMinutesMonth": "300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Ang built-in live transcription ng Omi ay na-optimize para sa real-time na pag-usap na may automatic speaker detection at diarization.",
+    "omiTranscriptionOptimized": "Ang live transcription ng Omi ay ginawa para sa mga real-time na usapan at minamarkahan kung sino ang nagsabi ng ano.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Sabihin mo sa amin ang higit pa",
     "deleteFlowFeedbackSubtitle": "Ano ang magiging dahilan para gumana ang Omi para sa iyo?",
     "deleteFlowFeedbackHint": "Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.",
-    "deleteFlowConfirmTitle": "Ito ay permanente",
-    "deleteFlowConfirmSubtitle": "Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.",
+    "deleteFlowConfirmTitle": "I-delete ang Iyong Account?",
+    "deleteFlowConfirmSubtitle": "Hindi na ito maibabalik, kahit ng support.",
     "deleteConsequenceSubscription": "Ang anumang aktibong subscription ay ikakansela.",
     "deleteConsequenceNoRecovery": "Hindi maibabalik ang iyong account — kahit ng support team.",
     "deleteTypeToConfirm": "I-type ang DELETE para kumpirmahin",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
     "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
     "transcribeLaterTitle": "I-transcribe Mamaya",
-    "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
+    "transcribeLaterDescription": "Mag-record ngayon, i-transcribe kapag gusto mo. Hanggang doon, nasa phone mo lang ang audio.",
     "transcribeLaterNote": "Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
     "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
     "unmute": "I-unmute",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
     "whisperModelSizeTiny": "Napakaliit",
-    "planSheetChooseYourPlan": "Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.",
+    "planSheetChooseYourPlan": "Piliin ang plan na bagay sa iyo.",
     "availableOnMacMobileWeb": "Available sa Mac, mobile, at web",
     "popularBadge": "SIKAT",
     "worksOnDesktop": "Gumagana sa desktop",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "I-verify ang iyong numero para tumawag gamit ang Omi.",
     "phoneDeleteNumberFailed": "Hindi ma-delete ang numerong ito",
     "forgetDeviceConfirmTitle": "Kalimutan ang Device?",
-    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.",
+    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito.",
     "deviceForgottenMessage": "Nakalimutan na ang device",
     "unpairDeviceConfirmTitle": "I-unpair ang Device?",
     "rollBack": "Ibalik",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "Bakit?",
     "pinPersonTitle": "I-pin si {name}",
     "pinPersonSubtitle": "Panatilihin si {name} at asahan sila sa mga usapan mo",
-    "pinPersonHonestLine": "Tatanungin ka ni Omi para kumpirmahin ang mga malapit na tugma sa halip na manghula.",
+    "pinPersonHonestLine": "Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.",
     "pinAction": "I-pin",
     "unpinAction": "I-unpin",
     "personPinnedToast": "Na-pin si {name}",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
     "speakerLabelEarlierMatches": "Mga naunang usapan na may ganitong boses: {count}",
     "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
-    "speakerLabelTalkTime": "{duration} ng boses na ito"
+    "speakerLabelTalkTime": "{duration} ng boses na ito",
+    "couldNotLoadApiKeys": "Hindi ma-load ang mga API key."
 }

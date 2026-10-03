@@ -374,8 +374,8 @@ void main() {
     await tester.tap(find.text('Maya Chen'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pin Maya Chen'), findsOneWidget);
-    expect(find.text('Omi will ask you to confirm close matches instead of guessing.'), findsOneWidget);
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Omi asks before matching close voices.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('person_confidence_pill')));
     await tester.pumpAndSettle();
     expect(find.text('Maya Chen is Confirmed. Omi keeps learning from each label.'), findsOneWidget);

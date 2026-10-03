@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "మీ అన్ని జ్ఞాపకాలు మరియు సంభాషణలు శాశ్వతంగా తొలగించబడుతుంది.",
+    "allDataErased": "మీ జ్ఞాపకాలు మరియు సంభాషణలు తొలగించబడతాయి.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "మీ అనువర్తనాలు మరియు ఇంటిగ్రేషన్‌లు వెంటనే డిస్‌కనెక్ట్ చేయబడుతుంది.",
+    "appsDisconnected": "మీ యాప్‌లు మరియు ఇంటిగ్రేషన్‌లు డిస్‌కనెక్ట్ అవుతాయి.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "ఆ విషయానికి సంబంధించిన భాష మెనూలు మరియు బటన్‌లను మార్చుతుంది. ఉచ్చారణ భాష మీ రికార్డింగ్‌లను ఎలా ట్రాన్‌స్క్రిప్ట్ చేయాలో ప్రభావితం చేస్తుంది.",
+    "languageSettingsHelperText": "యాప్ భాష మెనూలు మరియు బటన్‌లను మారుస్తుంది. ప్రధాన భాష మీ రికార్డింగ్‌లు ఎలా ట్రాన్‌స్క్రైబ్ అవుతాయో ప్రభావితం చేస్తుంది.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi యొక్క అనంత జ్ఞాపకం అన్‌లాక్ చేయండి",
+    "unlockOmiInfiniteMemory": "అపరిమిత జ్ఞాపకాలు",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి",
+    "checkConnectionTryAgain": "మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
+    "premiumMinutesInfo": "నెలకు 300 ప్రీమియం నిమిషాలు. అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ కోసం \"పరికరంపై\" ఎంచుకోండి.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
+    "premiumMinutesMonth": "నెలకు 300 ప్రీమియం నిమిషాలు. అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ కోసం \"పరికరంపై\" ఎంచుకోండి. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi యొక్క అంతర్నిర్మిత లైవ్ ట్రాన్‌స్క్రిప్షన్ స్వయంచాలక స్పీకర్ గుర్తింపు మరియు డయారిజేషన్‌తో రియల్-టైమ్ సంభాషణల కోసం ఆప్టిమైజ్ చేయబడింది.",
+    "omiTranscriptionOptimized": "Omi లైవ్ ట్రాన్‌స్క్రిప్షన్ రియల్-టైమ్ సంభాషణల కోసం రూపొందించబడింది మరియు ఎవరు ఏమి చెప్పారో గుర్తిస్తుంది.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "మరింత చెప్పండి",
     "deleteFlowFeedbackSubtitle": "Omi మీకు ఎలా పని చేసేది?",
     "deleteFlowFeedbackHint": "ఐచ్ఛికం — మీ ఆలోచనలు మెరుగైన ఉత్పత్తిని తయారు చేయడంలో మాకు సహాయపడతాయి.",
-    "deleteFlowConfirmTitle": "ఇది శాశ్వతం",
-    "deleteFlowConfirmSubtitle": "మీరు ఖాతాను తొలగించిన తర్వాత, దాన్ని పునరుద్ధరించే మార్గం లేదు.",
+    "deleteFlowConfirmTitle": "మీ ఖాతాను తొలగించాలా?",
+    "deleteFlowConfirmSubtitle": "దీన్ని రద్దు చేయలేరు, సపోర్ట్ కూడా చేయలేదు.",
     "deleteConsequenceSubscription": "ఏదైనా క్రియాశీల సబ్‌స్క్రిప్షన్ రద్దు చేయబడుతుంది.",
     "deleteConsequenceNoRecovery": "మీ ఖాతాను పునరుద్ధరించలేరు — సపోర్ట్ కూడా చేయలేదు.",
     "deleteTypeToConfirm": "నిర్ధారించడానికి DELETE టైప్ చేయండి",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది",
     "syncCustomSttWarningMessage": "మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.",
     "transcribeLaterTitle": "తర్వాత ట్రాన్‌స్క్రైబ్ చేయండి",
-    "transcribeLaterDescription": "లైవ్‌గా కాకుండా ఆడియోను ఇప్పుడు రికార్డ్ చేసి, మీకు కావలసినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. రికార్డింగ్‌లు మీ ఫోన్‌లోనే సేవ్ చేయబడతాయి, తర్వాత వాటిని అప్‌లోడ్ చేయడం ద్వారా సంభాషణలను రూపొందించవచ్చు.",
+    "transcribeLaterDescription": "ఇప్పుడు రికార్డ్ చేయండి, మీకు కావాలనుకున్నప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. అప్పటివరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
     "transcribeLaterNote": "ఫోన్ మైక్రోఫోన్, Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
     "transcribeLaterStorageFull": "మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, ఆ తర్వాత అది దానంతటదే మళ్లీ ప్రారంభమవుతుంది.",
     "unmute": "అన్‌మ్యూట్ చేయి",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "మధ్యస్థం",
     "whisperModelSizeSmall": "చిన్నది",
     "whisperModelSizeTiny": "అతి చిన్నది",
-    "planSheetChooseYourPlan": "అపరిమిత Omi అన్‌లాక్ చేయడానికి మీ ప్లాన్‌ను ఎంచుకోండి.",
+    "planSheetChooseYourPlan": "మీకు సరిపోయే ప్లాన్‌ను ఎంచుకోండి.",
     "availableOnMacMobileWeb": "Mac, మొబైల్ మరియు వెబ్‌లో అందుబాటులో ఉంది",
     "popularBadge": "ప్రసిద్ధం",
     "worksOnDesktop": "డెస్క్‌టాప్‌లో పనిచేస్తుంది",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Omi ద్వారా కాల్ చేయడానికి మీ నంబర్‌ను ధృవీకరించండి.",
     "phoneDeleteNumberFailed": "ఈ నంబర్‌ను తొలగించలేకపోయాము",
     "forgetDeviceConfirmTitle": "పరికరాన్ని మర్చిపోవాలా?",
-    "forgetDeviceConfirmMessage": "Omi ఈ పరికరానికి కనెక్ట్ అవ్వడం ఆపివేస్తుంది. మళ్లీ ఉపయోగించడానికి, మీరు దాన్ని మళ్లీ పెయిర్ చేయాలి.",
+    "forgetDeviceConfirmMessage": "Omi ఈ పరికరానికి కనెక్ట్ అవ్వడం ఆపివేస్తుంది.",
     "deviceForgottenMessage": "పరికరం మర్చిపోబడింది",
     "unpairDeviceConfirmTitle": "పరికరాన్ని అన్‌పెయిర్ చేయాలా?",
     "rollBack": "రోల్ బ్యాక్",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "ఎందుకు?",
     "pinPersonTitle": "{name}ను పిన్ చేయి",
     "pinPersonSubtitle": "{name}ను ఉంచుకోండి, మీ సంభాషణలలో వారిని ఆశించండి",
-    "pinPersonHonestLine": "ఊహించే బదులు, దగ్గరి మ్యాచ్‌లను నిర్ధారించమని Omi మిమ్మల్ని అడుగుతుంది.",
+    "pinPersonHonestLine": "దగ్గరగా ఉన్న గొంతులను సరిపోల్చే ముందు Omi అడుగుతుంది.",
     "pinAction": "పిన్ చేయి",
     "unpinAction": "అన్‌పిన్ చేయి",
     "personPinnedToast": "{name} పిన్ చేయబడింది",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
     "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}",
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
-    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}"
+    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
+    "couldNotLoadApiKeys": "API కీలను లోడ్ చేయడం సాధ్యం కాలేదు."
 }

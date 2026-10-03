@@ -358,10 +358,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get cannotBeUndone => 'Dette kan ikke fortrydes.';
 
   @override
-  String get allDataErased => 'Alle dine minder og samtaler vil blive permanent slettet.';
+  String get allDataErased => 'Dine minder og samtaler bliver slettet.';
 
   @override
-  String get appsDisconnected => 'Dine apps og integrationer vil blive afbrudt øjeblikkeligt.';
+  String get appsDisconnected => 'Dine apps og integrationer bliver afbrudt.';
 
   @override
   String get exportBeforeDelete =>
@@ -2212,14 +2212,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String get appLanguage => 'App-sprog';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-GRÆNSEFLADE';
+  String get appInterfaceSectionTitle => 'App-grænseflade';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TALE OG TRANSSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Tale og transskription';
 
   @override
   String get languageSettingsHelperText =>
-      'App-sprog ændrer menuer og knapper. Talesprog påvirker, hvordan dine optagelser transskriberes.';
+      'App-sprog ændrer menuer og knapper. Primært sprog påvirker, hvordan dine optagelser transskriberes.';
 
   @override
   String get translationNotice => 'Oversættelsesmeddelelse';
@@ -4518,7 +4518,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get askOmiAnything => 'Spørg Omi om hvad som helst om dit liv';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Lås op for Omis uendelige hukommelse';
+  String get unlockOmiInfiniteMemory => 'Ubegrænsede minder';
 
   @override
   String get youreOnAnnualPlan => 'Du er på det årlige abonnement';
@@ -4530,7 +4530,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get unableToLoadPlans => 'Kunne ikke indlæse planer';
 
   @override
-  String get checkConnectionTryAgain => 'Tjek din forbindelse og prøv igen';
+  String get checkConnectionTryAgain => 'Tjek din forbindelse, og prøv igen.';
 
   @override
   String get useFreePlan => 'Brug gratis abonnement';
@@ -5959,7 +5959,8 @@ class AppLocalizationsDa extends AppLocalizations {
   String get cloudProvider => 'Cloud-udbyder';
 
   @override
-  String get premiumMinutesInfo => '300 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
+  String get premiumMinutesInfo =>
+      '300 premium-minutter om måneden. Vælg \"På enhed\" for ubegrænset gratis transskription.';
 
   @override
   String get viewUsage => 'Se forbrug';
@@ -6040,7 +6041,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
+      '300 premium-minutter om måneden. Vælg \"På enhed\" for ubegrænset gratis transskription. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.';
@@ -6094,7 +6095,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis indbyggede live-transskription er optimeret til samtaler i realtid med automatisk talerdetektering og diarization.';
+      'Omis live-transskription er lavet til samtaler i realtid og viser, hvem der sagde hvad.';
 
   @override
   String get reset => 'Nulstil';
@@ -8460,7 +8461,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tipAutoSync => 'Optagelser synkroniseres automatisk';
 
   @override
-  String get storageSection => 'LAGER';
+  String get storageSection => 'Lager';
 
   @override
   String get permissions => 'Tilladelser';
@@ -8889,10 +8890,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Valgfrit — dine tanker hjælper os med at bygge et bedre produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Dette er permanent';
+  String get deleteFlowConfirmTitle => 'Slet din konto?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Når du sletter din konto, kan den ikke gendannes.';
+  String get deleteFlowConfirmSubtitle => 'Det kan ikke fortrydes, heller ikke af support.';
 
   @override
   String get deleteConsequenceSubscription => 'Eventuelle aktive abonnementer annulleres.';
@@ -9334,7 +9335,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Optag lyd nu, og transskriber den efter behov i stedet for live. Optagelserne gemmes på din telefon, hvorefter du uploader dem for at oprette samtaler.';
+      'Optag nu, og transskriber, når du vil. Indtil da bliver lyden på din telefon.';
 
   @override
   String get transcribeLaterNote =>
@@ -9771,7 +9772,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusTooOld => 'For gammel til at synkronisere — Omi kan ikke acceptere den';
 
   @override
-  String get planSheetChooseYourPlan => 'Vælg din plan for at låse op for ubegrænset Omi.';
+  String get planSheetChooseYourPlan => 'Vælg den plan, der passer til dig.';
 
   @override
   String get availableOnMacMobileWeb => 'Tilgængelig på Mac, mobil og web';
@@ -10434,8 +10435,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Glem enhed?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi holder op med at oprette forbindelse til denne enhed. For at bruge den igen skal du parre den igen.';
+  String get forgetDeviceConfirmMessage => 'Omi holder op med at oprette forbindelse til denne enhed.';
 
   @override
   String get deviceForgottenMessage => 'Enhed glemt';
@@ -11858,7 +11858,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi beder dig bekræfte tætte matcher i stedet for at gætte.';
+  String get pinPersonHonestLine => 'Omi spørger, før lignende stemmer matches.';
 
   @override
   String get pinAction => 'Fastgør';
@@ -12209,4 +12209,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API-nøglerne kunne ikke indlæses.';
 }

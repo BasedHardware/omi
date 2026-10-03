@@ -98,6 +98,9 @@ final settingsPagesScenarios = <AuditScenario>[
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
       await a.shot('Pick a reason, skip feedback, reach the typed confirmation', step: 'confirm');
+      await a.tester.enterText(find.byKey(const Key('delete_account_confirm_field')), 'DELETE');
+      await a.settle();
+      await a.shot('Type DELETE: Delete Account becomes the live action', step: 'typed');
     },
   ),
   AuditScenario(

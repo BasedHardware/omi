@@ -475,11 +475,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "All of your memories and conversations will be permanently erased.",
+    "allDataErased": "Your memories and conversations will be erased.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Your Apps and Integrations will be disconnected effectively immediately.",
+    "appsDisconnected": "Your apps and integrations will be disconnected.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2317,15 +2317,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App Interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & Transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.",
+    "languageSettingsHelperText": "App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5271,7 +5271,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Unlock Omi's infinite memory",
+    "unlockOmiInfiniteMemory": "Unlimited memories",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5287,7 +5287,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Please check your connection and try again",
+    "checkConnectionTryAgain": "Check your connection and try again.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7259,7 +7259,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium minutes/month. On-Device tab offers unlimited free transcription.",
+    "premiumMinutesInfo": "300 premium minutes a month. Choose On Device for unlimited free transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7370,7 +7370,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+    "premiumMinutesMonth": "300 premium minutes a month. Choose On Device for unlimited free transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7458,7 +7458,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
+    "omiTranscriptionOptimized": "Omi's live transcription is built for real-time conversations and labels who said what.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -9508,7 +9508,7 @@
     "highestRating": "Highest Rating",
     "lowestRating": "Lowest Rating",
     "resetFilters": "Reset Filters",
-    "applyFilters": "Apply filters",
+    "applyFilters": "Apply Filters",
     "mostInstalls": "Most Installs",
     "couldNotOpenUrl": "Could not open URL. Please try again.",
     "newTask": "New Task",
@@ -10140,7 +10140,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10565,11 +10565,11 @@
     "@deleteFlowFeedbackHint": {
         "description": "TextField hint on delete feedback step"
     },
-    "deleteFlowConfirmTitle": "This is permanent",
+    "deleteFlowConfirmTitle": "Delete Your Account?",
     "@deleteFlowConfirmTitle": {
         "description": "Title on final delete confirmation step"
     },
-    "deleteFlowConfirmSubtitle": "Once you delete your account, there is no way to recover it.",
+    "deleteFlowConfirmSubtitle": "This can't be undone, even by support.",
     "@deleteFlowConfirmSubtitle": {
         "description": "Subtitle on final delete confirmation step"
     },
@@ -11056,7 +11056,7 @@
     "@transcribeLaterTitle": {
         "description": "Title for the 'transcribe later' capture-mode toggle in device settings"
     },
-    "transcribeLaterDescription": "Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.",
+    "transcribeLaterDescription": "Record now, transcribe when you choose. Audio stays on your phone until then.",
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
@@ -11573,7 +11573,7 @@
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
     },
     "syncStatusTooOld": "Too old to sync — Omi can't accept it",
-    "planSheetChooseYourPlan": "Choose your plan to unlock unlimited Omi.",
+    "planSheetChooseYourPlan": "Choose the plan that fits you.",
     "@planSheetChooseYourPlan": {
         "description": "Plans sheet subtitle prompting a free user to pick a paid plan"
     },
@@ -12291,7 +12291,7 @@
     "@forgetDeviceConfirmTitle": {
         "description": "Title of the confirmation before forgetting a paired device"
     },
-    "forgetDeviceConfirmMessage": "Omi will stop connecting to this device. To use it again, you'll have to pair it again.",
+    "forgetDeviceConfirmMessage": "Omi will stop connecting to this device.",
     "@forgetDeviceConfirmMessage": {
         "description": "Consequence of forgetting a paired device"
     },
@@ -14125,7 +14125,7 @@
             }
         }
     },
-    "pinPersonHonestLine": "Omi will ask you to confirm close matches instead of guessing.",
+    "pinPersonHonestLine": "Omi asks before matching close voices.",
     "@pinPersonHonestLine": {
         "description": "Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them."
     },
@@ -14575,5 +14575,9 @@
                 "type": "String"
             }
         }
+    },
+    "couldNotLoadApiKeys": "Couldn't load API keys.",
+    "@couldNotLoadApiKeys": {
+        "description": "Developer Settings: the API key or MCP key list failed to load"
     }
 }

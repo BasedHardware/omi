@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "כל הזיכרונות והשיחות שלך יימחקו לצמיתות.",
+    "allDataErased": "הזיכרונות והשיחות שלך יימחקו.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "האפליקציות והאינטגרציות שלך יהיו מנותקות באופן מיידי.",
+    "appsDisconnected": "האפליקציות והשילובים שלך ינותקו.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "שינוי שפת אפליקציה משנה תפריטים וכפתורים. שפת דיבור משפיעה על אופן התמלול של ההקלטות שלך.",
+    "languageSettingsHelperText": "שפת האפליקציה משנה תפריטים וכפתורים. השפה הראשונית משפיעה על אופן התמלול של ההקלטות שלך.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "בטל את הנעילה של הזיכרון האינסופי של Omi",
+    "unlockOmiInfiniteMemory": "זיכרונות ללא הגבלה",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "בדוק את החיבור ונסה שוב",
+    "checkConnectionTryAgain": "בדקו את החיבור ונסו שוב.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
+    "premiumMinutesInfo": "300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
+    "premiumMinutesMonth": "300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "התמלול החי המובנה של Omi מותאם לשיחות בזמן אמת עם זיהוי דוברים אוטומטי וdiarization.",
+    "omiTranscriptionOptimized": "התמלול החי של Omi בנוי לשיחות בזמן אמת ומציין מי אמר מה.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "ספר לנו עוד",
     "deleteFlowFeedbackSubtitle": "מה היה גורם ל-Omi לעבוד עבורך?",
     "deleteFlowFeedbackHint": "אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.",
-    "deleteFlowConfirmTitle": "זה לצמיתות",
-    "deleteFlowConfirmSubtitle": "לאחר מחיקת החשבון, אין דרך לשחזר אותו.",
+    "deleteFlowConfirmTitle": "למחוק את החשבון שלך?",
+    "deleteFlowConfirmSubtitle": "לא ניתן לבטל פעולה זו, גם לא על ידי התמיכה.",
     "deleteConsequenceSubscription": "כל מנוי פעיל יבוטל.",
     "deleteConsequenceNoRecovery": "לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.",
     "deleteTypeToConfirm": "הקלד DELETE לאישור",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "הסנכרון משתמש בתמלול של Omi",
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
-    "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
+    "transcribeLaterDescription": "הקליטו עכשיו ותמללו מתי שתרצו. עד אז האודיו נשאר בטלפון שלכם.",
     "transcribeLaterNote": "פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
     "whisperModelSizeTiny": "זעיר",
-    "planSheetChooseYourPlan": "בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.",
+    "planSheetChooseYourPlan": "בחרו את התוכנית שמתאימה לכם.",
     "availableOnMacMobileWeb": "זמין ב-Mac, בנייד ובאינטרנט",
     "popularBadge": "פופולרי",
     "worksOnDesktop": "עובד במחשב",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "אמת את המספר שלך כדי להתקשר דרך Omi.",
     "phoneDeleteNumberFailed": "לא ניתן למחוק את המספר",
     "forgetDeviceConfirmTitle": "לשכוח את המכשיר?",
-    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה. כדי להשתמש בו שוב, יהיה עליך לצמד אותו מחדש.",
+    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה.",
     "deviceForgottenMessage": "המכשיר נשכח",
     "unpairDeviceConfirmTitle": "לבטל את צימוד המכשיר?",
     "rollBack": "שחזור לגרסה קודמת",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "למה?",
     "pinPersonTitle": "הצמדת {name}",
     "pinPersonSubtitle": "השאר את {name} בראש הרשימה וצפה לו בשיחות שלך",
-    "pinPersonHonestLine": "Omi יבקש ממך לאשר התאמות קרובות במקום לנחש.",
+    "pinPersonHonestLine": "Omi שואל לפני התאמת קולות דומים.",
     "pinAction": "הצמד",
     "unpinAction": "בטל הצמדה",
     "personPinnedToast": "הוצמד: {name}",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
     "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה"
+    "speakerLabelTalkTime": "{duration} מהקול הזה",
+    "couldNotLoadApiKeys": "לא ניתן לטעון את מפתחות ה-API."
 }

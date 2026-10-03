@@ -359,10 +359,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get cannotBeUndone => 'இதை மாற்ற முடியாது.';
 
   @override
-  String get allDataErased => 'உங்கள் அனைத்து நினைவுகள் மற்றும் உரையாடல்கள் நிரந்தரமாக நீக்கப்படும்.';
+  String get allDataErased => 'உங்கள் நினைவுகளும் உரையாடல்களும் அழிக்கப்படும்.';
 
   @override
-  String get appsDisconnected => 'உங்கள் பயன்பாடுகள் மற்றும் ஒருங்கிணைப்புகள் உடனடியாக துண்டிக்கப்படும்.';
+  String get appsDisconnected => 'உங்கள் ஆப்ஸ் மற்றும் ஒருங்கிணைப்புகள் துண்டிக்கப்படும்.';
 
   @override
   String get exportBeforeDelete =>
@@ -2247,7 +2247,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get languageSettingsHelperText =>
-      'பயன்பாட்டு மொழி மெனுக்கள் மற்றும் பொத்தான்கள் மாற்றுகிறது. பேச்சு மொழி உங்கள் பதிவுகளை எவ்வாறு தட்டச்சு செய்யப்படுகிறது என்பதைப் பாதிக்கிறது.';
+      'பயன்பாட்டு மொழி மெனுக்களையும் பொத்தான்களையும் மாற்றுகிறது. முதன்மை மொழி உங்கள் பதிவுகள் எவ்வாறு எழுத்துப்படியாக்கப்படுகின்றன என்பதைப் பாதிக்கிறது.';
 
   @override
   String get translationNotice => 'மொழிபெயர்ப்பு குறிப்பு';
@@ -4561,7 +4561,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get askOmiAnything => 'உங்கள் வாழ்க்கையைப் பற்றி Omi-ஐ எதையும் கேளுங்கள்';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omi இன் எல்லையற்ற நினைவை திறக்கவும்';
+  String get unlockOmiInfiniteMemory => 'வரம்பற்ற நினைவுகள்';
 
   @override
   String get youreOnAnnualPlan => 'நீங்கள் ஆண்டு திட்டத்தில் இருக்கிறீர்கள்';
@@ -4573,7 +4573,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get unableToLoadPlans => 'திட்டங்களை ஏற்ற முடியவில்லை';
 
   @override
-  String get checkConnectionTryAgain => 'இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்';
+  String get checkConnectionTryAgain => 'உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.';
 
   @override
   String get useFreePlan => 'இலவச திட்டத்தைப் பயன்படுத்தவும்';
@@ -6013,7 +6013,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும்.';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6095,7 +6095,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும். ';
 
   @override
   String get audioProcessedLocally =>
@@ -6150,7 +6150,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi இன் உள்ளமைந்த நேரடி உபாய கேட்டுபேரல் உரையாடல் பற்றிய ஒத்திசைப்பு மற்றும் தற்போதைய பேச்சாளர் கண்டறிதலுக்கு தெளிவு செய்யப்பட்டுள்ளது।';
+      'Omi நேரலை எழுத்துப்படியாக்கம் நிகழ்நேர உரையாடல்களுக்காக உருவாக்கப்பட்டது, யார் என்ன சொன்னார்கள் என்பதைக் குறிக்கிறது.';
 
   @override
   String get reset => 'மீட்டமைக்கவும்';
@@ -8965,10 +8965,10 @@ class AppLocalizationsTa extends AppLocalizations {
       'விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.';
 
   @override
-  String get deleteFlowConfirmTitle => 'இது நிரந்தரமானது';
+  String get deleteFlowConfirmTitle => 'உங்கள் கணக்கை நீக்கவா?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.';
+  String get deleteFlowConfirmSubtitle => 'இதைச் செயல்தவிர்க்க முடியாது, ஆதரவுக் குழுவாலும் முடியாது.';
 
   @override
   String get deleteConsequenceSubscription => 'செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.';
@@ -9411,7 +9411,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.';
+      'இப்போது பதிவு செய்து, விரும்பும்போது எழுத்துப்படியாக்குங்கள். அதுவரை ஆடியோ உங்கள் ஃபோனிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterNote =>
@@ -9852,7 +9852,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
 
   @override
-  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+  String get planSheetChooseYourPlan => 'உங்களுக்குப் பொருத்தமான திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
 
   @override
   String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
@@ -10518,8 +10518,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'சாதனத்தை மறக்கவா?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும். மீண்டும் பயன்படுத்த, அதை மீண்டும் இணைக்க வேண்டும்.';
+  String get forgetDeviceConfirmMessage => 'Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும்.';
 
   @override
   String get deviceForgottenMessage => 'சாதனம் மறக்கப்பட்டது';
@@ -11950,8 +11949,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine =>
-      'ஊகிப்பதற்குப் பதிலாக, நெருக்கமான பொருத்தங்களை உறுதிசெய்யுமாறு Omi உங்களிடம் கேட்கும்.';
+  String get pinPersonHonestLine => 'ஒத்த குரல்களைப் பொருத்தும் முன் Omi கேட்கும்.';
 
   @override
   String get pinAction => 'பின் செய்';
@@ -12305,4 +12303,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API விசைகளை ஏற்ற முடியவில்லை.';
 }

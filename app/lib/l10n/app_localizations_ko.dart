@@ -356,10 +356,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cannotBeUndone => '이 작업은 되돌릴 수 없습니다.';
 
   @override
-  String get allDataErased => '모든 기억과 대화가 영구적으로 삭제됩니다.';
+  String get allDataErased => '추억과 대화가 삭제됩니다.';
 
   @override
-  String get appsDisconnected => '앱 및 통합 기능이 즉시 연결 해제됩니다.';
+  String get appsDisconnected => '앱과 연동이 연결 해제됩니다.';
 
   @override
   String get exportBeforeDelete => '계정을 삭제하기 전에 데이터를 내보낼 수 있지만, 삭제된 후에는 복구할 수 없습니다.';
@@ -2195,7 +2195,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speechTranscriptionSectionTitle => '음성 및 전사';
 
   @override
-  String get languageSettingsHelperText => '앱 언어는 메뉴와 버튼을 변경합니다. 음성 언어는 녹음이 전사되는 방식에 영향을 줍니다.';
+  String get languageSettingsHelperText => '앱 언어는 메뉴와 버튼을 변경합니다. 기본 언어는 녹음이 전사되는 방식에 영향을 줍니다.';
 
   @override
   String get translationNotice => '번역 안내';
@@ -4450,7 +4450,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get askOmiAnything => 'Omi에게 당신의 삶에 대해 무엇이든 물어보세요';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omi의 무한 메모리 잠금 해제';
+  String get unlockOmiInfiniteMemory => '무제한 추억';
 
   @override
   String get youreOnAnnualPlan => '연간 플랜을 사용 중입니다';
@@ -4462,7 +4462,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unableToLoadPlans => '플랜을 불러올 수 없습니다';
 
   @override
-  String get checkConnectionTryAgain => '연결을 확인하고 다시 시도하세요';
+  String get checkConnectionTryAgain => '연결을 확인한 후 다시 시도하세요.';
 
   @override
   String get useFreePlan => '무료 플랜 사용';
@@ -5869,7 +5869,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 300분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '매월 300분의 프리미엄 시간. 무제한 무료 전사를 원하면 \'기기에서\'를 선택하세요.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -5947,7 +5947,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 300 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '매월 300분의 프리미엄 시간. 무제한 무료 전사를 원하면 \'기기에서\'를 선택하세요. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -5998,7 +5998,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'Omi의 내장 라이브 전사는 자동 화자 감지 및 화자 분리로 실시간 대화에 최적화되어 있습니다.';
+  String get omiTranscriptionOptimized => 'Omi 실시간 전사는 실시간 대화를 위해 만들어졌으며 누가 무엇을 말했는지 표시합니다.';
 
   @override
   String get reset => '초기화';
@@ -8758,10 +8758,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteFlowFeedbackHint => '선택 사항 — 여러분의 의견은 더 나은 제품을 만드는 데 도움이 됩니다.';
 
   @override
-  String get deleteFlowConfirmTitle => '이 작업은 영구적입니다';
+  String get deleteFlowConfirmTitle => '계정을 삭제할까요?';
 
   @override
-  String get deleteFlowConfirmSubtitle => '계정을 삭제하면 복구할 방법이 없습니다.';
+  String get deleteFlowConfirmSubtitle => '이 작업은 되돌릴 수 없으며, 지원팀도 복구할 수 없습니다.';
 
   @override
   String get deleteConsequenceSubscription => '활성 구독은 모두 취소됩니다.';
@@ -9195,7 +9195,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterTitle => '나중에 변환하기';
 
   @override
-  String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
+  String get transcribeLaterDescription => '지금 녹음하고 원할 때 전사하세요. 그때까지 오디오는 휴대폰에 보관됩니다.';
 
   @override
   String get transcribeLaterNote => '휴대폰 마이크, Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
@@ -9620,7 +9620,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
 
   @override
-  String get planSheetChooseYourPlan => '플랜을 선택하고 무제한 Omi를 잠금 해제하세요.';
+  String get planSheetChooseYourPlan => '나에게 맞는 플랜을 선택하세요.';
 
   @override
   String get availableOnMacMobileWeb => 'Mac, 모바일, 웹에서 사용 가능';
@@ -10276,7 +10276,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get forgetDeviceConfirmTitle => '기기를 삭제할까요?';
 
   @override
-  String get forgetDeviceConfirmMessage => 'Omi가 이 기기에 더 이상 연결하지 않습니다. 다시 사용하려면 다시 페어링해야 합니다.';
+  String get forgetDeviceConfirmMessage => 'Omi가 이 기기에 더 이상 연결하지 않습니다.';
 
   @override
   String get deviceForgottenMessage => '기기를 삭제했습니다';
@@ -11684,7 +11684,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi가 추측하지 않고 비슷한 일치는 확인을 요청해요.';
+  String get pinPersonHonestLine => '비슷한 목소리를 매칭하기 전에 Omi가 확인합니다.';
 
   @override
   String get pinAction => '고정';
@@ -12031,4 +12031,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API 키를 불러올 수 없습니다.';
 }

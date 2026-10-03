@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "آپ کی تمام یادیں اور بات چیتیں مستقل طور پر حذف ہو جائیں گی۔",
+    "allDataErased": "آپ کی یادیں اور گفتگوئیں مٹا دی جائیں گی۔",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "آپ کی ایپلیکیشنز اور انضمام فوری طور پر منقطع ہو جائیں گے۔",
+    "appsDisconnected": "آپ کی ایپس اور انٹیگریشنز منقطع ہو جائیں گی۔",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "ایپ کی زبان مینوز اور بٹن بدلتی ہے۔ تقریر کی زبان آپ کی ریکارڈنگز کی ٹرانسکرپشن کو متاثر کرتی ہے۔",
+    "languageSettingsHelperText": "ایپ کی زبان مینوز اور بٹن بدلتی ہے۔ بنیادی زبان آپ کی ریکارڈنگز کی ٹرانسکرپشن کو متاثر کرتی ہے۔",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi کی لامحدود یادوں کو کھولیں",
+    "unlockOmiInfiniteMemory": "لامحدود یادیں",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "کنکشن چیک کریں اور دوبارہ کوشش کریں",
+    "checkConnectionTryAgain": "اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔",
+    "premiumMinutesInfo": "ہر مہینے 300 پریمیم منٹ۔ لامحدود مفت ٹرانسکرپشن کے لیے \"آلے پر\" منتخب کریں۔",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ",
+    "premiumMinutesMonth": "ہر مہینے 300 پریمیم منٹ۔ لامحدود مفت ٹرانسکرپشن کے لیے \"آلے پر\" منتخب کریں۔ ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi کا built-in لائیو ٹرانسکریپشن خودکار speaker detection اور diarization کے ساتھ real-time بات چیت کے لیے بہتر بنایا گیا ہے۔",
+    "omiTranscriptionOptimized": "Omi کی لائیو ٹرانسکرپشن ریئل ٹائم گفتگو کے لیے بنائی گئی ہے اور بتاتی ہے کہ کس نے کیا کہا۔",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "مزید بتائیں",
     "deleteFlowFeedbackSubtitle": "کس چیز سے Omi آپ کے لیے کام کرتا؟",
     "deleteFlowFeedbackHint": "اختیاری — آپ کے خیالات ہمیں بہتر پروڈکٹ بنانے میں مدد دیتے ہیں۔",
-    "deleteFlowConfirmTitle": "یہ مستقل ہے",
-    "deleteFlowConfirmSubtitle": "ایک بار اکاؤنٹ حذف ہونے کے بعد اسے بحال نہیں کیا جا سکتا۔",
+    "deleteFlowConfirmTitle": "اپنا اکاؤنٹ حذف کریں؟",
+    "deleteFlowConfirmSubtitle": "اسے واپس نہیں کیا جا سکتا، سپورٹ کے ذریعے بھی نہیں۔",
     "deleteConsequenceSubscription": "کوئی بھی فعال سبسکرپشن منسوخ کر دی جائے گی۔",
     "deleteConsequenceNoRecovery": "آپ کا اکاؤنٹ بحال نہیں ہو سکتا — سپورٹ بھی نہیں کر سکتی۔",
     "deleteTypeToConfirm": "تصدیق کے لیے DELETE ٹائپ کریں",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "سنک Omi کی ٹرانسکرپشن استعمال کرتا ہے",
     "syncCustomSttWarningMessage": "آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔",
     "transcribeLaterTitle": "بعد میں ٹرانسکرائب کریں",
-    "transcribeLaterDescription": "ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔",
+    "transcribeLaterDescription": "ابھی ریکارڈ کریں، جب چاہیں ٹرانسکرائب کریں۔ تب تک آڈیو آپ کے فون پر رہتا ہے۔",
     "transcribeLaterNote": "فون کے مائیکروفون، Omi اور Limitless ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔",
     "transcribeLaterStorageFull": "آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔",
     "unmute": "آواز چالو کریں",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "درمیانہ",
     "whisperModelSizeSmall": "چھوٹا",
     "whisperModelSizeTiny": "بہت چھوٹا",
-    "planSheetChooseYourPlan": "لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔",
+    "planSheetChooseYourPlan": "اپنے لیے موزوں پلان منتخب کریں۔",
     "availableOnMacMobileWeb": "Mac، موبائل اور ویب پر دستیاب",
     "popularBadge": "مقبول",
     "worksOnDesktop": "ڈیسک ٹاپ پر کام کرتا ہے",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Omi کے ذریعے کال کرنے کے لیے اپنا نمبر تصدیق کریں۔",
     "phoneDeleteNumberFailed": "یہ نمبر حذف نہیں ہو سکا",
     "forgetDeviceConfirmTitle": "ڈیوائس بھول جائیں؟",
-    "forgetDeviceConfirmMessage": "Omi اس ڈیوائس سے جڑنا بند کر دے گا۔ اسے دوبارہ استعمال کرنے کے لیے آپ کو اسے دوبارہ پیئر کرنا ہوگا۔",
+    "forgetDeviceConfirmMessage": "Omi اس ڈیوائس سے جڑنا بند کر دے گا۔",
     "deviceForgottenMessage": "ڈیوائس بھلا دی گئی",
     "unpairDeviceConfirmTitle": "ڈیوائس کو ان پیئر کریں؟",
     "rollBack": "واپس لائیں",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "کیوں؟",
     "pinPersonTitle": "{name} کو پن کریں",
     "pinPersonSubtitle": "{name} کو رکھیں، اور اپنی گفتگو میں ان کی توقع رکھیں",
-    "pinPersonHonestLine": "Omi اندازہ لگانے کے بجائے قریبی میچز کی تصدیق آپ سے پوچھے گا۔",
+    "pinPersonHonestLine": "ملتی جلتی آوازوں کو ملانے سے پہلے Omi پوچھتا ہے۔",
     "pinAction": "پن کریں",
     "unpinAction": "پن ہٹائیں",
     "personPinnedToast": "{name} کو پن کر دیا گیا",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi اگلی بار {name} کو پہچان لے گا۔} pending{اس میں چند سیکنڈ لگتے ہیں۔} disabled{ترتیبات میں آوازیں محفوظ کرنا آن کریں تاکہ Omi {name} کو پہچان سکے۔} other{Omi کو {name} کی مزید واضح گفتگو درکار ہے اور وہ کوشش جاری رکھے گا۔}}",
     "speakerLabelEarlierMatches": "اس آواز کے ساتھ پچھلی گفتگوئیں: {count}",
     "speakerLabelText": "{part, select, likely{ممکنہ} soundsLike{{name} جیسی لگتی ہے} notPerson{{name} نہیں} carried{اب بھی {name}۔ آپ کی پچھلی گفتگو سے جاری۔} change{تبدیل کریں} alsoTitle{کیا یہ بھی {name} ہیں؟} alsoBody{Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔} confirmed{آپ نے اس لیبل کی تصدیق کی} other{جائزہ لیں}}",
-    "speakerLabelTalkTime": "اس آواز کا {duration}"
+    "speakerLabelTalkTime": "اس آواز کا {duration}",
+    "couldNotLoadApiKeys": "API کلیدیں لوڈ نہیں ہو سکیں۔"
 }

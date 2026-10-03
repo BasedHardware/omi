@@ -358,10 +358,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get cannotBeUndone => 'Ovo se ne može poništiti.';
 
   @override
-  String get allDataErased => 'Sve tvoje uspomene i razgovori bit će trajno obrisani.';
+  String get allDataErased => 'Vaše uspomene i razgovori bit će izbrisani.';
 
   @override
-  String get appsDisconnected => 'Tvoje aplikacije i integracije bit će odspojene odmah.';
+  String get appsDisconnected => 'Vaše aplikacije i integracije bit će odspojene.';
 
   @override
   String get exportBeforeDelete =>
@@ -2229,14 +2229,14 @@ class AppLocalizationsHr extends AppLocalizations {
   String get appLanguage => 'Jezik Aplikacije';
 
   @override
-  String get appInterfaceSectionTitle => 'SUČELJE APLIKACIJE';
+  String get appInterfaceSectionTitle => 'Sučelje aplikacije';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GOVOR I TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Govor i transkripcija';
 
   @override
   String get languageSettingsHelperText =>
-      'Jezičke promjene Aplikacije Meniji i gumbi. Jezični Govor utječe na to kako se vaše snimke transkribiraju.';
+      'Jezik aplikacije mijenja izbornike i gumbe. Primarni jezik utječe na to kako se vaše snimke transkribiraju.';
 
   @override
   String get translationNotice => 'Obavijest o Prijevodu';
@@ -4546,7 +4546,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get askOmiAnything => 'Pitajte Omija bilo što o svojoj životu';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Otključajte Omijevu beskonačnu memoriju';
+  String get unlockOmiInfiniteMemory => 'Neograničene uspomene';
 
   @override
   String get youreOnAnnualPlan => 'Nalazite se na godišnjem planu';
@@ -4558,7 +4558,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get unableToLoadPlans => 'Nije moguće učitati planove';
 
   @override
-  String get checkConnectionTryAgain => 'Provjerite vezu i pokušajte ponovo';
+  String get checkConnectionTryAgain => 'Provjerite vezu i pokušajte ponovno.';
 
   @override
   String get useFreePlan => 'Koristi besplatni plan';
@@ -5991,7 +5991,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.';
+      '300 premium minuta mjesečno. Odaberite „Na Uređaju” za neograničenu besplatnu transkripciju.';
 
   @override
   String get viewUsage => 'Prikaži upotrebu';
@@ -6071,7 +6071,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.';
+      '300 premium minuta mjesečno. Odaberite „Na Uređaju” za neograničenu besplatnu transkripciju. ';
 
   @override
   String get audioProcessedLocally => 'Zvuk se obrađuje lokalno. Radi bez veze, privatnije, ali koristi više baterije.';
@@ -6124,7 +6124,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi-jeva ugrađena transkripcija u realnom vremenu optimizirana je za razgovore u realnom vremenu sa automatskim prepoznavanjem govornika i dijalizacijom.';
+      'Omi transkripcija uživo izrađena je za razgovore u stvarnom vremenu i označava tko je što rekao.';
 
   @override
   String get reset => 'Resetiraj';
@@ -8502,7 +8502,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get tipAutoSync => 'Snimke se sinhroniziraju automatski';
 
   @override
-  String get storageSection => 'POHRANA';
+  String get storageSection => 'Pohrana';
 
   @override
   String get permissions => 'Dozvole';
@@ -8929,10 +8929,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Neobavezno — vaše misli pomažu nam izgraditi bolji proizvod.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Ovo je trajno';
+  String get deleteFlowConfirmTitle => 'Izbrisati vaš račun?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Nakon brisanja računa nije ga moguće vratiti.';
+  String get deleteFlowConfirmSubtitle => 'Ovo se ne može poništiti, čak ni uz pomoć podrške.';
 
   @override
   String get deleteConsequenceSubscription => 'Bilo koja aktivna pretplata bit će otkazana.';
@@ -9377,7 +9377,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Snimaj zvuk odmah, a transkripciju pokreni naknadno umjesto uživo. Snimke se spremaju na tvoj telefon, a zatim ih prenosiš kako bi se stvorili razgovori.';
+      'Snimajte sada, transkribirajte kada želite. Do tada zvuk ostaje na vašem telefonu.';
 
   @override
   String get transcribeLaterNote =>
@@ -9816,7 +9816,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncStatusTooOld => 'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
 
   @override
-  String get planSheetChooseYourPlan => 'Odaberite svoj plan i otključajte neograničeni Omi.';
+  String get planSheetChooseYourPlan => 'Odaberite plan koji vam odgovara.';
 
   @override
   String get availableOnMacMobileWeb => 'Dostupno na Macu, mobitelu i webu';
@@ -10482,8 +10482,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Zaboraviti uređaj?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi se više neće povezivati s ovim uređajem. Da biste ga ponovno koristili, morat ćete ga ponovno upariti.';
+  String get forgetDeviceConfirmMessage => 'Omi se više neće povezivati s ovim uređajem.';
 
   @override
   String get deviceForgottenMessage => 'Uređaj je zaboravljen';
@@ -11908,7 +11907,7 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi će te tražiti da potvrdiš bliska podudaranja umjesto da nagađa.';
+  String get pinPersonHonestLine => 'Omi pita prije nego što upari slične glasove.';
 
   @override
   String get pinAction => 'Prikvači';
@@ -12260,4 +12259,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Učitavanje API ključeva nije uspjelo.';
 }

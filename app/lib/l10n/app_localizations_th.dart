@@ -357,10 +357,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cannotBeUndone => 'การกระทำนี้ไม่สามารถยกเลิกได้';
 
   @override
-  String get allDataErased => 'ความทรงจำและบทสนทนาทั้งหมดของคุณจะถูกลบอย่างถาวร';
+  String get allDataErased => 'ความทรงจำและบทสนทนาของคุณจะถูกลบ';
 
   @override
-  String get appsDisconnected => 'แอปและการเชื่อมต่อของคุณจะถูกตัดการเชื่อมต่อทันที';
+  String get appsDisconnected => 'แอปและการผสานรวมของคุณจะถูกยกเลิกการเชื่อมต่อ';
 
   @override
   String get exportBeforeDelete => 'คุณสามารถส่งออกข้อมูลของคุณก่อนลบบัญชี แต่เมื่อลบแล้วจะไม่สามารถกู้คืนได้';
@@ -2219,7 +2219,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get speechTranscriptionSectionTitle => 'คำพูดและการถอดเสียง';
 
   @override
-  String get languageSettingsHelperText => 'ภาษาแอปเปลี่ยนเมนูและปุ่ม ภาษาคำพูดส่งผลต่อวิธีถอดเสียงการบันทึกของคุณ';
+  String get languageSettingsHelperText => 'ภาษาแอปเปลี่ยนเมนูและปุ่ม ภาษาหลักส่งผลต่อวิธีถอดเสียงการบันทึกของคุณ';
 
   @override
   String get translationNotice => 'ประกาศการแปล';
@@ -4501,7 +4501,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get askOmiAnything => 'ถาม Omi อะไรก็ได้เกี่ยวกับชีวิตของคุณ';
 
   @override
-  String get unlockOmiInfiniteMemory => 'ปลดล็อกหน่วยความจำไม่สิ้นสุดของ Omi';
+  String get unlockOmiInfiniteMemory => 'ความทรงจำไม่จำกัด';
 
   @override
   String get youreOnAnnualPlan => 'คุณอยู่ในแพ็คเกจรายปี';
@@ -4513,7 +4513,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get unableToLoadPlans => 'ไม่สามารถโหลดแผนได้';
 
   @override
-  String get checkConnectionTryAgain => 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+  String get checkConnectionTryAgain => 'ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
 
   @override
   String get useFreePlan => 'ใช้แพ็คเกจฟรี';
@@ -5936,7 +5936,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cloudProvider => 'ผู้ให้บริการคลาวด์';
 
   @override
-  String get premiumMinutesInfo => '300 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
+  String get premiumMinutesInfo => 'พรีเมียม 300 นาทีต่อเดือน เลือก \"บนอุปกรณ์\" เพื่อถอดเสียงฟรีไม่จำกัด';
 
   @override
   String get viewUsage => 'ดูการใช้งาน';
@@ -6016,7 +6016,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryDrainSignificantly => 'การใช้แบตเตอรี่จะเพิ่มขึ้นอย่างมาก';
 
   @override
-  String get premiumMinutesMonth => '300 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
+  String get premiumMinutesMonth => 'พรีเมียม 300 นาทีต่อเดือน เลือก \"บนอุปกรณ์\" เพื่อถอดเสียงฟรีไม่จำกัด ';
 
   @override
   String get audioProcessedLocally =>
@@ -6069,8 +6069,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized =>
-      'การถอดความสดในตัวของ Omi ถูกปรับให้เหมาะสมสำหรับการสนทนาแบบเรียลไทม์พร้อมการตรวจจับผู้พูดอัตโนมัติและการแยกผู้พูด';
+  String get omiTranscriptionOptimized => 'การถอดเสียงสดของ Omi สร้างมาสำหรับบทสนทนาแบบเรียลไทม์ และระบุว่าใครพูดอะไร';
 
   @override
   String get reset => 'รีเซ็ต';
@@ -8852,10 +8851,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น';
 
   @override
-  String get deleteFlowConfirmTitle => 'การกระทำนี้ถาวร';
+  String get deleteFlowConfirmTitle => 'ลบบัญชีของคุณใช่ไหม';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'เมื่อคุณลบบัญชีของคุณแล้ว จะไม่สามารถกู้คืนได้';
+  String get deleteFlowConfirmSubtitle => 'การดำเนินการนี้ย้อนกลับไม่ได้ แม้แต่ฝ่ายสนับสนุนก็ทำไม่ได้';
 
   @override
   String get deleteConsequenceSubscription => 'การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก';
@@ -9292,7 +9291,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'บันทึกเสียงไว้ก่อนแล้วค่อยถอดเสียงเมื่อต้องการ แทนที่จะถอดแบบเรียลไทม์ ไฟล์บันทึกจะถูกเก็บไว้ในเครื่องของคุณ จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา';
+      'บันทึกตอนนี้ แล้วถอดเสียงเมื่อคุณต้องการ ระหว่างนั้นเสียงจะอยู่ในโทรศัพท์ของคุณ';
 
   @override
   String get transcribeLaterNote =>
@@ -9725,7 +9724,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusTooOld => 'เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้';
 
   @override
-  String get planSheetChooseYourPlan => 'เลือกแพ็กเกจของคุณเพื่อปลดล็อก Omi แบบไม่จำกัด';
+  String get planSheetChooseYourPlan => 'เลือกแพ็กเกจที่เหมาะกับคุณ';
 
   @override
   String get availableOnMacMobileWeb => 'ใช้ได้บน Mac มือถือ และเว็บ';
@@ -10386,7 +10385,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'ลืมอุปกรณ์ใช่ไหม';
 
   @override
-  String get forgetDeviceConfirmMessage => 'Omi จะหยุดเชื่อมต่อกับอุปกรณ์นี้ หากต้องการใช้อีกครั้ง คุณต้องจับคู่ใหม่';
+  String get forgetDeviceConfirmMessage => 'Omi จะหยุดเชื่อมต่อกับอุปกรณ์นี้';
 
   @override
   String get deviceForgottenMessage => 'ลืมอุปกรณ์แล้ว';
@@ -11807,7 +11806,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi จะขอให้คุณยืนยันการจับคู่ที่ใกล้เคียงแทนการเดา';
+  String get pinPersonHonestLine => 'Omi จะถามก่อนจับคู่เสียงที่ใกล้เคียงกัน';
 
   @override
   String get pinAction => 'ปักหมุด';
@@ -12155,4 +12154,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'โหลดคีย์ API ไม่ได้';
 }

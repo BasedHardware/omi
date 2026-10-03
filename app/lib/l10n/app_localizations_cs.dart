@@ -359,10 +359,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cannotBeUndone => 'Toto nelze vrátit zpět.';
 
   @override
-  String get allDataErased => 'Všechny vaše vzpomínky a konverzace budou trvale smazány.';
+  String get allDataErased => 'Vaše vzpomínky a konverzace budou vymazány.';
 
   @override
-  String get appsDisconnected => 'Vaše aplikace a integrace budou okamžitě odpojeny.';
+  String get appsDisconnected => 'Vaše aplikace a integrace budou odpojeny.';
 
   @override
   String get exportBeforeDelete => 'Před smazáním účtu si můžete exportovat data, ale po smazání je nelze obnovit.';
@@ -2229,14 +2229,14 @@ class AppLocalizationsCs extends AppLocalizations {
   String get appLanguage => 'Jazyk aplikace';
 
   @override
-  String get appInterfaceSectionTitle => 'ROZHRANÍ APLIKACE';
+  String get appInterfaceSectionTitle => 'Rozhraní aplikace';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ŘEČ A PŘEPIS';
+  String get speechTranscriptionSectionTitle => 'Řeč a přepis';
 
   @override
   String get languageSettingsHelperText =>
-      'Jazyk aplikace mění nabídky a tlačítka. Jazyk řeči ovlivňuje, jak jsou vaše nahrávky přepisovány.';
+      'Jazyk aplikace mění nabídky a tlačítka. Hlavní jazyk ovlivňuje, jak jsou vaše nahrávky přepisovány.';
 
   @override
   String get translationNotice => 'Oznámení o překladu';
@@ -4522,7 +4522,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get askOmiAnything => 'Zeptejte se Omi na cokoli o svém životě';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Odemkněte nekonečnou paměť Omi';
+  String get unlockOmiInfiniteMemory => 'Neomezené vzpomínky';
 
   @override
   String get youreOnAnnualPlan => 'Jste na ročním plánu';
@@ -4534,7 +4534,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get unableToLoadPlans => 'Nepodařilo se načíst plány';
 
   @override
-  String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
+  String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu.';
 
   @override
   String get useFreePlan => 'Použít bezplatný plán';
@@ -5962,7 +5962,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
+  String get premiumMinutesInfo => '300 prémiových minut měsíčně. Pro neomezený bezplatný přepis zvolte „Na zařízení“.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
@@ -6042,7 +6042,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get batteryDrainSignificantly => 'Vybíjení baterie se výrazně zvýší.';
 
   @override
-  String get premiumMinutesMonth => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+  String get premiumMinutesMonth =>
+      '300 prémiových minut měsíčně. Pro neomezený bezplatný přepis zvolte „Na zařízení“. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6096,7 +6097,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Vestavěný živý přepis Omi je optimalizován pro konverzace v reálném čase s automatickou detekcí mluvčích a diarizací.';
+      'Živý přepis Omi je navržený pro konverzace v reálném čase a označuje, kdo co řekl.';
 
   @override
   String get reset => 'Resetovat';
@@ -8469,7 +8470,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
 
   @override
-  String get storageSection => 'ÚLOŽIŠTĚ';
+  String get storageSection => 'Úložiště';
 
   @override
   String get permissions => 'Oprávnění';
@@ -8894,10 +8895,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlenky nám pomáhají vytvořit lepší produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+  String get deleteFlowConfirmTitle => 'Smazat váš účet?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Po smazání účtu jej nelze obnovit.';
+  String get deleteFlowConfirmSubtitle => 'Tuto akci nelze vrátit, ani s pomocí podpory.';
 
   @override
   String get deleteConsequenceSubscription => 'Jakékoli aktivní předplatné bude zrušeno.';
@@ -9344,7 +9345,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.';
+      'Nahrávejte teď, přepisujte, kdy budete chtít. Do té doby zůstává zvuk v telefonu.';
 
   @override
   String get transcribeLaterNote =>
@@ -9782,7 +9783,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusTooOld => 'Příliš staré na synchronizaci — Omi ho nemůže přijmout';
 
   @override
-  String get planSheetChooseYourPlan => 'Vyberte si plán a odemkněte neomezené Omi.';
+  String get planSheetChooseYourPlan => 'Vyberte si plán, který vám vyhovuje.';
 
   @override
   String get availableOnMacMobileWeb => 'Dostupné na Macu, mobilu a webu';
@@ -10446,8 +10447,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Zapomenout zařízení?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi se přestane k tomuto zařízení připojovat. Chcete-li ho znovu používat, budete ho muset znovu spárovat.';
+  String get forgetDeviceConfirmMessage => 'Omi se přestane k tomuto zařízení připojovat.';
 
   @override
   String get deviceForgottenMessage => 'Zařízení zapomenuto';
@@ -11871,7 +11871,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi se vás místo hádání zeptá, abyste potvrdili blízké shody.';
+  String get pinPersonHonestLine => 'Omi se zeptá, než přiřadí podobné hlasy.';
 
   @override
   String get pinAction => 'Připnout';
@@ -12222,4 +12222,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Klíče API se nepodařilo načíst.';
 }

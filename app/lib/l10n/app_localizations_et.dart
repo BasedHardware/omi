@@ -359,10 +359,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get cannotBeUndone => 'Seda ei saa tagasi võtta.';
 
   @override
-  String get allDataErased => 'Kõik teie mälestused ja vestlused kustutatakse jäädavalt.';
+  String get allDataErased => 'Sinu mälestused ja vestlused kustutatakse.';
 
   @override
-  String get appsDisconnected => 'Teie rakendused ja integratsioonid katkestatakse viivitamatult.';
+  String get appsDisconnected => 'Sinu rakendused ja integratsioonid ühendatakse lahti.';
 
   @override
   String get exportBeforeDelete =>
@@ -2228,14 +2228,14 @@ class AppLocalizationsEt extends AppLocalizations {
   String get appLanguage => 'Rakenduse keel';
 
   @override
-  String get appInterfaceSectionTitle => 'RAKENDUSE LIIDES';
+  String get appInterfaceSectionTitle => 'Rakenduse liides';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KÕNE JA TRANSKRIPTSIOON';
+  String get speechTranscriptionSectionTitle => 'Kõne ja transkriptsioon';
 
   @override
   String get languageSettingsHelperText =>
-      'Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse.';
+      'Rakenduse keel muudab menüüsid ja nuppe. Põhikeel mõjutab, kuidas teie salvestisi transkribeeritakse.';
 
   @override
   String get translationNotice => 'Tõlke teatis';
@@ -4528,7 +4528,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get askOmiAnything => 'Küsige Omilt kõike oma elu kohta';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Avage Omi lõpmatu mälu';
+  String get unlockOmiInfiniteMemory => 'Piiramatult mälestusi';
 
   @override
   String get youreOnAnnualPlan => 'Olete aastasel plaanil';
@@ -4540,7 +4540,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unableToLoadPlans => 'Plaanide laadimine ebaõnnestus';
 
   @override
-  String get checkConnectionTryAgain => 'Kontrolli ühendust ja proovi uuesti';
+  String get checkConnectionTryAgain => 'Kontrolli ühendust ja proovi uuesti.';
 
   @override
   String get useFreePlan => 'Kasuta tasuta plaani';
@@ -5971,8 +5971,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get cloudProvider => 'Pilveteenuse pakkuja';
 
   @override
-  String get premiumMinutesInfo =>
-      '300 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+  String get premiumMinutesInfo => '300 premium-minutit kuus. Piiramatu tasuta transkriptsiooni jaoks vali „Seadmel“.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6054,7 +6053,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '300 premium-minutit kuus. Piiramatu tasuta transkriptsiooni jaoks vali „Seadmel“. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6109,7 +6108,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi sisseehitatud reaalajas transkriptsioon on optimeeritud reaalajas vestluste jaoks automaatse kõneleja tuvastamise ja diariseerimisega.';
+      'Omi reaalajas transkriptsioon on loodud reaalajas vestlusteks ja märgib, kes mida ütles.';
 
   @override
   String get reset => 'Lähtesta';
@@ -8473,7 +8472,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tipAutoSync => 'Salvestised sünkroonitakse automaatselt';
 
   @override
-  String get storageSection => 'SALVESTUSRUUM';
+  String get storageSection => 'Salvestusruum';
 
   @override
   String get permissions => 'Õigused';
@@ -8899,10 +8898,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Valikuline — sinu mõtted aitavad meil paremat toodet ehitada.';
 
   @override
-  String get deleteFlowConfirmTitle => 'See on jäädav';
+  String get deleteFlowConfirmTitle => 'Kas kustutada oma konto?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Kui kustutad oma konto, ei saa seda enam taastada.';
+  String get deleteFlowConfirmSubtitle => 'Seda ei saa tagasi võtta, isegi mitte kasutajatoe abil.';
 
   @override
   String get deleteConsequenceSubscription => 'Kõik aktiivsed tellimused tühistatakse.';
@@ -9344,7 +9343,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.';
+      'Salvesta kohe, transkribeeri siis, kui soovid. Seni jääb heli sinu telefoni.';
 
   @override
   String get transcribeLaterNote =>
@@ -9780,7 +9779,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
 
   @override
-  String get planSheetChooseYourPlan => 'Vali oma pakett, et avada piiramatu Omi.';
+  String get planSheetChooseYourPlan => 'Vali endale sobiv pakett.';
 
   @override
   String get availableOnMacMobileWeb => 'Saadaval Macis, mobiilis ja veebis';
@@ -10443,8 +10442,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Kas unustada seade?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi lõpetab selle seadmega ühendumise. Selle uuesti kasutamiseks pead selle uuesti siduma.';
+  String get forgetDeviceConfirmMessage => 'Omi lõpetab selle seadmega ühendumise.';
 
   @override
   String get deviceForgottenMessage => 'Seade unustatud';
@@ -11869,7 +11867,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi palub sul lähedasi vasteid kinnitada, selle asemel et ise oletada.';
+  String get pinPersonHonestLine => 'Omi küsib enne sarnaste häälte sobitamist.';
 
   @override
   String get pinAction => 'Tõsta esile';
@@ -12221,4 +12219,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API-võtmeid ei õnnestunud laadida.';
 }

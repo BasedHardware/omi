@@ -359,10 +359,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get cannotBeUndone => 'Hindi ito maaaring bawiin.';
 
   @override
-  String get allDataErased => 'Lahat ng iyong mga alaala at pag-uusap ay permanenteng buburahin.';
+  String get allDataErased => 'Mabubura ang iyong mga alaala at conversation.';
 
   @override
-  String get appsDisconnected => 'Ang iyong Mga App at Integrations ay mawawalan ng koneksyon kaagad.';
+  String get appsDisconnected => 'Madidiskonekta ang iyong mga app at integration.';
 
   @override
   String get exportBeforeDelete =>
@@ -2241,14 +2241,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App Interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & Transcription';
 
   @override
   String get languageSettingsHelperText =>
-      'Ang App Language ay nagbabago ng mga menu at button. Ang Speech Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.';
+      'Ang App Language ay nagbabago ng mga menu at button. Ang Primary Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.';
 
   @override
   String get translationNotice => 'Translation Notice';
@@ -4569,7 +4569,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get askOmiAnything => 'Tanungin ang Omi tungkol sa kahit ano sa iyong buhay';
 
   @override
-  String get unlockOmiInfiniteMemory => 'I-unlock ang walang hanggang memorya ng Omi';
+  String get unlockOmiInfiniteMemory => 'Walang limitasyong alaala';
 
   @override
   String get youreOnAnnualPlan => 'Ikaw ay nasa Annual Plan';
@@ -4581,7 +4581,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get unableToLoadPlans => 'Hindi ma-load ang mga plan';
 
   @override
-  String get checkConnectionTryAgain => 'Suriin ang koneksyon at subukan ulit';
+  String get checkConnectionTryAgain => 'Suriin ang iyong koneksyon at subukang muli.';
 
   @override
   String get useFreePlan => 'Gamitin ang Free Plan';
@@ -6022,7 +6022,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6105,7 +6105,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6160,7 +6160,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Ang built-in live transcription ng Omi ay na-optimize para sa real-time na pag-usap na may automatic speaker detection at diarization.';
+      'Ang live transcription ng Omi ay ginawa para sa mga real-time na usapan at minamarkahan kung sino ang nagsabi ng ano.';
 
   @override
   String get reset => 'I-reset';
@@ -8550,7 +8550,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tipAutoSync => 'Ang mga recordings ay nag-sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -8983,10 +8983,10 @@ class AppLocalizationsTl extends AppLocalizations {
       'Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Ito ay permanente';
+  String get deleteFlowConfirmTitle => 'I-delete ang Iyong Account?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.';
+  String get deleteFlowConfirmSubtitle => 'Hindi na ito maibabalik, kahit ng support.';
 
   @override
   String get deleteConsequenceSubscription => 'Ang anumang aktibong subscription ay ikakansela.';
@@ -9430,7 +9430,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.';
+      'Mag-record ngayon, i-transcribe kapag gusto mo. Hanggang doon, nasa phone mo lang ang audio.';
 
   @override
   String get transcribeLaterNote =>
@@ -9872,7 +9872,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
 
   @override
-  String get planSheetChooseYourPlan => 'Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.';
+  String get planSheetChooseYourPlan => 'Piliin ang plan na bagay sa iyo.';
 
   @override
   String get availableOnMacMobileWeb => 'Available sa Mac, mobile, at web';
@@ -10538,8 +10538,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Kalimutan ang Device?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.';
+  String get forgetDeviceConfirmMessage => 'Hihinto ang Omi sa pagkonekta sa device na ito.';
 
   @override
   String get deviceForgottenMessage => 'Nakalimutan na ang device';
@@ -11973,8 +11972,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine =>
-      'Tatanungin ka ni Omi para kumpirmahin ang mga malapit na tugma sa halip na manghula.';
+  String get pinPersonHonestLine => 'Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.';
 
   @override
   String get pinAction => 'I-pin';
@@ -12327,4 +12325,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Hindi ma-load ang mga API key.';
 }

@@ -356,10 +356,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cannotBeUndone => '此操作无法撤消。';
 
   @override
-  String get allDataErased => '您的所有记忆和对话将被永久删除。';
+  String get allDataErased => '你的回忆和对话将被清除。';
 
   @override
-  String get appsDisconnected => '您的应用和集成将立即断开连接。';
+  String get appsDisconnected => '你的应用和集成将被断开。';
 
   @override
   String get exportBeforeDelete => '您可以在删除账户前导出数据。一旦删除，将无法恢复。';
@@ -2191,7 +2191,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechTranscriptionSectionTitle => '语音与转录';
 
   @override
-  String get languageSettingsHelperText => '应用语言更改菜单和按钮。语音语言影响录音的转录方式。';
+  String get languageSettingsHelperText => '应用语言更改菜单和按钮。主要语言影响录音的转录方式。';
 
   @override
   String get translationNotice => '翻译通知';
@@ -4443,7 +4443,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get askOmiAnything => '向Omi询问关于您生活的任何事情';
 
   @override
-  String get unlockOmiInfiniteMemory => '解锁Omi的无限记忆';
+  String get unlockOmiInfiniteMemory => '无限回忆';
 
   @override
   String get youreOnAnnualPlan => '您正在使用年度计划';
@@ -4455,7 +4455,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToLoadPlans => '无法加载计划';
 
   @override
-  String get checkConnectionTryAgain => '请检查连接并重试';
+  String get checkConnectionTryAgain => '请检查网络连接后重试。';
 
   @override
   String get useFreePlan => '使用免费计划';
@@ -5858,7 +5858,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 300 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 300 分钟高级时长。选择“设备端”可无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -5936,7 +5936,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月300分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月 300 分钟高级时长。选择“设备端”可无限免费转录。 ';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -5987,7 +5987,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'Omi 的内置实时转录针对实时对话进行了优化，具有自动说话人检测和说话人分离功能。';
+  String get omiTranscriptionOptimized => 'Omi 的实时转录专为实时对话打造，并标注谁说了什么。';
 
   @override
   String get reset => '重置';
@@ -8744,10 +8744,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteFlowFeedbackHint => '可选 — 您的想法有助于我们打造更好的产品。';
 
   @override
-  String get deleteFlowConfirmTitle => '此操作不可撤销';
+  String get deleteFlowConfirmTitle => '删除你的账户？';
 
   @override
-  String get deleteFlowConfirmSubtitle => '一旦删除账户,将无法恢复。';
+  String get deleteFlowConfirmSubtitle => '此操作无法撤销，客服也无法恢复。';
 
   @override
   String get deleteConsequenceSubscription => '任何有效的订阅都将被取消。';
@@ -9179,7 +9179,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterTitle => '稍后转写';
 
   @override
-  String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
+  String get transcribeLaterDescription => '现在录音，想转录时再转录。在此之前，音频保存在你的手机上。';
 
   @override
   String get transcribeLaterNote => '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
@@ -9602,7 +9602,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
 
   @override
-  String get planSheetChooseYourPlan => '选择你的方案，解锁无限 Omi。';
+  String get planSheetChooseYourPlan => '选择适合你的方案。';
 
   @override
   String get availableOnMacMobileWeb => '支持 Mac、手机和网页';
@@ -10255,7 +10255,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forgetDeviceConfirmTitle => '要忘记设备吗?';
 
   @override
-  String get forgetDeviceConfirmMessage => 'Omi 将不再连接此设备。如需再次使用,你需要重新配对。';
+  String get forgetDeviceConfirmMessage => 'Omi 将不再连接此设备。';
 
   @override
   String get deviceForgottenMessage => '已忘记设备';
@@ -11659,7 +11659,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => '对于相近的匹配，Omi 会请你确认，而不是自行猜测。';
+  String get pinPersonHonestLine => 'Omi 会在匹配相近的声音前先询问你。';
 
   @override
   String get pinAction => '置顶';
@@ -12006,4 +12006,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get couldNotLoadApiKeys => '无法加载 API 密钥。';
 }

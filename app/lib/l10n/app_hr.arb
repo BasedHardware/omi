@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Sve tvoje uspomene i razgovori bit će trajno obrisani.",
+    "allDataErased": "Vaše uspomene i razgovori bit će izbrisani.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Tvoje aplikacije i integracije bit će odspojene odmah.",
+    "appsDisconnected": "Vaše aplikacije i integracije bit će odspojene.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "SUČELJE APLIKACIJE",
+    "appInterfaceSectionTitle": "Sučelje aplikacije",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "GOVOR I TRANSKRIPCIJA",
+    "speechTranscriptionSectionTitle": "Govor i transkripcija",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Jezičke promjene Aplikacije Meniji i gumbi. Jezični Govor utječe na to kako se vaše snimke transkribiraju.",
+    "languageSettingsHelperText": "Jezik aplikacije mijenja izbornike i gumbe. Primarni jezik utječe na to kako se vaše snimke transkribiraju.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Otključajte Omijevu beskonačnu memoriju",
+    "unlockOmiInfiniteMemory": "Neograničene uspomene",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo",
+    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovno.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesInfo": "300 premium minuta mjesečno. Odaberite „Na Uređaju” za neograničenu besplatnu transkripciju.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesMonth": "300 premium minuta mjesečno. Odaberite „Na Uređaju” za neograničenu besplatnu transkripciju. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi-jeva ugrađena transkripcija u realnom vremenu optimizirana je za razgovore u realnom vremenu sa automatskim prepoznavanjem govornika i dijalizacijom.",
+    "omiTranscriptionOptimized": "Omi transkripcija uživo izrađena je za razgovore u stvarnom vremenu i označava tko je što rekao.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "POHRANA",
+    "storageSection": "Pohrana",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Recite nam više",
     "deleteFlowFeedbackSubtitle": "Što bi Omi učinilo prikladnim za vas?",
     "deleteFlowFeedbackHint": "Neobavezno — vaše misli pomažu nam izgraditi bolji proizvod.",
-    "deleteFlowConfirmTitle": "Ovo je trajno",
-    "deleteFlowConfirmSubtitle": "Nakon brisanja računa nije ga moguće vratiti.",
+    "deleteFlowConfirmTitle": "Izbrisati vaš račun?",
+    "deleteFlowConfirmSubtitle": "Ovo se ne može poništiti, čak ni uz pomoć podrške.",
     "deleteConsequenceSubscription": "Bilo koja aktivna pretplata bit će otkazana.",
     "deleteConsequenceNoRecovery": "Vaš račun nije moguće vratiti — čak ni preko podrške.",
     "deleteTypeToConfirm": "Upišite DELETE za potvrdu",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Sinkronizacija koristi Omi transkripciju",
     "syncCustomSttWarningMessage": "Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.",
     "transcribeLaterTitle": "Transkribiraj poslije",
-    "transcribeLaterDescription": "Snimaj zvuk odmah, a transkripciju pokreni naknadno umjesto uživo. Snimke se spremaju na tvoj telefon, a zatim ih prenosiš kako bi se stvorili razgovori.",
+    "transcribeLaterDescription": "Snimajte sada, transkribirajte kada želite. Do tada zvuk ostaje na vašem telefonu.",
     "transcribeLaterNote": "Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.",
     "transcribeLaterStorageFull": "Telefonu ponestaje prostora pa je snimanje pauzirano. Oslobodi prostor ili prenesi snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
     "whisperModelSizeTiny": "Sićušni",
-    "planSheetChooseYourPlan": "Odaberite svoj plan i otključajte neograničeni Omi.",
+    "planSheetChooseYourPlan": "Odaberite plan koji vam odgovara.",
     "availableOnMacMobileWeb": "Dostupno na Macu, mobitelu i webu",
     "popularBadge": "POPULARNO",
     "worksOnDesktop": "Radi na računalu",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Potvrdite svoj broj za pozive putem Omija.",
     "phoneDeleteNumberFailed": "Broj nije moguće izbrisati",
     "forgetDeviceConfirmTitle": "Zaboraviti uređaj?",
-    "forgetDeviceConfirmMessage": "Omi se više neće povezivati s ovim uređajem. Da biste ga ponovno koristili, morat ćete ga ponovno upariti.",
+    "forgetDeviceConfirmMessage": "Omi se više neće povezivati s ovim uređajem.",
     "deviceForgottenMessage": "Uređaj je zaboravljen",
     "unpairDeviceConfirmTitle": "Poništiti uparivanje uređaja?",
     "rollBack": "Vrati",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "Zašto?",
     "pinPersonTitle": "Prikvači {name}",
     "pinPersonSubtitle": "Zadrži osobu {name} i očekuj je u svojim razgovorima",
-    "pinPersonHonestLine": "Omi će te tražiti da potvrdiš bliska podudaranja umjesto da nagađa.",
+    "pinPersonHonestLine": "Omi pita prije nego što upari slične glasove.",
     "pinAction": "Prikvači",
     "unpinAction": "Otkvači",
     "personPinnedToast": "Prikvačeno: {name}",
@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{To traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama kako bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
     "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}",
     "speakerLabelText": "{part, select, likely{Vjerojatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg zadnjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
-    "speakerLabelTalkTime": "{duration} ovog glasa"
+    "speakerLabelTalkTime": "{duration} ovog glasa",
+    "couldNotLoadApiKeys": "Učitavanje API ključeva nije uspjelo."
 }

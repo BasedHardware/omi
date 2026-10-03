@@ -356,10 +356,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get cannotBeUndone => 'Tätä ei voi perua.';
 
   @override
-  String get allDataErased => 'Kaikki muistosi ja keskustelusi poistetaan pysyvästi.';
+  String get allDataErased => 'Muistosi ja keskustelusi poistetaan.';
 
   @override
-  String get appsDisconnected => 'Sovelluksesi ja integraatiot katkaistaan välittömästi.';
+  String get appsDisconnected => 'Sovelluksesi ja integraatiosi irrotetaan.';
 
   @override
   String get exportBeforeDelete =>
@@ -2227,14 +2227,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appLanguage => 'Sovelluksen kieli';
 
   @override
-  String get appInterfaceSectionTitle => 'SOVELLUKSEN KÄYTTÖLIITTYMÄ';
+  String get appInterfaceSectionTitle => 'Sovelluksen käyttöliittymä';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PUHE JA LITTEROINTI';
+  String get speechTranscriptionSectionTitle => 'Puhe ja litterointi';
 
   @override
   String get languageSettingsHelperText =>
-      'Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan.';
+      'Sovelluksen kieli muuttaa valikkoja ja painikkeita. Ensisijainen kieli vaikuttaa siihen, miten tallenteet litteroidaan.';
 
   @override
   String get translationNotice => 'Käännösilmoitus';
@@ -4530,7 +4530,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get askOmiAnything => 'Kysy Omilta mitä tahansa elämästäsi';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Avaa Omin rajaton muisti';
+  String get unlockOmiInfiniteMemory => 'Rajattomasti muistoja';
 
   @override
   String get youreOnAnnualPlan => 'Sinulla on vuositilaus';
@@ -4542,7 +4542,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get unableToLoadPlans => 'Suunnitelmia ei voitu ladata';
 
   @override
-  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen';
+  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen.';
 
   @override
   String get useFreePlan => 'Käytä ilmaista tilausta';
@@ -5973,7 +5973,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '300 premium-minuuttia kuukaudessa. Valitse ”Laitteella” rajattomaan ilmaiseen litterointiin.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6055,7 +6055,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '300 premium-minuuttia kuukaudessa. Valitse ”Laitteella” rajattomaan ilmaiseen litterointiin. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6109,7 +6109,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omin sisäänrakennettu live-transkriptio on optimoitu reaaliaikaisiin keskusteluihin automaattisella puhujan tunnistuksella ja diarisaatiolla.';
+      'Omin reaaliaikainen litterointi on tehty reaaliaikaisiin keskusteluihin ja merkitsee, kuka sanoi mitäkin.';
 
   @override
   String get reset => 'Nollaa';
@@ -8474,7 +8474,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tipAutoSync => 'Nauhoitukset synkronoidaan automaattisesti';
 
   @override
-  String get storageSection => 'TALLENNUSTILA';
+  String get storageSection => 'Tallennustila';
 
   @override
   String get permissions => 'Käyttöoikeudet';
@@ -8901,10 +8901,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Tämä on lopullista';
+  String get deleteFlowConfirmTitle => 'Poistetaanko tilisi?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Kun poistat tilisi, sitä ei voi enää palauttaa.';
+  String get deleteFlowConfirmSubtitle => 'Tätä ei voi perua, ei edes tuen avulla.';
 
   @override
   String get deleteConsequenceSubscription => 'Mahdolliset aktiiviset tilaukset peruutetaan.';
@@ -9347,7 +9347,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.';
+      'Nauhoita nyt ja litteroi, kun haluat. Siihen asti ääni pysyy puhelimessasi.';
 
   @override
   String get transcribeLaterNote =>
@@ -9785,7 +9785,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
 
   @override
-  String get planSheetChooseYourPlan => 'Valitse tilauksesi ja avaa rajaton Omi.';
+  String get planSheetChooseYourPlan => 'Valitse sinulle sopiva tilaus.';
 
   @override
   String get availableOnMacMobileWeb => 'Saatavilla Macilla, mobiilissa ja verkossa';
@@ -10449,8 +10449,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Unohdetaanko laite?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi lopettaa yhteyden muodostamisen tähän laitteeseen. Jotta voit käyttää sitä uudelleen, sinun on muodostettava pari uudelleen.';
+  String get forgetDeviceConfirmMessage => 'Omi lopettaa yhteyden muodostamisen tähän laitteeseen.';
 
   @override
   String get deviceForgottenMessage => 'Laite unohdettu';
@@ -11875,7 +11874,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi pyytää sinua vahvistamaan lähes osuvat tunnistukset arvaamisen sijaan.';
+  String get pinPersonHonestLine => 'Omi kysyy ennen samankaltaisten äänten yhdistämistä.';
 
   @override
   String get pinAction => 'Kiinnitä';
@@ -12227,4 +12226,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'API-avaimia ei voitu ladata.';
 }

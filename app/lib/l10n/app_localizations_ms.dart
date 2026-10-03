@@ -358,10 +358,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get cannotBeUndone => 'Ini tidak boleh dibatalkan.';
 
   @override
-  String get allDataErased => 'Semua ingatan dan perbualan anda akan dipadam secara kekal.';
+  String get allDataErased => 'Kenangan dan perbualan anda akan dipadam.';
 
   @override
-  String get appsDisconnected => 'Aplikasi dan Integrasi anda akan diputuskan sambungan dengan serta-merta.';
+  String get appsDisconnected => 'Aplikasi dan integrasi anda akan diputuskan.';
 
   @override
   String get exportBeforeDelete =>
@@ -2236,14 +2236,14 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appLanguage => 'Bahasa Aplikasi';
 
   @override
-  String get appInterfaceSectionTitle => 'ANTARA MUKA APLIKASI';
+  String get appInterfaceSectionTitle => 'Antara muka aplikasi';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PERTUTURAN & TRANSKRIPSI';
+  String get speechTranscriptionSectionTitle => 'Pertuturan & transkripsi';
 
   @override
   String get languageSettingsHelperText =>
-      'Bahasa Aplikasi menukar menu dan butang. Bahasa Pertuturan mempengaruhi cara rakaman anda ditranskripsi.';
+      'Bahasa Aplikasi menukar menu dan butang. Bahasa Utama mempengaruhi cara rakaman anda ditranskripsi.';
 
   @override
   String get translationNotice => 'Notis Terjemahan';
@@ -4546,7 +4546,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get askOmiAnything => 'Tanya Omi apa sahaja tentang hidup anda';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Buka kunci memori tak terhingga Omi';
+  String get unlockOmiInfiniteMemory => 'Kenangan tanpa had';
 
   @override
   String get youreOnAnnualPlan => 'Anda berada di Pelan Tahunan';
@@ -4558,7 +4558,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get unableToLoadPlans => 'Gagal memuatkan pelan';
 
   @override
-  String get checkConnectionTryAgain => 'Semak sambungan anda dan cuba lagi';
+  String get checkConnectionTryAgain => 'Semak sambungan anda dan cuba lagi.';
 
   @override
   String get useFreePlan => 'Gunakan Pelan Percuma';
@@ -5990,8 +5990,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get cloudProvider => 'Pembekal Awan';
 
   @override
-  String get premiumMinutesInfo =>
-      '300 minit premium/bulan. Tab Pada-Peranti menawarkan transkripsi percuma tanpa had.';
+  String get premiumMinutesInfo => '300 minit premium sebulan. Pilih Pada Peranti untuk transkripsi percuma tanpa had.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6073,7 +6072,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
+      '300 minit premium sebulan. Pilih Pada Peranti untuk transkripsi percuma tanpa had. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6128,7 +6127,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Transkripsi langsung terbina dalam Omi dioptimumkan untuk perbualan masa nyata dengan pengesanan penutur automatik dan diarisasi.';
+      'Transkripsi langsung Omi dibina untuk perbualan masa nyata dan menandakan siapa berkata apa.';
 
   @override
   String get reset => 'Set semula';
@@ -8497,7 +8496,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tipAutoSync => 'Rakaman disegerakkan secara automatik';
 
   @override
-  String get storageSection => 'STORAN';
+  String get storageSection => 'Storan';
 
   @override
   String get permissions => 'Kebenaran';
@@ -8924,10 +8923,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Pilihan — pandangan anda membantu kami membina produk yang lebih baik.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Ini adalah kekal';
+  String get deleteFlowConfirmTitle => 'Padam akaun anda?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Setelah anda memadam akaun, tiada cara untuk memulihkannya.';
+  String get deleteFlowConfirmSubtitle => 'Tindakan ini tidak boleh dibatalkan, walaupun oleh sokongan.';
 
   @override
   String get deleteConsequenceSubscription => 'Sebarang langganan aktif akan dibatalkan.';
@@ -9369,7 +9368,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.';
+      'Rakam sekarang, transkripsi bila-bila anda mahu. Sehingga itu, audio kekal pada telefon anda.';
 
   @override
   String get transcribeLaterNote =>
@@ -9808,7 +9807,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusTooOld => 'Terlalu lama untuk disegerakkan — Omi tidak boleh menerimanya';
 
   @override
-  String get planSheetChooseYourPlan => 'Pilih pelan anda untuk membuka Omi tanpa had.';
+  String get planSheetChooseYourPlan => 'Pilih pelan yang sesuai untuk anda.';
 
   @override
   String get availableOnMacMobileWeb => 'Tersedia di Mac, mudah alih dan web';
@@ -10474,8 +10473,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Lupakan Peranti?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi akan berhenti menyambung ke peranti ini. Untuk menggunakannya semula, anda perlu memadankannya semula.';
+  String get forgetDeviceConfirmMessage => 'Omi akan berhenti menyambung ke peranti ini.';
 
   @override
   String get deviceForgottenMessage => 'Peranti dilupakan';
@@ -11903,7 +11901,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi akan meminta anda mengesahkan padanan yang hampir tepat dan bukannya meneka.';
+  String get pinPersonHonestLine => 'Omi bertanya sebelum memadankan suara yang hampir sama.';
 
   @override
   String get pinAction => 'Semat';
@@ -12256,4 +12254,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get couldNotLoadApiKeys => 'Tidak dapat memuatkan kunci API.';
 }

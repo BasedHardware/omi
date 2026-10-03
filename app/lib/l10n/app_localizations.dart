@@ -870,13 +870,13 @@ abstract class AppLocalizations {
   /// Delete account warning 1
   ///
   /// In en, this message translates to:
-  /// **'All of your memories and conversations will be permanently erased.'**
+  /// **'Your memories and conversations will be erased.'**
   String get allDataErased;
 
   /// Delete account warning 2
   ///
   /// In en, this message translates to:
-  /// **'Your Apps and Integrations will be disconnected effectively immediately.'**
+  /// **'Your apps and integrations will be disconnected.'**
   String get appsDisconnected;
 
   /// Delete account warning 3
@@ -4332,19 +4332,19 @@ abstract class AppLocalizations {
   /// Section title for app interface language settings
   ///
   /// In en, this message translates to:
-  /// **'APP INTERFACE'**
+  /// **'App Interface'**
   String get appInterfaceSectionTitle;
 
   /// Section title for speech and transcription language settings
   ///
   /// In en, this message translates to:
-  /// **'SPEECH & TRANSCRIPTION'**
+  /// **'Speech & Transcription'**
   String get speechTranscriptionSectionTitle;
 
   /// Helper text explaining the difference between app language and speech language
   ///
   /// In en, this message translates to:
-  /// **'App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.'**
+  /// **'App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.'**
   String get languageSettingsHelperText;
 
   /// Title for dialog explaining that conversations are translated
@@ -8634,7 +8634,7 @@ abstract class AppLocalizations {
   /// Feature: unlock infinite memory
   ///
   /// In en, this message translates to:
-  /// **'Unlock Omi\'s infinite memory'**
+  /// **'Unlimited memories'**
   String get unlockOmiInfiniteMemory;
 
   /// Message showing user is on annual plan
@@ -8658,7 +8658,7 @@ abstract class AppLocalizations {
   /// Message to check connection
   ///
   /// In en, this message translates to:
-  /// **'Please check your connection and try again'**
+  /// **'Check your connection and try again.'**
   String get checkConnectionTryAgain;
 
   /// Button to use free plan
@@ -11322,7 +11322,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'300 premium minutes a month. Choose On Device for unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11466,7 +11466,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'300 premium minutes a month. Choose On Device for unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -11544,7 +11544,7 @@ abstract class AppLocalizations {
   /// Description of Omi transcription features
   ///
   /// In en, this message translates to:
-  /// **'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
+  /// **'Omi\'s live transcription is built for real-time conversations and labels who said what.'**
   String get omiTranscriptionOptimized;
 
   /// Reset button label
@@ -14454,7 +14454,7 @@ abstract class AppLocalizations {
   /// No description provided for @applyFilters.
   ///
   /// In en, this message translates to:
-  /// **'Apply filters'**
+  /// **'Apply Filters'**
   String get applyFilters;
 
   /// No description provided for @mostInstalls.
@@ -15834,7 +15834,7 @@ abstract class AppLocalizations {
   /// Section header for storage settings
   ///
   /// In en, this message translates to:
-  /// **'STORAGE'**
+  /// **'Storage'**
   String get storageSection;
 
   /// Title for the permissions settings page
@@ -16632,13 +16632,13 @@ abstract class AppLocalizations {
   /// Title on final delete confirmation step
   ///
   /// In en, this message translates to:
-  /// **'This is permanent'**
+  /// **'Delete Your Account?'**
   String get deleteFlowConfirmTitle;
 
   /// Subtitle on final delete confirmation step
   ///
   /// In en, this message translates to:
-  /// **'Once you delete your account, there is no way to recover it.'**
+  /// **'This can\'t be undone, even by support.'**
   String get deleteFlowConfirmSubtitle;
 
   /// Delete consequence bullet
@@ -17406,7 +17406,7 @@ abstract class AppLocalizations {
   /// Subtitle explaining the transcribe-later mode toggle
   ///
   /// In en, this message translates to:
-  /// **'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.'**
+  /// **'Record now, transcribe when you choose. Audio stays on your phone until then.'**
   String get transcribeLaterDescription;
 
   /// Caveat note shown in the Transcribe Later sheet
@@ -18228,7 +18228,7 @@ abstract class AppLocalizations {
   /// Plans sheet subtitle prompting a free user to pick a paid plan
   ///
   /// In en, this message translates to:
-  /// **'Choose your plan to unlock unlimited Omi.'**
+  /// **'Choose the plan that fits you.'**
   String get planSheetChooseYourPlan;
 
   /// Plans sheet highlight: which platforms Omi runs on
@@ -19152,7 +19152,7 @@ abstract class AppLocalizations {
   /// Consequence of forgetting a paired device
   ///
   /// In en, this message translates to:
-  /// **'Omi will stop connecting to this device. To use it again, you\'ll have to pair it again.'**
+  /// **'Omi will stop connecting to this device.'**
   String get forgetDeviceConfirmMessage;
 
   /// Toast after the device was forgotten
@@ -21438,7 +21438,7 @@ abstract class AppLocalizations {
   /// Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them.
   ///
   /// In en, this message translates to:
-  /// **'Omi will ask you to confirm close matches instead of guessing.'**
+  /// **'Omi asks before matching close voices.'**
   String get pinPersonHonestLine;
 
   /// Swipe action and menu item: pin this person (Title Case verb).
@@ -21884,6 +21884,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Developer Settings: the API key or MCP key list failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load API keys.'**
+  String get couldNotLoadApiKeys;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
