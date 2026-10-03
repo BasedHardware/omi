@@ -114,6 +114,7 @@ def fake_redis(monkeypatch):
     now = [1000.0]
     fake = _FakeRedis(clock=lambda: now[0])
     monkeypatch.setattr(redis_db, 'r', fake)
+    monkeypatch.setattr(people_stats_cache, '_bounded_client', fake)
     return fake, now
 
 
@@ -888,3 +889,29 @@ def test_finalization_intent_invalidates_after_contention_retry(writer_env, monk
     row = store.rows[store.conv_path('u1', 'c1')]
     assert row['status'] == 'processing'
     assert invalidated == ['u1']
+
+
+def test_cache_client_bounds_socket_io(monkeypatch):
+    """A stalled Redis must not block conversation writers: the cache client carries socket timeouts."""
+    built = {}
+
+    class _Recorder:
+        def __init__(self, **kwargs):
+            built.update(kwargs)
+
+    monkeypatch.setattr(people_stats_cache, '_bounded_client', None)
+    monkeypatch.setattr(people_stats_cache.redis, 'Redis', _Recorder)
+    monkeypatch.setenv('REDIS_DB_HOST', 'redis.internal')
+    assert isinstance(people_stats_cache._redis(), _Recorder)
+    assert built['socket_timeout'] == people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS
+    assert built['socket_connect_timeout'] == people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS
+    assert 0 < people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS <= 0.5
+
+
+def test_unconfigured_redis_disables_the_cache_without_error(monkeypatch):
+    monkeypatch.setattr(people_stats_cache, '_bounded_client', None)
+    monkeypatch.delenv('REDIS_DB_HOST', raising=False)
+    assert people_stats_cache.current_generation('u1') is None
+    assert people_stats_cache.read_people_stats_cache('u1', 'g1', 1000) is None
+    people_stats_cache.write_people_stats_cache('u1', 'g1', 1000, {})
+    people_stats_cache.invalidate_people_stats_cache('u1')

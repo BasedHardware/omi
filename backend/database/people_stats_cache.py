@@ -7,18 +7,26 @@ per-uid generation token namespaces every entry key, so a writer-side bump
 retires all outstanding entries at once instead of tracking each key. Entries
 carry a short TTL; the generation outlives them. Every read/write is
 fail-open: a Redis outage degrades to the uncached scan, never a 500.
+
+The cache uses its own client with bounded socket I/O. The shared
+``redis_db.r`` has no socket timeout, and the invalidation runs on
+conversation write paths after Firestore has committed, so a stalled Redis
+must cost those writers a fraction of a second, not block them.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import math
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from database import redis_db
+import redis
+
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -27,6 +35,43 @@ PEOPLE_STATS_CACHE_SCHEMA_VERSION = 1
 PEOPLE_STATS_ENTRY_TTL_SECONDS = 60
 PEOPLE_STATS_GENERATION_TTL_SECONDS = 86400
 PEOPLE_STATS_MAX_ENTRY_BYTES = 262144
+PEOPLE_STATS_REDIS_TIMEOUT_SECONDS = 0.25
+
+_bounded_client: Any = None
+
+
+def _redis() -> Any:
+    """The shared Redis deployment, reached through a client whose socket I/O is bounded."""
+    global _bounded_client
+    if _bounded_client is None:
+        host = os.getenv('REDIS_DB_HOST', '').strip()
+        if not host:
+            return None
+        _bounded_client = redis.Redis(
+            host=host,
+            port=int(os.getenv('REDIS_DB_PORT', '6379')),
+            username='default',
+            password=os.getenv('REDIS_DB_PASSWORD'),
+            socket_connect_timeout=PEOPLE_STATS_REDIS_TIMEOUT_SECONDS,
+            socket_timeout=PEOPLE_STATS_REDIS_TIMEOUT_SECONDS,
+        )
+    return _bounded_client
+
+
+def _record_uncached() -> None:
+    record_fallback(
+        component='other',
+        from_mode='cached',
+        to_mode='uncached',
+        reason='connection_lost',
+        outcome='recovered',
+        log=logger,
+    )
+
+
+def _entry_key(path: str) -> str:
+    # Same key layout as redis_db's generic cache, so entries stay readable across this change.
+    return 'cache:' + base64.b64encode(path.encode('utf-8')).decode('utf-8')
 
 
 def _generation_key(uid: str) -> str:
@@ -39,21 +84,17 @@ def _entry_path(uid: str, generation: str, scan_cap: int) -> str:
 
 def current_generation(uid: str) -> Optional[str]:
     """Fetch-or-create the uid's stats generation; ``None`` disables cache for this call."""
+    client = _redis()
+    if client is None:
+        return None
     key = _generation_key(uid)
     token = uuid.uuid4().hex
     try:
-        redis_db.r.set(key, token, nx=True, ex=PEOPLE_STATS_GENERATION_TTL_SECONDS)
-        raw = redis_db.r.get(key)
+        client.set(key, token, nx=True, ex=PEOPLE_STATS_GENERATION_TTL_SECONDS)
+        raw = client.get(key)
     except Exception as exc:
         logger.warning('people stats generation lookup failed uid=%s error_type=%s', uid, type(exc).__name__)
-        record_fallback(
-            component='other',
-            from_mode='cached',
-            to_mode='uncached',
-            reason='connection_lost',
-            outcome='recovered',
-            log=logger,
-        )
+        _record_uncached()
         return None
     try:
         text = raw.decode('utf-8') if isinstance(raw, bytes) else raw
@@ -102,7 +143,16 @@ def read_people_stats_cache(uid: str, generation: Optional[str], scan_cap: int) 
     """Decoded stats map for the current generation; ``None`` on miss or any invalid payload."""
     if generation is None:
         return None
-    payload = redis_db.get_generic_cache(_entry_path(uid, generation, scan_cap))
+    client = _redis()
+    if client is None:
+        return None
+    try:
+        raw = client.get(_entry_key(_entry_path(uid, generation, scan_cap)))
+        payload = json.loads(raw) if raw else None
+    except Exception as exc:
+        logger.warning('people stats cache read failed uid=%s error_type=%s', uid, type(exc).__name__)
+        _record_uncached()
+        return None
     if not isinstance(payload, dict) or payload.get('schema_version') != PEOPLE_STATS_CACHE_SCHEMA_VERSION:
         return None
     try:
@@ -136,20 +186,27 @@ def write_people_stats_cache(
             return
     except (TypeError, ValueError, OverflowError):
         return
-    redis_db.set_generic_cache(_entry_path(uid, generation, scan_cap), payload, ttl=PEOPLE_STATS_ENTRY_TTL_SECONDS)
+    client = _redis()
+    if client is None:
+        return
+    try:
+        client.set(
+            _entry_key(_entry_path(uid, generation, scan_cap)),
+            json.dumps(payload, default=str),
+            ex=PEOPLE_STATS_ENTRY_TTL_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning('people stats cache write failed uid=%s error_type=%s', uid, type(exc).__name__)
+        _record_uncached()
 
 
 def invalidate_people_stats_cache(uid: str) -> None:
     """Bump the uid's generation so every outstanding stats entry becomes unreachable."""
+    client = _redis()
+    if client is None:
+        return
     try:
-        redis_db.r.set(_generation_key(uid), uuid.uuid4().hex, ex=PEOPLE_STATS_GENERATION_TTL_SECONDS)
+        client.set(_generation_key(uid), uuid.uuid4().hex, ex=PEOPLE_STATS_GENERATION_TTL_SECONDS)
     except Exception as exc:
         logger.warning('people stats cache invalidation failed uid=%s error_type=%s', uid, type(exc).__name__)
-        record_fallback(
-            component='other',
-            from_mode='cached',
-            to_mode='uncached',
-            reason='connection_lost',
-            outcome='recovered',
-            log=logger,
-        )
+        _record_uncached()
