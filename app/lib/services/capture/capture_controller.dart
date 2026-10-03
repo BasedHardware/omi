@@ -3292,7 +3292,7 @@ class CaptureController extends ChangeNotifier
         _autoSyncSessionWals();
       }
     }).catchError((Object error) {
-      Logger.debug('Process Now result handling failed: $error');
+      Logger.debug('Process Now result handling failed: ${error.runtimeType}');
     });
   }
 
@@ -3437,7 +3437,7 @@ class CaptureController extends ChangeNotifier
         _peopleRefreshFuture = null;
       });
       _peopleRefreshFuture?.catchError((Object error) {
-        Logger.debug('People cache refresh failed: $error');
+        Logger.debug('People cache refresh failed: ${error.runtimeType}');
       });
     }
 
@@ -3559,7 +3559,7 @@ class CaptureController extends ChangeNotifier
         _peopleRefreshFuture = null;
       });
       _peopleRefreshFuture?.catchError((Object error) {
-        Logger.debug('People cache refresh failed: $error');
+        Logger.debug('People cache refresh failed: ${error.runtimeType}');
       });
     }
 
