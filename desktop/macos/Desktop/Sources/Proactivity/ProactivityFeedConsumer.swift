@@ -106,6 +106,7 @@ final class ProactivityFeedConsumer {
   private func poll(_ snapshot: RuntimeOwnerAuthorizationSnapshot) async {
     do {
       try await flush(snapshot)
+      guard pendingPresentations.isEmpty else { return }
       var cursor: String?
       // Bounded catch-up. A fresh poll starts at the newest page every time.
       for _ in 0..<5 {
@@ -132,6 +133,9 @@ final class ProactivityFeedConsumer {
               // The next bounded poll retries failures with the same durable event ID.
               Task { [weak self] in try? await self?.flush(snapshot) }
             })
+          // Shared pacing is stamped at render, not queue admission. A feed
+          // page must not enqueue a burst before its first card mounts.
+          return
         }
         guard feed.hasMore, !feed.nextCursor.isEmpty else { break }
         cursor = feed.nextCursor
