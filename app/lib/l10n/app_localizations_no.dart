@@ -12307,19 +12307,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String get evidenceNothing => 'Du har ikke merket eller bekreftet dem ennå';
 
   @override
-  String get effectCountsALot => 'Teller mye';
+  String get effectCountsALot => 'Hjelper mye';
 
   @override
-  String get effectCounts => 'Teller';
+  String get effectCounts => 'Hjelper';
 
   @override
-  String get effectCountsALittle => 'Teller litt';
+  String get effectCountsALittle => 'Hjelper litt';
 
   @override
-  String get effectBarelyCounts => 'Teller knapt';
+  String get effectBarelyCounts => 'Hjelper knapt';
 
   @override
-  String get effectCountsAgainst => 'Teller mot';
+  String get effectCountsAgainst => 'Skader';
 
   @override
   String get effectNeeded => 'Kreves for å bli bekreftet';
@@ -12339,7 +12339,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Bare svarene dine påvirker sikkerheten særlig. Automatiske treff alene teller nesten ikke.';
+      'Bare svarene dine påvirker sikkerheten særlig. Automatiske treff alene hjelper nesten ikke.';
 
   @override
   String get personWhyConfidence => 'Hvorfor?';
@@ -12657,7 +12657,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Merkede linjer: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Merket $count linjer',
+      one: 'Merket 1 linje',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12685,7 +12691,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Tidligere samtaler med denne stemmen: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Funnet i $count tidligere samtaler',
+      one: 'Funnet i 1 tidligere samtale',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12720,4 +12732,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Kunne ikke laste inn API-nøkler.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nei…';
 }

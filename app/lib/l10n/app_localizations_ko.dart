@@ -11850,19 +11850,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get evidenceNothing => '아직 라벨을 지정하거나 확인하지 않았어요';
 
   @override
-  String get effectCountsALot => '크게 반영됨';
+  String get effectCountsALot => '크게 도움';
 
   @override
-  String get effectCounts => '반영됨';
+  String get effectCounts => '도움';
 
   @override
-  String get effectCountsALittle => '조금 반영됨';
+  String get effectCountsALittle => '조금 도움';
 
   @override
-  String get effectBarelyCounts => '거의 반영 안 됨';
+  String get effectBarelyCounts => '거의 도움 안 됨';
 
   @override
-  String get effectCountsAgainst => '감점 요인';
+  String get effectCountsAgainst => '불리함';
 
   @override
   String get effectNeeded => '확인됨에 필요';
@@ -11882,7 +11882,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      '신뢰도를 크게 바꾸는 건 내 답변뿐이에요. 자동 일치만으로는 거의 반영되지 않아요.';
+      '신뢰도를 크게 바꾸는 건 내 답변뿐이에요. 자동 일치만으로는 거의 도움이 되지 않아요.';
 
   @override
   String get personWhyConfidence => '왜죠?';
@@ -12192,7 +12192,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return '라벨을 지정한 줄 수: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count줄에 라벨을 지정했어요',
+      one: '1줄에 라벨을 지정했어요',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12219,7 +12225,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return '이 목소리의 이전 대화 수: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이전 대화 $count개에서 찾았어요',
+      one: '이전 대화 1개에서 찾았어요',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12254,4 +12266,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API 키를 불러올 수 없습니다.';
+
+  @override
+  String get speakerTagPromptNoAction => '아니요…';
 }

@@ -12376,19 +12376,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String get evidenceNothing => 'Dar nepažymėjote ir nepatvirtinote';
 
   @override
-  String get effectCountsALot => 'Daug reiškia';
+  String get effectCountsALot => 'Labai padeda';
 
   @override
-  String get effectCounts => 'Reiškia';
+  String get effectCounts => 'Padeda';
 
   @override
-  String get effectCountsALittle => 'Šiek tiek reiškia';
+  String get effectCountsALittle => 'Šiek tiek padeda';
 
   @override
-  String get effectBarelyCounts => 'Vos reiškia';
+  String get effectBarelyCounts => 'Vos padeda';
 
   @override
-  String get effectCountsAgainst => 'Rodo priešingai';
+  String get effectCountsAgainst => 'Kenkia';
 
   @override
   String get effectNeeded => 'Reikia, kad būtų patvirtintas';
@@ -12408,7 +12408,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Tikrumą daug keičia tik jūsų atsakymai. Vien automatiniai atitikmenys vos ką reiškia.';
+      'Tikrumą daug keičia tik jūsų atsakymai. Vien automatiniai atitikmenys vos padeda.';
 
   @override
   String get personWhyConfidence => 'Kodėl?';
@@ -12728,7 +12728,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Pažymėtos eilutės: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pažymėta eilučių: $count',
+      one: 'Pažymėta 1 eilutė',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12756,7 +12762,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Ankstesni pokalbiai su šiuo balsu: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rasta ankstesniuose pokalbiuose: $count',
+      one: 'Rasta 1 ankstesniame pokalbyje',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12792,4 +12804,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Nepavyko įkelti API raktų.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ne…';
 }

@@ -12383,19 +12383,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String get evidenceNothing => 'আপনি এখনো নাম দেননি বা নিশ্চিত করেননি';
 
   @override
-  String get effectCountsALot => 'অনেক গুরুত্বপূর্ণ';
+  String get effectCountsALot => 'অনেক সাহায্য করে';
 
   @override
-  String get effectCounts => 'গুরুত্বপূর্ণ';
+  String get effectCounts => 'সাহায্য করে';
 
   @override
-  String get effectCountsALittle => 'সামান্য গুরুত্বপূর্ণ';
+  String get effectCountsALittle => 'একটু সাহায্য করে';
 
   @override
-  String get effectBarelyCounts => 'প্রায় গুরুত্বহীন';
+  String get effectBarelyCounts => 'প্রায় সাহায্য করে না';
 
   @override
-  String get effectCountsAgainst => 'বিপক্ষে যায়';
+  String get effectCountsAgainst => 'ক্ষতি করে';
 
   @override
   String get effectNeeded => '“নিশ্চিত” হতে দরকার';
@@ -12415,7 +12415,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'শুধু আপনার উত্তরই নিশ্চয়তা বেশি বাড়ায়। স্বয়ংক্রিয় মিল একা প্রায় গুরুত্বহীন।';
+      'শুধু আপনার উত্তরই নিশ্চয়তা বেশি বাড়ায়। স্বয়ংক্রিয় মিল একা প্রায় সাহায্য করে না।';
 
   @override
   String get personWhyConfidence => 'কেন?';
@@ -12733,7 +12733,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'লেবেল করা লাইন: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি লাইন লেবেল করা হয়েছে',
+      one: '1টি লাইন লেবেল করা হয়েছে',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12762,7 +12768,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'এই ভয়েসের আগের কথোপকথন: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আগের $countটি কথোপকথনে পাওয়া গেছে',
+      one: 'আগের 1টি কথোপকথনে পাওয়া গেছে',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12798,4 +12810,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API কী লোড করা যায়নি।';
+
+  @override
+  String get speakerTagPromptNoAction => 'না…';
 }

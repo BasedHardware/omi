@@ -143,14 +143,21 @@ void main() {
     expect(emitted, isEmpty);
   });
 
-  testWidgets('a row without title or transcript shows a recording date and reports', (tester) async {
-    await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
+  testWidgets('a row without title or transcript says Untitled Conversation and reports', (tester) async {
+    await _pumpRow(
+      tester,
+      conversation: _conversation(title: '', summaryRetryable: false, segments: const []),
+    );
 
-    expect(find.text(_l10n(tester).untitledConversation), findsNothing);
+    // The day header and the row's time already say when; the date is not repeated as the title.
+    expect(find.text(_l10n(tester).untitledConversation), findsOneWidget);
     expect(
-      find.text(OmiDateFormat.of(tester.element(find.byType(ConversationListItem)))
-          .dateTime(DateTime.utc(2020, 1, 1, 12).toLocal())),
-      findsOneWidget,
+      find.text(
+        OmiDateFormat.of(
+          tester.element(find.byType(ConversationListItem)),
+        ).dateTime(DateTime.utc(2020, 1, 1, 12).toLocal()),
+      ),
+      findsNothing,
     );
     expect(emitted, hasLength(1));
     expect(emitted.single.surface, ConversationUntitledRenderedSurface.list);

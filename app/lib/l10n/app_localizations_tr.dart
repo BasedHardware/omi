@@ -12352,19 +12352,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get evidenceNothing => 'Henüz etiketlemediniz veya onaylamadınız';
 
   @override
-  String get effectCountsALot => 'Çok etkili';
+  String get effectCountsALot => 'Çok yardımcı olur';
 
   @override
-  String get effectCounts => 'Etkili';
+  String get effectCounts => 'Yardımcı olur';
 
   @override
-  String get effectCountsALittle => 'Az etkili';
+  String get effectCountsALittle => 'Biraz yardımcı olur';
 
   @override
-  String get effectBarelyCounts => 'Neredeyse etkisiz';
+  String get effectBarelyCounts => 'Neredeyse yardımcı olmaz';
 
   @override
-  String get effectCountsAgainst => 'Aleyhine sayılır';
+  String get effectCountsAgainst => 'Zarar verir';
 
   @override
   String get effectNeeded => 'Onaylandı seviyesi için gerekli';
@@ -12384,7 +12384,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Güveni asıl yalnızca yanıtlarınız değiştirir. Otomatik eşleşmeler tek başına neredeyse hiç sayılmaz.';
+      'Güveni asıl yalnızca yanıtlarınız değiştirir. Otomatik eşleşmeler tek başına neredeyse hiç yardımcı olmaz.';
 
   @override
   String get personWhyConfidence => 'Neden?';
@@ -12704,7 +12704,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Etiketlenen satırlar: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count satır etiketlendi',
+      one: '1 satır etiketlendi',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12733,7 +12739,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Bu sesle önceki sohbetler: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count önceki sohbette bulundu',
+      one: '1 önceki sohbette bulundu',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12768,4 +12780,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API anahtarları yüklenemedi.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Hayır…';
 }

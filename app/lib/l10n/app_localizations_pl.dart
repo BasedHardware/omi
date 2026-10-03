@@ -12401,19 +12401,19 @@ class AppLocalizationsPl extends AppLocalizations {
       'Ta osoba nie została jeszcze oznaczona ani potwierdzona przez Ciebie';
 
   @override
-  String get effectCountsALot => 'Bardzo się liczy';
+  String get effectCountsALot => 'Bardzo pomaga';
 
   @override
-  String get effectCounts => 'Liczy się';
+  String get effectCounts => 'Pomaga';
 
   @override
-  String get effectCountsALittle => 'Trochę się liczy';
+  String get effectCountsALittle => 'Trochę pomaga';
 
   @override
-  String get effectBarelyCounts => 'Prawie się nie liczy';
+  String get effectBarelyCounts => 'Prawie nie pomaga';
 
   @override
-  String get effectCountsAgainst => 'Liczy się na minus';
+  String get effectCountsAgainst => 'Szkodzi';
 
   @override
   String get effectNeeded => 'Potrzebne, by było potwierdzone';
@@ -12433,7 +12433,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Pewność zmieniają głównie Twoje odpowiedzi. Same automatyczne dopasowania prawie się nie liczą.';
+      'Pewność zmieniają głównie Twoje odpowiedzi. Same automatyczne dopasowania prawie nie pomagają.';
 
   @override
   String get personWhyConfidence => 'Dlaczego?';
@@ -12751,7 +12751,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Oznaczone wiersze: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oznaczono wierszy: $count',
+      one: 'Oznaczono 1 wiersz',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12780,7 +12786,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Wcześniejsze rozmowy z tym głosem: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Znaleziono we wcześniejszych rozmowach: $count',
+      one: 'Znaleziono w 1 wcześniejszej rozmowie',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12815,4 +12827,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Nie udało się wczytać kluczy API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nie…';
 }

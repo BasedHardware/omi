@@ -12271,19 +12271,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get evidenceNothing => 'Du har endnu ikke mærket eller bekræftet dem';
 
   @override
-  String get effectCountsALot => 'Vejer tungt';
+  String get effectCountsALot => 'Hjælper meget';
 
   @override
-  String get effectCounts => 'Tæller';
+  String get effectCounts => 'Hjælper';
 
   @override
-  String get effectCountsALittle => 'Tæller lidt';
+  String get effectCountsALittle => 'Hjælper lidt';
 
   @override
-  String get effectBarelyCounts => 'Tæller næsten ikke';
+  String get effectBarelyCounts => 'Hjælper næsten ikke';
 
   @override
-  String get effectCountsAgainst => 'Tæller imod';
+  String get effectCountsAgainst => 'Skader';
 
   @override
   String get effectNeeded => 'Kræves for Bekræftet';
@@ -12303,7 +12303,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Kun dine svar flytter sikkerheden meget. Automatiske matcher alene tæller næsten ikke.';
+      'Kun dine svar flytter sikkerheden meget. Automatiske matcher alene hjælper næsten ikke.';
 
   @override
   String get personWhyConfidence => 'Hvorfor?';
@@ -12623,7 +12623,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Mærkede linjer: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mærkede $count linjer',
+      one: 'Mærkede 1 linje',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12652,7 +12658,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Tidligere samtaler med denne stemme: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Fundet i $count tidligere samtaler',
+      one: 'Fundet i 1 tidligere samtale',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12688,4 +12700,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API-nøglerne kunne ikke indlæses.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nej…';
 }

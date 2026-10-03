@@ -11692,19 +11692,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get evidenceNothing => '你还没有标记或确认过这个人';
 
   @override
-  String get effectCountsALot => '作用很大';
+  String get effectCountsALot => '帮助很大';
 
   @override
-  String get effectCounts => '有作用';
+  String get effectCounts => '有帮助';
 
   @override
-  String get effectCountsALittle => '作用较小';
+  String get effectCountsALittle => '帮助较小';
 
   @override
-  String get effectBarelyCounts => '几乎没作用';
+  String get effectBarelyCounts => '几乎没帮助';
 
   @override
-  String get effectCountsAgainst => '会降低';
+  String get effectCountsAgainst => '有负面影响';
 
   @override
   String get effectNeeded => '达到“已确认”所需';
@@ -11723,7 +11723,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get confidenceFootnote => '只有你的回答才会明显提升可信度。仅靠自动匹配几乎不起作用。';
+  String get confidenceFootnote => '只有你的回答才会明显提升可信度。仅靠自动匹配几乎没有帮助。';
 
   @override
   String get personWhyConfidence => '为什么？';
@@ -12027,7 +12027,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return '已标记的行数：$count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已标记 $count 行',
+      one: '已标记 1 行',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12054,7 +12060,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return '与此声音的过往对话：$count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 段过往对话中找到',
+      one: '在 1 段过往对话中找到',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12089,4 +12101,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => '无法加载 API 密钥。';
+
+  @override
+  String get speakerTagPromptNoAction => '否…';
 }

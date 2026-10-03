@@ -12550,19 +12550,19 @@ class AppLocalizationsTa extends AppLocalizations {
       'நீங்கள் இன்னும் லேபிள் செய்யவில்லை அல்லது உறுதிசெய்யவில்லை';
 
   @override
-  String get effectCountsALot => 'மிகவும் முக்கியம்';
+  String get effectCountsALot => 'மிகவும் உதவும்';
 
   @override
-  String get effectCounts => 'முக்கியம்';
+  String get effectCounts => 'உதவும்';
 
   @override
-  String get effectCountsALittle => 'சிறிது முக்கியம்';
+  String get effectCountsALittle => 'சிறிது உதவும்';
 
   @override
-  String get effectBarelyCounts => 'கிட்டத்தட்ட முக்கியமில்லை';
+  String get effectBarelyCounts => 'கிட்டத்தட்ட உதவாது';
 
   @override
-  String get effectCountsAgainst => 'எதிராகக் கணக்கிடப்படும்';
+  String get effectCountsAgainst => 'பாதிக்கும்';
 
   @override
   String get effectNeeded => 'உறுதிசெய்யப்பட்டது நிலைக்குத் தேவை';
@@ -12582,7 +12582,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட கணக்கில் வராது.';
+      'உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட உதவாது.';
 
   @override
   String get personWhyConfidence => 'ஏன்?';
@@ -12906,7 +12906,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'லேபிளிடப்பட்ட வரிகள்: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count வரிகளுக்கு லேபிளிடப்பட்டது',
+      one: '1 வரிக்கு லேபிளிடப்பட்டது',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12935,7 +12941,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'இந்தக் குரலுடன் முந்தைய உரையாடல்கள்: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'முந்தைய $count உரையாடல்களில் கண்டறியப்பட்டது',
+      one: 'முந்தைய 1 உரையாடலில் கண்டறியப்பட்டது',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12971,4 +12983,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API விசைகளை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get speakerTagPromptNoAction => 'இல்லை…';
 }

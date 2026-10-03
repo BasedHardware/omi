@@ -12361,19 +12361,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String get evidenceNothing => 'Et ole vielä nimennyt tai vahvistanut häntä';
 
   @override
-  String get effectCountsALot => 'Painaa paljon';
+  String get effectCountsALot => 'Auttaa paljon';
 
   @override
-  String get effectCounts => 'Painaa';
+  String get effectCounts => 'Auttaa';
 
   @override
-  String get effectCountsALittle => 'Painaa vähän';
+  String get effectCountsALittle => 'Auttaa vähän';
 
   @override
-  String get effectBarelyCounts => 'Tuskin painaa';
+  String get effectBarelyCounts => 'Tuskin auttaa';
 
   @override
-  String get effectCountsAgainst => 'Painaa vastaan';
+  String get effectCountsAgainst => 'Haittaa';
 
   @override
   String get effectNeeded => 'Tarvitaan tilaan Vahvistettu';
@@ -12393,7 +12393,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Vain sinun vastauksesi vaikuttavat varmuuteen merkittävästi. Automaattiset tunnistukset yksinään tuskin painavat mitään.';
+      'Vain sinun vastauksesi vaikuttavat varmuuteen merkittävästi. Automaattiset tunnistukset yksinään tuskin auttavat.';
 
   @override
   String get personWhyConfidence => 'Miksi?';
@@ -12713,7 +12713,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Nimetyt rivit: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetty $count riviä',
+      one: 'Nimetty 1 rivi',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12742,7 +12748,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Aiemmat keskustelut tällä äänellä: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Löytyi $count aiemmasta keskustelusta',
+      one: 'Löytyi 1 aiemmasta keskustelusta',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12778,4 +12790,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API-avaimia ei voitu ladata.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ei…';
 }

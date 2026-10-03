@@ -12415,19 +12415,19 @@ class AppLocalizationsMk extends AppLocalizations {
   String get evidenceNothing => 'Сè уште не сте го означиле ниту потврдиле';
 
   @override
-  String get effectCountsALot => 'Многу се брои';
+  String get effectCountsALot => 'Многу помага';
 
   @override
-  String get effectCounts => 'Се брои';
+  String get effectCounts => 'Помага';
 
   @override
-  String get effectCountsALittle => 'Малку се брои';
+  String get effectCountsALittle => 'Малку помага';
 
   @override
-  String get effectBarelyCounts => 'Едвај се брои';
+  String get effectBarelyCounts => 'Едвај помага';
 
   @override
-  String get effectCountsAgainst => 'Се брои против';
+  String get effectCountsAgainst => 'Штети';
 
   @override
   String get effectNeeded => 'Потребно за да биде потврдено';
@@ -12447,7 +12447,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Само вашите одговори значително ја менуваат сигурноста. Автоматските совпаѓања сами едвај се бројат.';
+      'Само вашите одговори значително ја менуваат сигурноста. Автоматските совпаѓања сами едвај помагаат.';
 
   @override
   String get personWhyConfidence => 'Зошто?';
@@ -12767,7 +12767,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Означени линии: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Означени се $count линии',
+      one: 'Означена е 1 линија',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12796,7 +12802,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Претходни разговори со овој глас: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пронајден во $count претходни разговори',
+      one: 'Пронајден во 1 претходен разговор',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12832,4 +12844,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API клучевите не можеа да се вчитаат.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Не…';
 }

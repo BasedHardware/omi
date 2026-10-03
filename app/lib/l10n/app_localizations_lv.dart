@@ -12363,19 +12363,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get evidenceNothing => 'Jūs vēl neesat atzīmējis vai apstiprinājis';
 
   @override
-  String get effectCountsALot => 'Ļoti ietekmē';
+  String get effectCountsALot => 'Ļoti palīdz';
 
   @override
-  String get effectCounts => 'Ietekmē';
+  String get effectCounts => 'Palīdz';
 
   @override
-  String get effectCountsALittle => 'Mazliet ietekmē';
+  String get effectCountsALittle => 'Mazliet palīdz';
 
   @override
-  String get effectBarelyCounts => 'Gandrīz neietekmē';
+  String get effectBarelyCounts => 'Gandrīz nepalīdz';
 
   @override
-  String get effectCountsAgainst => 'Ietekmē negatīvi';
+  String get effectCountsAgainst => 'Kaitē';
 
   @override
   String get effectNeeded => 'Nepieciešams, lai būtu apstiprināts';
@@ -12395,7 +12395,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Pārliecību būtiski maina tikai jūsu atbildes. Automātiskas atbilstības vien gandrīz neko nenozīmē.';
+      'Pārliecību būtiski maina tikai jūsu atbildes. Automātiskas atbilstības vien gandrīz nepalīdz.';
 
   @override
   String get personWhyConfidence => 'Kāpēc?';
@@ -12713,7 +12713,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Atzīmētās rindas: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Atzīmētas rindas: $count',
+      one: 'Atzīmēta 1 rinda',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12742,7 +12748,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Iepriekšējās sarunas ar šo balsi: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Atrasta iepriekšējās sarunās: $count',
+      one: 'Atrasta 1 iepriekšējā sarunā',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12777,4 +12789,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Neizdevās ielādēt API atslēgas.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nē…';
 }

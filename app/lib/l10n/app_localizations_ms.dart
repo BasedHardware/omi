@@ -12377,19 +12377,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get evidenceNothing => 'Anda belum melabel atau mengesahkan mereka';
 
   @override
-  String get effectCountsALot => 'Sangat bernilai';
+  String get effectCountsALot => 'Sangat membantu';
 
   @override
-  String get effectCounts => 'Bernilai';
+  String get effectCounts => 'Membantu';
 
   @override
-  String get effectCountsALittle => 'Sedikit bernilai';
+  String get effectCountsALittle => 'Sedikit membantu';
 
   @override
-  String get effectBarelyCounts => 'Hampir tidak bernilai';
+  String get effectBarelyCounts => 'Hampir tidak membantu';
 
   @override
-  String get effectCountsAgainst => 'Bertentangan';
+  String get effectCountsAgainst => 'Merugikan';
 
   @override
   String get effectNeeded => 'Diperlukan untuk Disahkan';
@@ -12409,7 +12409,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Hanya jawapan anda yang banyak mengubah keyakinan. Padanan automatik sahaja hampir tidak dikira.';
+      'Hanya jawapan anda yang banyak mengubah keyakinan. Padanan automatik sahaja hampir tidak membantu.';
 
   @override
   String get personWhyConfidence => 'Kenapa?';
@@ -12731,7 +12731,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Baris dilabel: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count baris dilabel',
+      one: '1 baris dilabel',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12760,7 +12766,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Perbualan terdahulu dengan suara ini: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ditemui dalam $count perbualan terdahulu',
+      one: 'Ditemui dalam 1 perbualan terdahulu',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12796,4 +12808,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Tidak dapat memuatkan kunci API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Tidak…';
 }

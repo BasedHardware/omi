@@ -12339,19 +12339,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get evidenceNothing => 'Zatím jste je neoznačili ani nepotvrdili';
 
   @override
-  String get effectCountsALot => 'Hodně se počítá';
+  String get effectCountsALot => 'Hodně pomáhá';
 
   @override
-  String get effectCounts => 'Počítá se';
+  String get effectCounts => 'Pomáhá';
 
   @override
-  String get effectCountsALittle => 'Málo se počítá';
+  String get effectCountsALittle => 'Trochu pomáhá';
 
   @override
-  String get effectBarelyCounts => 'Skoro se nepočítá';
+  String get effectBarelyCounts => 'Skoro nepomáhá';
 
   @override
-  String get effectCountsAgainst => 'Počítá se proti';
+  String get effectCountsAgainst => 'Škodí';
 
   @override
   String get effectNeeded => 'Potřeba pro „Potvrzená“';
@@ -12371,7 +12371,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Jistotu výrazně mění jen vaše odpovědi. Samotné automatické shody se téměř nepočítají.';
+      'Jistotu výrazně mění jen vaše odpovědi. Samotné automatické shody téměř nepomáhají.';
 
   @override
   String get personWhyConfidence => 'Proč?';
@@ -12690,7 +12690,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Označené řádky: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označeno řádků: $count',
+      one: 'Označen 1 řádek',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12719,7 +12725,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Dřívější rozhovory s tímto hlasem: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nalezen v dřívějších rozhovorech: $count',
+      one: 'Nalezen v 1 dřívějším rozhovoru',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12754,4 +12766,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Klíče API se nepodařilo načíst.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ne…';
 }

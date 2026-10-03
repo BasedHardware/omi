@@ -12373,19 +12373,19 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je hebt deze persoon nog niet gelabeld of bevestigd';
 
   @override
-  String get effectCountsALot => 'Telt zwaar mee';
+  String get effectCountsALot => 'Helpt veel';
 
   @override
-  String get effectCounts => 'Telt mee';
+  String get effectCounts => 'Helpt';
 
   @override
-  String get effectCountsALittle => 'Telt een beetje mee';
+  String get effectCountsALittle => 'Helpt een beetje';
 
   @override
-  String get effectBarelyCounts => 'Telt nauwelijks mee';
+  String get effectBarelyCounts => 'Helpt nauwelijks';
 
   @override
-  String get effectCountsAgainst => 'Telt tegen';
+  String get effectCountsAgainst => 'Schaadt';
 
   @override
   String get effectNeeded => 'Nodig voor Bevestigd';
@@ -12405,7 +12405,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Alleen je antwoorden veranderen de zekerheid veel. Automatische matches alleen tellen nauwelijks mee.';
+      'Alleen je antwoorden veranderen de zekerheid veel. Automatische matches alleen helpen nauwelijks.';
 
   @override
   String get personWhyConfidence => 'Waarom?';
@@ -12725,7 +12725,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Gelabelde regels: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count regels gelabeld',
+      one: '1 regel gelabeld',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12754,7 +12760,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Eerdere gesprekken met deze stem: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gevonden in $count eerdere gesprekken',
+      one: 'Gevonden in 1 eerder gesprek',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12790,4 +12802,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API-sleutels konden niet worden geladen.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nee…';
 }

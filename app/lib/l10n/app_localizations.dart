@@ -21373,31 +21373,31 @@ abstract class AppLocalizations {
   /// How much one kind of evidence raises confidence: strongly.
   ///
   /// In en, this message translates to:
-  /// **'Counts a lot'**
+  /// **'Helps a lot'**
   String get effectCountsALot;
 
   /// How much one kind of evidence raises confidence: moderately.
   ///
   /// In en, this message translates to:
-  /// **'Counts'**
+  /// **'Helps'**
   String get effectCounts;
 
   /// How much one kind of evidence raises confidence: slightly.
   ///
   /// In en, this message translates to:
-  /// **'Counts a little'**
+  /// **'Helps a little'**
   String get effectCountsALittle;
 
   /// How much one kind of evidence raises confidence: almost not at all.
   ///
   /// In en, this message translates to:
-  /// **'Barely counts'**
+  /// **'Barely helps'**
   String get effectBarelyCounts;
 
   /// This kind of evidence lowers confidence.
   ///
   /// In en, this message translates to:
-  /// **'Counts against'**
+  /// **'Hurts'**
   String get effectCountsAgainst;
 
   /// A missing piece of evidence (a voice sample) is required to reach the Confirmed level.
@@ -21427,7 +21427,7 @@ abstract class AppLocalizations {
   /// Footnote at the bottom of the confidence sheet.
   ///
   /// In en, this message translates to:
-  /// **'Only your answers move confidence much. Automatic matches on their own barely count.'**
+  /// **'Only your answers move confidence much. Automatic matches on their own barely help.'**
   String get confidenceFootnote;
 
   /// Link beside a person's confidence level that opens an explanation.
@@ -21865,7 +21865,7 @@ abstract class AppLocalizations {
   /// After tagging a speaker: how many transcript lines received the name
   ///
   /// In en, this message translates to:
-  /// **'Lines labeled: {count}'**
+  /// **'{count, plural, =1{Labeled 1 line} other{Labeled {count} lines}}'**
   String speakerLabelLinesLabeled(int count);
 
   /// After tagging a person: whether Omi has learned to recognize their voice (server voice_learning_state)
@@ -21883,7 +21883,7 @@ abstract class AppLocalizations {
   /// The tagged person's voice was found, unnamed, in this many earlier conversations
   ///
   /// In en, this message translates to:
-  /// **'Earlier conversations with this voice: {count}'**
+  /// **'{count, plural, =1{Found in 1 earlier conversation} other{Found in {count} earlier conversations}}'**
   String speakerLabelEarlierMatches(int count);
 
   /// Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)
@@ -21921,6 +21921,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t load API keys.'**
   String get couldNotLoadApiKeys;
+
+  /// Voice card answer to 'Is this <name>?': no, and opens the picker to say who it is (or That's Me / Not a Person).
+  ///
+  /// In en, this message translates to:
+  /// **'No…'**
+  String get speakerTagPromptNoAction;
 }
 
 class _AppLocalizationsDelegate

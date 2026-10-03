@@ -12400,19 +12400,19 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы ещё не отмечали и не подтверждали этого человека';
 
   @override
-  String get effectCountsALot => 'Сильно влияет';
+  String get effectCountsALot => 'Сильно помогает';
 
   @override
-  String get effectCounts => 'Влияет';
+  String get effectCounts => 'Помогает';
 
   @override
-  String get effectCountsALittle => 'Слегка влияет';
+  String get effectCountsALittle => 'Немного помогает';
 
   @override
-  String get effectBarelyCounts => 'Почти не влияет';
+  String get effectBarelyCounts => 'Почти не помогает';
 
   @override
-  String get effectCountsAgainst => 'Влияет отрицательно';
+  String get effectCountsAgainst => 'Вредит';
 
   @override
   String get effectNeeded => 'Нужно для статуса «Подтверждено»';
@@ -12432,7 +12432,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Уверенность заметно меняют только ваши ответы. Сами по себе автосовпадения почти не влияют.';
+      'Уверенность заметно меняют только ваши ответы. Сами по себе автосовпадения почти не помогают.';
 
   @override
   String get personWhyConfidence => 'Почему?';
@@ -12752,7 +12752,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Помечено строк: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Помечено строк: $count',
+      one: 'Помечена 1 строка',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12780,7 +12786,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Прошлые разговоры с этим голосом: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Есть в прошлых разговорах: $count',
+      one: 'Есть в 1 прошлом разговоре',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12816,4 +12828,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Не удалось загрузить ключи API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Нет…';
 }

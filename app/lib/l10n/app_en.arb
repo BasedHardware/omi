@@ -14053,23 +14053,23 @@
     "@evidenceNothing": {
         "description": "Evidence row when there is no evidence from the user at all."
     },
-    "effectCountsALot": "Counts a lot",
+    "effectCountsALot": "Helps a lot",
     "@effectCountsALot": {
         "description": "How much one kind of evidence raises confidence: strongly."
     },
-    "effectCounts": "Counts",
+    "effectCounts": "Helps",
     "@effectCounts": {
         "description": "How much one kind of evidence raises confidence: moderately."
     },
-    "effectCountsALittle": "Counts a little",
+    "effectCountsALittle": "Helps a little",
     "@effectCountsALittle": {
         "description": "How much one kind of evidence raises confidence: slightly."
     },
-    "effectBarelyCounts": "Barely counts",
+    "effectBarelyCounts": "Barely helps",
     "@effectBarelyCounts": {
         "description": "How much one kind of evidence raises confidence: almost not at all."
     },
-    "effectCountsAgainst": "Counts against",
+    "effectCountsAgainst": "Hurts",
     "@effectCountsAgainst": {
         "description": "This kind of evidence lowers confidence."
     },
@@ -14099,7 +14099,7 @@
             }
         }
     },
-    "confidenceFootnote": "Only your answers move confidence much. Automatic matches on their own barely count.",
+    "confidenceFootnote": "Only your answers move confidence much. Automatic matches on their own barely help.",
     "@confidenceFootnote": {
         "description": "Footnote at the bottom of the confidence sheet."
     },
@@ -14516,7 +14516,7 @@
     "@localCopiesSection": {
         "description": "Section header above the auto-remove synced copies setting"
     },
-    "speakerLabelLinesLabeled": "Lines labeled: {count}",
+    "speakerLabelLinesLabeled": "{count, plural, =1{Labeled 1 line} other{Labeled {count} lines}}",
     "@speakerLabelLinesLabeled": {
         "description": "After tagging a speaker: how many transcript lines received the name",
         "placeholders": {
@@ -14546,7 +14546,7 @@
             }
         }
     },
-    "speakerLabelEarlierMatches": "Earlier conversations with this voice: {count}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{Found in 1 earlier conversation} other{Found in {count} earlier conversations}}",
     "@speakerLabelEarlierMatches": {
         "description": "The tagged person's voice was found, unnamed, in this many earlier conversations",
         "placeholders": {
@@ -14591,5 +14591,9 @@
     "couldNotLoadApiKeys": "Couldn't load API keys.",
     "@couldNotLoadApiKeys": {
         "description": "Developer Settings: the API key or MCP key list failed to load"
+    },
+    "speakerTagPromptNoAction": "No…",
+    "@speakerTagPromptNoAction": {
+        "description": "Voice card answer to 'Is this <name>?': no, and opens the picker to say who it is (or That's Me / Not a Person)."
     }
 }

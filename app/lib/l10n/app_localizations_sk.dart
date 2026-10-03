@@ -12324,19 +12324,19 @@ class AppLocalizationsSk extends AppLocalizations {
       'Túto osobu ste zatiaľ neoznačili ani nepotvrdili';
 
   @override
-  String get effectCountsALot => 'Veľmi sa počíta';
+  String get effectCountsALot => 'Veľmi pomáha';
 
   @override
-  String get effectCounts => 'Počíta sa';
+  String get effectCounts => 'Pomáha';
 
   @override
-  String get effectCountsALittle => 'Trochu sa počíta';
+  String get effectCountsALittle => 'Trochu pomáha';
 
   @override
-  String get effectBarelyCounts => 'Takmer sa nepočíta';
+  String get effectBarelyCounts => 'Takmer nepomáha';
 
   @override
-  String get effectCountsAgainst => 'Počíta sa proti';
+  String get effectCountsAgainst => 'Škodí';
 
   @override
   String get effectNeeded => 'Potrebné pre stav Potvrdené';
@@ -12356,7 +12356,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Istotu výrazne menia len vaše odpovede. Samotné automatické zhody sa takmer nepočítajú.';
+      'Istotu výrazne menia len vaše odpovede. Samotné automatické zhody takmer nepomáhajú.';
 
   @override
   String get personWhyConfidence => 'Prečo?';
@@ -12675,7 +12675,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Označené riadky: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označené riadky: $count',
+      one: 'Označený 1 riadok',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12704,7 +12710,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Predchádzajúce rozhovory s týmto hlasom: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nájdený v predchádzajúcich rozhovoroch: $count',
+      one: 'Nájdený v 1 predchádzajúcom rozhovore',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12739,4 +12751,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Kľúče API sa nepodarilo načítať.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nie…';
 }

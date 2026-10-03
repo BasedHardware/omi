@@ -12330,19 +12330,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get evidenceNothing => 'Bạn chưa gắn nhãn hoặc xác nhận người này';
 
   @override
-  String get effectCountsALot => 'Rất quan trọng';
+  String get effectCountsALot => 'Giúp rất nhiều';
 
   @override
-  String get effectCounts => 'Có giá trị';
+  String get effectCounts => 'Có giúp';
 
   @override
-  String get effectCountsALittle => 'Ít giá trị';
+  String get effectCountsALittle => 'Giúp một chút';
 
   @override
-  String get effectBarelyCounts => 'Gần như không đáng kể';
+  String get effectBarelyCounts => 'Gần như không giúp';
 
   @override
-  String get effectCountsAgainst => 'Làm giảm';
+  String get effectCountsAgainst => 'Gây bất lợi';
 
   @override
   String get effectNeeded => 'Cần để đạt Đã xác nhận';
@@ -12362,7 +12362,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Chỉ câu trả lời của bạn mới thay đổi độ tin cậy đáng kể. Riêng kết quả khớp tự động gần như không đáng kể.';
+      'Chỉ câu trả lời của bạn mới thay đổi độ tin cậy đáng kể. Riêng kết quả khớp tự động gần như không giúp gì.';
 
   @override
   String get personWhyConfidence => 'Tại sao?';
@@ -12681,7 +12681,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Số dòng đã gắn nhãn: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã gắn nhãn $count dòng',
+      one: 'Đã gắn nhãn 1 dòng',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12709,7 +12715,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Số cuộc trò chuyện trước có giọng nói này: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tìm thấy trong $count cuộc trò chuyện trước',
+      one: 'Tìm thấy trong 1 cuộc trò chuyện trước',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12746,4 +12758,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Không thể tải khóa API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Không…';
 }

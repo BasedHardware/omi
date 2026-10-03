@@ -12186,19 +12186,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String get evidenceNothing => 'คุณยังไม่ได้ระบุชื่อหรือยืนยัน';
 
   @override
-  String get effectCountsALot => 'มีน้ำหนักมาก';
+  String get effectCountsALot => 'ช่วยได้มาก';
 
   @override
-  String get effectCounts => 'มีน้ำหนัก';
+  String get effectCounts => 'ช่วยได้';
 
   @override
-  String get effectCountsALittle => 'มีน้ำหนักเล็กน้อย';
+  String get effectCountsALittle => 'ช่วยได้เล็กน้อย';
 
   @override
-  String get effectBarelyCounts => 'แทบไม่มีน้ำหนัก';
+  String get effectBarelyCounts => 'แทบไม่ช่วย';
 
   @override
-  String get effectCountsAgainst => 'ลดความมั่นใจ';
+  String get effectCountsAgainst => 'ส่งผลเสีย';
 
   @override
   String get effectNeeded => 'จำเป็นสำหรับระดับยืนยันแล้ว';
@@ -12218,7 +12218,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'มีแค่คำตอบของคุณที่เปลี่ยนความมั่นใจได้มาก การจับคู่อัตโนมัติอย่างเดียวแทบไม่มีน้ำหนัก';
+      'มีแค่คำตอบของคุณที่เปลี่ยนความมั่นใจได้มาก การจับคู่อัตโนมัติอย่างเดียวแทบไม่ช่วย';
 
   @override
   String get personWhyConfidence => 'ทำไม?';
@@ -12532,7 +12532,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'จำนวนบรรทัดที่ติดป้ายชื่อ: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ติดป้ายชื่อแล้ว $count บรรทัด',
+      one: 'ติดป้ายชื่อแล้ว 1 บรรทัด',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12560,7 +12566,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'การสนทนาก่อนหน้าที่มีเสียงนี้: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'พบในการสนทนาก่อนหน้า $count รายการ',
+      one: 'พบในการสนทนาก่อนหน้า 1 รายการ',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12595,4 +12607,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'โหลดคีย์ API ไม่ได้';
+
+  @override
+  String get speakerTagPromptNoAction => 'ไม่…';
 }

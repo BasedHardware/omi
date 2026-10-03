@@ -12495,19 +12495,19 @@ class AppLocalizationsEl extends AppLocalizations {
   String get evidenceNothing => 'Δεν το έχετε επισημάνει ή επιβεβαιώσει ακόμα';
 
   @override
-  String get effectCountsALot => 'Μετράει πολύ';
+  String get effectCountsALot => 'Βοηθά πολύ';
 
   @override
-  String get effectCounts => 'Μετράει';
+  String get effectCounts => 'Βοηθά';
 
   @override
-  String get effectCountsALittle => 'Μετράει λίγο';
+  String get effectCountsALittle => 'Βοηθά λίγο';
 
   @override
-  String get effectBarelyCounts => 'Μετράει ελάχιστα';
+  String get effectBarelyCounts => 'Βοηθά ελάχιστα';
 
   @override
-  String get effectCountsAgainst => 'Μετράει αρνητικά';
+  String get effectCountsAgainst => 'Βλάπτει';
 
   @override
   String get effectNeeded => 'Απαιτείται για «Επιβεβαιωμένη»';
@@ -12527,7 +12527,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Μόνο οι απαντήσεις σας αλλάζουν αισθητά τη βεβαιότητα. Οι αυτόματες αντιστοιχίσεις από μόνες τους μετράνε ελάχιστα.';
+      'Μόνο οι απαντήσεις σας αλλάζουν αισθητά τη βεβαιότητα. Οι αυτόματες αντιστοιχίσεις από μόνες τους βοηθούν ελάχιστα.';
 
   @override
   String get personWhyConfidence => 'Γιατί;';
@@ -12849,7 +12849,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Γραμμές που επισημάνθηκαν: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Επισημάνθηκαν $count γραμμές',
+      one: 'Επισημάνθηκε 1 γραμμή',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12878,7 +12884,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Προηγούμενες συζητήσεις με αυτή τη φωνή: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Βρέθηκε σε $count προηγούμενες συζητήσεις',
+      one: 'Βρέθηκε σε 1 προηγούμενη συζήτηση',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12916,4 +12928,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get couldNotLoadApiKeys =>
       'Δεν ήταν δυνατή η φόρτωση των κλειδιών API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Όχι…';
 }

@@ -15,21 +15,20 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/widgets/person_chip.dart';
 
 Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
 TranscriptSegment _seg(String id, {String? personId}) => TranscriptSegment(
-      id: id,
-      text: 'speech',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: personId,
-      translations: [],
-      start: 0,
-      end: 1,
-    );
+  id: id,
+  text: 'speech',
+  speaker: 'SPEAKER_00',
+  isUser: false,
+  personId: personId,
+  translations: [],
+  start: 0,
+  end: 1,
+);
 
 Future<void> _pumpSheet(
   WidgetTester tester, {
@@ -42,7 +41,8 @@ Future<void> _pumpSheet(
     String personName,
     List<String> segmentIds,
     bool applyToSpeaker,
-  )? onSpeakerAssigned,
+  )?
+  onSpeakerAssigned,
 }) async {
   final provider = PeopleProvider()..people = people;
   await tester.pumpWidget(
@@ -67,7 +67,7 @@ Future<void> _pumpSheet(
 }
 
 List<String> _chipNames(WidgetTester tester) =>
-    tester.widgetList<PersonChip>(find.byType(PersonChip)).map((c) => c.personName).toList();
+    tester.widgetList<OmiFilterChip>(find.byType(OmiFilterChip)).map((c) => c.label).toList();
 
 void main() {
   setUp(() async {
@@ -80,7 +80,12 @@ void main() {
       tester,
       people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
       suggestion: SpeakerLabelSuggestionEvent(
-          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+        speakerId: 0,
+        personId: '',
+        personName: 'Maya',
+        segmentId: 'seg0',
+        suggestedPersonId: 'maya',
+      ),
       onSpeakerAssigned: (_, id, __, ___, ____) async {
         assignments.add(id);
         return false;
@@ -359,17 +364,17 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     // "+ Add Person" and "You" are present before searching.
     expect(find.text('Add Person'), findsOneWidget);
-    expect(find.text('Owner (You)'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'AL');
     await tester.pumpAndSettle();
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'Alex', 'Alice', 'Alicia']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'Alex', 'Alice', 'Alicia']);
     expect(find.text('Bob'), findsNothing);
 
     // Diacritic-insensitive: "jose" matches "José".
     await tester.enterText(find.byType(TextField), 'jose');
     await tester.pumpAndSettle();
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'José']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'José']);
 
     // Clearing the query restores the full grid.
     await tester.enterText(find.byType(TextField), '');
@@ -401,7 +406,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Zed');
     await tester.pumpAndSettle();
     // Only "+ Add Person" and "You" remain, plus the inline add row.
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)']);
+    expect(_chipNames(tester), ['Add Person', 'You']);
     final addRow = find.text('Add "Zed" as a new person');
     expect(addRow, findsOneWidget);
 
@@ -448,7 +453,7 @@ void main() {
     );
     // "You" first, then most-recently-used (Bob > Carol), then frequency
     // (Alice has 3 segments but no recency).
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'Bob', 'Carol', 'Alice']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'Bob', 'Carol', 'Alice']);
   });
 
   testWidgets('grid is capped and a "Show all" chip expands it inline', (tester) async {
@@ -480,7 +485,7 @@ void main() {
     // Person 20..26 all match; no cap, no expander while searching.
     expect(_chipNames(tester), [
       'Add Person',
-      'Owner (You)',
+      'You',
       ...List.generate(7, (i) => 'Person ${(20 + i).toString().padLeft(2, '0')}'),
     ]);
     expect(find.text('Show all 26 people'), findsNothing);

@@ -12331,19 +12331,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String get evidenceNothing => 'Sa pole teda veel märgistanud ega kinnitanud';
 
   @override
-  String get effectCountsALot => 'Loeb palju';
+  String get effectCountsALot => 'Aitab palju';
 
   @override
-  String get effectCounts => 'Loeb';
+  String get effectCounts => 'Aitab';
 
   @override
-  String get effectCountsALittle => 'Loeb vähe';
+  String get effectCountsALittle => 'Aitab veidi';
 
   @override
-  String get effectBarelyCounts => 'Loeb vaevu';
+  String get effectBarelyCounts => 'Aitab vaevu';
 
   @override
-  String get effectCountsAgainst => 'Loeb vastu';
+  String get effectCountsAgainst => 'Kahjustab';
 
   @override
   String get effectNeeded => 'Vajalik tasemeks „Kinnitatud“';
@@ -12363,7 +12363,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Kindlust muudavad märgatavalt vaid sinu vastused. Automaatsed vasted üksi loevad vaevu.';
+      'Kindlust muudavad märgatavalt vaid sinu vastused. Automaatsed vasted üksi aitavad vaevu.';
 
   @override
   String get personWhyConfidence => 'Miks?';
@@ -12684,7 +12684,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Märgitud ridu: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Märgitud $count rida',
+      one: 'Märgitud 1 rida',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12713,7 +12719,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Varasemad vestlused selle häälega: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Leitud $count varasemast vestlusest',
+      one: 'Leitud 1 varasemast vestlusest',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12749,4 +12761,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'API-võtmeid ei õnnestunud laadida.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ei…';
 }

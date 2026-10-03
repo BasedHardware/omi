@@ -390,11 +390,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Picked in 2 suggestions'), findsWidgets);
-    expect(find.text('Counts'), findsWidgets);
+    expect(find.text('Helps'), findsWidgets);
     expect(find.text('1 match moved to someone else'), findsOneWidget);
-    expect(find.text('Counts against'), findsOneWidget);
+    expect(find.text('Hurts'), findsOneWidget);
     expect(find.text('3 automatic matches nobody confirmed'), findsOneWidget);
-    expect(find.text('Barely counts'), findsOneWidget);
+    expect(find.text('Barely helps'), findsOneWidget);
     expect(find.text('Label them in 1 more conversation.'), findsOneWidget);
   });
 

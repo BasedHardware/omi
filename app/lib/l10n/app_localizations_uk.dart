@@ -12389,19 +12389,19 @@ class AppLocalizationsUk extends AppLocalizations {
       'Ви ще не позначали і не підтверджували цю людину';
 
   @override
-  String get effectCountsALot => 'Дуже важливо';
+  String get effectCountsALot => 'Дуже допомагає';
 
   @override
-  String get effectCounts => 'Важливо';
+  String get effectCounts => 'Допомагає';
 
   @override
-  String get effectCountsALittle => 'Трохи впливає';
+  String get effectCountsALittle => 'Трохи допомагає';
 
   @override
-  String get effectBarelyCounts => 'Майже не впливає';
+  String get effectBarelyCounts => 'Майже не допомагає';
 
   @override
-  String get effectCountsAgainst => 'Знижує впевненість';
+  String get effectCountsAgainst => 'Шкодить';
 
   @override
   String get effectNeeded => 'Потрібно для рівня «Підтверджено»';
@@ -12421,7 +12421,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Впевненість помітно змінюють лише ваші відповіді. Самі по собі автоматичні збіги майже не враховуються.';
+      'Впевненість помітно змінюють лише ваші відповіді. Самі по собі автоматичні збіги майже не допомагають.';
 
   @override
   String get personWhyConfidence => 'Чому?';
@@ -12741,7 +12741,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Позначено рядків: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Позначено рядків: $count',
+      one: 'Позначено 1 рядок',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12770,7 +12776,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Попередні розмови з цим голосом: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Є в попередніх розмовах: $count',
+      one: 'Є в 1 попередній розмові',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12806,4 +12818,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Не вдалося завантажити ключі API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ні…';
 }

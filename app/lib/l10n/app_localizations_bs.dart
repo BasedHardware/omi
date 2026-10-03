@@ -12377,19 +12377,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get evidenceNothing => 'Još niste imenovali niti potvrdili';
 
   @override
-  String get effectCountsALot => 'Mnogo vrijedi';
+  String get effectCountsALot => 'Mnogo pomaže';
 
   @override
-  String get effectCounts => 'Vrijedi';
+  String get effectCounts => 'Pomaže';
 
   @override
-  String get effectCountsALittle => 'Malo vrijedi';
+  String get effectCountsALittle => 'Malo pomaže';
 
   @override
-  String get effectBarelyCounts => 'Jedva vrijedi';
+  String get effectBarelyCounts => 'Jedva pomaže';
 
   @override
-  String get effectCountsAgainst => 'Vrijedi protiv';
+  String get effectCountsAgainst => 'Šteti';
 
   @override
   String get effectNeeded => 'Potrebno za „Potvrđeno“';
@@ -12409,7 +12409,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Samo vaši odgovori bitno mijenjaju sigurnost. Automatska podudaranja sama jedva računaju.';
+      'Samo vaši odgovori bitno mijenjaju sigurnost. Automatska podudaranja sama jedva pomažu.';
 
   @override
   String get personWhyConfidence => 'Zašto?';
@@ -12727,7 +12727,13 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Označeni redovi: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označeno redova: $count',
+      one: 'Označen 1 red',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12756,7 +12762,13 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Raniji razgovori s ovim glasom: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pronađen u ranijim razgovorima: $count',
+      one: 'Pronađen u 1 ranijem razgovoru',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12791,4 +12803,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Učitavanje API ključeva nije uspjelo.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ne…';
 }

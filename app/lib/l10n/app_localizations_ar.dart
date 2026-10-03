@@ -12190,19 +12190,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get evidenceNothing => 'لم تسمِّه أو تؤكده بعد';
 
   @override
-  String get effectCountsALot => 'مؤثر جدًا';
+  String get effectCountsALot => 'يساعد كثيرًا';
 
   @override
-  String get effectCounts => 'مؤثر';
+  String get effectCounts => 'يساعد';
 
   @override
-  String get effectCountsALittle => 'مؤثر قليلًا';
+  String get effectCountsALittle => 'يساعد قليلًا';
 
   @override
-  String get effectBarelyCounts => 'يكاد لا يؤثر';
+  String get effectBarelyCounts => 'بالكاد يساعد';
 
   @override
-  String get effectCountsAgainst => 'يؤثر سلبًا';
+  String get effectCountsAgainst => 'يضر';
 
   @override
   String get effectNeeded => 'مطلوب للوصول إلى مؤكد';
@@ -12222,7 +12222,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'إجاباتك وحدها ترفع الثقة كثيرًا. المطابقات التلقائية وحدها تكاد لا تُحتسب.';
+      'إجاباتك وحدها ترفع الثقة كثيرًا. المطابقات التلقائية وحدها بالكاد تساعد.';
 
   @override
   String get personWhyConfidence => 'لماذا؟';
@@ -12536,7 +12536,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'الأسطر الموسومة: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم وسم $count من الأسطر',
+      one: 'تم وسم سطر واحد',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12564,7 +12570,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'المحادثات السابقة بهذا الصوت: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'وُجد في $count من المحادثات السابقة',
+      one: 'وُجد في محادثة سابقة واحدة',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12599,4 +12611,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'تعذّر تحميل مفاتيح API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'لا…';
 }

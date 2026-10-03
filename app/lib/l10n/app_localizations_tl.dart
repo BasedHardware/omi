@@ -12512,19 +12512,19 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi mo pa sila nilagyan ng label o kinumpirma';
 
   @override
-  String get effectCountsALot => 'Malaki ang bigat';
+  String get effectCountsALot => 'Malaking tulong';
 
   @override
-  String get effectCounts => 'May bigat';
+  String get effectCounts => 'Nakakatulong';
 
   @override
-  String get effectCountsALittle => 'Kaunti ang bigat';
+  String get effectCountsALittle => 'Kaunting tulong';
 
   @override
-  String get effectBarelyCounts => 'Halos walang bigat';
+  String get effectBarelyCounts => 'Halos hindi nakakatulong';
 
   @override
-  String get effectCountsAgainst => 'Nagpapababa';
+  String get effectCountsAgainst => 'Nakakasama';
 
   @override
   String get effectNeeded => 'Kailangan para maging Kumpirmado';
@@ -12544,7 +12544,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos walang bigat ang mga awtomatikong tugma nang mag-isa.';
+      'Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos hindi nakakatulong ang mga awtomatikong tugma nang mag-isa.';
 
   @override
   String get personWhyConfidence => 'Bakit?';
@@ -12864,7 +12864,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Mga linyang may label: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan ng label ang $count linya',
+      one: 'Nilagyan ng label ang 1 linya',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12893,7 +12899,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Mga naunang usapan na may ganitong boses: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakita sa $count naunang usapan',
+      one: 'Nakita sa 1 naunang usapan',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12929,4 +12941,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get couldNotLoadApiKeys => 'Hindi ma-load ang mga API key.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Hindi…';
 }
