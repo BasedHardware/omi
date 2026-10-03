@@ -115,6 +115,8 @@ env:
     value: "true"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
