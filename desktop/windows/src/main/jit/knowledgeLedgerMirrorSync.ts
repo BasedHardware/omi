@@ -183,7 +183,9 @@ export class KnowledgeLedgerMirrorSync implements ProactiveAssistant {
     return null
   }
 
-  handleResult(): void {}
+  handleResult(): void {
+    return
+  }
 
   stop(): void {
     this.owner = null
