@@ -97,12 +97,14 @@ def _get_shadow_redis(deadline: float) -> Any:
 
 def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str, deadline: float) -> str:
     try:
-        env_name, default = {
-            'relevance': ('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', 60000),
-            'owner': ('MEMORY_OWNER_JEV_SHADOW_DAILY_CAP', 60000),
-            'mentor': ('MENTOR_JEV_SHADOW_DAILY_CAP', MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT),
-        }[lane]
-        cap = int(os.getenv(env_name, str(default)))
+        if lane == 'mentor':
+            cap = int(os.getenv('MENTOR_JEV_SHADOW_DAILY_CAP', str(MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT)))
+        else:
+            cap = int(
+                os.getenv('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', '60000')
+                if lane == 'relevance'
+                else os.getenv('MEMORY_OWNER_JEV_SHADOW_DAILY_CAP', '60000')
+            )
     except ValueError:
         return 'cap'
     if cap <= 0:
