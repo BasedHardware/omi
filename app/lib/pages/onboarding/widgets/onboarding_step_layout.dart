@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/ui.dart';
 
+/// Height of the navigation row (progress dots and back button) below the status bar: the dots'
+/// top gap plus one tap target.
+const double kOnboardingChromeHeight = OmiSpacing.md + kOmiMinTapTarget;
+
 /// The host owns space for navigation above steps that start at the top of the screen.
-/// Bottom-card steps can keep their navigation over the background artwork.
+/// Bottom-card steps keep their navigation over the background artwork, but their content still
+/// clears it: the step gets a [MediaQuery] whose top padding includes [kOnboardingChromeHeight], so
+/// its own [SafeArea] starts below the navigation while backgrounds bleed to the top edge.
 class OnboardingStepLayout extends StatelessWidget {
   const OnboardingStepLayout({
     super.key,
@@ -35,11 +41,19 @@ class OnboardingStepLayout extends StatelessWidget {
       return Column(children: [
         SafeArea(
           bottom: false,
-          child: SizedBox(height: OmiSpacing.md + kOmiMinTapTarget, child: chrome),
+          child: SizedBox(height: kOnboardingChromeHeight, child: chrome),
         ),
         Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: child)),
       ]);
     }
-    return Stack(children: [child, if (progress != null || onBack != null) SafeArea(child: chrome)]);
+    if (progress == null && onBack == null) return child;
+    final media = MediaQuery.of(context);
+    return Stack(children: [
+      MediaQuery(
+        data: media.copyWith(padding: media.padding.copyWith(top: media.padding.top + kOnboardingChromeHeight)),
+        child: child,
+      ),
+      SafeArea(child: chrome),
+    ]);
   }
 }

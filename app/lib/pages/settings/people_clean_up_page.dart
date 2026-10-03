@@ -50,8 +50,9 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
         title: Text(l10n.cleanUpTitle),
         actions: [
           if (_candidates.isNotEmpty)
-            OmiButton.toolbar(
+            OmiButton.tertiary(
               key: const Key('people_clean_up_toggle_all'),
+              size: OmiButtonSize.compact,
               label: allTicked ? l10n.deselectAll : l10n.selectAll,
               onPressed: () {
                 OmiHaptics.selection();

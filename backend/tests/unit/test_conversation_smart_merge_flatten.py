@@ -810,6 +810,33 @@ def test_invalid_grand_donor_blocks_the_whole_assignment(world):
     assert world.store.rows == before
 
 
+def test_size_rollover_abandons_the_flatten_plan_without_ancestor_writes(world, monkeypatch):
+    from utils.sync import assignment
+
+    _flattened_world(world)
+    world.add('d', 24, 8, sync_content_revision=1)
+    world.add('g3', 23, 2)
+    _tombstone(world, 'g3', merged_into='d')
+    world.raw('d')['sync_merged_from'] = ['g3']
+    _seed_index(world, 'd')
+    before_p = deepcopy(world.raw('p'))
+    real_estimate = assignment._stored_document_bytes
+
+    def estimate(reference, payload, current, invalidate):
+        if reference.path[-1] == 'p':
+            return assignment.SYNC_CONVERSATION_BYTE_BUDGET + 1
+        return real_estimate(reference, payload, current, invalidate)
+
+    monkeypatch.setattr(assignment, '_stored_document_bytes', estimate)
+    result, created, _ = _assign(world, _sync_chunk('wal-r', 26, minutes=2), target_id='n')
+    assert result['id'] == 'd' and not created
+    assert world.raw('p') == before_p
+    assert world.raw('g3')['sync_merged_into'] == 'd'
+    assert _decoded(world, 'd')['sync_merged_from'] == ['g3']
+    assert 'wal-r-seg' in _segment_ids(world, 'd')
+    assert _visible(world) == ['d', 'p']
+
+
 def test_over_cap_sync_donor_ancestry_conflicts_before_grand_reads(world, reads):
     _flattened_world(world)
     world.add('d', 20, 8, sync_content_revision=1)

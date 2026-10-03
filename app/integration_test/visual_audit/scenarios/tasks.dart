@@ -39,7 +39,8 @@ final tasksScenarios = <AuditScenario>[
       await a.shot('Tap Add Due Date', step: 'date-picker');
       await a.tap(find.text('Done'));
       await a.shot('Confirm the date and return to the draft', step: 'date-selected');
-      expect(find.text('29/4096'), findsOneWidget);
+      // The character counter appears only near the 4096 limit.
+      expect(find.byKey(const Key('task_character_count')), findsNothing);
       await a.tap(find.byKey(const ValueKey('task_quick_date_1')));
       await a.shot('Choose Tomorrow in one tap', step: 'quick-date');
       // A non-retryable rejection reaches the form; transient 503s are retried by the HTTP client.

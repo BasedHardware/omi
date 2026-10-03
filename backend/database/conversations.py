@@ -3358,7 +3358,7 @@ def store_conversation_photos(
 @set_data_protection_level(data_arg_name='incoming')
 def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
     """Atomically choose, create or append a sync conversation across workers."""
-    from utils.sync.assignment import assign_in_transaction
+    from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -3377,12 +3377,14 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             result.pop('manual_speaker_assignments', None)
         return result
 
+    attempted: dict[str, str] = {}
+
     @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, full_ids=frozenset()):
         def encode(payload):
             return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
-        return assign_in_transaction(
+        planned = assign_in_transaction(
             transaction,
             user_ref,
             incoming,
@@ -3391,9 +3393,15 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
+            full_ids=full_ids,
         )
+        # The commit runs after this returns; remember which row it would grow.
+        attempted['canonical'] = planned[0]['id']
+        return planned
 
-    result = run_transactional(client, assign)
+    result = run_with_size_limit_backstop(
+        lambda full_ids: run_transactional(client, assign, full_ids=full_ids), lambda: attempted.get('canonical')
+    )
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
         _delete_conversation_search_index(uid, str(donor_id))

@@ -23,7 +23,26 @@ from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from tests.unit.test_conversation_smart_merge import UID, World
 from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
+from tests.unit.test_conversation_smart_merge_flatten import _sync_chunk
 from utils.sync.assignment import assign_in_transaction
+
+
+def _setup_pair(world):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    for gid in ('g1', 'g2'):
+        world.add(gid, 5, 5)
+        world.raw(gid).update(
+            {
+                'deleted': True,
+                'discarded': True,
+                'sync_merged_into': 'n',
+                'sync_content_revision': 3,
+            }
+        )
+    world.raw('n')['sync_merged_from'] = ['g1', 'g2']
+    world.raw('n')['sync_content_revision'] = 7
+    world.raw('p')['sync_content_revision'] = 2
 
 
 @pytest.fixture
@@ -33,6 +52,7 @@ def sdk_world(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_AUDIT_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_FLATTEN_ENV, raising=False)
     world = World(monkeypatch)
+    _setup_pair(world)
     client = OfflineFirestoreClient(project='synthetic-flatten-sdk-test')
     api = MagicMock()
     client._firestore_api_internal = api
@@ -83,27 +103,7 @@ def sdk_world(monkeypatch):
     return SimpleNamespace(world=world, client=client, api=api, state=state, committed=committed, rollbacks=rollbacks)
 
 
-def _setup_pair(world):
-    world.add('p', 0, 10)
-    world.add('n', 15, 10)
-    for gid in ('g1', 'g2'):
-        world.add(gid, 5, 5)
-        world.raw(gid).update(
-            {
-                'deleted': True,
-                'discarded': True,
-                'sync_merged_into': 'n',
-                'sync_content_revision': 3,
-            }
-        )
-    world.raw('n')['sync_merged_from'] = ['g1', 'g2']
-    world.raw('n')['sync_content_revision'] = 7
-    world.raw('p')['sync_content_revision'] = 2
-
-
 def _chunk(cid, start_min, minutes=2):
-    from tests.unit.test_conversation_smart_merge_flatten import _sync_chunk
-
     return _sync_chunk(cid, start_min, minutes=minutes)
 
 
@@ -152,7 +152,6 @@ def test_sync_commit_aborted_by_real_absorb_retries_into_survivor(sdk_world):
     """
     test = sdk_world
     world = test.world
-    _setup_pair(world)
     test.state.abort_on = lambda writes: any(
         write.update.name.endswith('/conversations/n') and 'deleted' not in write.update.fields for write in writes
     )
@@ -188,7 +187,6 @@ def test_absorb_commit_aborted_by_real_sync_rejects_then_converges(sdk_world):
     """
     test = sdk_world
     world = test.world
-    _setup_pair(world)
     test.state.compete = lambda: _sdk_assign(test, _chunk('wal-race-2', 20), target_id='n')
     start_ids = {seg['id'] for cid in ('p', 'n') for seg in world.transcript(cid)}
 
