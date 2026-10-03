@@ -12133,24 +12133,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'קול';
-
-  @override
-  String get assistantVoice => 'קול העוזר';
-
-  @override
-  String get voiceSharedAcrossDevices => 'בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.';
-
-  @override
-  String get readChatRepliesAloud => 'קריאת תשובות צ\'אט בקול';
-
-  @override
-  String get readChatRepliesAloudDescription => 'מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.';
-
-  @override
-  String get voicePreviewSample => 'היי, אני Omi. זה הקול שלי.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
@@ -12218,6 +12200,39 @@ class AppLocalizationsHe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration אחרונות';
   }
+
+  @override
+  String get chatReplyOffline => 'לא ניתן להתחבר. בדוק את החיבור שלך ונסה שוב.';
+
+  @override
+  String get chatReplyServerError => 'משהו השתבש אצלנו. נסה שוב.';
+
+  @override
+  String get chatReplyTimeout => 'התשובה ארכה יותר מדי זמן. נסה שוב.';
+
+  @override
+  String get chatReplyNotSignedIn => 'לא התחברת. התחבר ונסה שוב.';
+
+  @override
+  String get chatAppsLoadFailed => 'לא ניתן לטעון את אפליקציות הצ\'אט. נסה שוב.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'קול';
+
+  @override
+  String get assistantVoice => 'קול העוזר';
+
+  @override
+  String get voiceSharedAcrossDevices => 'בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.';
+
+  @override
+  String get readChatRepliesAloud => 'קריאת תשובות צ\'אט בקול';
+
+  @override
+  String get readChatRepliesAloudDescription => 'מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.';
+
+  @override
+  String get voicePreviewSample => 'היי, אני Omi. זה הקול שלי.';
 
   @override
   String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';

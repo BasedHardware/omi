@@ -12252,24 +12252,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Голос';
-
-  @override
-  String get assistantVoice => 'Голос асистента';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Ваш вибір голосу спільний для мобільної та комп\'ютерної версій.';
-
-  @override
-  String get readChatRepliesAloud => 'Читати відповіді в чаті вголос';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".';
-
-  @override
-  String get voicePreviewSample => 'Привіт, я Omi. Це мій голос.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
@@ -12337,6 +12319,39 @@ class AppLocalizationsUk extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Останні $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Не вдалося під\'єднатися. Перевірте з\'єднання та повторіть спробу.';
+
+  @override
+  String get chatReplyServerError => 'Щось пішло не так з нашого боку. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyTimeout => 'Відповідь забрала забагато часу. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Ви не ввійшли. Увійдіть і спробуйте ще раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не вдалося завантажити застосунки чату. Спробуйте ще раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ваш вибір голосу спільний для мобільної та комп\'ютерної версій.';
+
+  @override
+  String get readChatRepliesAloud => 'Читати відповіді в чаті вголос';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".';
+
+  @override
+  String get voicePreviewSample => 'Привіт, я Omi. Це мій голос.';
 
   @override
   String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';

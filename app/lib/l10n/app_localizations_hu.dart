@@ -12272,24 +12272,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Hang';
-
-  @override
-  String get assistantVoice => 'Asszisztens hangja';
-
-  @override
-  String get voiceSharedAcrossDevices => 'A választott hang megosztott a mobil és az asztali verzió között.';
-
-  @override
-  String get readChatRepliesAloud => 'Chatválaszok felolvasása hangosan';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Csak akkor szólal meg, ha a Hangválasz engedi.';
-
-  @override
-  String get voicePreviewSample => 'Szia, Omi vagyok. Ez az én hangom.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
@@ -12357,6 +12339,39 @@ class AppLocalizationsHu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Utolsó $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nem sikerült csatlakozni. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String get chatReplyServerError => 'Valami hiba történt a mi oldalunkon. Kérlek, próbáld újra.';
+
+  @override
+  String get chatReplyTimeout => 'A válasz túl sokáig tartott. Kérlek, próbáld újra.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nem vagy bejelentkezve. Jelentkezz be, és próbáld újra.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nem sikerült betölteni a csevegőalkalmazásokat. Kérlek, próbáld újra.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hang';
+
+  @override
+  String get assistantVoice => 'Asszisztens hangja';
+
+  @override
+  String get voiceSharedAcrossDevices => 'A választott hang megosztott a mobil és az asztali verzió között.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatválaszok felolvasása hangosan';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Csak akkor szólal meg, ha a Hangválasz engedi.';
+
+  @override
+  String get voicePreviewSample => 'Szia, Omi vagyok. Ez az én hangom.';
 
   @override
   String get peopleStatsIncomplete => 'A számok hiányosak lehetnek.';

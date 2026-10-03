@@ -12260,24 +12260,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Glas';
-
-  @override
-  String get assistantVoice => 'Glas asistenta';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Vaš odabir glasa dijeli se između mobilne i desktop aplikacije.';
-
-  @override
-  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Govori samo kada to dopusti \"Glasovni odgovor\".';
-
-  @override
-  String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
@@ -12345,6 +12327,39 @@ class AppLocalizationsHr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Posljednjih $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nije moguće povezivanje. Provjerite vezu i pokušajte ponovno.';
+
+  @override
+  String get chatReplyServerError => 'Nešto je pošlo po zlu s naše strane. Pokušajte ponovno.';
+
+  @override
+  String get chatReplyTimeout => 'Odgovor je predugo trajao. Pokušajte ponovno.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se i pokušajte ponovno.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nije moguće učitati aplikacije za razgovor. Pokušajte ponovno.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaš odabir glasa dijeli se između mobilne i desktop aplikacije.';
+
+  @override
+  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori samo kada to dopusti \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
 
   @override
   String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';

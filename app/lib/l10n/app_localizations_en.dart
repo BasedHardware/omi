@@ -12212,24 +12212,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voice';
-
-  @override
-  String get assistantVoice => 'Assistant Voice';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Your voice choice is shared across mobile and desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Read chat replies aloud';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Only speaks when Voice response allows it.';
-
-  @override
-  String get voicePreviewSample => 'Hi, I\'m Omi. This is my voice.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration of this voice';
   }
@@ -12297,6 +12279,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Last $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Unable to connect. Check your connection and try again.';
+
+  @override
+  String get chatReplyServerError => 'Something went wrong on our side. Please try again.';
+
+  @override
+  String get chatReplyTimeout => 'The response took too long. Please try again.';
+
+  @override
+  String get chatReplyNotSignedIn => 'You\'re not signed in. Sign in and try again.';
+
+  @override
+  String get chatAppsLoadFailed => 'Couldn\'t load chat apps. Please try again.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voice';
+
+  @override
+  String get assistantVoice => 'Assistant Voice';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Your voice choice is shared across mobile and desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Read chat replies aloud';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Only speaks when Voice response allows it.';
+
+  @override
+  String get voicePreviewSample => 'Hi, I\'m Omi. This is my voice.';
 
   @override
   String get peopleStatsIncomplete => 'Counts may be incomplete.';
