@@ -439,13 +439,13 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | No
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         logger.info('get_app_cache_by_id from cache')
-        if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
+        if cached_app.get('private', True) and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
+    if app.get('private', True) and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     set_app_cache_by_id(app_id, app)
     return app
@@ -455,10 +455,10 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
+    if app.get('private', True) and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
-    app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
-    app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
+    app['money_made'] = get_app_money_made_amount(app['id']) if not app.get('private', True) else None
+    app['usage_count'] = get_app_usage_count(app['id']) if not app.get('private', True) else None
     reviews = get_app_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = (
