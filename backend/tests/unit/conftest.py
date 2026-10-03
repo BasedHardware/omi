@@ -231,4 +231,11 @@ def _reset_live_stt_fleet_health():
     fresh = type(shared)()
     with shared._lock:
         vars(shared).update(vars(fresh))
+    if 'utils.stt.streaming' in sys.modules:
+        # Family circuits re-derive their per-family endpoint/credential identity
+        # each test; a stale latch must not reset a bench the next test arms on
+        # a freshly swapped breaker.
+        from utils.stt import streaming
+
+        streaming._family_circuits_identity.clear()
     yield

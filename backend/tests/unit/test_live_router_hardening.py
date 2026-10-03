@@ -21,7 +21,7 @@ import pytest
 
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
-from utils.stt import live_chain, live_health, live_router, live_session, streaming as st
+from utils.stt import live_chain, live_failure, live_health, live_router, live_session, streaming as st
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState, transition
 from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES
@@ -1961,6 +1961,82 @@ async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(
     assert service == st.STTService.deepgram
     assert dialed == ['deepgram']
     assert len(live_router._target_circuits) == 64
+
+
+def test_family_circuit_reset_on_identity_rotation(monkeypatch):
+    """A rotated credential/stage must not inherit the old family bench."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    first = st._circuit_for_primary(st.STTService.modulate)
+    first.record_account_failure(1800)
+    assert first.state == 'open'
+    assert first.account_cooldown_seconds_remaining > 1700
+
+    # Same identity: the bench stands.
+    assert st._circuit_for_primary(st.STTService.modulate) is first
+    assert first.state == 'open'
+
+    # Rotated credential: the bench is cleared, breaker identity is fresh.
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    rotated = st._circuit_for_primary(st.STTService.modulate)
+    assert rotated is first
+    assert rotated.state == 'closed'
+    assert rotated.account_cooldown_seconds_remaining == 0.0
+    assert rotated.allow_request() is True
+
+    # Stage change clears serve benches the same way.
+    rotated.record_serve_failure()
+    assert rotated.state == 'open'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert st._circuit_for_primary(st.STTService.modulate).state == 'closed'
+
+    # One family's rotation must not clear a sibling's bench.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    sibling = st._circuit_for_primary(st.STTService.soniox)
+    sibling.record_account_failure(1800)
+    armed = st._circuit_for_primary(st.STTService.modulate)
+    armed.record_account_failure(1800)
+    monkeypatch.setenv('SONIOX_API_KEY', 'soniox-rotated')
+    assert st._circuit_for_primary(st.STTService.soniox).state == 'closed'
+    assert st._circuit_for_primary(st.STTService.modulate).state == 'open'
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-c')
+    assert st._circuit_for_primary(st.STTService.modulate).state == 'closed'
+    with pytest.raises(ValueError):
+        st._circuit_for_primary(st.STTService('not-a-service'))
+
+
+@pytest.mark.asyncio
+async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monkeypatch, isolated):
+    """A custom-endpoint serve death must not bench the family default endpoint."""
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    scheduled = []
+    monkeypatch.setattr(pod, 'schedule', scheduled.append)
+    monkeypatch.setattr(st, 'health', pod)
+    monkeypatch.setattr(live_session, 'health', pod)
+
+    endpoint = 'wss://endpoint-a.invalid/stream'
+    raw = SimpleNamespace(is_connection_dead=False, routing_endpoint=endpoint)
+    socket = SimpleNamespace(
+        raw=raw,
+        typed_death_reason='modulate_serve_error',
+        routing_endpoint=endpoint,
+        # No record_target_death: exercise the fallback leg (plain socket).
+    )
+    assert live_failure.note_typed_provider_death(socket, 'modulate') is True
+
+    await _flush_bench_writes(pod)
+    scoped_state = live_stt_state.fleet_state_key('modulate', endpoint=endpoint)
+    default_state = live_stt_state.fleet_state_key('modulate')
+    assert pod._client.data[scoped_state].startswith('selection:')
+    assert default_state not in pod._client.data
+    state = pod.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
+    assert state.bench == 'selection'
+    default = pod.cached_snapshot(['modulate'], 'en')['modulate']
+    assert not default.bench
 
 
 @pytest.mark.asyncio

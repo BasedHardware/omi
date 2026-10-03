@@ -407,16 +407,21 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         return False
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
+    endpoint: str | None = None
+    try:
+        endpoint = getattr(stt_socket, 'routing_endpoint', None)
+    except Exception:
+        endpoint = None
     try:
         target_death = getattr(stt_socket, 'record_target_death', None)
         if callable(target_death) and target_death(typed):
             return True
     except Exception as error:
         logger.warning('Unable to record target circuit after provider death error_type=%s', type(error).__name__)
-    return _open_serving_provider_circuit(typed, provider)
+    return _open_serving_provider_circuit(typed, provider, endpoint=endpoint)
 
 
-def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> bool:
+def _open_serving_provider_circuit(bounded_reason: str, provider: str | None, *, endpoint: str | None = None) -> bool:
     """Open the process-local selection circuit of the provider who died serving.
 
     Deliberately cheap and fail-open: the terminal close of the client session
@@ -432,6 +437,8 @@ def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) ->
     try:
         from utils.stt.streaming import open_provider_selection_circuit
 
+        if endpoint:
+            return open_provider_selection_circuit(provider, reason=bounded_reason, endpoint=endpoint)
         return open_provider_selection_circuit(provider, reason=bounded_reason)
     except Exception as error:  # noqa: BLE001 — telemetry-adjacent bookkeeping must not fail the terminal path
         logger.warning(

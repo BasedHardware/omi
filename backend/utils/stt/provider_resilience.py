@@ -394,6 +394,29 @@ class ProviderCircuitBreaker:
 
         self.record_success(serving=True)
 
+    def reset(self) -> None:
+        """Clear every bench as if the breaker had just been constructed.
+
+        Identity transitions (rotated credential, replaced endpoint, stage
+        change) invalidate the evidence a bench was built on: the old
+        credential's account-open state must not make the replacement
+        credential undialable for its whole 30-minute cooldown. Bumping the
+        generation also strands callbacks already handed out for the old
+        identity, exactly like any other superseding transition.
+        """
+        with self._lock:
+            self._probes_in_flight = 0
+            self._state = 'closed'
+            self._generation += 1
+            self._opened_at = 0.0
+            self._opened_by_serve_error = False
+            self._account_cooldown = None
+            self._remaining_successes_to_close = 1
+            self._failures = 0
+            self._serve_error_events = 0
+            self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._publish_state()
+
     def replacement_callbacks(self, *, serving: bool) -> tuple[Callable[[], None], Callable[[], None]]:
         """Callbacks a long-lived session uses to settle ITS admission.
 

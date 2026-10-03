@@ -41,6 +41,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
+from config import live_stt_state
 from config.live_stt_registry import DEFAULT_IDS
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
@@ -170,24 +171,54 @@ _modulate_circuit = ProviderCircuitBreaker(
 )
 _soniox_circuit = soniox_circuit_from_env()
 
+# Per-family identity (stage + that family's endpoint and credential fingerprint)
+# each family breaker was built under. A rotated credential or replaced endpoint
+# resets only that family's benches, mirroring FleetHealth._check_identity and
+# live_router's identity-keyed _target_circuits; registry targets keep their own
+# circuits. One family's input change must not clear a sibling's evidence.
+_family_circuits_identity: dict[str, str] = {}
+_family_circuits_lock = threading.Lock()
+
 # Pre-create the always-emitted connect series so absence of a provider's
 # failures is queryable (and a dead emitter visible) from process start.
 initialize_stt_provider_connect_children()
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
+    global _family_circuits_identity
+    circuit = None
     if primary_service == STTService.parakeet:
-        return _parakeet_circuit
-    if primary_service == STTService.deepgram:
-        return _deepgram_circuit
-    if primary_service == STTService.modulate:
-        return _modulate_circuit
-    if primary_service == STTService.soniox:
-        return _soniox_circuit
-    raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
+        circuit = _parakeet_circuit
+    elif primary_service == STTService.deepgram:
+        circuit = _deepgram_circuit
+    elif primary_service == STTService.modulate:
+        circuit = _modulate_circuit
+    elif primary_service == STTService.soniox:
+        circuit = _soniox_circuit
+    else:
+        raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
+    family = primary_service.value
+    identity = _family_circuits_identity
+    seen = live_stt_state.fleet_prefix(family)
+    if identity.get(family) is None:
+        with _family_circuits_lock:
+            identity.setdefault(family, seen)
+    elif identity[family] != seen:
+        with _family_circuits_lock:
+            if identity.get(family) != seen:
+                # A rotated credential, replaced endpoint, or stage change for
+                # THIS family invalidates the evidence its bench was built on:
+                # the replacement credential must not inherit the old
+                # account-open circuit (the same failure mode the Redis views
+                # already reset for in FleetHealth._check_identity). Sibling
+                # families keep their evidence; registry targets are keyed
+                # separately in live_router._target_circuits.
+                circuit.reset()
+                identity[family] = seen
+    return circuit
 
 
-def open_provider_selection_circuit(provider: str | None, *, reason: str) -> bool:
+def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoint: str | None = None) -> bool:
     """Open a provider's process-local selection circuit after a serve-time death.
 
     Selection normally learns from connect-time outcomes alone, so a provider
@@ -197,6 +228,10 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     provider that just died for one cooldown window. Returns whether a known
     provider's circuit was opened; unknown provider names are tolerated
     (same shapes metrics accept) and simply report ``False``.
+
+    ``endpoint`` carries the selected target's serving endpoint when the
+    caller knows it, so a custom-endpoint death benches that endpoint's
+    selection state instead of poisoning the family default.
     """
     if not provider:
         return False
@@ -217,6 +252,7 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
             if reason in ACCOUNT_REJECTION_REASONS
             else circuit.serve_error_bench_seconds
         ),
+        endpoint=endpoint,
     )
     # Logged AFTER the record so bench_seconds is the window just armed — an
     # outage keeps dying here from every rescue, and this is what makes the

@@ -1220,9 +1220,11 @@ def test_target_circuit_hook_errors_cannot_interrupt_failover(monkeypatch, acces
             return fail
 
     seen = []
-    monkeypatch.setattr(live_failure, '_open_serving_provider_circuit', lambda *args: seen.append(args) or True)
+    monkeypatch.setattr(
+        live_failure, '_open_serving_provider_circuit', lambda *args, **kwargs: seen.append((args, kwargs)) or True
+    )
     assert live_failure.note_typed_provider_death(Broken(), 'modulate')
-    assert seen == [(st.MODULATE_DEATH_SERVE_ERROR, 'modulate')]
+    assert seen == [((st.MODULATE_DEATH_SERVE_ERROR, 'modulate'), {'endpoint': None})]
 
 
 @pytest.mark.asyncio
