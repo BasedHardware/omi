@@ -12213,11 +12213,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration từ giọng nói này';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Giọng nói';
 
   @override
@@ -12234,4 +12229,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration từ giọng nói này';
+  }
 }

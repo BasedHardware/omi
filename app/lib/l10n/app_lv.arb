@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.",
     "exportingAllData": "Notiek jūsu datu eksports… Turiet Omi atvērtu; lieliem kontiem tas var ilgt vairākas minūtes.",
     "transcriptSpeakerCount": "{count, plural, =1{1 runātājs} other{Runātāji: {count}}}",
+    "assistantVoiceSettingsTitle": "Balss",
+    "assistantVoice": "Asistenta balss",
+    "voiceSharedAcrossDevices": "Jūsu izvēlētā balss tiek koplietota mobilajā un datora lietotnē.",
+    "readChatRepliesAloud": "Izlasīt tērzēšanas atbildes skaļi",
+    "readChatRepliesAloudDescription": "Runā tikai tad, kad to atļauj \"Balss atbilde\".",
+    "voicePreviewSample": "Sveiki, esmu Omi. Šī ir mana balss.",
     "autoRemoveSyncedCopiesTitle": "Automātiski noņemt sinhronizētās kopijas",
     "autoRemoveSyncedCopiesDays": "Sinhronizētās kopijas tiek dzēstas pēc {days} dienām",
     "autoRemoveSyncedCopiesDescription": "Dzēš vietējās kopijas {days} dienas pēc sinhronizācijas. Mākoņa kopijas tiek saglabātas.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nākamreiz atpazīs {name}.} pending{Tas aizņem dažas sekundes.} disabled{Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt {name}.} other{Omi vajag vairāk skaidras {name} runas, un tas turpinās mēģināt.}}",
     "speakerLabelEarlierMatches": "Iepriekšējās sarunas ar šo balsi: {count}",
     "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
-    "speakerLabelTalkTime": "{duration} no šīs balss",
-    "assistantVoiceSettingsTitle": "Balss",
-    "assistantVoice": "Asistenta balss",
-    "voiceSharedAcrossDevices": "Jūsu izvēlētā balss tiek koplietota mobilajā un datora lietotnē.",
-    "readChatRepliesAloud": "Izlasīt tērzēšanas atbildes skaļi",
-    "readChatRepliesAloudDescription": "Runā tikai tad, kad to atļauj \"Balss atbilde\".",
-    "voicePreviewSample": "Sveiki, esmu Omi. Šī ir mana balss."
+    "speakerLabelTalkTime": "{duration} no šīs balss"
 }

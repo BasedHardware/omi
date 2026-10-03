@@ -21879,12 +21879,6 @@ abstract class AppLocalizations {
   /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
   String speakerLabelText(String part, String name);
 
-  /// How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)
-  ///
-  /// In en, this message translates to:
-  /// **'{duration} of this voice'**
-  String speakerLabelTalkTime(String duration);
-
   /// Settings section title for assistant voice
   ///
   /// In en, this message translates to:
@@ -21920,6 +21914,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Hi, I\'m Omi. This is my voice.'**
   String get voicePreviewSample;
+
+  /// How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} of this voice'**
+  String speakerLabelTalkTime(String duration);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.",
     "exportingAllData": "데이터를 보내는 중… Omi를 열어 두세요. 데이터가 많은 계정은 몇 분 정도 걸릴 수 있습니다.",
     "transcriptSpeakerCount": "{count, plural, =1{화자 1명} other{화자 {count}명}}",
+    "assistantVoiceSettingsTitle": "음성",
+    "assistantVoice": "어시스턴트 음성",
+    "voiceSharedAcrossDevices": "선택한 음성은 모바일과 데스크톱에서 공유됩니다.",
+    "readChatRepliesAloud": "채팅 답장 소리 내어 읽기",
+    "readChatRepliesAloudDescription": "\"음성 응답\"이 허용할 때만 말합니다.",
+    "voicePreviewSample": "안녕하세요, 저는 Omi입니다. 이것이 제 목소리입니다.",
     "autoRemoveSyncedCopiesTitle": "동기화된 사본 자동 삭제",
     "autoRemoveSyncedCopiesDays": "동기화된 사본은 {days}일 후 삭제됩니다",
     "autoRemoveSyncedCopiesDescription": "동기화 후 {days}일에 로컬 사본을 삭제합니다. 클라우드 사본은 유지됩니다.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{다음부터 Omi가 {name}님을 알아볼 거예요.} pending{몇 초 정도 걸려요.} disabled{Omi가 {name}님을 알아보려면 설정에서 목소리 저장을 켜 주세요.} other{Omi에 {name}님의 또렷한 음성이 더 필요해요. 계속 시도할게요.}}",
     "speakerLabelEarlierMatches": "이 목소리의 이전 대화 수: {count}",
     "speakerLabelText": "{part, select, likely{추정} soundsLike{{name}님 목소리와 비슷해요} notPerson{{name}님 아님} carried{계속 {name}님이에요. 지난 대화에서 이어졌어요.} change{변경} alsoTitle{이분도 {name}님인가요?} alsoBody{Omi가 이전 대화에서 같은 목소리를 찾았어요.} confirmed{이 라벨을 확인했어요} other{검토}}",
-    "speakerLabelTalkTime": "이 목소리 {duration}",
-    "assistantVoiceSettingsTitle": "음성",
-    "assistantVoice": "어시스턴트 음성",
-    "voiceSharedAcrossDevices": "선택한 음성은 모바일과 데스크톱에서 공유됩니다.",
-    "readChatRepliesAloud": "채팅 답장 소리 내어 읽기",
-    "readChatRepliesAloudDescription": "\"음성 응답\"이 허용할 때만 말합니다.",
-    "voicePreviewSample": "안녕하세요, 저는 Omi입니다. 이것이 제 목소리입니다."
+    "speakerLabelTalkTime": "이 목소리 {duration}"
 }

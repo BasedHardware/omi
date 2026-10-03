@@ -12257,11 +12257,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration ovog glasa';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Glas';
 
   @override
@@ -12278,4 +12273,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ovog glasa';
+  }
 }

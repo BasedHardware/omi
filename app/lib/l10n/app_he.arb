@@ -11330,6 +11330,12 @@
     "updateRequiredMessage": "הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.",
     "exportingAllData": "מייצא את הנתונים שלך… השאירו את Omi פתוח; חשבונות גדולים עשויים לקחת מספר דקות.",
     "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}",
+    "assistantVoiceSettingsTitle": "קול",
+    "assistantVoice": "קול העוזר",
+    "voiceSharedAcrossDevices": "בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.",
+    "readChatRepliesAloud": "קריאת תשובות צ'אט בקול",
+    "readChatRepliesAloudDescription": "מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.",
+    "voicePreviewSample": "היי, אני Omi. זה הקול שלי.",
     "autoRemoveSyncedCopiesTitle": "הסרה אוטומטית של עותקים מסונכרנים",
     "autoRemoveSyncedCopiesDays": "עותקים מסונכרנים נמחקים לאחר {days} ימים",
     "autoRemoveSyncedCopiesDescription": "מוחק עותקים מקומיים {days} ימים לאחר הסנכרון. עותקי הענן נשמרים.",
@@ -11339,11 +11345,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
     "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה",
-    "assistantVoiceSettingsTitle": "קול",
-    "assistantVoice": "קול העוזר",
-    "voiceSharedAcrossDevices": "בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.",
-    "readChatRepliesAloud": "קריאת תשובות צ'אט בקול",
-    "readChatRepliesAloudDescription": "מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.",
-    "voicePreviewSample": "היי, אני Omi. זה הקול שלי."
+    "speakerLabelTalkTime": "{duration} מהקול הזה"
 }

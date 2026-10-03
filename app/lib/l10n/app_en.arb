@@ -14567,15 +14567,6 @@
             }
         }
     },
-    "speakerLabelTalkTime": "{duration} of this voice",
-    "@speakerLabelTalkTime": {
-        "description": "How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)",
-        "placeholders": {
-            "duration": {
-                "type": "String"
-            }
-        }
-    },
     "assistantVoiceSettingsTitle": "Voice",
     "@assistantVoiceSettingsTitle": {
         "description": "Settings section title for assistant voice"
@@ -14599,5 +14590,14 @@
     "voicePreviewSample": "Hi, I'm Omi. This is my voice.",
     "@voicePreviewSample": {
         "description": "Sample text synthesized when previewing an assistant voice"
+    },
+    "speakerLabelTalkTime": "{duration} of this voice",
+    "@speakerLabelTalkTime": {
+        "description": "How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
     }
 }

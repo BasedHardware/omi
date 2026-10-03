@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Den här versionen av Omi stöds inte längre. Uppdatera för att fortsätta spela in och synkronisera.",
     "exportingAllData": "Exporterar dina data… Håll Omi öppen; stora konton kan ta flera minuter.",
     "transcriptSpeakerCount": "{count, plural, =1{1 talare} other{{count} talare}}",
+    "assistantVoiceSettingsTitle": "Röst",
+    "assistantVoice": "Assistentens röst",
+    "voiceSharedAcrossDevices": "Ditt röstval delas mellan mobil och dator.",
+    "readChatRepliesAloud": "Läs chattsvar högt",
+    "readChatRepliesAloudDescription": "Talar bara när Röstsvar tillåter det.",
+    "voicePreviewSample": "Hej, jag är Omi. Det här är min röst.",
     "autoRemoveSyncedCopiesTitle": "Ta bort synkroniserade kopior automatiskt",
     "autoRemoveSyncedCopiesDays": "Synkroniserade kopior raderas efter {days} dagar",
     "autoRemoveSyncedCopiesDescription": "Raderar lokala kopior {days} dagar efter synkronisering. Molnkopior behålls.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi känner igen {name} nästa gång.} pending{Det tar några sekunder.} disabled{Aktivera sparande av röster i Inställningar så att Omi kan känna igen {name}.} other{Omi behöver mer tydligt tal från {name} och fortsätter försöka.}}",
     "speakerLabelEarlierMatches": "Tidigare konversationer med den här rösten: {count}",
     "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
-    "speakerLabelTalkTime": "{duration} av den här rösten",
-    "assistantVoiceSettingsTitle": "Röst",
-    "assistantVoice": "Assistentens röst",
-    "voiceSharedAcrossDevices": "Ditt röstval delas mellan mobil och dator.",
-    "readChatRepliesAloud": "Läs chattsvar högt",
-    "readChatRepliesAloudDescription": "Talar bara när Röstsvar tillåter det.",
-    "voicePreviewSample": "Hej, jag är Omi. Det här är min röst."
+    "speakerLabelTalkTime": "{duration} av den här rösten"
 }

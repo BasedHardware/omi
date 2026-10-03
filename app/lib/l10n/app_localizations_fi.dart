@@ -12224,11 +12224,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration tästä äänestä';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Ääni';
 
   @override
@@ -12245,4 +12240,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tästä äänestä';
+  }
 }

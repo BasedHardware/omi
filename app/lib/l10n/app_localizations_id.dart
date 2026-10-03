@@ -12232,11 +12232,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration dari suara ini';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Suara';
 
   @override
@@ -12253,4 +12248,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration dari suara ini';
+  }
 }

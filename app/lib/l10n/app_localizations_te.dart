@@ -12271,11 +12271,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return 'ఈ వాయిస్ యొక్క $duration';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'వాయిస్';
 
   @override
@@ -12292,4 +12287,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'హాయ్, నేను Omiని. ఇది నా వాయిస్.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'ఈ వాయిస్ యొక్క $duration';
+  }
 }

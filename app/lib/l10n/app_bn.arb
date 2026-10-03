@@ -11330,6 +11330,12 @@
     "updateRequiredMessage": "Omi-এর এই সংস্করণ আর সমর্থিত নয়। রেকর্ডিং ও সিঙ্ক চালিয়ে যেতে আপডেট করুন।",
     "exportingAllData": "আপনার ডেটা রপ্তানি করা হচ্ছে… Omi খোলা রাখুন; বড় অ্যাকাউন্টের ক্ষেত্রে কয়েক মিনিট লাগতে পারে।",
     "transcriptSpeakerCount": "{count, plural, =1{১ জন বক্তা} other{{count} জন বক্তা}}",
+    "assistantVoiceSettingsTitle": "ভয়েস",
+    "assistantVoice": "অ্যাসিস্ট্যান্টের ভয়েস",
+    "voiceSharedAcrossDevices": "আপনার নির্বাচিত ভয়েস মোবাইল ও ডেস্কটপে শেয়ার করা হয়।",
+    "readChatRepliesAloud": "চ্যাটের উত্তরগুলো জোরে পড়ুন",
+    "readChatRepliesAloudDescription": "শুধুমাত্র \"ভয়েস রেসপন্স\" অনুমতি দিলেই কথা বলে।",
+    "voicePreviewSample": "হাই, আমি Omi। এটাই আমার ভয়েস।",
     "autoRemoveSyncedCopiesTitle": "সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান",
     "autoRemoveSyncedCopiesDays": "{days} দিন পরে সিঙ্ক করা কপি মুছে যায়",
     "autoRemoveSyncedCopiesDescription": "সিঙ্কের {days} দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।",
@@ -11339,11 +11345,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi পরের বার {name}-কে চিনতে পারবে।} pending{এতে কয়েক সেকেন্ড লাগবে।} disabled{Omi যাতে {name}-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।} other{Omi-র {name}-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।}}",
     "speakerLabelEarlierMatches": "এই ভয়েসের আগের কথোপকথন: {count}",
     "speakerLabelText": "{part, select, likely{সম্ভাব্য} soundsLike{{name}-এর মতো শোনাচ্ছে} notPerson{{name} নয়} carried{এখনও {name}। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।} change{পরিবর্তন} alsoTitle{এটিও কি {name}?} alsoBody{Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।} confirmed{আপনি এই লেবেল নিশ্চিত করেছেন} other{পর্যালোচনা}}",
-    "speakerLabelTalkTime": "এই ভয়েসের {duration}",
-    "assistantVoiceSettingsTitle": "ভয়েস",
-    "assistantVoice": "অ্যাসিস্ট্যান্টের ভয়েস",
-    "voiceSharedAcrossDevices": "আপনার নির্বাচিত ভয়েস মোবাইল ও ডেস্কটপে শেয়ার করা হয়।",
-    "readChatRepliesAloud": "চ্যাটের উত্তরগুলো জোরে পড়ুন",
-    "readChatRepliesAloudDescription": "শুধুমাত্র \"ভয়েস রেসপন্স\" অনুমতি দিলেই কথা বলে।",
-    "voicePreviewSample": "হাই, আমি Omi। এটাই আমার ভয়েস।"
+    "speakerLabelTalkTime": "এই ভয়েসের {duration}"
 }

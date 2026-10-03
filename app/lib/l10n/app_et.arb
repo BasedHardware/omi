@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.",
     "exportingAllData": "Teie andmete eksportimine… Hoidke Omi avatud; suurte kontode puhul võib see võtta mitu minutit.",
     "transcriptSpeakerCount": "{count, plural, =1{1 kõneleja} other{{count} kõnelejat}}",
+    "assistantVoiceSettingsTitle": "Hääl",
+    "assistantVoice": "Assistendi hääl",
+    "voiceSharedAcrossDevices": "Sinu häälevalik on ühine mobiilis ja töölaual.",
+    "readChatRepliesAloud": "Loe vestluse vastused ette",
+    "readChatRepliesAloudDescription": "Räägib ainult siis, kui \"Häälvastus\" seda lubab.",
+    "voicePreviewSample": "Tere, mina olen Omi. See on minu hääl.",
     "autoRemoveSyncedCopiesTitle": "Sünkroonitud koopiate automaatne eemaldamine",
     "autoRemoveSyncedCopiesDays": "Sünkroonitud koopiad kustutatakse pärast {days} päeva",
     "autoRemoveSyncedCopiesDescription": "Kustutab kohalikud koopiad {days} päeva pärast sünkroonimist. Pilvekoopiad jäävad alles.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest",
-    "assistantVoiceSettingsTitle": "Hääl",
-    "assistantVoice": "Assistendi hääl",
-    "voiceSharedAcrossDevices": "Sinu häälevalik on ühine mobiilis ja töölaual.",
-    "readChatRepliesAloud": "Loe vestluse vastused ette",
-    "readChatRepliesAloudDescription": "Räägib ainult siis, kui \"Häälvastus\" seda lubab.",
-    "voicePreviewSample": "Tere, mina olen Omi. See on minu hääl."
+    "speakerLabelTalkTime": "{duration} sellest häälest"
 }

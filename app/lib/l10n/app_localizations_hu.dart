@@ -12266,11 +12266,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration ebből a hangból';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Hang';
 
   @override
@@ -12287,4 +12282,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Szia, Omi vagyok. Ez az én hangom.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ebből a hangból';
+  }
 }

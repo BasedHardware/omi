@@ -3808,6 +3808,12 @@
     "updateRequiredMessage": "Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando.",
     "exportingAllData": "Exportando seus dados… Mantenha o Omi aberto; contas grandes podem levar vários minutos.",
     "transcriptSpeakerCount": "{count, plural, =1{1 participante} other{{count} participantes}}",
+    "assistantVoiceSettingsTitle": "Voz",
+    "assistantVoice": "Voz do assistente",
+    "voiceSharedAcrossDevices": "A tua escolha de voz é partilhada entre o telemóvel e o computador.",
+    "readChatRepliesAloud": "Ler respostas do chat em voz alta",
+    "readChatRepliesAloudDescription": "Só fala quando a Resposta por voz o permite.",
+    "voicePreviewSample": "Olá, eu sou a Omi. Esta é a minha voz.",
     "autoRemoveSyncedCopiesTitle": "Remover cópias sincronizadas automaticamente",
     "autoRemoveSyncedCopiesDays": "As cópias sincronizadas são excluídas após {days} dias",
     "autoRemoveSyncedCopiesDescription": "Exclui cópias locais {days} dias após a sincronização. As cópias na nuvem são mantidas.",
@@ -3817,11 +3823,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{O Omi vai reconhecer {name} na próxima vez.} pending{Isso leva alguns segundos.} disabled{Ative o salvamento de vozes em Configurações para o Omi poder reconhecer {name}.} other{O Omi precisa de mais fala clara de {name} e vai continuar tentando.}}",
     "speakerLabelEarlierMatches": "Conversas anteriores com esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Provável} soundsLike{Soa como {name}} notPerson{Não é {name}} carried{Continua sendo {name}. Mantido da sua última conversa.} change{Alterar} alsoTitle{Esta voz também é {name}?} alsoBody{O Omi encontrou a mesma voz em conversas anteriores.} confirmed{Você confirmou este rótulo} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} desta voz",
-    "assistantVoiceSettingsTitle": "Voz",
-    "assistantVoice": "Voz do assistente",
-    "voiceSharedAcrossDevices": "A tua escolha de voz é partilhada entre o telemóvel e o computador.",
-    "readChatRepliesAloud": "Ler respostas do chat em voz alta",
-    "readChatRepliesAloudDescription": "Só fala quando a Resposta por voz o permite.",
-    "voicePreviewSample": "Olá, eu sou a Omi. Esta é a minha voz."
+    "speakerLabelTalkTime": "{duration} desta voz"
 }

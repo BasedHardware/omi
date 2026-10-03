@@ -3808,6 +3808,12 @@
     "updateRequiredMessage": "Omi'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin.",
     "exportingAllData": "Verileriniz dışa aktarılıyor… Omi'yi açık tutun; büyük hesaplar birkaç dakika sürebilir.",
     "transcriptSpeakerCount": "{count, plural, =1{1 konuşmacı} other{{count} konuşmacı}}",
+    "assistantVoiceSettingsTitle": "Ses",
+    "assistantVoice": "Asistan Sesi",
+    "voiceSharedAcrossDevices": "Ses seçiminiz mobil ve masaüstü arasında paylaşılır.",
+    "readChatRepliesAloud": "Sohbet yanıtlarını sesli oku",
+    "readChatRepliesAloudDescription": "Yalnızca Sesli yanıt izin verdiğinde konuşur.",
+    "voicePreviewSample": "Merhaba, ben Omi. Bu benim sesim.",
     "autoRemoveSyncedCopiesTitle": "Senkronize Kopyaları Otomatik Kaldır",
     "autoRemoveSyncedCopiesDays": "Senkronize kopyalar {days} gün sonra silinir",
     "autoRemoveSyncedCopiesDescription": "Senkronizasyondan {days} gün sonra yerel kopyaları siler. Bulut kopyaları saklanır.",
@@ -3817,11 +3823,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi bir dahaki sefere {name} kişisini tanıyacak.} pending{Bu birkaç saniye sürer.} disabled{Omi {name} kişisini tanıyabilsin diye Ayarlar’da ses kaydetmeyi açın.} other{Omi, {name} kişisinin daha net konuşmasına ihtiyaç duyuyor ve denemeye devam edecek.}}",
     "speakerLabelEarlierMatches": "Bu sesle önceki sohbetler: {count}",
     "speakerLabelText": "{part, select, likely{Muhtemel} soundsLike{{name} gibi duyuluyor} notPerson{{name} değil} carried{Hâlâ {name}. Son sohbetinizden aktarıldı.} change{Değiştir} alsoTitle{Bu da {name} mi?} alsoBody{Omi aynı sesi önceki sohbetlerde buldu.} confirmed{Bu etiketi onayladınız} other{İncele}}",
-    "speakerLabelTalkTime": "Bu sesten {duration}",
-    "assistantVoiceSettingsTitle": "Ses",
-    "assistantVoice": "Asistan Sesi",
-    "voiceSharedAcrossDevices": "Ses seçiminiz mobil ve masaüstü arasında paylaşılır.",
-    "readChatRepliesAloud": "Sohbet yanıtlarını sesli oku",
-    "readChatRepliesAloudDescription": "Yalnızca Sesli yanıt izin verdiğinde konuşur.",
-    "voicePreviewSample": "Merhaba, ben Omi. Bu benim sesim."
+    "speakerLabelTalkTime": "Bu sesten {duration}"
 }

@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Тази версия на Omi вече не се поддържа. Актуализирайте, за да продължите да записвате и синхронизирате.",
     "exportingAllData": "Експортиране на вашите данни… Не затваряйте Omi; при големи акаунти може да отнеме няколко минути.",
     "transcriptSpeakerCount": "{count, plural, =1{1 говорител} other{{count} говорители}}",
+    "assistantVoiceSettingsTitle": "Глас",
+    "assistantVoice": "Глас на асистента",
+    "voiceSharedAcrossDevices": "Избраният от вас глас се споделя между мобилната и десктоп версията.",
+    "readChatRepliesAloud": "Четене на отговорите в чата на глас",
+    "readChatRepliesAloudDescription": "Говори само когато „Гласов отговор\" го позволява.",
+    "voicePreviewSample": "Здравей, аз съм Omi. Това е моят глас.",
     "autoRemoveSyncedCopiesTitle": "Автоматично премахване на синхронизираните копия",
     "autoRemoveSyncedCopiesDays": "Синхронизираните копия се изтриват след {days} дни",
     "autoRemoveSyncedCopiesDescription": "Изтрива локалните копия {days} дни след синхронизация. Облачните копия се запазват.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ще разпознае {name} следващия път.} pending{Това отнема няколко секунди.} disabled{Включете запазването на гласове в Настройки, за да може Omi да разпознава {name}.} other{Omi се нуждае от повече ясна реч от {name} и ще продължи да опитва.}}",
     "speakerLabelEarlierMatches": "Предишни разговори с този глас: {count}",
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
-    "speakerLabelTalkTime": "{duration} от този глас",
-    "assistantVoiceSettingsTitle": "Глас",
-    "assistantVoice": "Глас на асистента",
-    "voiceSharedAcrossDevices": "Избраният от вас глас се споделя между мобилната и десктоп версията.",
-    "readChatRepliesAloud": "Четене на отговорите в чата на глас",
-    "readChatRepliesAloudDescription": "Говори само когато „Гласов отговор\" го позволява.",
-    "voicePreviewSample": "Здравей, аз съм Omi. Това е моят глас."
+    "speakerLabelTalkTime": "{duration} от този глас"
 }

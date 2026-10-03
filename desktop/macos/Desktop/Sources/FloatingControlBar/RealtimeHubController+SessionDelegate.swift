@@ -549,7 +549,7 @@ extension RealtimeHubController {
       FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
         acknowledgement,
         provider: acknowledgementProvider,
-        voiceName: session?.assistantVoiceID)
+        voiceName: Self.acknowledgementVoiceName(acknowledgementProvider, session?.assistantVoiceID))
     }
     switch tool {
     case .getTasks:

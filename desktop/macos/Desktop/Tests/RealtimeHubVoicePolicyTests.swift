@@ -22,6 +22,12 @@ final class RealtimeHubVoicePolicyTests: XCTestCase {
     XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: .gemini), "Charon")
     XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: .openai, assistantVoiceID: "Kore"), "cedar")
   }
+
+  func testAcknowledgementVoiceNameFollowsTheSessionProvider() {
+    XCTAssertEqual(RealtimeHubController.acknowledgementVoiceName(.openai, "Kore"), "cedar")
+    XCTAssertEqual(RealtimeHubController.acknowledgementVoiceName(.gemini, "Kore"), "Kore")
+    XCTAssertEqual(RealtimeHubController.acknowledgementVoiceName(.gemini, nil), "Charon")
+  }
 }
 
 /// Through the production payload seams the session builders embed — not the

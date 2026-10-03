@@ -12003,11 +12003,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '此声音共 $duration';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => '语音';
 
   @override
@@ -12024,4 +12019,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voicePreviewSample => '嗨，我是 Omi。这是我的声音。';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '此声音共 $duration';
+  }
 }

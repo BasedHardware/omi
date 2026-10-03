@@ -12301,11 +12301,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '$duration αυτής της φωνής';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'Φωνή';
 
   @override
@@ -12322,4 +12317,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'Γεια, είμαι ο Omi. Αυτή είναι η φωνή μου.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration αυτής της φωνής';
+  }
 }

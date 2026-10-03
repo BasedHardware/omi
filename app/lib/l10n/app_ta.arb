@@ -11330,6 +11330,12 @@
     "updateRequiredMessage": "Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.",
     "exportingAllData": "உங்கள் தரவு ஏற்றுமதி செய்யப்படுகிறது… Omi-ஐ திறந்தே வைக்கவும்; பெரிய கணக்குகளுக்கு பல நிமிடங்கள் ஆகலாம்.",
     "transcriptSpeakerCount": "{count, plural, =1{1 பேச்சாளர்} other{{count} பேச்சாளர்கள்}}",
+    "assistantVoiceSettingsTitle": "குரல்",
+    "assistantVoice": "உதவியாளர் குரல்",
+    "voiceSharedAcrossDevices": "நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.",
+    "readChatRepliesAloud": "அரட்டை பதில்களை சத்தமாக வாசி",
+    "readChatRepliesAloudDescription": "\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.",
+    "voicePreviewSample": "ஹாய், நான் Omi. இது என் குரல்.",
     "autoRemoveSyncedCopiesTitle": "ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று",
     "autoRemoveSyncedCopiesDays": "ஒத்திசைக்கப்பட்ட நகல்கள் {days} நாட்களுக்குப் பிறகு நீக்கப்படும்",
     "autoRemoveSyncedCopiesDescription": "ஒத்திசைத்த {days} நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.",
@@ -11339,11 +11345,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{அடுத்த முறை Omi {name} அவர்களை அடையாளம் காணும்.} pending{இதற்கு சில விநாடிகள் ஆகும்.} disabled{Omi {name} அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.} other{Omi-க்கு {name} அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.}}",
     "speakerLabelEarlierMatches": "இந்தக் குரலுடன் முந்தைய உரையாடல்கள்: {count}",
     "speakerLabelText": "{part, select, likely{சாத்தியம்} soundsLike{{name} போல ஒலிக்கிறது} notPerson{{name} இல்லை} carried{இன்னும் {name}. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.} change{மாற்று} alsoTitle{இதுவும் {name} தானா?} alsoBody{முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.} confirmed{இந்த லேபிளை உறுதிப்படுத்தினீர்கள்} other{மதிப்பாய்வு}}",
-    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}",
-    "assistantVoiceSettingsTitle": "குரல்",
-    "assistantVoice": "உதவியாளர் குரல்",
-    "voiceSharedAcrossDevices": "நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.",
-    "readChatRepliesAloud": "அரட்டை பதில்களை சத்தமாக வாசி",
-    "readChatRepliesAloudDescription": "\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.",
-    "voicePreviewSample": "ஹாய், நான் Omi. இது என் குரல்."
+    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}"
 }

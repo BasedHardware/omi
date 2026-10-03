@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.",
     "exportingAllData": "Se exportă datele tale… Ține Omi deschis; conturile mari pot dura câteva minute.",
     "transcriptSpeakerCount": "{count, plural, =1{1 vorbitor} other{Vorbitori: {count}}}",
+    "assistantVoiceSettingsTitle": "Voce",
+    "assistantVoice": "Vocea asistentului",
+    "voiceSharedAcrossDevices": "Vocea aleasă este partajată între mobil și desktop.",
+    "readChatRepliesAloud": "Citește răspunsurile din chat cu voce tare",
+    "readChatRepliesAloudDescription": "Vorbește doar când \"Răspuns vocal\" permite.",
+    "voicePreviewSample": "Bună, sunt Omi. Aceasta este vocea mea.",
     "autoRemoveSyncedCopiesTitle": "Eliminare automată a copiilor sincronizate",
     "autoRemoveSyncedCopiesDays": "Copiile sincronizate se șterg după {days} zile",
     "autoRemoveSyncedCopiesDescription": "Șterge copiile locale la {days} zile după sincronizare. Copiile din cloud sunt păstrate.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi va recunoaște persoana {name} data viitoare.} pending{Durează câteva secunde.} disabled{Activează salvarea vocilor în Setări ca Omi să poată recunoaște persoana {name}.} other{Omi are nevoie de mai multă vorbire clară de la {name} și va continua să încerce.}}",
     "speakerLabelEarlierMatches": "Conversații anterioare cu această voce: {count}",
     "speakerLabelText": "{part, select, likely{Probabil} soundsLike{Sună ca {name}} notPerson{Nu este {name}} carried{Tot {name}. Preluat din ultima ta conversație.} change{Schimbă} alsoTitle{Este și aceasta {name}?} alsoBody{Omi a găsit aceeași voce în conversații anterioare.} confirmed{Ai confirmat această etichetă} other{Revizuiește}}",
-    "speakerLabelTalkTime": "{duration} din această voce",
-    "assistantVoiceSettingsTitle": "Voce",
-    "assistantVoice": "Vocea asistentului",
-    "voiceSharedAcrossDevices": "Vocea aleasă este partajată între mobil și desktop.",
-    "readChatRepliesAloud": "Citește răspunsurile din chat cu voce tare",
-    "readChatRepliesAloudDescription": "Vorbește doar când \"Răspuns vocal\" permite.",
-    "voicePreviewSample": "Bună, sunt Omi. Aceasta este vocea mea."
+    "speakerLabelTalkTime": "{duration} din această voce"
 }

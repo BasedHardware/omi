@@ -12028,11 +12028,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return '이 목소리 $duration';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => '음성';
 
   @override
@@ -12049,4 +12044,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voicePreviewSample => '안녕하세요, 저는 Omi입니다. 이것이 제 목소리입니다.';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '이 목소리 $duration';
+  }
 }

@@ -3773,6 +3773,12 @@
     "updateRequiredMessage": "Questa versione di Omi non è più supportata. Aggiorna per continuare a registrare e sincronizzare.",
     "exportingAllData": "Esportazione dei tuoi dati in corso… Tieni Omi aperta; gli account di grandi dimensioni possono richiedere diversi minuti.",
     "transcriptSpeakerCount": "{count, plural, =1{1 interlocutore} other{{count} interlocutori}}",
+    "assistantVoiceSettingsTitle": "Voce",
+    "assistantVoice": "Voce dell'assistente",
+    "voiceSharedAcrossDevices": "La voce scelta è condivisa tra mobile e desktop.",
+    "readChatRepliesAloud": "Leggi le risposte della chat ad alta voce",
+    "readChatRepliesAloudDescription": "Parla solo quando \"Risposta vocale\" lo consente.",
+    "voicePreviewSample": "Ciao, sono Omi. Questa è la mia voce.",
     "autoRemoveSyncedCopiesTitle": "Rimozione automatica delle copie sincronizzate",
     "autoRemoveSyncedCopiesDays": "Le copie sincronizzate vengono eliminate dopo {days} giorni",
     "autoRemoveSyncedCopiesDescription": "Elimina le copie locali {days} giorni dopo la sincronizzazione. Le copie sul cloud vengono conservate.",
@@ -3782,11 +3788,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi riconoscerà {name} la prossima volta.} pending{Ci vogliono pochi secondi.} disabled{Attiva il salvataggio delle voci nelle Impostazioni così Omi potrà riconoscere {name}.} other{Omi ha bisogno di più parlato chiaro da {name} e continuerà a provare.}}",
     "speakerLabelEarlierMatches": "Conversazioni precedenti con questa voce: {count}",
     "speakerLabelText": "{part, select, likely{Probabile} soundsLike{Somiglia a {name}} notPerson{Non è {name}} carried{È ancora {name}. Riportato dalla tua ultima conversazione.} change{Cambia} alsoTitle{È anche {name}?} alsoBody{Omi ha trovato la stessa voce in conversazioni precedenti.} confirmed{Hai confermato questa etichetta} other{Rivedi}}",
-    "speakerLabelTalkTime": "{duration} di questa voce",
-    "assistantVoiceSettingsTitle": "Voce",
-    "assistantVoice": "Voce dell'assistente",
-    "voiceSharedAcrossDevices": "La voce scelta è condivisa tra mobile e desktop.",
-    "readChatRepliesAloud": "Leggi le risposte della chat ad alta voce",
-    "readChatRepliesAloudDescription": "Parla solo quando \"Risposta vocale\" lo consente.",
-    "voicePreviewSample": "Ciao, sono Omi. Questa è la mia voce."
+    "speakerLabelTalkTime": "{duration} di questa voce"
 }

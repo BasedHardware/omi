@@ -12219,11 +12219,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String speakerLabelTalkTime(String duration) {
-    return 'এই ভয়েসের $duration';
-  }
-
-  @override
   String get assistantVoiceSettingsTitle => 'ভয়েস';
 
   @override
@@ -12240,4 +12235,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voicePreviewSample => 'হাই, আমি Omi। এটাই আমার ভয়েস।';
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'এই ভয়েসের $duration';
+  }
 }

@@ -11,4 +11,8 @@ extension RealtimeHubController {
   @objc private func assistantVoiceChanged() {
     requestSessionHandoff(reason: .assistantVoice)
   }
+
+  nonisolated static func acknowledgementVoiceName(_ provider: RealtimeHubProvider, _ voiceID: String?) -> String {
+    RealtimeHubVoicePolicy.voiceName(for: provider, assistantVoiceID: voiceID ?? "Charon")
+  }
 }
