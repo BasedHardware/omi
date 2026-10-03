@@ -376,7 +376,10 @@ def _gateway_messages(
                 else message
             )
             if isinstance(dumped, Mapping):
-                role = str(dumped.get('role') or 'user').strip()
+                raw_role = str(dumped.get('role') or 'user').strip().lower()
+                role = (
+                    raw_role if raw_role in {'user', 'assistant'} else 'user'
+                )
                 content = str(dumped.get('content') or '').strip()
                 if content:
                     messages.append({'role': role, 'content': content})
