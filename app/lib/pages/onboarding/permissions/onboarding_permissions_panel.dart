@@ -12,6 +12,7 @@ import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/components/omi_permission_row.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// The permissions the first-run flow and the returning-user interstitial ask for.
 ///
@@ -66,11 +67,34 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
   }
 }
 
+/// [source], or the platform source over the ambient [OnboardingProvider].
+OnboardingPermissionsSource resolveOnboardingPermissionsSource(
+  BuildContext context,
+  OnboardingPermissionsSource? source,
+) =>
+    source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
+
+/// What Continue does on the first-run step and the interstitial: asks, in row order, for every
+/// permission that can still be asked. Allowed, blocked and service-off ones are left alone, and a
+/// failed ask never keeps the reader on the screen.
+Future<void> requestMissingOnboardingPermissions(OnboardingPermissionsSource source) async {
+  for (final permission in source.permissions) {
+    try {
+      if (await source.status(permission) == OmiPermissionStatus.askable) {
+        await source.request(permission);
+      }
+    } catch (e) {
+      Logger.debug('Onboarding permission request failed for ${permission.name}: $e');
+    }
+  }
+}
+
 /// The permission rows shared by the onboarding step and the interstitial: one
 /// [OmiPermissionRow] per permission, each with its own Allow / Open Settings.
 ///
-/// Nothing here prompts on its own; the screens' Continue only moves on. States are re-read when
-/// the app returns to the foreground, so a permission switched on in Settings shows as allowed.
+/// A row's Allow asks for that permission alone; the screens' Continue asks for whatever is still
+/// missing ([requestMissingOnboardingPermissions]). States are re-read when the app returns to the
+/// foreground, so a permission switched on in Settings shows as allowed.
 class OnboardingPermissionsPanel extends StatefulWidget {
   const OnboardingPermissionsPanel({super.key, this.source});
 
@@ -82,8 +106,7 @@ class OnboardingPermissionsPanel extends StatefulWidget {
 }
 
 class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel> with WidgetsBindingObserver {
-  late final OnboardingPermissionsSource _source =
-      widget.source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
+  late final OnboardingPermissionsSource _source = resolveOnboardingPermissionsSource(context, widget.source);
   final Map<OnboardingPermission, OmiPermissionStatus> _statuses = {};
 
   @override
