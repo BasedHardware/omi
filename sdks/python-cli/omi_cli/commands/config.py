@@ -81,8 +81,19 @@ def set_value(
     profile = config.get_profile(ctx.profile_name)
     if key in {"api_base", "local_api_url"}:
         cleaned = value.strip().rstrip("/")
-        parsed = urlsplit(cleaned)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        try:
+            parsed = urlsplit(cleaned)
+            # ``urlsplit`` validates some components lazily; touching ``.port``
+            # and ``.hostname`` forces those checks so malformed values raise a
+            # clean UsageError instead of a leaked ValueError.
+            hostname = parsed.hostname
+            _ = parsed.port
+        except ValueError as exc:
+            raise UsageError(
+                message=f"Invalid URL for '{key}'",
+                detail=f"'{key}' must be an http:// or https:// URL with a valid host (got '{value}').",
+            ) from exc
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
             raise UsageError(
                 message=f"Invalid URL for '{key}'",
                 detail=f"'{key}' must be an http:// or https:// URL with a valid host (got '{value}').",
