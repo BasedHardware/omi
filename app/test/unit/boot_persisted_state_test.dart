@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,39 @@ void main() {
     expect(stored.getString(archivedPairing), '{"id":42}');
     expect(quarantineRecorded, isTrue, reason: 'quarantine journal should record btDevice within two seconds');
     expect(await journal.readAsString(), contains('quarantine:btDevice'));
+  });
+
+  test('native codec string lists survive cold loading and reload without quarantine', () async {
+    const values = ['saved-1', 'saved-2'];
+    const codec = StandardMessageCodec();
+    final decoded = codec.decodeMessage(codec.encodeMessage(values)) as List;
+    expect(decoded, isNot(isA<List<String>>()));
+    const keys = [
+      'flash_page_pending_uploads',
+      'btDevices',
+      'cachedTranscriptionVocabulary',
+      'cachedPeople',
+      'cachedMessages'
+    ];
+    SharedPreferences.setMockInitialValues({for (final key in keys) key: decoded});
+    await SharedPreferencesUtil.init();
+    final prefs = SharedPreferencesUtil();
+    for (final key in keys) {
+      expect(prefs.getStringList(key), values);
+    }
+    await SharedPreferencesUtil.reload();
+    for (final key in keys) {
+      final returned = prefs.getStringList(key);
+      expect(returned, values);
+      returned.add('local-only');
+      expect(prefs.getStringList(key), values, reason: 'return a copy of the native cache');
+    }
+    await Future<void>.delayed(Duration.zero);
+    final stored = await SharedPreferences.getInstance();
+    for (final key in keys) {
+      expect(stored.containsKey(key), isTrue);
+      expect(stored.getKeys().any((candidate) => candidate.startsWith('$key.corrupt-')), isFalse);
+    }
   });
 
   test('mixed-type list is archived as JSON before the original is removed', () async {
