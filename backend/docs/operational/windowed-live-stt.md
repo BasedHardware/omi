@@ -313,8 +313,19 @@ Recovery lifecycle is owned by one `LiveRecoveryController` per receiver
 replaying → recovered`, terminal `exhausted` and `client_leaving`. A provider
 death opens one **60s episode deadline** that covers every dial, replay prefix,
 and first nonempty successor transcript within that episode; a successor dying
-before proof shares it rather than restarting it. Candidate adoption and
-transcript proof bind to the current candidate token, so a late callback from
+before proof shares it rather than restarting it. Two proofs release the
+deadline to `recovered`: a nonempty transcript from the current candidate, or —
+for an adopted successor that stays silent — the death monitor observing its
+socket still connected **5s after adoption** (`RECOVERY_HEALTHY_CONNECTED_SECONDS`).
+The connected-dwell proof is not transcript settlement: it clears only the
+episode deadline and never settles a pending leg outcome as recovered. A
+successor dying after the episode released opens a **fresh 60s episode**;
+deaths inside one open episode share its remaining budget. A session is
+bounded to **20 fresh episodes** (`MAX_RECOVERY_EPISODES`); opening a 21st
+exhausts rather than dialing. The unique-target ledger (20 targets), dial
+count, and the one transient Soniox re-entry grant are per-session state that
+persists across episodes. Candidate adoption and transcript/health proofs
+bind to the current candidate token, so a late callback from
 a retired predecessor can never release the deadline. Client departure is a
 monotonic latch taken only from explicit owner/session/websocket evidence —
 never raw socket cleanup flags — and a disconnect/reconnect flap cannot

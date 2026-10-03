@@ -785,8 +785,15 @@ A managed session may make one additional Soniox connection after that leg's
 previous transport loss (`connection_lost` or `send_failed`), only when its
 local circuit is closed and no untried configured Deepgram rescue is available.
 The failed window never re-arms. Rebuilds share the bounded target-and-time
-recovery controller (unique targets inside the shared 60s episode) rather than
-counting distinct providers.
+recovery controller rather than counting distinct providers. Each 60s
+episode ends on the first nonempty successor transcript or, for an adopted
+but silent successor, on five continuous seconds of observed-connected dwell
+after adoption; the connected-dwell proof clears only the deadline — pending
+leg settlement still requires real text or the terminal path. A successor
+dying before either proof keeps the original episode's remaining budget;
+one dying after the release opens a fresh 60s episode, and a session is
+bounded to twenty such episodes. The unique-target ledger, dial count, and
+that single Soniox re-entry grant span all of a session's episodes.
 Concurrent last-resort handshakes retain the configured circuit probe limit.
 A session waits at most 12 seconds for an occupied non-account probe slot;
 account benches and window shedding are never forced. At the 300ms default

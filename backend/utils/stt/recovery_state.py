@@ -1,9 +1,14 @@
 """Session-scoped live recovery episode state; exactly one per ListenReceiver.
 
 The controller is the single authority on recovery lifecycle and dial
-accounting. It owns one wall-clock episode per provider death: every real
-dial, the paced prefix replay, and the first nonempty successor transcript
-must complete inside it. Socket acceptance alone never clears the deadline.
+accounting. A provider death opens one wall-clock episode; every real
+dial, the paced prefix replay, and the recovery proof must complete
+inside it. Proof is the first nonempty successor transcript, or — for an
+adopted but silent successor — RECOVERY_HEALTHY_CONNECTED_SECONDS of
+connected dwell observed after adoption. Socket acceptance alone never
+clears the deadline. A successor dying before proof shares the episode;
+one dying after release opens a fresh episode, bounded per session by
+MAX_RECOVERY_EPISODES.
 Target identities are kept in memory only — never endpoint or user labels.
 """
 
@@ -22,8 +27,13 @@ from utils.stt.live_metrics import RECOVERY_ATTEMPTS, provider_family
 RECOVERY_EPISODE_SECONDS = 60.0
 # Each actual dial gets at most this much of the remaining episode.
 RECOVERY_DIAL_SECONDS = 5.0
+# An adopted, connected successor proves recovery after this healthy dwell,
+# even when the provider stays silent and emits no transcript.
+RECOVERY_HEALTHY_CONNECTED_SECONDS = 5.0
 # max 16 registry targets plus the possible four legacy protocol identities.
 MAX_RECOVERY_TARGETS = 20
+# Bounded recovery work per session: each fresh episode deadline counts once.
+MAX_RECOVERY_EPISODES = 20
 clock = time.monotonic
 
 
@@ -66,6 +76,8 @@ class LiveRecoveryController:
         # candidate; a retired candidate's late callbacks never release.
         self._candidate: Any = None
         self._candidate_text = False
+        self._adopted_at: float | None = None
+        self.episode_count = 0
 
     # -- client departure latch (monotonic; a flap cannot resurrect) --------
 
@@ -104,16 +116,22 @@ class LiveRecoveryController:
         """A provider death opens (or continues) one bounded recovery episode."""
         if self.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
             return
-        # A successor that dies while its predecessor's text is still unproven
-        # shares the same deadline; only adopted + nonempty text clears it.
+        # A successor that dies before its episode released shares the same
+        # deadline; adopted + nonempty text, or the healthy connected dwell,
+        # clears it. Each fresh deadline counts against the episode cap.
         if self._deadline is None:
+            if self.episode_count >= MAX_RECOVERY_EPISODES:
+                self.exhaust()
+                return
             self._deadline = self._clock() + RECOVERY_EPISODE_SECONDS
+            self.episode_count += 1
         if family is not None:
             self.source_family = family
         # A new death invalidates the previous candidate's adoption/text proof.
         self._candidate = None
         self._candidate_text = False
         self._adopted = False
+        self._adopted_at = None
         self.state = RecoveryState.provider_died
 
     def set_candidate(self, token: Any) -> None:
@@ -123,6 +141,7 @@ class LiveRecoveryController:
         self._candidate = token
         self._candidate_text = False
         self._adopted = False
+        self._adopted_at = None
 
     def replaying(self) -> None:
         if self.state not in (RecoveryState.exhausted, RecoveryState.client_leaving):
@@ -139,11 +158,14 @@ class LiveRecoveryController:
 
     def adopted(self, token: Any = None) -> None:
         """Frozen prefix written and leg adopted; the deadline still waits on
-        this candidate's text. Adoption without text never clears it."""
+        this candidate's text, or on RECOVERY_HEALTHY_CONNECTED_SECONDS of
+        connected healthy dwell observed through note_healthy_connection."""
         if self.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
             return
         if self._candidate is not None and token is not None and token is not self._candidate:
             return
+        if self._adopted_at is None:
+            self._adopted_at = self._clock()
         self._adopted = True
         self._release()
 
@@ -155,6 +177,31 @@ class LiveRecoveryController:
             return
         self._candidate_text = True
         self._release()
+
+    def note_healthy_connection(self, candidate: Any = None) -> None:
+        """The owner observed the current candidate's socket alive.
+
+        An adopted successor that stays connected for the healthy dwell
+        satisfies the episode's lifecycle proof: the deadline releases to
+        ``recovered`` without transcript text. It is lifecycle proof only —
+        not transcript or availability evidence — so it never synthesizes
+        ``note_transcript``, emits no provider-health observation, and never
+        settles a pending leg outcome; those still need real emitted text
+        (or the owner's own terminal settlement). No dwell is credited
+        before adoption, and a stale candidate's health never releases.
+        """
+        if self.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
+            return
+        if self._deadline is None or self._adopted_at is None:
+            return
+        if candidate is None or candidate is not self._candidate or not self._adopted:
+            return
+        if self.client_has_left():
+            return
+        if self._clock() - self._adopted_at < RECOVERY_HEALTHY_CONNECTED_SECONDS:
+            return
+        self._deadline = None
+        self.state = RecoveryState.recovered
 
     def exhaust(self) -> None:
         if not self.client_has_left():

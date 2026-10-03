@@ -1238,6 +1238,8 @@ class ListenReceiver(ReplayFilterMixin):
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
             self.recovery.begin(self.stt_socket, provider_for_service(self.host.stt_service))
+            if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
+                return False
             try:
                 if await self._reconnect_stt_socket_locked():
                     return True
@@ -1575,6 +1577,8 @@ class ListenReceiver(ReplayFilterMixin):
                     platform=self.host.client_device_context.platform,
                 )
                 return
+            if socket is not None and not socket_is_finishing(socket):
+                self.recovery.note_healthy_connection(self._candidate_token)
             # Shutdown-aware sleep: wakes immediately on session shutdown, in
             # which case normal teardown owns termination and we simply exit.
             if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):

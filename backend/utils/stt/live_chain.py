@@ -455,6 +455,8 @@ async def connect_configured_chain(
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
+            elif reason in ('provider_429', PROVIDER_RATE_LIMITED):
+                on_close()
             elif not provider_failure:
                 on_close()
                 if reason == 'capacity_full':

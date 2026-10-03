@@ -64,6 +64,7 @@ from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
     PROVIDER_BUDGET_EXHAUSTED,
+    PROVIDER_RATE_LIMITED,
     record_stt_stream_close,
 )
 from utils.stt.connect_metrics import (
@@ -459,8 +460,12 @@ async def connect_stt_socket_with_fallback(
                 if isinstance(typed_probe_death, str):
                     typed_connect_reason = typed_probe_death
                 close_rejected_socket(socket)
-                reason = _fallback_failure_reason(RuntimeError(detail))
-                circuit.record_failure()
+                if typed_probe_death == PROVIDER_RATE_LIMITED:
+                    reason = 'provider_429'
+                    circuit.release_probe()
+                else:
+                    reason = _fallback_failure_reason(RuntimeError(detail))
+                    circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
                 record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
@@ -473,8 +478,12 @@ async def connect_stt_socket_with_fallback(
                 if isinstance(typed_death, str):
                     typed_connect_reason = typed_death
                 close_rejected_socket(socket)
-                reason = _fallback_failure_reason(RuntimeError(detail))
-                circuit.record_failure()
+                if typed_death == PROVIDER_RATE_LIMITED:
+                    reason = 'provider_429'
+                    circuit.release_probe()
+                else:
+                    reason = _fallback_failure_reason(RuntimeError(detail))
+                    circuit.record_failure()
         except DeepgramConnectionRejection:
             # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
             # its class for the fallback legs and the circuit: mapping it to
@@ -506,7 +515,10 @@ async def connect_stt_socket_with_fallback(
             circuit.record_failure()
         except Exception as error:
             reason = _fallback_failure_reason(error)
-            circuit.record_failure()
+            if reason == 'provider_429':
+                circuit.release_probe()
+            else:
+                circuit.record_failure()
         # One attempt, one increment: the not-serving branches left their typed
         # death reason in typed_connect_reason, everything else lands here with
         # the bounded `reason` the except chain already computed.

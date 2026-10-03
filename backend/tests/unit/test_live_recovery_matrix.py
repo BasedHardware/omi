@@ -43,6 +43,8 @@ from tests.unit.test_live_health_reason_reconciliation import serving_leg
 from tests.unit.test_live_session_transcript_outcome import _runtime
 from tests.unit.test_live_stt_resilient_stream import receiver as make_receiver
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
+from tests.unit.test_modulate_capacity_failover import dead_receiver
+from utils.stt.soniox import SonioxRateLimitError
 from utils.stt import live_chain, live_health, live_router, recovery_state, replay_delivery, resilient_stream
 from utils.stt import soniox as soniox_module
 from utils.stt.live_failure import live_stt_terminal_reason
@@ -1597,3 +1599,441 @@ async def test_same_provider_reconnect_serving_check_shares_dial_budget(monkeypa
     finally:
         old.finish()
         new.finish()
+
+
+def _seam_controller(ticks):
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    return recovery_state.LiveRecoveryController(host, clock=lambda: ticks[0])
+
+
+def test_healthy_connection_releases_only_at_five_seconds_adopted_dwell():
+    """The dwell boundary is exact: 4.999s holds the deadline, 5.0s releases."""
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    token = object()
+    controller.begin(family='soniox')
+    controller.set_candidate(token)
+    controller.adopted(token)
+    ticks[0] = 4.999
+    controller.note_healthy_connection(token)
+    assert controller.deadline is not None
+    assert controller.state is not RecoveryState.recovered
+    ticks[0] = 5.0
+    controller.note_healthy_connection(token)
+    assert controller.deadline is None
+    assert controller.state is RecoveryState.recovered
+
+
+def test_stale_candidate_health_and_unadopted_health_never_release():
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    current, stale = object(), object()
+    controller.begin(family='soniox')
+    controller.set_candidate(current)
+    controller.adopted(current)
+    ticks[0] = 60.0
+    controller.note_healthy_connection(stale)
+    assert controller.deadline is not None
+    assert controller.state is not RecoveryState.recovered
+
+    unadopted = _seam_controller(ticks)
+    unadopted.begin(family='soniox')
+    unadopted.set_candidate(current)
+    unadopted.note_healthy_connection(current)
+    assert unadopted.deadline is not None
+    assert unadopted.state is not RecoveryState.recovered
+
+
+def test_set_candidate_restarts_the_adoption_dwell():
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    first, second = object(), object()
+    controller.begin(family='soniox')
+    controller.set_candidate(first)
+    controller.adopted(first)
+    ticks[0] = 4.0
+    controller.set_candidate(second)
+    controller.adopted(second)
+    ticks[0] = 8.999
+    controller.note_healthy_connection(second)
+    assert controller.deadline is not None
+    ticks[0] = 9.0
+    controller.note_healthy_connection(second)
+    assert controller.state is RecoveryState.recovered
+
+
+def test_idempotent_adoption_does_not_extend_the_dwell():
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    token = object()
+    controller.begin(family='soniox')
+    controller.set_candidate(token)
+    controller.adopted(token)
+    ticks[0] = 4.0
+    controller.adopted(token)
+    ticks[0] = 5.0
+    controller.note_healthy_connection(token)
+    assert controller.state is RecoveryState.recovered
+
+
+def test_departure_and_terminal_states_win_over_healthy_release():
+    ticks = [0.0]
+    leaving = _seam_controller(ticks)
+    token = object()
+    leaving.begin(family='soniox')
+    leaving.set_candidate(token)
+    leaving.adopted(token)
+    leaving.mark_client_leaving()
+    ticks[0] = 30.0
+    leaving.note_healthy_connection(token)
+    assert leaving.state is RecoveryState.client_leaving
+    assert leaving.deadline is not None
+
+    exhausted = _seam_controller(ticks)
+    exhausted.begin(family='soniox')
+    exhausted.set_candidate(token)
+    exhausted.adopted(token)
+    exhausted.exhaust()
+    exhausted.note_healthy_connection(token)
+    assert exhausted.state is RecoveryState.exhausted
+    assert exhausted.deadline is not None
+
+
+def test_healthy_release_keeps_session_attempt_and_reentry_state():
+    """Episode budget resets per fresh death; the session's unique-target
+    ledger, dial count and one Soniox repeat grant carry across episodes."""
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    token = object()
+    controller.begin(family='parakeet')
+    assert controller.episode_count == 1
+    controller.set_candidate(token)
+    controller.reserve('soniox', 'soniox')
+    controller.grant_soniox_reentry('soniox')
+    controller.adopted(token)
+    ticks[0] = 6.0
+    controller.note_healthy_connection(token)
+    assert controller.state is RecoveryState.recovered
+    controller.begin(family='soniox')
+    assert controller.episode_count == 2
+    assert controller.attempted_targets == {'soniox'}
+    assert controller.dial_attempts == 1
+    assert controller.can_attempt('soniox')
+
+
+def test_episode_cap_exhausts_a_new_episode_without_dialing(monkeypatch):
+    """The 20-episode session bound refuses a further fresh deadline; opening
+    it exhausts rather than spending another dial."""
+    monkeypatch.setattr(recovery_state, 'MAX_RECOVERY_EPISODES', 2)
+    ticks = [0.0]
+    controller = _seam_controller(ticks)
+    token = object()
+    for _ in range(2):
+        controller.begin(family='soniox')
+        controller.set_candidate(token)
+        controller.adopted(token)
+        controller.note_transcript(True, candidate=token)
+        assert controller.state is RecoveryState.recovered
+    assert controller.episode_count == 2
+    controller.begin(family='soniox')
+    assert controller.episode_count == 2
+    assert controller.state is RecoveryState.exhausted
+    assert not controller.can_attempt('modulate-velma-2')
+    assert not controller.admission_open()
+
+    departed = _seam_controller(ticks)
+    departed.begin(family='soniox')
+    departed.set_candidate(token)
+    departed.adopted(token)
+    departed.note_transcript(True, candidate=token)
+    departed.mark_client_leaving()
+    departed.begin(family='soniox')
+    assert departed.state is RecoveryState.client_leaving
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor,follower', [('soniox', 'modulate-velma-2'), ('modulate-velma-2', 'soniox')])
+async def test_silent_adopted_successor_recovers_on_healthy_dwell_then_walks_on_death(
+    monkeypatch, virtual_clock, successor, follower
+):
+    """Luna's silent-successor regression: an adopted successor that emits no
+    transcript still proves recovery after five connected seconds — the real
+    death monitor observes the live socket — and its later death opens a
+    FRESH episode that dials the untried provider."""
+
+    actual, base, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor, follower])
+    actual._window_replay_started = True
+    websocket = actual.host.request.websocket
+    websocket.client_state = WebSocketState.CONNECTED
+    websocket.application_state = WebSocketState.CONNECTED
+    kept = b''.join(data for _, data in actual._window_replay_audio.snapshot())[-PREFIX_SECONDS * BYTES_PER_SECOND :]
+
+    async def wait(seconds):
+        await virtual_clock.sleep(seconds)
+        return False
+
+    actual.host.wait = wait
+    monitor = asyncio.create_task(actual._monitor_stt_death())
+    successor_kind = SafeSonioxSocket if successor == 'soniox' else SafeModulateSocket
+    follower_kind = SafeSonioxSocket if follower == 'soniox' else SafeModulateSocket
+    try:
+        kill_source(actual, 'parakeet-window')
+        assert await actual._failover_stt_socket()
+        successor_raw = raws[-1]
+        assert isinstance(successor_raw, successor_kind)
+        original_deadline = actual.recovery.deadline
+        assert original_deadline is not None
+        assert actual.recovery.episode_count == 1
+        await until(lambda: successor_raw._ws.byte_count == len(kept))
+        assert successor_raw._ws.pcm == kept
+        assert websocket.client_state is WebSocketState.CONNECTED
+        assert websocket.application_state is WebSocketState.CONNECTED
+        await virtual_clock.sleep(5.0)
+        await until(lambda: actual.recovery.deadline is None)
+        assert actual.recovery.state is RecoveryState.recovered
+        assert not legs[0].leg_outcome.settled
+        await virtual_clock.sleep(56.0)
+        assert virtual_clock.now >= original_deadline
+        assert actual.recovery.state is RecoveryState.recovered
+        assert actual.host.state.active
+        websocket.close.assert_not_awaited()
+        dead_at = virtual_clock.now
+        kill_source(actual, successor)
+        assert await actual._failover_stt_socket()
+        follower_raw = raws[-1]
+        assert isinstance(follower_raw, follower_kind)
+        assert actual.recovery.episode_count == 2
+        assert actual.recovery.deadline - dead_at == pytest.approx(60.0, abs=1.0)
+        assert actual.recovery.deadline > original_deadline
+        await until(lambda: follower_raw._ws.byte_count == len(kept))
+        assert follower_raw._ws.pcm == kept
+        assert websocket.client_state is WebSocketState.CONNECTED
+        assert websocket.application_state is WebSocketState.CONNECTED
+        assert not actual.stt_socket.is_connection_dead
+        assert not actual.host.state.stt_terminal_failure
+        follower_raw._stream_transcript([{'text': 'synthetic', 'start': 0, 'end': 0.5, 'speaker': 'speaker_0'}])
+        assert actual.recovery.state is RecoveryState.recovered
+        await actual._drain_stt_sockets()
+        assert_legs_drained(legs, observations)
+    finally:
+        actual.host.state.active = False
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor,follower', [('soniox', 'modulate-velma-2'), ('modulate-velma-2', 'soniox')])
+async def test_successor_death_before_healthy_dwell_shares_the_original_episode(
+    monkeypatch, virtual_clock, successor, follower
+):
+    """Inverse of the healthy-dwell case: a successor dying two seconds after
+    adoption keeps the ORIGINAL deadline and episode count — the walk to the
+    next provider spends the same budget, never a fresh 60s."""
+
+    actual, base, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor, follower])
+    actual._window_replay_started = True
+    websocket = actual.host.request.websocket
+    websocket.client_state = WebSocketState.CONNECTED
+    websocket.application_state = WebSocketState.CONNECTED
+    follower_kind = SafeSonioxSocket if follower == 'soniox' else SafeModulateSocket
+    try:
+        kill_source(actual, 'parakeet-window')
+        assert await actual._failover_stt_socket()
+        original_deadline = actual.recovery.deadline
+        assert original_deadline is not None
+        assert websocket.client_state is WebSocketState.CONNECTED
+        assert websocket.application_state is WebSocketState.CONNECTED
+        await virtual_clock.sleep(2.0)
+        kill_source(actual, successor)
+        assert await actual._failover_stt_socket()
+        assert isinstance(raws[-1], follower_kind)
+        assert actual.recovery.episode_count == 1
+        assert actual.recovery.deadline == original_deadline
+        assert websocket.client_state is WebSocketState.CONNECTED
+        assert websocket.application_state is WebSocketState.CONNECTED
+        assert not actual.stt_socket.is_connection_dead
+        assert not actual.host.state.stt_terminal_failure
+        raws[-1]._stream_transcript([{'text': 'synthetic', 'start': 0, 'end': 0.5, 'speaker': 'speaker_0'}])
+        assert actual.recovery.state is RecoveryState.recovered
+        await actual._drain_stt_sockets()
+        assert_legs_drained(legs, observations)
+    finally:
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_receiver_returns_false_when_episode_cap_refuses_a_fresh_episode(monkeypatch, virtual_clock):
+    """Cap-1 session: once the first episode releases, the next real dead
+    socket cannot open a new one — _failover_stt_socket returns False
+    before touching reconnect or rebuild."""
+    monkeypatch.setattr(recovery_state, 'MAX_RECOVERY_EPISODES', 1)
+    actual, base, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', 'soniox'])
+    actual._window_replay_started = True
+    try:
+        kill_source(actual, 'parakeet-window')
+        assert await actual._failover_stt_socket()
+        raws[-1]._stream_transcript([{'text': 'synthetic', 'start': 0, 'end': 0.5, 'speaker': 'speaker_0'}])
+        assert actual.recovery.episode_count == 1
+        assert actual.recovery.deadline is None
+
+        reconnect = AsyncMock(return_value=True)
+        rebuild = AsyncMock(return_value=True)
+        monkeypatch.setattr(actual, '_reconnect_stt_socket_locked', reconnect)
+        monkeypatch.setattr(actual, '_rebuild_stt_socket_locked', rebuild)
+        kill_source(actual, 'soniox')
+        assert await actual._failover_stt_socket() is False
+        assert actual.recovery.state is RecoveryState.exhausted
+        reconnect.assert_not_awaited()
+        rebuild.assert_not_awaited()
+        await actual._drain_stt_sockets()
+        assert_legs_drained(legs, observations)
+    finally:
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_departed_receiver_latches_leaving_before_the_episode_cap(monkeypatch, virtual_clock):
+    """Owner departure evidence wins on the cap boundary: begin latches
+    client_leaving rather than exhausted."""
+    monkeypatch.setattr(recovery_state, 'MAX_RECOVERY_EPISODES', 1)
+    actual = dead_receiver()
+    actual.host.state.active = False
+    reconnect = AsyncMock(return_value=True)
+    rebuild = AsyncMock(return_value=True)
+    monkeypatch.setattr(actual, '_reconnect_stt_socket_locked', reconnect)
+    monkeypatch.setattr(actual, '_rebuild_stt_socket_locked', rebuild)
+    assert await actual._failover_stt_socket() is False
+    assert actual.recovery.state is RecoveryState.client_leaving
+    reconnect.assert_not_awaited()
+    rebuild.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('rejection', ['exception', 'frame'])
+async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench(monkeypatch, virtual_clock, rejection):
+    """40 dead Modulate sources surge behind a full Parakeet window: all 40
+    dial Soniox once behind one barrier; a deterministic 20 are refused with
+    transient 429s (connect exception, or a real post-upgrade error frame)
+    and each takes exactly one extra Deepgram dial inside the same episode,
+    while the other 20 serve on Soniox. No shared selection bench or
+    quarantine is raised for a 429, so a NEW session still dials Soniox.
+
+    This is a capacity-error recovery proof over fake providers — not a
+    claim that the production Deepgram account is funded for the wave."""
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    admission = window.WindowAdmission()
+    monkeypatch.setattr(window, 'admission', admission)
+    releases = [admission.acquire() for _ in range(8)]
+    window_connect = AsyncMock(side_effect=AssertionError('full window must be skipped'))
+    monkeypatch.setattr(window, 'connect_window', window_connect)
+    quarantined = []
+    monkeypatch.setattr(live_chain.health, 'quarantine', lambda *args, **kwargs: quarantined.append(args) or True)
+
+    soniox_dials = {}
+    episode_deadlines = {}
+    dg_dials = {}
+    soniox_raws = []
+    started = asyncio.Event()
+    barrier = asyncio.Event()
+    wave = [0]
+
+    async def soniox(callback, *args, **kwargs):
+        controller = current_recovery.get()
+        index = wave[0]
+        wave[0] += 1
+        soniox_dials.setdefault(controller, []).append(index)
+        episode_deadlines[controller] = controller.deadline
+        if wave[0] == 40:
+            started.set()
+        await barrier.wait()
+        rejected = index < 40 and index % 2 == 0
+        if rejected and rejection == 'exception':
+            raise SonioxRateLimitError('transient')
+        raw = SafeSonioxSocket(Transport(), callback, asyncio.get_running_loop())
+        soniox_raws.append(raw)
+        if rejected:
+            raw._ws.inbound.put_nowait(json.dumps({'error_code': 429, 'error_type': 'concurrency_limit_exceeded'}))
+            await until(lambda: raw.is_connection_dead)
+            assert raw.typed_death_reason == 'provider_rate_limited'
+        return raw
+
+    async def deepgram(callback, *args, **kwargs):
+        controller = current_recovery.get()
+        dg_dials.setdefault(controller, []).append(1)
+        return Replacement(callback)
+
+    monkeypatch.setattr(st, 'process_audio_soniox', soniox)
+    monkeypatch.setattr(st, 'process_audio_dg', deepgram)
+
+    actuals = [dead_receiver() for _ in range(40)]
+    tasks = []
+    try:
+        for actual in actuals:
+            websocket = actual.host.request.websocket
+            websocket.client_state = WebSocketState.CONNECTED
+            websocket.application_state = WebSocketState.CONNECTED
+            actual.recovery.mark_attempted('modulate-velma-2')
+        tasks = [asyncio.create_task(actual._failover_stt_socket()) for actual in actuals]
+        await until(lambda: started.is_set() or all(task.done() for task in tasks))
+        barrier.set()
+        assert await asyncio.gather(*tasks) == [True] * 40
+        assert len(soniox_dials) == 40
+        assert all(len(dials) == 1 for dials in soniox_dials.values())
+        assert sum(len(dials) for dials in dg_dials.values()) == 20
+        assert all(len(dials) == 1 for dials in dg_dials.values())
+        window_connect.assert_not_called()
+        assert quarantined == []
+        for actual in actuals:
+            websocket = actual.host.request.websocket
+            assert websocket.client_state is WebSocketState.CONNECTED
+            assert websocket.application_state is WebSocketState.CONNECTED
+            websocket.close.assert_not_awaited()
+            controller = actual.recovery
+            assert not actual.host.state.stt_terminal_failure
+            assert controller.episode_count == 1
+            assert not actual.stt_socket.is_connection_dead
+            assert len(soniox_dials.get(controller, ())) == 1
+            assert controller.deadline == episode_deadlines[controller]
+            assert controller.deadline - virtual_clock.now > 0
+            if dg_dials.get(controller):
+                assert actual.host.stt_service == st.STTService.deepgram
+                assert controller.dial_attempts == 3, sorted(controller.attempted_targets)
+            else:
+                assert actual.host.stt_service == st.STTService.soniox
+                assert controller.dial_attempts == 2, sorted(controller.attempted_targets)
+        assert st._soniox_circuit.state == 'closed'
+        assert st._soniox_circuit._failures == 0
+        fresh = dead_receiver()
+        fresh.host.request.websocket.client_state = WebSocketState.CONNECTED
+        fresh.host.request.websocket.application_state = WebSocketState.CONNECTED
+        fresh.recovery.mark_attempted('modulate-velma-2')
+        actuals.append(fresh)
+        assert await fresh._failover_stt_socket()
+        assert fresh.host.stt_service == st.STTService.soniox
+        assert len(soniox_dials.get(fresh.recovery, ())) == 1
+        assert wave[0] == 41
+    finally:
+        barrier.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        for actual in actuals:
+            actual.stt_socket.finish()
+            await actual._drain_stt_sockets()
+        await stop(soniox_raws)
+        for raw in soniox_raws:
+            assert raw._send_task.done() and raw._recv_task.done()
+            assert raw._ws.closed
+        for release in releases:
+            release()
