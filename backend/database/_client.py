@@ -335,7 +335,8 @@ def firestore_error_document_path(error: BaseException) -> tuple[str, ...] | Non
     match = _ERROR_DOCUMENT_PATH.search(str(error))
     if not match:
         return None
-    segments = tuple(match.group(1).rstrip('.,;:)').split('/'))
+    # The message quotes the path, so the match ends at the closing quote.
+    segments = tuple(match.group(1).split('/'))
     if len(segments) < 2 or len(segments) % 2 or not all(segments):
         return None
     return segments

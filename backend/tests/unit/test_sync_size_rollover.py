@@ -137,7 +137,11 @@ def test_full_canonical_is_left_untouched_and_new_speech_starts_a_conversation(m
     assert not _row(store, 'b').get('sync_merged_from')
     assert len(conversations(store)) == 2
     events = _events(caplog)
-    assert events == ['event=sync_assignment_target outcome=size_rollover trigger=estimate created=true']
+    # 'a' only borders the chunk, so it is recognised as full without a merge.
+    assert events == [
+        'event=sync_assignment_target outcome=size_rollover trigger=full_neighbor created=true '
+        'excluded=0 skipped_full=1'
+    ]
     fallback = _events(caplog, 'omi_fallback_event')
     assert fallback and 'from=canonical_append to=size_rollover' in fallback[0]
 
@@ -155,20 +159,43 @@ def test_identical_retry_and_later_chunks_land_in_the_rollover(monkeypatch, capl
     assert len(conversations(store)) == 2
 
 
-def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch, caplog):
+def _full_chain(monkeypatch, length=8):
     store = _full_store(monkeypatch)
     ids = ['a']
-    for i, start in enumerate(range(1060, 1060 + 60 * 7, 60)):
+    for i, start in enumerate(range(1060, 1000 + 60 * length, 60)):
         cid = f'full-{i}'
         result, created, _ = intake(store, chunk(cid, start, text=_LONG + str(i)))
         assert result['id'] == cid and created
         ids.append(cid)
+    return store, ids
+
+
+@pytest.mark.parametrize('overlapping', [False, True])
+def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch, caplog, overlapping):
+    store, ids = _full_chain(monkeypatch)
     frozen = {cid: deepcopy(_row(store, cid)) for cid in ids}
-    result, created, survivors = intake(store, chunk('tail', 1060 + 60 * 7, text='The last short sentence.'))
+    caplog.clear()
+    if overlapping:
+        # Spans every full row, so each must be merged (it could hold this speech)
+        # and then excluded in turn; every accepted rollover is re-checked.
+        tail = chunk('tail', 1000, text='The last short sentence.')
+        tail['transcript_segments'][0].update(start=30.0, end=39.5)
+        tail['finished_at'] = chunk('end', 1000 + 60 * len(ids))['finished_at']
+    else:
+        # Only borders the two newest full rows (both within the 120 s gap),
+        # which are recognised without a merge.
+        tail = chunk('tail', 1000 + 60 * len(ids), text='The last short sentence.')
+    result, created, survivors = intake(store, tail)
     assert result['id'] == 'tail' and created and len(survivors) == 1
     assert {cid: _row(store, cid) for cid in ids} == frozen
     assert len(conversations(store)) == len(ids) + 1
-    assert not [m for m in _events(caplog) if 'size_rollover_unavailable' in m]
+    expected = (
+        'trigger=estimate created=true excluded=8 skipped_full=0'
+        if overlapping
+        else ('trigger=full_neighbor created=true excluded=0 skipped_full=2')
+    )
+    assert _events(caplog) == [f'event=sync_assignment_target outcome=size_rollover {expected}']
+    assert len(_events(caplog, 'omi_fallback_event')) == 1
 
 
 def test_speech_already_in_the_full_conversation_is_not_duplicated(monkeypatch):
@@ -360,7 +387,10 @@ def test_one_size_limit_commit_retries_once_into_a_new_conversation(adapter, cap
     assert _row(store, 'a') == before
     events = _events(caplog)
     assert events[0] == 'event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=conversation'
-    assert 'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true' in events
+    assert (
+        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true '
+        'excluded=1 skipped_full=0'
+    ) in events
     assert any('to=size_limit_retry' in message for message in _events(caplog, 'omi_fallback_event'))
     # An identical retry later deduplicates into the conversation the backstop
     # created; the original is still full, so its merge is rejected once more.
@@ -458,6 +488,29 @@ def test_document_kind_comes_from_collection_segments_only(error, kind):
 def test_document_path_is_parsed_from_the_verbatim_prod_message():
     error = _size_error('users/uid-1/conversations/conv-1')
     assert firestore_error_document_path(error) == ('users', 'uid-1', 'conversations', 'conv-1')
+    # The quoted path is kept whole: an id may legitimately end in punctuation.
+    error = _size_error('users/uid-1/conversations/conv-1.')
+    assert firestore_error_document_path(error) == ('users', 'uid-1', 'conversations', 'conv-1.')
+
+
+def test_estimate_counts_references_and_never_undercounts_unknown_values():
+    class _Ref:
+        path = 'users/u/conversations/c'
+
+    class _Terse:
+        def __str__(self):
+            return 'x'
+
+    assert estimate_firestore_document_bytes({'r': _Ref()}, 'p/d') == (
+        # Each of the four segments plus one byte, plus 16 (slashes are not stored).
+        estimate_firestore_document_bytes({}, 'p/d')
+        + 2
+        + (len('usersuconversationsc') + 4 + 16)
+    )
+    assert (
+        estimate_firestore_document_bytes({'t': _Terse()}, 'p/d')
+        == estimate_firestore_document_bytes({}, 'p/d') + 2 + 16
+    )
 
 
 @pytest.mark.parametrize(
@@ -467,6 +520,8 @@ def test_document_path_is_parsed_from_the_verbatim_prod_message():
         ('users/u/conversations/donor', 'full', ('donor', 'donor')),
         (None, 'full', ('full', 'none')),
         ('users/u/sync_assignment/recent', 'full', (None, 'sync_recent')),
+        # A path is present but unparseable: it could be an index document.
+        ('users', 'full', (None, 'none')),
     ],
 )
 def test_size_limited_conversation_names_only_conversations(path, canonical, expected):

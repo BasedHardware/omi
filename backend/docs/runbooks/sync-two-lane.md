@@ -173,8 +173,10 @@ another conversation instead of failing after paid transcription:
 to=size_rollover` count it, `outcome=size_limit_retry` counts the one commit
 backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
 safe home, so the original write was attempted unchanged. `firestore_error=document_size_limit`
-should then be rare and name `sync_day_index` or `sync_recent` rather than
-`conversation`.
+should then be rare; when it still occurs it names `sync_day_index`, `sync_recent`,
+a `donor`, or a `conversation` rejected a second time after the backstop retry.
+`skipped_full` on the rollover event counts full neighbours that only border the
+chunk and were left out without being merged.
 
 ## Run ownership and recovery
 

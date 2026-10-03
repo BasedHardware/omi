@@ -2195,7 +2195,12 @@ would exceed `SYNC_CONVERSATION_BYTE_BUDGET` (900 KiB) it re-plans in the same
 transaction with that conversation excluded: it is never the chunk's target, donor or
 bridge, every retry, deletion, provenance, receipt and smart-merge fence re-runs, and
 only the speech the full plan found new moves on, to the next eligible conversation or
-a new one (`sync_assignment_target outcome=size_rollover trigger=estimate`). An
+a new one (`sync_assignment_target outcome=size_rollover trigger=estimate`, one event
+per committed plan). Each accepted rollover is re-checked until it fits. A stored
+neighbour within 64 KiB of the budget that only borders the chunk in time is treated
+as full without being merged (`trigger=full_neighbor`, `skipped_full`), so a long chain
+of full conversations is not decrypted on every upload; one that overlaps the chunk is
+always merged, because only it can already hold the chunk's speech. An
 identical retry plans the same rollover and deduplicates into it. A dedupe-only retry
 still writes in place. When no safe home exists (the new row would overwrite a
 tombstone, be empty, or break a fence) the original write stands

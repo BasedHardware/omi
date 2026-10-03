@@ -44,5 +44,10 @@ def _value_bytes(value: Any) -> int:
         return sum(_value_bytes(item) for item in value)
     if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
         return 16
-    # Unknown SDK value: over-estimate rather than under-estimate.
-    return len(str(value).encode('utf-8')) + 1
+    path = getattr(value, 'path', None)
+    if isinstance(path, str):
+        # A document reference is stored as its full name, like a document name.
+        return sum(len(part.encode('utf-8')) + 1 for part in path.split('/')) + 16
+    # Any other SDK value: its text form, floored so a terse repr is never cheaper
+    # than the widest fixed-size value Firestore stores.
+    return max(len(str(value).encode('utf-8')) + 1, 16)
