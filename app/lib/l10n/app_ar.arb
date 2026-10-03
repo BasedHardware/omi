@@ -629,11 +629,11 @@
     "searchMemories": "البحث عن ذكريات",
     "memoryDeleted": "تم حذف الذكرى",
     "undo": "تراجع",
-    "noMemoriesYet": "🧠 لا توجد ذكريات بعد",
+    "noMemoriesYet": "لا توجد ذكريات بعد",
     "noAutoMemories": "لا توجد ذكريات مستخرجة تلقائياً بعد",
     "noManualMemories": "لا توجد ذكريات يدوية بعد",
     "noMemoriesInCategories": "لا توجد ذكريات في هذه الفئات",
-    "noMemoriesFound": "🔍 لم يتم العثور على ذكريات",
+    "noMemoriesFound": "لم يتم العثور على ذكريات",
     "addFirstMemory": "أضف ذكرتك الأولى",
     "clearMemoryTitle": "مسح ذاكرة Omi",
     "clearMemoryMessage": "هل أنت متأكد من رغبتك في مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
     "speakerLabelTalkTime": "{duration} من هذا الصوت",
     "findDeviceNoneTitle": "لم يتم العثور على Omi",
-    "findDeviceNoneMessage": "شغّله وأمسكه بالقرب من هاتفك."
+    "findDeviceNoneMessage": "شغّله وأمسكه بالقرب من هاتفك.",
+    "startupFailedDetails": "التفاصيل"
 }

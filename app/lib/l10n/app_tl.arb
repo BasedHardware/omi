@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Walang mga alaala pa",
+    "noMemoriesYet": "Walang mga alaala pa",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Walang mga alaala na nahanap",
+    "noMemoriesFound": "Walang mga alaala na nahanap",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
     "speakerLabelTalkTime": "{duration} ng boses na ito",
     "findDeviceNoneTitle": "Walang Nahanap na Omi",
-    "findDeviceNoneMessage": "I-on ito at hawakan malapit sa iyong telepono."
+    "findDeviceNoneMessage": "I-on ito at hawakan malapit sa iyong telepono.",
+    "startupFailedDetails": "Mga Detalye"
 }

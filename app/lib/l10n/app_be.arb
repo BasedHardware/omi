@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Спамінаў яшчэ нету",
+    "noMemoriesYet": "Спамінаў яшчэ нету",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Спамінаў не знойдзена",
+    "noMemoriesFound": "Спамінаў не знойдзена",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
     "speakerLabelTalkTime": "{duration} гэтага голасу",
     "findDeviceNoneTitle": "Omi не знойдзены",
-    "findDeviceNoneMessage": "Уключыце яго і трымайце побач з тэлефонам."
+    "findDeviceNoneMessage": "Уключыце яго і трымайце побач з тэлефонам.",
+    "startupFailedDetails": "Падрабязнасці"
 }

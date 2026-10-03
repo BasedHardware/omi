@@ -629,11 +629,11 @@
     "searchMemories": "Meklēt atmiņas",
     "memoryDeleted": "Atmiņa izdzēsta",
     "undo": "Atsaukt",
-    "noMemoriesYet": "🧠 Vēl nav atmiņu",
+    "noMemoriesYet": "Vēl nav atmiņu",
     "noAutoMemories": "Vēl nav automātiski izvilktu atmiņu",
     "noManualMemories": "Vēl nav manuālu atmiņu",
     "noMemoriesInCategories": "Šajās kategorijās nav atmiņu",
-    "noMemoriesFound": "🔍 Atmiņas nav atrastas",
+    "noMemoriesFound": "Atmiņas nav atrastas",
     "addFirstMemory": "Pievienot savu pirmo atmiņu",
     "clearMemoryTitle": "Notīrīt Omi atmiņu",
     "clearMemoryMessage": "Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
     "speakerLabelTalkTime": "{duration} no šīs balss",
     "findDeviceNoneTitle": "Omi netika atrasts",
-    "findDeviceNoneMessage": "Ieslēdziet to un turiet tālruņa tuvumā."
+    "findDeviceNoneMessage": "Ieslēdziet to un turiet tālruņa tuvumā.",
+    "startupFailedDetails": "Detalizēti"
 }

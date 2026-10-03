@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Nema uspomena još",
+    "noMemoriesYet": "Nema uspomena još",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Nema pronađenih uspomena",
+    "noMemoriesFound": "Nema pronađenih uspomena",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{Vjerojatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg zadnjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
     "speakerLabelTalkTime": "{duration} ovog glasa",
     "findDeviceNoneTitle": "Omi nije pronađen",
-    "findDeviceNoneMessage": "Uključite ga i držite blizu telefona."
+    "findDeviceNoneMessage": "Uključite ga i držite blizu telefona.",
+    "startupFailedDetails": "Detalji"
 }

@@ -629,11 +629,11 @@
     "searchMemories": "Caută amintiri",
     "memoryDeleted": "Amintire ștearsă",
     "undo": "Anulează",
-    "noMemoriesYet": "🧠 Încă nu există amintiri",
+    "noMemoriesYet": "Încă nu există amintiri",
     "noAutoMemories": "Nicio amintire extrasă automat încă",
     "noManualMemories": "Nicio amintire manuală încă",
     "noMemoriesInCategories": "Nicio amintire în aceste categorii",
-    "noMemoriesFound": "🔍 Nu s-au găsit amintiri",
+    "noMemoriesFound": "Nu s-au găsit amintiri",
     "addFirstMemory": "Adaugă prima ta amintire",
     "clearMemoryTitle": "Șterge memoria lui Omi",
     "clearMemoryMessage": "Sunteți sigur că doriți să ștergeți memoria lui Omi? Această acțiune nu poate fi anulată.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Probabil} soundsLike{Sună ca {name}} notPerson{Nu este {name}} carried{Tot {name}. Preluat din ultima ta conversație.} change{Schimbă} alsoTitle{Este și aceasta {name}?} alsoBody{Omi a găsit aceeași voce în conversații anterioare.} confirmed{Ai confirmat această etichetă} other{Revizuiește}}",
     "speakerLabelTalkTime": "{duration} din această voce",
     "findDeviceNoneTitle": "Niciun Omi găsit",
-    "findDeviceNoneMessage": "Pornește-l și ține-l aproape de telefon."
+    "findDeviceNoneMessage": "Pornește-l și ține-l aproape de telefon.",
+    "startupFailedDetails": "Detalii"
 }

@@ -1331,11 +1331,11 @@
     "noLogFilesFound": "Nerasta jokių žurnalo failų.",
     "noLogsYet": "Kol kas nėra žurnalų. Pradėkite įrašinėti, kad matytumėte pasirinktinio STT veiklą.",
     "noManualMemories": "Kol kas nėra rankinio prisiminimų",
-    "noMemoriesFound": "🔍 Prisiminimų nerasta",
+    "noMemoriesFound": "Prisiminimų nerasta",
     "noMemoriesInCategories": "Šiose kategorijose nėra prisiminimų",
     "noMemoriesInCategory": "Šioje kategorijoje dar nėra atsiminimų",
     "noMemoriesToDelete": "Nėra atminimų trynimui",
-    "noMemoriesYet": "🧠 Dar nėra prisiminimų",
+    "noMemoriesYet": "Dar nėra prisiminimų",
     "noMessagesYet": "Kol kas nėra žinučių!\nKodėl gi nepradėtumėte pokalbio?",
     "noNotificationScopesAvailable": "Pranešimų sritys nepasiekiamos",
     "noProjectsInWorkspace": "Šioje darbo srityje nerasta projektų",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
     "speakerLabelTalkTime": "{duration} šio balso",
     "findDeviceNoneTitle": "Omi nerastas",
-    "findDeviceNoneMessage": "Įjunkite jį ir laikykite šalia telefono."
+    "findDeviceNoneMessage": "Įjunkite jį ir laikykite šalia telefono.",
+    "startupFailedDetails": "Išsami informacija"
 }

@@ -629,11 +629,11 @@
     "searchMemories": "Hledat vzpomínky",
     "memoryDeleted": "Vzpomínka smazána",
     "undo": "Vrátit zpět",
-    "noMemoriesYet": "🧠 Zatím žádné vzpomínky",
+    "noMemoriesYet": "Zatím žádné vzpomínky",
     "noAutoMemories": "Zatím žádné automaticky extrahované vzpomínky",
     "noManualMemories": "Zatím žádné manuální vzpomínky",
     "noMemoriesInCategories": "Žádné vzpomínky v těchto kategoriích",
-    "noMemoriesFound": "🔍 Nenalezeny žádné vzpomínky",
+    "noMemoriesFound": "Nenalezeny žádné vzpomínky",
     "addFirstMemory": "Přidat první vzpomínku",
     "clearMemoryTitle": "Vymazat paměť Omi",
     "clearMemoryMessage": "Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Pravděpodobně} soundsLike{Zní jako {name}} notPerson{Není {name}} carried{Stále {name}. Převzato z vaší poslední konverzace.} change{Změnit} alsoTitle{Je to také {name}?} alsoBody{Omi našel stejný hlas v dřívějších rozhovorech.} confirmed{Tento štítek jste potvrdili} other{Zkontrolovat}}",
     "speakerLabelTalkTime": "{duration} tohoto hlasu",
     "findDeviceNoneTitle": "Omi nenalezeno",
-    "findDeviceNoneMessage": "Zapněte ho a podržte ho u telefonu."
+    "findDeviceNoneMessage": "Zapněte ho a podržte ho u telefonu.",
+    "startupFailedDetails": "Podrobnosti"
 }

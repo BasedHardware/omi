@@ -624,11 +624,11 @@
     "searchMemories": "यादें खोजें",
     "memoryDeleted": "याद हटा दी गई।",
     "undo": "पूर्ववत करें",
-    "noMemoriesYet": "🧠 अभी कोई यादें नहीं",
+    "noMemoriesYet": "अभी कोई यादें नहीं",
     "noAutoMemories": "कोई स्वतः यादें नहीं",
     "noManualMemories": "कोई मैनुअल यादें नहीं",
     "noMemoriesInCategories": "इन श्रेणियों में कोई यादें नहीं",
-    "noMemoriesFound": "🔍 कोई यादें नहीं मिलीं",
+    "noMemoriesFound": "कोई यादें नहीं मिलीं",
     "addFirstMemory": "अपनी पहली याद जोड़ें",
     "clearMemoryTitle": "Omi मेमोरी साफ़ करें?",
     "clearMemoryMessage": "क्या आप वाकई Omi मेमोरी साफ़ करना चाहते हैं? यह पूर्ववत नहीं किया जा सकता।",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
     "speakerLabelTalkTime": "इस आवाज़ का {duration}",
     "findDeviceNoneTitle": "कोई Omi नहीं मिला",
-    "findDeviceNoneMessage": "इसे चालू करें और अपने फ़ोन के पास रखें।"
+    "findDeviceNoneMessage": "इसे चालू करें और अपने फ़ोन के पास रखें।",
+    "startupFailedDetails": "विवरण"
 }

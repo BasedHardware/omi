@@ -629,11 +629,11 @@
     "searchMemories": "Anı ara",
     "memoryDeleted": "Anı Silindi",
     "undo": "Geri Al",
-    "noMemoriesYet": "🧠 Henüz anı yok",
+    "noMemoriesYet": "Henüz anı yok",
     "noAutoMemories": "Henüz otomatik çıkarılan anı yok",
     "noManualMemories": "Henüz manuel anı yok",
     "noMemoriesInCategories": "Bu kategorilerde anı yok",
-    "noMemoriesFound": "🔍 Anı bulunamadı",
+    "noMemoriesFound": "Anı bulunamadı",
     "addFirstMemory": "İlk anınızı ekleyin",
     "clearMemoryTitle": "Omi'nin Hafızasını Temizle",
     "clearMemoryMessage": "Omi'nin hafızasını temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
@@ -3819,5 +3819,6 @@
     "speakerLabelText": "{part, select, likely{Muhtemel} soundsLike{{name} gibi duyuluyor} notPerson{{name} değil} carried{Hâlâ {name}. Son sohbetinizden aktarıldı.} change{Değiştir} alsoTitle{Bu da {name} mi?} alsoBody{Omi aynı sesi önceki sohbetlerde buldu.} confirmed{Bu etiketi onayladınız} other{İncele}}",
     "speakerLabelTalkTime": "Bu sesten {duration}",
     "findDeviceNoneTitle": "Omi Bulunamadı",
-    "findDeviceNoneMessage": "Açın ve telefonunuzun yakınında tutun."
+    "findDeviceNoneMessage": "Açın ve telefonunuzun yakınında tutun.",
+    "startupFailedDetails": "Ayrıntılar"
 }

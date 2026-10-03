@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 এখনও কোনো স্মৃতি নেই",
+    "noMemoriesYet": "এখনও কোনো স্মৃতি নেই",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 কোনো স্মৃতি পাওয়া যায়নি",
+    "noMemoriesFound": "কোনো স্মৃতি পাওয়া যায়নি",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{সম্ভাব্য} soundsLike{{name}-এর মতো শোনাচ্ছে} notPerson{{name} নয়} carried{এখনও {name}। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।} change{পরিবর্তন} alsoTitle{এটিও কি {name}?} alsoBody{Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।} confirmed{আপনি এই লেবেল নিশ্চিত করেছেন} other{পর্যালোচনা}}",
     "speakerLabelTalkTime": "এই ভয়েসের {duration}",
     "findDeviceNoneTitle": "কোনো Omi পাওয়া যায়নি",
-    "findDeviceNoneMessage": "এটি চালু করুন এবং আপনার ফোনের কাছে ধরে রাখুন।"
+    "findDeviceNoneMessage": "এটি চালু করুন এবং আপনার ফোনের কাছে ধরে রাখুন।",
+    "startupFailedDetails": "বিস্তারিত"
 }

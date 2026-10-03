@@ -629,11 +629,11 @@
     "searchMemories": "Cari kenangan",
     "memoryDeleted": "Memori Dihapus",
     "undo": "Batalkan",
-    "noMemoriesYet": "🧠 Belum ada kenangan",
+    "noMemoriesYet": "Belum ada kenangan",
     "noAutoMemories": "Belum ada memori yang diekstrak otomatis",
     "noManualMemories": "Belum ada memori manual",
     "noMemoriesInCategories": "Tidak ada memori dalam kategori ini",
-    "noMemoriesFound": "🔍 Tidak ditemukan kenangan",
+    "noMemoriesFound": "Tidak ditemukan kenangan",
     "addFirstMemory": "Tambahkan memori pertama Anda",
     "clearMemoryTitle": "Hapus Memori Omi",
     "clearMemoryMessage": "Apakah Anda yakin ingin menghapus memori Omi? Tindakan ini tidak dapat dibatalkan.",
@@ -3819,5 +3819,6 @@
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Terdengar seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dilanjutkan dari percakapan terakhir Anda.} change{Ubah} alsoTitle{Apakah ini juga {name}?} alsoBody{Omi menemukan suara yang sama di percakapan sebelumnya.} confirmed{Anda telah mengonfirmasi label ini} other{Tinjau}}",
     "speakerLabelTalkTime": "{duration} dari suara ini",
     "findDeviceNoneTitle": "Omi Tidak Ditemukan",
-    "findDeviceNoneMessage": "Nyalakan dan dekatkan ke ponsel Anda."
+    "findDeviceNoneMessage": "Nyalakan dan dekatkan ke ponsel Anda.",
+    "startupFailedDetails": "Detail"
 }

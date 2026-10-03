@@ -624,11 +624,11 @@
     "searchMemories": "Buscar recuerdos",
     "memoryDeleted": "Recuerdo borrado",
     "undo": "Deshacer",
-    "noMemoriesYet": "🧠 Aún no hay recuerdos",
+    "noMemoriesYet": "Aún no hay recuerdos",
     "noAutoMemories": "No hay recuerdos automáticos",
     "noManualMemories": "No hay recuerdos manuales",
     "noMemoriesInCategories": "No hay recuerdos en estas categorías",
-    "noMemoriesFound": "🔍 No se encontraron recuerdos",
+    "noMemoriesFound": "No se encontraron recuerdos",
     "addFirstMemory": "Añade tu primer recuerdo",
     "clearMemoryTitle": "¿Borrar memoria de Omi?",
     "clearMemoryMessage": "¿Seguro que quieres borrar la memoria de Omi? No se puede deshacer.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
     "speakerLabelTalkTime": "{duration} de esta voz",
     "findDeviceNoneTitle": "No se encontró ningún Omi",
-    "findDeviceNoneMessage": "Enciéndelo y mantenlo cerca de tu teléfono."
+    "findDeviceNoneMessage": "Enciéndelo y mantenlo cerca de tu teléfono.",
+    "startupFailedDetails": "Detalles"
 }

@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Нема успомени сеуште",
+    "noMemoriesYet": "Нема успомени сеуште",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Нема пронајдени успомени",
+    "noMemoriesFound": "Нема пронајдени успомени",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
     "speakerLabelTalkTime": "{duration} од овој глас",
     "findDeviceNoneTitle": "Не е пронајден Omi",
-    "findDeviceNoneMessage": "Вклучете го и држете го близу до телефонот."
+    "findDeviceNoneMessage": "Вклучете го и држете го близу до телефонот.",
+    "startupFailedDetails": "Детали"
 }

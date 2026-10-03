@@ -629,11 +629,11 @@
     "searchMemories": "Cari kenangan",
     "memoryDeleted": "Ingatan Dipadam",
     "undo": "Buat Asal",
-    "noMemoriesYet": "🧠 Belum ada kenangan",
+    "noMemoriesYet": "Belum ada kenangan",
     "noAutoMemories": "Tiada ingatan auto-ekstrak lagi",
     "noManualMemories": "Tiada ingatan manual lagi",
     "noMemoriesInCategories": "Tiada ingatan dalam kategori ini",
-    "noMemoriesFound": "🔍 Tiada kenangan ditemui",
+    "noMemoriesFound": "Tiada kenangan ditemui",
     "addFirstMemory": "Tambah ingatan pertama anda",
     "clearMemoryTitle": "Kosongkan Ingatan Omi",
     "clearMemoryMessage": "Adakah anda pasti mahu mengosongkan ingatan Omi? Tindakan ini tidak boleh dibatalkan.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
     "speakerLabelTalkTime": "{duration} daripada suara ini",
     "findDeviceNoneTitle": "Tiada Omi Ditemui",
-    "findDeviceNoneMessage": "Hidupkannya dan pegang berhampiran telefon anda."
+    "findDeviceNoneMessage": "Hidupkannya dan pegang berhampiran telefon anda.",
+    "startupFailedDetails": "Butiran"
 }

@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 இன்னும் பதிவுகள் இல்லை",
+    "noMemoriesYet": "இன்னும் பதிவுகள் இல்லை",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 பதிவுகள் கிடைக்கவில்லை",
+    "noMemoriesFound": "பதிவுகள் கிடைக்கவில்லை",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{சாத்தியம்} soundsLike{{name} போல ஒலிக்கிறது} notPerson{{name} இல்லை} carried{இன்னும் {name}. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.} change{மாற்று} alsoTitle{இதுவும் {name} தானா?} alsoBody{முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.} confirmed{இந்த லேபிளை உறுதிப்படுத்தினீர்கள்} other{மதிப்பாய்வு}}",
     "speakerLabelTalkTime": "இந்தக் குரலின் {duration}",
     "findDeviceNoneTitle": "Omi எதுவும் கிடைக்கவில்லை",
-    "findDeviceNoneMessage": "அதை இயக்கி, உங்கள் ஃபோனுக்கு அருகில் வைத்திருங்கள்."
+    "findDeviceNoneMessage": "அதை இயக்கி, உங்கள் ஃபோனுக்கு அருகில் வைத்திருங்கள்.",
+    "startupFailedDetails": "விவரங்கள்"
 }

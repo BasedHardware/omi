@@ -629,11 +629,11 @@
     "searchMemories": "추억 검색",
     "memoryDeleted": "기억이 삭제되었습니다",
     "undo": "실행 취소",
-    "noMemoriesYet": "🧠 아직 추억이 없습니다",
+    "noMemoriesYet": "아직 추억이 없습니다",
     "noAutoMemories": "아직 자동 추출된 기억이 없습니다",
     "noManualMemories": "아직 수동 기억이 없습니다",
     "noMemoriesInCategories": "이 카테고리에 기억이 없습니다",
-    "noMemoriesFound": "🔍 추억을 찾을 수 없습니다",
+    "noMemoriesFound": "추억을 찾을 수 없습니다",
     "addFirstMemory": "첫 번째 기억 추가",
     "clearMemoryTitle": "Omi의 기억 지우기",
     "clearMemoryMessage": "Omi의 기억을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{추정} soundsLike{{name}님 목소리와 비슷해요} notPerson{{name}님 아님} carried{계속 {name}님이에요. 지난 대화에서 이어졌어요.} change{변경} alsoTitle{이분도 {name}님인가요?} alsoBody{Omi가 이전 대화에서 같은 목소리를 찾았어요.} confirmed{이 라벨을 확인했어요} other{검토}}",
     "speakerLabelTalkTime": "이 목소리 {duration}",
     "findDeviceNoneTitle": "Omi를 찾을 수 없음",
-    "findDeviceNoneMessage": "전원을 켜고 휴대폰 가까이에 두세요."
+    "findDeviceNoneMessage": "전원을 켜고 휴대폰 가까이에 두세요.",
+    "startupFailedDetails": "세부 정보"
 }

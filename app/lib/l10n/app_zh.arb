@@ -624,11 +624,11 @@
     "searchMemories": "搜索回忆",
     "memoryDeleted": "记忆已删除",
     "undo": "撤销",
-    "noMemoriesYet": "🧠 还没有回忆",
+    "noMemoriesYet": "还没有回忆",
     "noAutoMemories": "暂无自动记忆",
     "noManualMemories": "暂无手动记忆",
     "noMemoriesInCategories": "此类目无记忆",
-    "noMemoriesFound": "🔍 未找到回忆",
+    "noMemoriesFound": "未找到回忆",
     "addFirstMemory": "添加您的第一条记忆",
     "clearMemoryTitle": "清除 Omi 记忆？",
     "clearMemoryMessage": "您确定要清除 Omi 的记忆吗？此操作无法撤消。",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{可能} soundsLike{听起来像 {name}} notPerson{不是 {name}} carried{仍是 {name}。沿用自你的上一段对话。} change{更改} alsoTitle{这也是 {name} 吗？} alsoBody{Omi 在之前的对话中发现了相同的声音。} confirmed{你已确认此标签} other{查看}}",
     "speakerLabelTalkTime": "此声音共 {duration}",
     "findDeviceNoneTitle": "未找到 Omi",
-    "findDeviceNoneMessage": "请将其开机并靠近手机。"
+    "findDeviceNoneMessage": "请将其开机并靠近手机。",
+    "startupFailedDetails": "详细信息"
 }

@@ -629,11 +629,11 @@
     "searchMemories": "Emlékek keresése",
     "memoryDeleted": "Emlék törölve",
     "undo": "Visszavonás",
-    "noMemoriesYet": "🧠 Még nincsenek emlékek",
+    "noMemoriesYet": "Még nincsenek emlékek",
     "noAutoMemories": "Még nincsenek automatikusan kinyert emlékek",
     "noManualMemories": "Még nincsenek manuális emlékek",
     "noMemoriesInCategories": "Nincsenek emlékek ezekben a kategóriákban",
-    "noMemoriesFound": "🔍 Nem találhatók emlékek",
+    "noMemoriesFound": "Nem találhatók emlékek",
     "addFirstMemory": "Add hozzá az első emlékedet",
     "clearMemoryTitle": "Omi emlékének törlése",
     "clearMemoryMessage": "Biztosan törölni szeretnéd az Omi emlékét? Ez a művelet nem vonható vissza.",
@@ -3880,5 +3880,6 @@
     "speakerLabelText": "{part, select, likely{Valószínű} soundsLike{{name} hangjához hasonlít} notPerson{Nem {name}} carried{Továbbra is {name}. Átvéve az előző beszélgetésedből.} change{Módosítás} alsoTitle{Ő is {name}?} alsoBody{Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.} confirmed{Megerősítetted ezt a címkét} other{Áttekintés}}",
     "speakerLabelTalkTime": "{duration} ebből a hangból",
     "findDeviceNoneTitle": "Nem található Omi",
-    "findDeviceNoneMessage": "Kapcsold be, és tartsd a telefonod közelében."
+    "findDeviceNoneMessage": "Kapcsold be, és tartsd a telefonod közelében.",
+    "startupFailedDetails": "Részletek"
 }

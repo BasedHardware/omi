@@ -624,11 +624,11 @@
     "searchMemories": "Buscar memórias",
     "memoryDeleted": "Memória apagada",
     "undo": "Desfazer",
-    "noMemoriesYet": "🧠 Ainda não há memórias",
+    "noMemoriesYet": "Ainda não há memórias",
     "noAutoMemories": "Nenhuma memória automática",
     "noManualMemories": "Nenhuma memória manual",
     "noMemoriesInCategories": "Nenhuma memória nestas categorias",
-    "noMemoriesFound": "🔍 Nenhuma memória encontrada",
+    "noMemoriesFound": "Nenhuma memória encontrada",
     "addFirstMemory": "Adicione sua primeira memória",
     "clearMemoryTitle": "Limpar memória do Omi?",
     "clearMemoryMessage": "Tem certeza de que deseja limpar a memória do Omi? Isso não pode ser desfeito.",
@@ -3819,5 +3819,6 @@
     "speakerLabelText": "{part, select, likely{Provável} soundsLike{Soa como {name}} notPerson{Não é {name}} carried{Continua sendo {name}. Mantido da sua última conversa.} change{Alterar} alsoTitle{Esta voz também é {name}?} alsoBody{O Omi encontrou a mesma voz em conversas anteriores.} confirmed{Você confirmou este rótulo} other{Revisar}}",
     "speakerLabelTalkTime": "{duration} desta voz",
     "findDeviceNoneTitle": "Nenhum Omi encontrado",
-    "findDeviceNoneMessage": "Ligue-o e mantenha-o perto do seu telefone."
+    "findDeviceNoneMessage": "Ligue-o e mantenha-o perto do seu telefone.",
+    "startupFailedDetails": "Detalhes"
 }

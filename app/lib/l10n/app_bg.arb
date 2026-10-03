@@ -629,11 +629,11 @@
     "searchMemories": "Търсене на спомени",
     "memoryDeleted": "Споменът е изтрит",
     "undo": "Отмени",
-    "noMemoriesYet": "🧠 Все още няма спомени",
+    "noMemoriesYet": "Все още няма спомени",
     "noAutoMemories": "Все още няма автоматично извлечени спомени",
     "noManualMemories": "Все още няма ръчно добавени спомени",
     "noMemoriesInCategories": "Няма спомени в тези категории",
-    "noMemoriesFound": "🔍 Не са намерени спомени",
+    "noMemoriesFound": "Не са намерени спомени",
     "addFirstMemory": "Добавете вашия първи спомен",
     "clearMemoryTitle": "Изчистване на паметта на Omi",
     "clearMemoryMessage": "Сигурни ли сте, че искате да изчистите паметта на Omi? Това действие не може да бъде отменено.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
     "speakerLabelTalkTime": "{duration} от този глас",
     "findDeviceNoneTitle": "Не е намерен Omi",
-    "findDeviceNoneMessage": "Включете го и го дръжте близо до телефона си."
+    "findDeviceNoneMessage": "Включете го и го дръжте близо до телефона си.",
+    "startupFailedDetails": "Подробности"
 }

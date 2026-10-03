@@ -629,11 +629,11 @@
     "searchMemories": "Поиск воспоминаний",
     "memoryDeleted": "Воспоминание удалено",
     "undo": "Отменить",
-    "noMemoriesYet": "🧠 Пока нет воспоминаний",
+    "noMemoriesYet": "Пока нет воспоминаний",
     "noAutoMemories": "Автоматически извлечённых воспоминаний пока нет",
     "noManualMemories": "Ручных воспоминаний пока нет",
     "noMemoriesInCategories": "Нет воспоминаний в этих категориях",
-    "noMemoriesFound": "🔍 Воспоминания не найдены",
+    "noMemoriesFound": "Воспоминания не найдены",
     "addFirstMemory": "Добавьте ваше первое воспоминание",
     "clearMemoryTitle": "Очистить память Omi",
     "clearMemoryMessage": "Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить.",
@@ -3819,5 +3819,6 @@
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Похоже на {name}} notPerson{Не {name}} carried{По-прежнему {name}. Перенесено из вашего прошлого разговора.} change{Изменить} alsoTitle{Это тоже {name}?} alsoBody{Omi нашёл такой же голос в прошлых разговорах.} confirmed{Вы подтвердили эту метку} other{Проверить}}",
     "speakerLabelTalkTime": "{duration} этого голоса",
     "findDeviceNoneTitle": "Omi не найден",
-    "findDeviceNoneMessage": "Включите его и держите рядом с телефоном."
+    "findDeviceNoneMessage": "Включите его и держите рядом с телефоном.",
+    "startupFailedDetails": "Подробности"
 }

@@ -629,11 +629,11 @@
     "searchMemories": "Sök minnen",
     "memoryDeleted": "Minne borttaget",
     "undo": "Ångra",
-    "noMemoriesYet": "🧠 Inga minnen ännu",
+    "noMemoriesYet": "Inga minnen ännu",
     "noAutoMemories": "Inga automatiskt extraherade minnen ännu",
     "noManualMemories": "Inga manuella minnen ännu",
     "noMemoriesInCategories": "Inga minnen i dessa kategorier",
-    "noMemoriesFound": "🔍 Inga minnen hittades",
+    "noMemoriesFound": "Inga minnen hittades",
     "addFirstMemory": "Lägg till ditt första minne",
     "clearMemoryTitle": "Rensa Omis minne",
     "clearMemoryMessage": "Är du säker på att du vill rensa Omis minne? Detta kan inte ångras.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
     "speakerLabelTalkTime": "{duration} av den här rösten",
     "findDeviceNoneTitle": "Ingen Omi hittades",
-    "findDeviceNoneMessage": "Slå på den och håll den nära telefonen."
+    "findDeviceNoneMessage": "Slå på den och håll den nära telefonen.",
+    "startupFailedDetails": "Detaljer"
 }

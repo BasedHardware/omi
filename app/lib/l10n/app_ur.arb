@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 ابھی کوئی یادیں نہیں",
+    "noMemoriesYet": "ابھی کوئی یادیں نہیں",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 کوئی یادیں نہیں ملیں",
+    "noMemoriesFound": "کوئی یادیں نہیں ملیں",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{ممکنہ} soundsLike{{name} جیسی لگتی ہے} notPerson{{name} نہیں} carried{اب بھی {name}۔ آپ کی پچھلی گفتگو سے جاری۔} change{تبدیل کریں} alsoTitle{کیا یہ بھی {name} ہیں؟} alsoBody{Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔} confirmed{آپ نے اس لیبل کی تصدیق کی} other{جائزہ لیں}}",
     "speakerLabelTalkTime": "اس آواز کا {duration}",
     "findDeviceNoneTitle": "کوئی Omi نہیں ملا",
-    "findDeviceNoneMessage": "اسے آن کریں اور اپنے فون کے قریب رکھیں۔"
+    "findDeviceNoneMessage": "اسے آن کریں اور اپنے فون کے قریب رکھیں۔",
+    "startupFailedDetails": "تفصیلات"
 }

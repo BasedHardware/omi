@@ -629,11 +629,11 @@
     "searchMemories": "Hae muistoja",
     "memoryDeleted": "Muisto poistettu",
     "undo": "Kumoa",
-    "noMemoriesYet": "🧠 Ei vielä muistoja",
+    "noMemoriesYet": "Ei vielä muistoja",
     "noAutoMemories": "Ei vielä automaattisesti poimittuja muistoja",
     "noManualMemories": "Ei vielä manuaalisia muistoja",
     "noMemoriesInCategories": "Ei muistoja näissä kategorioissa",
-    "noMemoriesFound": "🔍 Muistoja ei löytynyt",
+    "noMemoriesFound": "Muistoja ei löytynyt",
     "addFirstMemory": "Lisää ensimmäinen muistosi",
     "clearMemoryTitle": "Tyhjennä Omin muisti",
     "clearMemoryMessage": "Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
     "speakerLabelTalkTime": "{duration} tästä äänestä",
     "findDeviceNoneTitle": "Omia ei löytynyt",
-    "findDeviceNoneMessage": "Kytke se päälle ja pidä sitä puhelimesi lähellä."
+    "findDeviceNoneMessage": "Kytke se päälle ja pidä sitä puhelimesi lähellä.",
+    "startupFailedDetails": "Tiedot"
 }

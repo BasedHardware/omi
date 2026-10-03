@@ -629,11 +629,11 @@
     "searchMemories": "Rechercher des souvenirs",
     "memoryDeleted": "Mémoire supprimée",
     "undo": "Annuler",
-    "noMemoriesYet": "🧠 Pas encore de souvenirs",
+    "noMemoriesYet": "Pas encore de souvenirs",
     "noAutoMemories": "Pas encore de mémoires extraites automatiquement",
     "noManualMemories": "Pas encore de mémoires manuelles",
     "noMemoriesInCategories": "Aucune mémoire dans ces catégories",
-    "noMemoriesFound": "🔍 Aucun souvenir trouvé",
+    "noMemoriesFound": "Aucun souvenir trouvé",
     "addFirstMemory": "Ajoutez votre première mémoire",
     "clearMemoryTitle": "Effacer la mémoire d'Omi",
     "clearMemoryMessage": "Êtes-vous sûr de vouloir effacer la mémoire d'Omi ? Cette action est irréversible.",
@@ -3819,5 +3819,6 @@
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
     "speakerLabelTalkTime": "{duration} de cette voix",
     "findDeviceNoneTitle": "Aucun Omi trouvé",
-    "findDeviceNoneMessage": "Allumez-le et tenez-le près de votre téléphone."
+    "findDeviceNoneMessage": "Allumez-le et tenez-le près de votre téléphone.",
+    "startupFailedDetails": "Détails"
 }

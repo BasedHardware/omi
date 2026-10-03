@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 هیچ خاطره‌ای هنوز نیست",
+    "noMemoriesYet": "هیچ خاطره‌ای هنوز نیست",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 هیچ خاطره‌ای یافت نشد",
+    "noMemoriesFound": "هیچ خاطره‌ای یافت نشد",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
     "speakerLabelTalkTime": "{duration} از این صدا",
     "findDeviceNoneTitle": "Omi پیدا نشد",
-    "findDeviceNoneMessage": "آن را روشن کنید و نزدیک تلفن خود نگه دارید."
+    "findDeviceNoneMessage": "آن را روشن کنید و نزدیک تلفن خود نگه دارید.",
+    "startupFailedDetails": "جزئیات"
 }

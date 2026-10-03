@@ -629,11 +629,11 @@
     "searchMemories": "Αναζήτηση αναμνήσεων",
     "memoryDeleted": "Η ανάμνηση διαγράφηκε",
     "undo": "Αναίρεση",
-    "noMemoriesYet": "🧠 Δεν υπάρχουν αναμνήσεις ακόμα",
+    "noMemoriesYet": "Δεν υπάρχουν αναμνήσεις ακόμα",
     "noAutoMemories": "Δεν υπάρχουν αυτόματα εξαγόμενες αναμνήσεις ακόμα",
     "noManualMemories": "Δεν υπάρχουν χειροκίνητες αναμνήσεις ακόμα",
     "noMemoriesInCategories": "Δεν υπάρχουν αναμνήσεις σε αυτές τις κατηγορίες",
-    "noMemoriesFound": "🔍 Δεν βρέθηκαν αναμνήσεις",
+    "noMemoriesFound": "Δεν βρέθηκαν αναμνήσεις",
     "addFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
     "clearMemoryTitle": "Εκκαθάριση Μνήμης του Omi",
     "clearMemoryMessage": "Είστε βέβαιοι ότι θέλετε να εκκαθαρίσετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Πιθανό} soundsLike{Ακούγεται σαν {name}} notPerson{Όχι {name}} carried{Εξακολουθεί να είναι {name}. Μεταφέρθηκε από την τελευταία σας συζήτηση.} change{Αλλαγή} alsoTitle{Είναι και αυτό το άτομο {name};} alsoBody{Το Omi βρήκε την ίδια φωνή σε προηγούμενες συζητήσεις.} confirmed{Επιβεβαιώσατε αυτή την ετικέτα} other{Έλεγχος}}",
     "speakerLabelTalkTime": "{duration} αυτής της φωνής",
     "findDeviceNoneTitle": "Δεν βρέθηκε Omi",
-    "findDeviceNoneMessage": "Ενεργοποιήστε το και κρατήστε το κοντά στο τηλέφωνό σας."
+    "findDeviceNoneMessage": "Ενεργοποιήστε το και κρατήστε το κοντά στο τηλέφωνό σας.",
+    "startupFailedDetails": "Λεπτομέρειες"
 }

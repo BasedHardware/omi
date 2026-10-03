@@ -629,11 +629,11 @@
     "searchMemories": "Cerca records",
     "memoryDeleted": "Record eliminat",
     "undo": "Desfer",
-    "noMemoriesYet": "🧠 Encara no hi ha records",
+    "noMemoriesYet": "Encara no hi ha records",
     "noAutoMemories": "Encara no hi ha records extrets automàticament",
     "noManualMemories": "Encara no hi ha records manuals",
     "noMemoriesInCategories": "No hi ha records en aquestes categories",
-    "noMemoriesFound": "🔍 No s'han trobat records",
+    "noMemoriesFound": "No s'han trobat records",
     "addFirstMemory": "Afegiu el vostre primer record",
     "clearMemoryTitle": "Esborrar la memòria d'Omi",
     "clearMemoryMessage": "Esteu segur que voleu esborrar la memòria d'Omi? Aquesta acció no es pot desfer.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
     "speakerLabelTalkTime": "{duration} d’aquesta veu",
     "findDeviceNoneTitle": "No s'ha trobat cap Omi",
-    "findDeviceNoneMessage": "Engega'l i mantén-lo a prop del telèfon."
+    "findDeviceNoneMessage": "Engega'l i mantén-lo a prop del telèfon.",
+    "startupFailedDetails": "Detalls"
 }

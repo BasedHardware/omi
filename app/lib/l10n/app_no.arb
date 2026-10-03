@@ -629,11 +629,11 @@
     "searchMemories": "Søk i minner",
     "memoryDeleted": "Minne slettet",
     "undo": "Angre",
-    "noMemoriesYet": "🧠 Ingen minner ennå",
+    "noMemoriesYet": "Ingen minner ennå",
     "noAutoMemories": "Ingen automatisk uttrukne minner ennå",
     "noManualMemories": "Ingen manuelle minner ennå",
     "noMemoriesInCategories": "Ingen minner i disse kategoriene",
-    "noMemoriesFound": "🔍 Ingen minner funnet",
+    "noMemoriesFound": "Ingen minner funnet",
     "addFirstMemory": "Legg til ditt første minne",
     "clearMemoryTitle": "Tømme Omis minne",
     "clearMemoryMessage": "Er du sikker på at du vil tømme Omis minne? Dette kan ikke angres.",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{Sannsynlig} soundsLike{Høres ut som {name}} notPerson{Ikke {name}} carried{Fortsatt {name}. Videreført fra den siste samtalen din.} change{Endre} alsoTitle{Er dette også {name}?} alsoBody{Omi fant den samme stemmen i tidligere samtaler.} confirmed{Du har bekreftet denne etiketten} other{Gjennomgå}}",
     "speakerLabelTalkTime": "{duration} av denne stemmen",
     "findDeviceNoneTitle": "Fant ingen Omi",
-    "findDeviceNoneMessage": "Slå den på og hold den nær telefonen."
+    "findDeviceNoneMessage": "Slå den på og hold den nær telefonen.",
+    "startupFailedDetails": "Detaljer"
 }

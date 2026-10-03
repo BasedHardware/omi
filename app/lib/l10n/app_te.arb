@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 ఇంకా జ్ఞాపకాలు లేవు",
+    "noMemoriesYet": "ఇంకా జ్ఞాపకాలు లేవు",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 జ్ఞాపకాలు కనుగొనబడలేదు",
+    "noMemoriesFound": "జ్ఞాపకాలు కనుగొనబడలేదు",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -11341,5 +11341,6 @@
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
     "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
     "findDeviceNoneTitle": "Omi ఏదీ కనుగొనబడలేదు",
-    "findDeviceNoneMessage": "దాన్ని ఆన్ చేసి, మీ ఫోన్ దగ్గర పట్టుకోండి."
+    "findDeviceNoneMessage": "దాన్ని ఆన్ చేసి, మీ ఫోన్ దగ్గర పట్టుకోండి.",
+    "startupFailedDetails": "వివరాలు"
 }

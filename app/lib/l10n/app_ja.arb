@@ -629,11 +629,11 @@
     "searchMemories": "記憶を検索",
     "memoryDeleted": "記憶を削除しました",
     "undo": "元に戻す",
-    "noMemoriesYet": "🧠 まだ記憶がありません",
+    "noMemoriesYet": "まだ記憶がありません",
     "noAutoMemories": "自動で作成された記憶はまだありません",
     "noManualMemories": "手動で作成した記憶はまだありません",
     "noMemoriesInCategories": "このカテゴリの記憶はありません",
-    "noMemoriesFound": "🔍 記憶が見つかりませんでした",
+    "noMemoriesFound": "記憶が見つかりませんでした",
     "addFirstMemory": "最初の記憶を追加",
     "clearMemoryTitle": "Omiの記憶を消去",
     "clearMemoryMessage": "Omiの記憶を消去してもよろしいですか？この操作は取り消せません。",
@@ -3784,5 +3784,6 @@
     "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
     "speakerLabelTalkTime": "この声の{duration}",
     "findDeviceNoneTitle": "Omiが見つかりません",
-    "findDeviceNoneMessage": "電源を入れて、スマートフォンの近くに置いてください。"
+    "findDeviceNoneMessage": "電源を入れて、スマートフォンの近くに置いてください。",
+    "startupFailedDetails": "詳細"
 }

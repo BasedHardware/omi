@@ -629,11 +629,11 @@
     "searchMemories": "Søg minder",
     "memoryDeleted": "Hukommelse slettet",
     "undo": "Fortryd",
-    "noMemoriesYet": "🧠 Ingen minder endnu",
+    "noMemoriesYet": "Ingen minder endnu",
     "noAutoMemories": "Ingen automatiske hukommelser",
     "noManualMemories": "Ingen manuelle hukommelser",
     "noMemoriesInCategories": "Ingen hukommelser i kategorier",
-    "noMemoriesFound": "🔍 Ingen minder fundet",
+    "noMemoriesFound": "Ingen minder fundet",
     "addFirstMemory": "Tilføj din første hukommelse",
     "clearMemoryTitle": "Ryd hukommelse",
     "clearMemoryMessage": "Er du sikker på, at du vil rydde hukommelsen?",
@@ -3826,5 +3826,6 @@
     "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
     "speakerLabelTalkTime": "{duration} af denne stemme",
     "findDeviceNoneTitle": "Ingen Omi fundet",
-    "findDeviceNoneMessage": "Tænd den, og hold den tæt på din telefon."
+    "findDeviceNoneMessage": "Tænd den, og hold den tæt på din telefon.",
+    "startupFailedDetails": "Detaljer"
 }
