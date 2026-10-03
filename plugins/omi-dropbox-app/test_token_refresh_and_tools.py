@@ -67,6 +67,12 @@ def make_module(name, **attrs):
 
 
 # Framework stubs for hermetic execution without fastapi/requests/tenacity installed
+req_exceptions = make_module(
+    "requests.exceptions",
+    RequestException=OSError,
+    Timeout=OSError,
+    ConnectionError=OSError,
+)
 stubs = {
     "requests": make_module(
         "requests",
@@ -74,14 +80,9 @@ stubs = {
         post=lambda *a, **kw: None,
         get=lambda *a, **kw: None,
         Response=ResponseStandIn,
-        # dropbox_client evaluates requests.exceptions.* at decoration time
-        exceptions=make_module(
-            "requests.exceptions",
-            RequestException=OSError,
-            Timeout=OSError,
-            ConnectionError=OSError,
-        ),
+        exceptions=req_exceptions,
     ),
+    "requests.exceptions": req_exceptions,
     "tenacity": make_module(
         "tenacity",
         retry=identity_retry,
@@ -234,7 +235,7 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             self.assertIn("Please provide a search query", res["error"])
 
             # Numeric query coerced to string
-            with patch.object(DropboxClient, "search_files", return_value=([], None)) as mock_search:
+            with patch.object(dropbox_main.DropboxClient, "search_files", return_value=([], None)) as mock_search:
                 res = asyncio.run(dropbox_main.tool_search_dropbox(FakeRequest({"uid": "u1", "query": 2026})))
                 mock_search.assert_called_once_with("2026", max_results=10)
 
