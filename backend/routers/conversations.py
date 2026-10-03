@@ -92,6 +92,7 @@ from utils.conversations.search import (
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_assignment_teaching import commit_manual_assignment
+from utils.speaker_learning_jobs import schedule_reprocessed_learning
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -752,6 +753,7 @@ def reprocess_conversation(
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
     response: Response = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -776,11 +778,7 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
-    receipt_applied = False
-
-    def record_speaker_receipt(applied: bool) -> None:
-        nonlocal receipt_applied
-        receipt_applied = applied
+    receipt_applied: list = []
 
     processed_conversation = process_conversation(
         uid,
@@ -792,15 +790,8 @@ def reprocess_conversation(
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
-        speaker_receipt_observer=record_speaker_receipt,
+        speaker_receipt_observer=receipt_applied.append,
     )
-
-    # The mobile speaker-label refresh must distinguish this processor from an
-    # older backend that accepted reprocess but built its prompt before applying
-    # the current manual speaker receipt. A header keeps released JSON decoders
-    # compatible and is emitted only after processing returns successfully.
-    if response is not None and receipt_applied:
-        response.headers['X-Omi-Speaker-Receipt-Summary'] = '1'
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
     # the user's choice (``restore_discarded``) so no later reassessment hides it
@@ -810,7 +801,13 @@ def reprocess_conversation(
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 
-    return processed_conversation
+    return schedule_reprocessed_learning(
+        uid,
+        processed_conversation,
+        background_tasks,
+        response=response,
+        receipt_applied=bool(receipt_applied and receipt_applied[-1]),
+    )
 
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:

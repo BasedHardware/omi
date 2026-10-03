@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from database import speaker_learning as speaker_learning_db
+from database import speaker_learning_jobs as speaker_learning_jobs_db
 from database import users
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
@@ -51,6 +52,7 @@ def world(monkeypatch):
     store.rows[conversation_path] = conversation
     monkeypatch.setattr(users, 'db', store)
     monkeypatch.setattr(speaker_learning_db, 'get_firestore_client', lambda *a, **k: store)
+    monkeypatch.setattr(speaker_learning_jobs_db, 'get_firestore_client', lambda *a, **k: store)
     monkeypatch.setattr(users, 'get_person', lambda uid, pid: deepcopy(store.rows.get(('users', uid, 'people', pid))))
     monkeypatch.setattr(
         users,
