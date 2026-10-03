@@ -1,17 +1,19 @@
-"""Overlapping strict generations bind deterministically to the later-created row.
+"""Overlapping strict generations bind only through the phone's stamp.
 
 A stamp append or smart merge can grow one generation's stored interval over its
 successor's, so more than one generation can strictly contain a segment. Silence
 rollovers also mint rows whose ``started_at`` is back-dated before wall-clock
-creation (``created_at`` is the rollover time). The segment belongs to exactly
-one of them: prefer the row whose creation interval proxy — its stored start
-clamped to its observed creation time — holds the segment; among those, the
-later-created row wins, with the row id as the final deterministic tie-break.
-Tolerant-only overlap stays ambiguous, and a truncated lineage still binds
-nothing. All ids are synthetic.
+creation, so no local clock reliably names the owner. When several strict
+matches canonicalize differently the plan stays undecidable: the segment
+carries no target and the ``ambiguous_pending`` binding token until a stamp
+that names one of the strict rows — by id or by canonical — disambiguates it.
+A folded donor whose canonical survivor is unambiguous still binds, tolerant
+overlap stays ambiguous, and a truncated lineage still binds nothing. All ids
+are synthetic.
 """
 
 import math
+from copy import deepcopy
 
 import pytest
 
@@ -46,10 +48,10 @@ def backdated(row_id, start, end, created, **extra):
 
 
 def overlap_rows():
-    """Two strict-overlap generations; the later one was created inside the first's span."""
+    """Luna A 12:00-12:20 and B backdated to 12:18 while created at 12:19."""
     return [
-        backdated('GEN-EARLY', 1000, 2000, 1000),
-        backdated('GEN-LATE', 1400, 2400, 1800),
+        backdated('GEN-A', 43200, 44400, 43200),
+        backdated('GEN-B', 44280, 45000, 44340),
     ]
 
 
@@ -66,109 +68,143 @@ def select(rows, chunk, **kwargs):
     )
 
 
-def test_segment_inside_both_proxy_intervals_binds_the_later_created():
-    result = select(overlap_rows(), sync_chunk(1900, 1910, 'buffered speech both rows could own'))
-    assert result.targets == {'SYNC-1900': 'GEN-LATE'} and result.outcome == 'bound'
+def test_overlap_with_a_compatible_stamp_binds_the_stamped_row():
+    chunk = sync_chunk(44300, 44330, 'buffered speech in the overlap')
+    assert select(overlap_rows(), chunk, stamp='GEN-B').targets == {chunk['id']: 'GEN-B'}
+    assert select(overlap_rows(), chunk, stamp='GEN-A').targets == {chunk['id']: 'GEN-A'}
 
 
-def test_segment_before_the_later_creation_binds_the_row_that_covers_it():
-    result = select(overlap_rows(), sync_chunk(1500, 1510, 'speech only the first row captured'))
-    assert result.targets == {'SYNC-1500': 'GEN-EARLY'}
+def test_overlap_with_a_compatible_stamp_counts_bound_once():
+    chunk = sync_chunk(44300, 44330, 'buffered speech in the overlap')
+    result = select(overlap_rows(), chunk, stamp='GEN-B')
+    assert result.outcome == 'bound' and result.counts == {
+        'bound': 1,
+        'stamp_overridden': 0,
+        'stamp_fallback': 0,
+        'unbound': 0,
+    }
+    assert result.binding_reasons == {chunk['id']: 'bound'}
 
 
-@pytest.mark.parametrize('overlap', [290, 420])
-def test_backdated_overlap_width_does_not_change_the_winner(overlap):
+@pytest.mark.parametrize('stamp', [None, 'STAMP', 'GEN-UNRELATED'])
+def test_overlap_without_a_compatible_stamp_stays_pending(stamp):
+    chunk = sync_chunk(44300, 44330, 'buffered speech in the overlap')
+    result = select(overlap_rows(), chunk, stamp=stamp)
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+    assert result.reason == 'ambiguous_overlap' and result.outcome == 'interval_miss'
+    assert result.counts['unbound'] == 1
+
+
+def test_overlap_without_safe_handling_keeps_the_plain_miss():
+    chunk = sync_chunk(44300, 44330, 'buffered speech in the overlap')
+    result = select(overlap_rows(), chunk, stamp='STAMP', safe_overlap=False)
+    assert result.targets == {chunk['id']: 'STAMP'}
+    assert result.binding_reasons == {chunk['id']: 'stamp_fallback'}
+
+
+@pytest.mark.parametrize('created', [44340, None])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_ambiguity_never_falls_back_to_an_id_winner(created, reverse):
     rows = [
-        backdated('GEN-EARLY', 1000, 2000, 1000),
-        backdated('GEN-LATE', 2000 - overlap, 3000 - overlap, 1500),
+        backdated('GEN-AAA', 43200, 44400, created),
+        backdated('GEN-ZZZ', 43200, 44400, created),
     ]
-    result = select(rows, sync_chunk(1990, 1999, 'speech inside the overlap'))
-    assert result.targets == {'SYNC-1990': 'GEN-LATE'}
+    chunk = sync_chunk(43400, 43430, 'speech inside identical intervals')
+    ordered = list(reversed(rows)) if reverse else rows
+    result = select(ordered, chunk)
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
 
 
 @pytest.mark.parametrize('reverse', [False, True])
-def test_exact_creation_tie_picks_a_stable_id_regardless_of_row_order(reverse):
+def test_a_compatible_stamp_ignores_row_order_and_id_order(reverse):
     rows = [
-        backdated('GEN-AAA', 1000, 2000, 1500),
-        backdated('GEN-ZZZ', 1000, 2000, 1500),
+        backdated('GEN-AAA', 43200, 44400, 44340),
+        backdated('GEN-ZZZ', 43200, 44400, 44340),
     ]
-    chunk = sync_chunk(1500, 1510, 'speech inside identical intervals')
-    first = select(list(reversed(rows)) if reverse else rows, chunk)
-    second = select(rows if reverse else list(reversed(rows)), chunk)
-    assert first.targets == second.targets == {'SYNC-1500': 'GEN-ZZZ'}
-
-
-@pytest.mark.parametrize('reverse', [False, True])
-def test_missing_creation_metadata_still_resolves_deterministically(reverse):
-    rows = [backdated('GEN-AAA', 1000, 2000, None), backdated('GEN-ZZZ', 1000, 2000, None)]
-    chunk = sync_chunk(1500, 1510, 'speech inside identical intervals')
-    first = select(list(reversed(rows)) if reverse else rows, chunk)
-    second = select(rows if reverse else list(reversed(rows)), chunk)
-    assert first.targets == second.targets == {'SYNC-1500': 'GEN-ZZZ'}
+    chunk = sync_chunk(43400, 43430, 'speech inside identical intervals')
+    ordered = list(reversed(rows)) if reverse else rows
+    result = select(ordered, chunk, stamp='GEN-AAA')
+    assert result.targets == {chunk['id']: 'GEN-AAA'}
+    assert result.counts['bound'] == 1
 
 
 def test_overlapping_generations_sharing_a_canonical_keep_the_unique_binding():
     donor = backdated(
         'GEN-DONOR',
-        1500,
-        2300,
-        1700,
+        44100,
+        44700,
+        44340,
         deleted=True,
         discarded=True,
-        sync_merged_into='GEN-EARLY',
+        sync_merged_into='GEN-A',
         smart_merge={'role': 'donor'},
     )
-    rows = [backdated('GEN-EARLY', 1000, 2000, 1000), donor]
-    result = select(rows, sync_chunk(1700, 1710, 'speech both folded rows contain'))
-    assert result.targets == {'SYNC-1700': 'GEN-EARLY'}
+    rows = [backdated('GEN-A', 43200, 44400, 43200), donor]
+    chunk = sync_chunk(44300, 44330, 'speech both folded rows contain')
+    result = select(rows, chunk)
+    assert result.targets == {chunk['id']: 'GEN-A'}
 
 
 def test_an_incomplete_overlap_set_still_binds_nothing():
     store = seeded_store(overlap_rows())
-    chunk = sync_chunk(1900, 1910, 'speech inside both rows')
+    chunk = sync_chunk(44300, 44330, 'speech inside both rows')
     result = plan(store, [chunk], truncated_before=math.inf)
     assert result.targets == {chunk['id']: None} and result.reason == 'truncated'
 
 
 def test_tolerant_only_overlap_stays_ambiguous():
-    rows = [backdated('GEN-EARLY', 1000, 2000, 1000), backdated('GEN-LATE', 2003, 2400, 2003)]
-    chunk = sync_chunk(1999, 2010, 'speech straddling the rollover')
+    rows = [backdated('GEN-A', 43200, 44400, 43200), backdated('GEN-B', 44403, 45000, 44403)]
+    chunk = sync_chunk(44399, 44410, 'speech straddling the rollover')
     result = select(rows, chunk)
     assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
 
 
-def test_new_speech_lands_on_the_chosen_row_without_new_conversations():
-    rows = overlap_rows()
-    store = seeded_store(rows)
+def test_new_speech_lands_on_the_stamped_row_without_new_conversations():
+    store = seeded_store(overlap_rows())
     before = {row['id'] for row in conversations(store)}
-    chunk = sync_chunk(1900, 1910, 'genuinely new speech the live socket missed')
-    targets = plan(store, [chunk]).targets
-    assert targets == {chunk['id']: 'GEN-LATE'}
+    chunk = sync_chunk(44300, 44330, 'genuinely new speech the live socket missed')
+    targets = plan(store, [chunk], stamp='GEN-B').targets
+    assert targets == {chunk['id']: 'GEN-B'}
     replay(store, [chunk], targets)
     assert {row['id'] for row in conversations(store)} == before
-    assert 'genuinely new speech the live socket missed' in texts(store, 'GEN-LATE')
-    assert 'genuinely new speech the live socket missed' not in texts(store, 'GEN-EARLY')
+    assert 'genuinely new speech the live socket missed' in texts(store, 'GEN-B')
+    assert 'genuinely new speech the live socket missed' not in texts(store, 'GEN-A')
 
 
-def test_late_created_row_does_not_steal_speech_outside_its_creation_interval():
+def test_pending_overlap_writes_nothing_until_a_retry_binds_the_stamp():
     store = seeded_store(overlap_rows())
-    before = {row['id'] for row in conversations(store)}
-    chunks = [
-        sync_chunk(1500, 1510, 'early speech only the first generation captured'),
-        sync_chunk(1900, 1910, 'later speech inside both proxy intervals'),
+    before = deepcopy(store.rows)
+    chunk = sync_chunk(44300, 44330, 'genuinely new speech inside the ambiguous window')
+    pending = plan(store, [chunk], stamp='STAMP')
+    assert pending.targets == {chunk['id']: None}
+    assert pending.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+    assert store.rows == before
+    bound = plan(store, [chunk], stamp='GEN-B')
+    replay(store, [chunk], bound.targets)
+    assert 'genuinely new speech inside the ambiguous window' in texts(store, 'GEN-B')
+    assert 'genuinely new speech inside the ambiguous window' not in texts(store, 'GEN-A')
+
+
+def test_a_stamp_that_is_not_strictly_covering_stays_pending():
+    rows = [
+        backdated('GEN-A', 43200, 44400, 43200),
+        backdated('GEN-B', 44280, 45000, 44340),
+        backdated('GEN-C', 43260, 44460, 43260),
     ]
-    targets = plan(store, chunks).targets
-    assert [targets[chunk['id']] for chunk in chunks] == ['GEN-EARLY', 'GEN-LATE']
-    replay(store, chunks, targets)
-    assert {row['id'] for row in conversations(store)} == before
-    assert chunks[0]['transcript_segments'][0]['text'] in texts(store, 'GEN-EARLY')
-    assert chunks[1]['transcript_segments'][0]['text'] in texts(store, 'GEN-LATE')
+    chunk = sync_chunk(43300, 43330, 'speech outside the stamped row')
+    result = select(rows, chunk, stamp='GEN-B')
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'}
 
 
-def test_overlap_replay_does_not_create_a_sync_row():
+def test_luna_backdated_buffered_audio_lands_in_stamped_generation():
     """The saved-row set is the observable contract: no sync upload may mint a row."""
     store = seeded_store(overlap_rows())
-    chunk = sync_chunk(1900, 1910, 'genuinely new speech inside the overlapping generation window')
-    replay(store, [chunk], plan(store, [chunk]).targets)
-    assert {row['id'] for row in conversations(store)} == {'GEN-EARLY', 'GEN-LATE'}
-    assert 'genuinely new speech inside the overlapping generation window' in texts(store, 'GEN-LATE')
+    chunk = sync_chunk(44300, 44330, 'synthetic Luna buffered speech inside the overlapping generation window')
+    replay(store, [chunk], plan(store, [chunk], stamp='GEN-B').targets)
+    assert {row['id'] for row in conversations(store)} == {'GEN-A', 'GEN-B'}
+    stored = texts(store, 'GEN-B')
+    assert 'synthetic Luna buffered speech inside the overlapping generation window' in stored
+    assert all('synthetic Luna buffered' not in text for text in texts(store, 'GEN-A'))

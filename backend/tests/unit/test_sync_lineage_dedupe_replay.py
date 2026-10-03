@@ -28,6 +28,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import conversations, intake
 from utils.firestore_document_size import estimate_firestore_document_bytes
 from utils.sync import assignment
+from utils.sync.recording_lineage import select_segment_targets
 
 T0 = 1_800_000_000.0
 LIVE_ID = 'LIVE-ROW'
@@ -573,13 +574,18 @@ def _drive_process_segment(
     wal_ts=T0 + 40,
     lineage_binding=None,
     prove=False,
+    signed_url_impl=None,
+    prerecorded_impl=None,
+    turnstile=None,
+    deferred_outcome=None,
+    errors=None,
 ):
     from utils.conversations import lifecycle
 
-    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', signed_url_impl or (lambda _path: 'file://x'))
     monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
-    monkeypatch.setattr(pipeline, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
+    monkeypatch.setattr(pipeline, 'prerecorded', prerecorded_impl or (lambda *args, **kwargs: (['w'], 'en')))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))
     monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: wal_ts)
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
@@ -607,9 +613,11 @@ def _drive_process_segment(
         'u',
         response,
         threading.Lock(),
-        [],
+        errors if errors is not None else [],
         target_conversation_id=target,
+        turnstile=turnstile,
         client_device_id='pendant',
+        deferred_outcome=deferred_outcome,
         lineage_binding=lineage_binding,
     )
     return ok, response, finish
@@ -792,6 +800,92 @@ def test_committed_append_logs_telemetry_before_a_failing_finish(pipeline_module
     assert 'appended_seconds=30.00' in lines[0] and 'repeat_only=False' in lines[0]
     for forbidden in (LIVE_ID, 'WAL-', 'quarterly'):
         assert forbidden not in lines[0]
+
+
+def test_ambiguous_pending_defers_before_stt_and_a_bound_retry_lands(pipeline_module, monkeypatch):
+    """An undecidable generation overlap defers the segment instead of guessing a row."""
+    pipeline = pipeline_module
+    store = seeded_store([live_row(capture_evidence=live_evidence())])
+    before = deepcopy(store.rows)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, deferred = [], {}
+    signed_url, prerecorded_call, turnstile = MagicMock(), MagicMock(), MagicMock()
+    ok, response, finish = _drive_process_segment(
+        pipeline,
+        monkeypatch,
+        store,
+        NEW,
+        response=response,
+        errors=errors,
+        deferred_outcome=deferred,
+        signed_url_impl=signed_url,
+        prerecorded_impl=prerecorded_call,
+        turnstile=turnstile,
+        lineage_binding='ambiguous_pending',
+    )
+    assert ok is False and errors == ['sync_persistence_failed']
+    assert deferred['retryable'] is True
+    signed_url.assert_not_called()
+    prerecorded_call.assert_not_called()
+    turnstile.complete.assert_called_once_with('/tmp/wal.wav')
+    finish.assert_not_called()
+    assert store.rows == before
+    assert response == {'new_memories': set(), 'updated_memories': set()}
+    ok, response, finish = _drive_process_segment(
+        pipeline, monkeypatch, store, NEW, response=response, lineage_binding='bound', prove=True
+    )
+    assert ok is True
+    assert len(conversations(store)) == 1
+    assert set(texts_of(store, LIVE_ID)) >= set(NEW)
+
+
+def test_pending_plan_output_defers_through_real_process_segment(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    rows = [
+        live_row(id='GEN-A', finished_at=at(T0 + 120)),
+        live_row(
+            id='GEN-B',
+            started_at=at(T0 + 60),
+            finished_at=at(T0 + 180),
+            external_data={'recording_session_id': 'S-B', 'recording_origin_id': ORIGIN},
+        ),
+    ]
+    store = seeded_store(rows)
+    before = deepcopy(store.rows)
+    segment_plan = select_segment_targets(
+        rows,
+        ORIGIN,
+        {'wal': (T0 + 80, T0 + 90)},
+        stamped_target='STAMP',
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+    )
+    signed_url, prerecorded_call = MagicMock(), MagicMock()
+    ok, _, finish = _drive_process_segment(
+        pipeline,
+        monkeypatch,
+        store,
+        NEW,
+        target=segment_plan.targets['wal'],
+        lineage_binding=segment_plan.binding_reasons['wal'],
+        signed_url_impl=signed_url,
+        prerecorded_impl=prerecorded_call,
+    )
+    assert ok is False
+    signed_url.assert_not_called()
+    prerecorded_call.assert_not_called()
+    finish.assert_not_called()
+    assert store.rows == before
+
+
+def test_pending_token_is_inert_when_safe_overlap_is_off(pipeline_module, monkeypatch):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    ok, _, finish = _drive_process_segment(pipeline, monkeypatch, store, NEW, lineage_binding='ambiguous_pending')
+    assert ok is True
+    finish.assert_called_once()
 
 
 def test_flag_off_logs_nothing_and_enrolls_normally(pipeline_module, monkeypatch, caplog):

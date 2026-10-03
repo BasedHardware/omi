@@ -15,10 +15,14 @@ it is the unique canonical row whose interval holds the segment: strictly
 first, then with the bounded edge allowance of ``recording_session_target``
 (overlapping it, starting at most 5 s before it and ending at most 60 s after
 its last word). Smart-merge donor tombstones stay
-in the lineage and canonicalize to their survivor. When no unique generation
-exists, the segment keeps the phone's stamp if it has one (the pre-#19424
-behavior) and otherwise stays unbound for temporal assignment, which never
-adopts live rows. A different unique generation overrides the stamp.
+in the lineage and canonicalize to their survivor. When several strict matches
+canonicalize differently there is no reliable local clock ordering, so under
+the safe-overlap gate the segment stays unbound with the ``ambiguous_pending``
+token unless the phone's stamp names exactly one strict canonical; without the
+gate, or with no unique generation and no overlap, the segment keeps the
+phone's stamp if it has one (the pre-#19424 behavior) and otherwise stays
+unbound for temporal assignment, which never adopts live rows. A different
+unique generation overrides the stamp.
 
 The plan is a pure function of the lineage rows, the segment spans and the
 stamp, so a retried job binds its remaining segments the same way against the
@@ -39,6 +43,7 @@ from config.sync_lineage import (
     sync_lineage_resolve_enabled,
     sync_lineage_resolve_uid_allowed,
 )
+from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
@@ -89,7 +94,6 @@ class _Generation:
     end: float
     canonical: str
     deleted: bool
-    created: Optional[float]
 
 
 @dataclass
@@ -198,7 +202,7 @@ def _generations(
     wanted_source = source_value(source)
     device_id = clean_text(client_device_id)
     redirects: dict[str, str] = {}
-    candidates: list[tuple[str, float, float, bool, Optional[float]]] = []
+    candidates: list[tuple[str, float, float, bool]] = []
     for row in rows:
         row_id = clean_text(row.get('id'))
         reason = classify_generation_row(
@@ -227,10 +231,10 @@ def _generations(
         end = unix_seconds(row.get('finished_at'))
         if start is None or end is None:
             continue
-        candidates.append((row_id, start, end, bool(row.get('deleted')), unix_seconds(row.get('created_at'))))
+        candidates.append((row_id, start, end, bool(row.get('deleted'))))
     generations = [
-        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted, created)
-        for row_id, start, end, deleted, created in sorted(candidates)
+        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted)
+        for row_id, start, end, deleted in sorted(candidates)
     ]
     if diagnostics is not None:
         diagnostics['candidate_count_after'] = len(generations)
@@ -251,14 +255,24 @@ def _unique(matches: list[_Generation]) -> Optional[str]:
     return min(generation.id for generation in matches)
 
 
-def _bind(generations: list[_Generation], start: float, end: float) -> Optional[str]:
+def _bind(
+    generations: list[_Generation],
+    start: float,
+    end: float,
+    *,
+    stamp: Optional[str] = None,
+    safe_overlap: bool = False,
+) -> tuple[Optional[str], bool]:
+    """The explicit target, plus whether several strict canonicals stayed undecidable."""
     strict = [g for g in generations if g.start <= start and end <= g.end]
     if strict:
         unique = _unique(strict)
         if unique is not None:
-            return unique
-        pick = pick_overlapping(strict, start, end)
-        return _unique([pick]) if pick is not None else None
+            return unique, False
+        if not safe_overlap:
+            return None, False
+        pick = pick_overlapping(strict, start, end, stamp)
+        return (_unique([pick]) if pick is not None else None), pick is None
     tolerant = [
         g
         for g in generations
@@ -267,7 +281,12 @@ def _bind(generations: list[_Generation], start: float, end: float) -> Optional[
         and start >= g.start - START_SKEW_SECONDS
         and end <= g.end + TRAILING_AUDIO_SECONDS
     ]
-    return _unique(tolerant) if tolerant else None
+    return (_unique(tolerant) if tolerant else None), False
+
+
+def ambiguous_binding_pending(uid: Optional[str], binding: Optional[str]) -> bool:
+    """The pending overlap token, live only where safe overlap handling is active."""
+    return binding == 'ambiguous_pending' and sync_live_dedupe_active_for(uid)
 
 
 def select_segment_targets(
@@ -281,8 +300,11 @@ def select_segment_targets(
     is_locked: bool,
     truncated_before: Optional[float] = None,
     lookup_failed: bool = False,
+    safe_overlap: Optional[bool] = None,
 ) -> LineagePlan:
-    """Pure per-segment plan: unique generation, else the stamp, else unbound."""
+    """Pure per-segment plan: unique generation or stamp-disambiguated overlap, else the stamp or unbound."""
+    if safe_overlap is None:
+        safe_overlap = sync_live_dedupe_enabled()
     filter_counts: dict[str, int] = {}
     generations = (
         []
@@ -307,6 +329,7 @@ def select_segment_targets(
     for key in sorted(spans):
         start, end = spans[key]
         bound = None
+        pending = False
         if lookup_failed:
             misses.add('lookup_failed')
         elif not math.isfinite(start) or not math.isfinite(end) or end <= start:
@@ -318,22 +341,31 @@ def select_segment_targets(
         elif truncated_before is not None:
             misses.add('truncated')
         else:
-            bound = _bind(generations, start, end)
+            bound, pending = _bind(generations, start, end, stamp=stamp, safe_overlap=safe_overlap)
             if bound is None:
-                misses.add('interval_miss')
+                misses.add('ambiguous_overlap' if pending else 'interval_miss')
         if bound is not None:
             canonical = canonical_by_id.get(bound, bound)
             bound_canonicals.add(canonical)
             binding = 'stamp_overridden' if stamp and stamp_canonical != canonical else 'bound'
             counts[binding] += 1
             targets[key] = bound
+        elif pending:
+            counts['unbound'] += 1
+            binding = 'ambiguous_pending'
+            targets[key] = None
         else:
             binding = 'stamp_fallback' if stamp else 'unbound'
             counts[binding] += 1
             targets[key] = stamp
         binding_reasons[key] = binding
     reason = next(
-        (item for item in ('lookup_failed', 'no_rows', 'truncated', 'interval_miss') if item in misses), 'none'
+        (
+            item
+            for item in ('lookup_failed', 'no_rows', 'truncated', 'ambiguous_overlap', 'interval_miss')
+            if item in misses
+        ),
+        'none',
     )
     if lookup_failed:
         outcome = 'lookup_failed'
@@ -341,6 +373,8 @@ def select_segment_targets(
         outcome = 'split_across_generations'
     elif bound_canonicals:
         outcome = 'stamp_overridden' if counts['stamp_overridden'] else 'bound'
+    elif 'ambiguous_overlap' in misses:
+        outcome = 'interval_miss'
     else:
         outcome = 'stamp_fallback' if stamp else reason
     return LineagePlan(
@@ -508,6 +542,7 @@ def resolve_segment_targets(
             is_locked=is_locked,
             truncated_before=truncated_before,
             lookup_failed=failed,
+            safe_overlap=sync_live_dedupe_active_for(uid),
         )
     except Exception as exc:
         _warning('event=sync_lineage_plan outcome=failed exception_type=%s', bounded_exception_class(exc))
@@ -567,20 +602,41 @@ def plan_segment_targets(
     """Blocking span construction plus per-segment lineage resolution for one upload.
 
     ``timestamp_of``/``duration_of`` are the caller's WAV clock functions; the
-    ``binding_reasons`` dict collects each segment's binding token.
+    ``binding_reasons`` dict collects each segment's binding token. A segment
+    left ``ambiguous_pending`` gets up to three local rechecks against a fresh
+    lineage read — newly visible metadata can decide it — then keeps the token
+    for the existing failed-segment/re-upload path. A key proven pending in any
+    pass keeps the token unless a later pass binds it; a degraded or ordinary
+    miss cannot silently revert it to the stamp or temporal path.
     """
     spans = {path: (timestamp_of(path), timestamp_of(path) + duration_of(path)) for path in segment_list}
-    return resolve_segment_targets(
-        uid,
-        origin_id,
-        spans,
-        stamped_target=stamped_target,
-        source=source,
-        client_device_id=client_device_id,
-        is_locked=is_locked,
-        job_id=job_id,
-        binding_reasons=binding_reasons,
-    )
+    proven_pending: set = set()
+    pass_reasons: dict = {}
+    targets: dict = {}
+    for _attempt in range(3):
+        pass_reasons = {}
+        targets = resolve_segment_targets(
+            uid,
+            origin_id,
+            spans,
+            stamped_target=stamped_target,
+            source=source,
+            client_device_id=client_device_id,
+            is_locked=is_locked,
+            job_id=job_id,
+            binding_reasons=pass_reasons,
+        )
+        proven_pending |= {key for key, token in pass_reasons.items() if token == 'ambiguous_pending'}
+        if 'ambiguous_pending' not in pass_reasons.values():
+            break
+    for key in proven_pending:
+        if pass_reasons.get(key) not in ('bound', 'stamp_overridden'):
+            targets[key] = None
+            pass_reasons[key] = 'ambiguous_pending'
+    if binding_reasons is not None:
+        binding_reasons.clear()
+        binding_reasons.update(pass_reasons)
+    return targets
 
 
 def fallback_segment_targets(

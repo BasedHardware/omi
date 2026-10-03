@@ -148,6 +148,7 @@ from utils.sync.recording_session_target import resolve_recording_session_sync_t
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
 from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync.recording_lineage import (
+    ambiguous_binding_pending,
     fallback_segment_targets,
     lineage_resolution_requested,
     plan_segment_targets,
@@ -1204,6 +1205,9 @@ def process_segment(
     model = 'unknown'
     phase = 'provider_select'
     try:
+        if ambiguous_binding_pending(uid, lineage_binding):
+            phase = 'persistence'
+            raise SyncAssignmentConflict('sync lineage generation ownership remains ambiguous')
         url = get_syncing_file_temporal_signed_url(path)
         schedule_syncing_temporal_file_deletion(path)
 

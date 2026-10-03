@@ -434,14 +434,33 @@ def test_trailing_allowance_does_not_exceed_sixty_seconds():
     assert result.targets == {chunk['id']: None}
 
 
-def test_overlapping_generations_pick_the_later_created():
+def test_overlapping_generations_bind_the_stamped_row_or_stay_pending():
     """A row whose interval grew over its successor (e.g. an earlier stamp append) overlaps it."""
     rows = [generation(1, finished_at=at(gen_start(2) + DURATION)), generation(2)]
     chunk = sync_chunk(gen_start(2) + 61, gen_start(2) + 69, live_text(2, 1))
-    result = select_segment_targets(
-        rows, ORIGIN, spans([chunk]), stamped_target='STAMP', source='omi', client_device_id='pendant', is_locked=False
+    stamped = select_segment_targets(
+        rows,
+        ORIGIN,
+        spans([chunk]),
+        stamped_target=gen_id(2),
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
     )
-    assert result.targets == {chunk['id']: gen_id(2)}
+    assert stamped.targets == {chunk['id']: gen_id(2)} and stamped.counts['bound'] == 1
+    for stamp in (None, 'STAMP'):
+        pending = select_segment_targets(
+            rows,
+            ORIGIN,
+            spans([chunk]),
+            stamped_target=stamp,
+            source='omi',
+            client_device_id='pendant',
+            is_locked=False,
+        )
+        assert pending.targets == {chunk['id']: None}
+        assert pending.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+        assert pending.reason == 'ambiguous_overlap' and pending.outcome == 'interval_miss'
 
 
 @pytest.mark.parametrize(
@@ -635,7 +654,19 @@ def test_old_stamp_extended_into_a_later_generation_is_not_hidden_by_the_limit(l
     chunk = upload_straddling_next_two()[0]
     # The origin row and LIVE-12 both contain the segment. The original
     # newest-eight query hides the extended origin and falsely overrides STAMP.
-    assert resolve([chunk], stamp='STAMP') == {chunk['id']: gen_id(L + 1)}
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        spans([chunk]),
+        stamped_target='STAMP',
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        binding_reasons=reasons,
+    )
+    assert targets == {chunk['id']: None}
+    assert reasons == {chunk['id']: 'ambiguous_pending'}
 
 
 def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage_db):
@@ -644,7 +675,19 @@ def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage
     # Donors need not be recent: the survivor can also have a late stamped
     # append while unrelated newer generations of the same recording exist.
     chunk = upload_straddling_next_two()[0]
-    assert resolve([chunk]) == {chunk['id']: gen_id(L + 1)}
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        spans([chunk]),
+        stamped_target=None,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        binding_reasons=reasons,
+    )
+    assert targets == {chunk['id']: None}
+    assert reasons == {chunk['id']: 'ambiguous_pending'}
 
 
 @pytest.mark.parametrize('duration', [0, -1, float('nan'), float('inf')])
@@ -700,6 +743,121 @@ def test_planning_error_fails_open_and_never_raises(lineage_db, monkeypatch):
     monkeypatch.setattr(recording_lineage, 'select_segment_targets', boom)
     chunks = upload_straddling_next_two()
     assert set(resolve(chunks, stamp='STAMP').values()) == {'STAMP'}
+
+
+def _drive_plan(monkeypatch, resolve):
+    calls = []
+
+    def fake(uid, origin_id, spans, **kwargs):
+        calls.append(dict(spans))
+        reasons = kwargs.get('binding_reasons')
+        if reasons is not None:
+            reasons.update(resolve(len(calls), spans))
+        return {key: ('LIVE-12' if token in ('bound', 'stamp_overridden') else None) for key, token in reasons.items()}
+
+    monkeypatch.setattr(recording_lineage, 'resolve_segment_targets', fake)
+    reasons = {'stale': 'token'}
+    targets = recording_lineage.plan_segment_targets(
+        ['/tmp/seg.wav'],
+        lambda _path: gen_start(L + 1) + 61,
+        lambda _path: 8.0,
+        'u',
+        ORIGIN,
+        'STAMP',
+        'omi',
+        'pendant',
+        False,
+        'job',
+        reasons,
+    )
+    return calls, targets, reasons
+
+
+def test_plan_reresolves_pending_segments_within_three_attempts(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt < 3 else 'bound' for key in spans}
+    )
+    assert len(calls) == 3
+    assert targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_plan_keeps_the_pending_token_after_three_attempts(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda _attempt, spans: {key: 'ambiguous_pending' for key in spans}
+    )
+    assert len(calls) == 3
+    assert targets == {'/tmp/seg.wav': None}
+    assert reasons == {'/tmp/seg.wav': 'ambiguous_pending'}
+
+
+@pytest.mark.parametrize('later', ['lookup_failed', 'stamp_fallback', 'unbound', 'no_rows'])
+def test_plan_pending_once_stays_pending_through_a_later_ordinary_miss(monkeypatch, later):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt == 1 else later for key in spans}
+    )
+    assert len(calls) == 2
+    assert targets == {'/tmp/seg.wav': None}
+    assert reasons == {'/tmp/seg.wav': 'ambiguous_pending'}
+
+
+def test_plan_pending_clears_only_when_a_later_pass_binds(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt == 1 else 'bound' for key in spans}
+    )
+    assert len(calls) == 2
+    assert targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_plan_resolves_once_when_no_segment_is_pending(monkeypatch):
+    calls, targets, reasons = _drive_plan(monkeypatch, lambda _attempt, spans: {key: 'bound' for key in spans})
+    assert len(calls) == 1 and targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_safe_overlap_off_never_enters_the_pending_recheck(monkeypatch, lineage_db):
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
+    loaded = []
+    real = recording_lineage._load_lineage
+
+    def counting(*args, **kwargs):
+        loaded.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(recording_lineage, '_load_lineage', counting)
+    old = lineage_db.rows[0]
+    old['finished_at'] = at(gen_start(L + 1) + DURATION)
+    chunk = upload_straddling_next_two()[0]
+    targets = recording_lineage.plan_segment_targets(
+        ['/tmp/seg.wav'],
+        lambda _path: chunk['started_at'].timestamp(),
+        lambda _path: (chunk['finished_at'] - chunk['started_at']).total_seconds(),
+        'u',
+        ORIGIN,
+        'STAMP',
+        'omi',
+        'pendant',
+        False,
+        'job',
+        {},
+    )
+    assert targets == {'/tmp/seg.wav': 'STAMP'}
+    assert len(loaded) == 1
+
+
+def test_resolver_excludes_unadmitted_cohorts_from_safe_overlap(monkeypatch, lineage_db):
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
+    seen = []
+    real = recording_lineage.select_segment_targets
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get('safe_overlap'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(recording_lineage, 'select_segment_targets', spy)
+    resolve(upload_straddling_next_two())
+    assert seen == [False]
 
 
 @pytest.mark.parametrize('flag', ['', 'off'])
