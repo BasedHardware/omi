@@ -78,6 +78,19 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reprocessConversation => 'Перапрацаваць размову';
 
   @override
+  String get reprocessTranscription => 'Перапрацаваць транскрыпцыю';
+
+  @override
+  String get retranscribingConversation =>
+      'Паўторная транскрыпцыя размовы...\nГэта можа заняць некаторы час для даўжэйшых размоў';
+
+  @override
+  String get errorReprocessingTranscription => 'Памылка пры паўторнай апрацоўцы транскрыпцыі. Паспрабуйце пазней.';
+
+  @override
+  String get errorNoStoredAudio => 'Для гэтай размовы няма захаванага аўдыё.';
+
+  @override
   String get deleteConversation => 'Выдаліць размову';
 
   @override

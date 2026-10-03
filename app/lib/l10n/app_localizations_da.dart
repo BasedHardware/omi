@@ -78,6 +78,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reprocessConversation => 'Genbehandl samtale';
 
   @override
+  String get reprocessTranscription => 'Genbehandl transskription';
+
+  @override
+  String get retranscribingConversation =>
+      'Transskriberer samtalen igen...\nDette kan tage lidt tid ved længere samtaler';
+
+  @override
+  String get errorReprocessingTranscription => 'Fejl under genbehandling af transskription. Prøv igen senere.';
+
+  @override
+  String get errorNoStoredAudio => 'Ingen gemt lyd tilgængelig for denne samtale.';
+
+  @override
   String get deleteConversation => 'Slet samtale';
 
   @override

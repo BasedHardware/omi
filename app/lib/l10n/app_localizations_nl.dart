@@ -79,6 +79,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reprocessConversation => 'Gesprek opnieuw verwerken';
 
   @override
+  String get reprocessTranscription => 'Transcriptie opnieuw verwerken';
+
+  @override
+  String get retranscribingConversation =>
+      'Gesprek wordt opnieuw getranscribeerd...\nDit kan even duren bij langere gesprekken';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Fout bij het opnieuw verwerken van de transcriptie. Probeer het later opnieuw.';
+
+  @override
+  String get errorNoStoredAudio => 'Geen opgeslagen audio beschikbaar voor dit gesprek.';
+
+  @override
   String get deleteConversation => 'Gesprek verwijderen';
 
   @override

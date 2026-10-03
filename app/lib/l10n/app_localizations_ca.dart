@@ -78,6 +78,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reprocessConversation => 'Reprocessar conversa';
 
   @override
+  String get reprocessTranscription => 'Reprocessar la transcripció';
+
+  @override
+  String get retranscribingConversation =>
+      'Tornant a transcriure la conversa...\nAixò pot trigar una estona en converses llargues';
+
+  @override
+  String get errorReprocessingTranscription => 'Error en reprocessar la transcripció. Torna-ho a provar més tard.';
+
+  @override
+  String get errorNoStoredAudio => 'No hi ha àudio desat per a aquesta conversa.';
+
+  @override
   String get deleteConversation => 'Suprimir conversa';
 
   @override
