@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,6 +12,7 @@ from tests.unit.test_live_cost_router import controls, MemoryRedis
 from tests.unit.test_live_health_reason_reconciliation import ServingSocket, observed
 from tests.unit.test_live_routing_health import SpeechGate
 from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead_socket
+from utils.async_tasks import WebSocketTaskSupervisor
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_failure, live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
@@ -333,6 +335,7 @@ def _receiver_for_close(monkeypatch, *, raw, frames, language='ko', close_code=1
             'codec': 'pcm',
             'sample_rate': 16000,
             'source': 'omi',
+            'owner_persistence_blocked': threading.Event(),
         },
     )()
     receiver.host.state.active = True
@@ -351,6 +354,10 @@ def _receiver_for_close(monkeypatch, *, raw, frames, language='ko', close_code=1
     receiver.host.audio_bytes_send = None
     receiver.host.client_device_context.platform = 'ios'
     receiver.vad_gate = None
+    supervisor = WebSocketTaskSupervisor(uid='synthetic-health-witness', label='listen')
+    receiver.host.task_supervisor = supervisor
+    receiver.host.spawn = supervisor.create_task
+    receiver.host.state.shutdown_event = supervisor.shutdown_event
     receiver.stt_socket = managed_leg(receiver, raw, family='soniox', gate=None)
     receiver.capture_timeline = None
     receiver._emit_realtime_demand = lambda *_args: None
