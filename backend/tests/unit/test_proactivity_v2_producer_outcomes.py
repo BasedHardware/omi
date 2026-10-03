@@ -3,6 +3,8 @@
 from datetime import timedelta
 from types import SimpleNamespace
 
+import database.action_items as tasks
+import database.chat as chat
 from database import proactivity as ledger
 from database import proactivity_producers as mapping
 from tests.unit.test_proactivity_v2_budget import NOW, store
@@ -83,7 +85,6 @@ def test_followup_publish_source_guard_checks_inside_transaction(store):
 
 def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
     import inspect
-    import database.chat as chat
 
     events = []
     messages = SimpleNamespace(add=lambda payload: events.append('persisted'))
@@ -97,16 +98,25 @@ def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
     assert events == ['persisted', 'observed']
 
 
-def test_canonical_task_completion_observation_is_post_commit(store, monkeypatch):
-    import database.action_items as tasks
-
-    events = []
-    monkeypatch.setattr(tasks, 'db', store)
-    monkeypatch.setattr(tasks, 'bump_action_items_list_version', lambda uid: None)
+def test_canonical_task_completion_observation_is_post_commit(monkeypatch):
+    saved, events = {}, []
+    document = SimpleNamespace(get=lambda: SimpleNamespace(exists=True), update=lambda values: saved.update(values))
+    owner = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda task_id: document))
     monkeypatch.setattr(
-        tasks,
-        '_record_followup_completion',
-        lambda uid, task_id: events.append(store.rows[('users', uid, 'action_items', task_id)]['completed']),
+        tasks, 'db', SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: owner))
     )
+    monkeypatch.setattr(tasks, 'bump_action_items_list_version', lambda uid: None)
+    monkeypatch.setattr(tasks, '_record_followup_completion', lambda uid, task_id: events.append(saved['completed']))
     assert tasks.mark_action_item_completed('u', 'a', True)
     assert events == [True]
+
+
+def test_mentor_reply_can_prove_exposure_when_push_was_denied(store, monkeypatch):
+    item = ready(store, producer='conversation_mentor_v2')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    row['feed_available_at'] = NOW
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
+    mapping.record_mentor_reply('u', firestore_client=store)
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['delivered'] and row['acted_24h']

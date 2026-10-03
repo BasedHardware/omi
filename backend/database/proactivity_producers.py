@@ -64,7 +64,7 @@ def record_mentor_reply(uid: str, *, firestore_client: Any = None) -> None:
         item = snapshot.to_dict()
         if not item or item.get('state') != 'ready':
             continue
-        anchor = item.get('delivered_at') or item.get('push_accepted_at')
+        anchor = item.get('delivered_at') or item.get('push_accepted_at') or item.get('feed_available_at')
         if anchor is not None and anchor <= now <= anchor + timedelta(hours=24):
             try:
                 ledger.record_server_outcome(item['item_id'], 'replied', uid=uid, firestore_client=client, now=now)

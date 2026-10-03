@@ -115,21 +115,25 @@ async def test_failure_has_one_attempt_no_fallback_and_retains_money(store, gate
 
 
 @pytest.mark.asyncio
-async def test_jev_executor_uses_same_authority(store, gated):
+@pytest.mark.parametrize('step', ['prefilter', 'dedupe'])
+async def test_jev_executor_uses_same_authority(store, gated, step):
+    question = (
+        {'type': 'score', 'instructions': 'Repeat?', 'criteria': ['a', 'b', 'c', 'd', 'e']}
+        if step == 'dedupe'
+        else {'type': 'noul', 'instructions': 'Keep?', 'criteria': {'true': 'yes', 'false': 'no'}}
+    )
     item = claim(store, producer='conversation_mentor_v2')
     route = resolve_systemone_route(
         load_gateway_config(),
         {
             'model': 'omi:auto:jev-decisions',
             'state': 'synthetic',
-            'questions': {
-                'worth': {'type': 'noul', 'instructions': 'Keep?', 'criteria': {'true': 'yes', 'false': 'no'}}
-            },
+            'questions': {'worth': question},
         },
     )
     provider = Provider()
     credentials = build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u'))
-    with gate.attempt_scope(context(item, 'prefilter')):
+    with gate.attempt_scope(context(item, step)):
         await execute_systemone(
             route, credentials, ProviderRegistry({'openrouter': provider}), attempt_trace=AttemptTrace()
         )
