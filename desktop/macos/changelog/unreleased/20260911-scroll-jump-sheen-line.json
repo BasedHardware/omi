@@ -1,0 +1,3 @@
+{
+  "change": "The jump-to-latest button in a chat transcript no longer shows a stray white line above the arrow. The glass highlight is a line along a panel's top edge, and it now stops where the edge stops curving instead of being drawn straight across a round button."
+}
