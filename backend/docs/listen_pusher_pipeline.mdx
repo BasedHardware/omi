@@ -973,6 +973,18 @@ adjudicates whether a short marked utterance is meaningful, and the structured
 extractor still decides whether it is a concrete command; the marker never
 creates a task by itself.
 
+The shared prompt prefix separately reports whether the capture carries
+model-usable source content: transcript text beyond the compact
+`[<segment-id> <cluster>]` turn headers, or a nonblank described photo.
+`get_conversation_notes` returns an empty `Structured` without constructing
+the notes model when a capture is metadata- or header-only; actual screen
+frames under the rich-context flag still count as content on their own. The
+volatile task instructions travel as a user message, not system — Vertex maps
+system messages to `systemInstruction`, so an all-system request would reach
+Gemini with empty `contents`. Ordinary empty captures are rule-discarded
+before this point; a restored blank capture keeps `relevance_discarded=False`
+and falls back to the deterministic minimum title without a model call.
+
 When and only when the matcher found a phrase, a separately framed,
 extended-reasoning classifier receives the full marked transcript, matched
 segment IDs, content-free extraction references, and speaker labels. Its
