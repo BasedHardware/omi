@@ -39,6 +39,9 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
 
+  @override
+  bool get pendantCaptureVerified => true;
+
   bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
   bool get _phone => !_pendant && live != AuditLive.idle;
 

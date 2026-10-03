@@ -12335,6 +12335,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
+
+  @override
   String get previousDay => 'Предыдущий день';
 
   @override

@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Jurang terpanjang",
     "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
     "diagnosticsLastDuration": "{duration} lepas",
+    "peopleStatsIncomplete": "Kiraan mungkin tidak lengkap.",
     "previousDay": "Hari sebelumnya",
     "nextDay": "Hari berikutnya",
     "noTasksOnDate": "Tiada tugas pada {date}"

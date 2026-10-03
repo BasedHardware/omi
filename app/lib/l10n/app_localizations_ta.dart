@@ -12377,6 +12377,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
   String get previousDay => 'முந்தைய நாள்';
 
   @override

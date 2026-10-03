@@ -12306,6 +12306,9 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
+
+  @override
   String get previousDay => 'پچھلا دن';
 
   @override

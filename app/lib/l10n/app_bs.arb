@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Najduži prekid",
     "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspjelih veza {failed}.",
     "diagnosticsLastDuration": "Posljednjih {duration}",
+    "peopleStatsIncomplete": "Brojevi možda nisu potpuni.",
     "previousDay": "Prethodni dan",
     "nextDay": "Sljedeći dan",
     "noTasksOnDate": "Nema zadataka za {date}"

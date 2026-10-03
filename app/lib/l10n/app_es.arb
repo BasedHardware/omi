@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Interrupción más larga",
     "diagnosticsSincePairingSummary": "Desde el emparejamiento: {drops} cortes, {failed} conexiones fallidas.",
     "diagnosticsLastDuration": "Últimos {duration}",
+    "peopleStatsIncomplete": "Los recuentos pueden estar incompletos.",
     "previousDay": "Día anterior",
     "nextDay": "Día siguiente",
     "noTasksOnDate": "No hay tareas el {date}"

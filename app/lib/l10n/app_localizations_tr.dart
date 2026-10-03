@@ -12305,6 +12305,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
   String get previousDay => 'Önceki gün';
 
   @override

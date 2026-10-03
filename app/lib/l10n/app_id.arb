@@ -3836,6 +3836,7 @@
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
     "diagnosticsLastDuration": "{duration} terakhir",
+    "peopleStatsIncomplete": "Jumlah mungkin belum lengkap.",
     "previousDay": "Hari sebelumnya",
     "nextDay": "Hari berikutnya",
     "noTasksOnDate": "Tidak ada tugas pada {date}"

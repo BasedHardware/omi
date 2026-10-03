@@ -12289,6 +12289,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
+
+  @override
   String get previousDay => 'Predchádzajúci deň';
 
   @override

@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "सबसे लंबा अंतराल",
     "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
     "diagnosticsLastDuration": "पिछले {duration}",
+    "peopleStatsIncomplete": "गिनती अधूरी हो सकती है।",
     "previousDay": "पिछला दिन",
     "nextDay": "अगला दिन",
     "noTasksOnDate": "{date} को कोई कार्य नहीं"

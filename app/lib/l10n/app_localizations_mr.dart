@@ -12300,6 +12300,9 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'मोजणी अपूर्ण असू शकते.';
+
+  @override
   String get previousDay => 'मागील दिवस';
 
   @override

@@ -12281,6 +12281,9 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Antallene kan være ufuldstændige.';
+
+  @override
   String get previousDay => 'Forrige dag';
 
   @override

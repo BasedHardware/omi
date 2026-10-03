@@ -12293,6 +12293,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
   String get previousDay => 'আগের দিন';
 
   @override

@@ -21993,6 +21993,12 @@ abstract class AppLocalizations {
   /// **'Last {duration}'**
   String diagnosticsLastDuration(String duration);
 
+  /// No description provided for @peopleStatsIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts may be incomplete.'**
+  String get peopleStatsIncomplete;
+
   /// Day page navigation: go to the day before
   ///
   /// In en, this message translates to:

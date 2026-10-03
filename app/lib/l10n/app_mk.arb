@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Најдолг прекин",
     "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
     "diagnosticsLastDuration": "Последните {duration}",
+    "peopleStatsIncomplete": "Бројките може да се нецелосни.",
     "previousDay": "Претходен ден",
     "nextDay": "Следен ден",
     "noTasksOnDate": "Нема задачи на {date}"

@@ -12108,6 +12108,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
+
+  @override
   String get previousDay => '이전 날';
 
   @override

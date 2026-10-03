@@ -12315,6 +12315,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
+
+  @override
   String get previousDay => 'Ankstesnė diena';
 
   @override

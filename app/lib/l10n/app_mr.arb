@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
     "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
     "diagnosticsLastDuration": "गेले {duration}",
+    "peopleStatsIncomplete": "मोजणी अपूर्ण असू शकते.",
     "previousDay": "मागील दिवस",
     "nextDay": "पुढील दिवस",
     "noTasksOnDate": "{date} रोजी कोणतीही कामे नाहीत"

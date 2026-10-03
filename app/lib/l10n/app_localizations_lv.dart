@@ -12321,6 +12321,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
+
+  @override
   String get previousDay => 'Iepriekšējā diena';
 
   @override

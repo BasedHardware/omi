@@ -14676,6 +14676,7 @@
             }
         }
     },
+    "peopleStatsIncomplete": "Counts may be incomplete.",
     "previousDay": "Previous day",
     "@previousDay": {
         "description": "Day page navigation: go to the day before"

@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "طویل ترین وقفہ",
     "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
     "diagnosticsLastDuration": "پچھلے {duration}",
+    "peopleStatsIncomplete": "گنتی نامکمل ہو سکتی ہے۔",
     "previousDay": "پچھلا دن",
     "nextDay": "اگلا دن",
     "noTasksOnDate": "{date} کو کوئی کام نہیں"

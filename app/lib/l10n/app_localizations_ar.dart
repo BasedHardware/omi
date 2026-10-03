@@ -12222,6 +12222,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
+
+  @override
   String get previousDay => 'اليوم السابق';
 
   @override

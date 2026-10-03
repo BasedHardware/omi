@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
     "diagnosticsLastDuration": "Останні {duration}",
+    "peopleStatsIncomplete": "Підрахунки можуть бути неповними.",
     "previousDay": "Попередній день",
     "nextDay": "Наступний день",
     "noTasksOnDate": "Немає завдань на {date}"

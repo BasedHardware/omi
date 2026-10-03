@@ -12330,6 +12330,9 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
+
+  @override
   String get previousDay => 'ಹಿಂದಿನ ದಿನ';
 
   @override

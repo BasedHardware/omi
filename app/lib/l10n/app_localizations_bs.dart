@@ -12322,6 +12322,9 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
   String get previousDay => 'Prethodni dan';
 
   @override

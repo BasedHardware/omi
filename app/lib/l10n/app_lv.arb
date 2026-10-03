@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Garākais pārtraukums",
     "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
     "diagnosticsLastDuration": "Pēdējās {duration}",
+    "peopleStatsIncomplete": "Skaitļi var būt nepilnīgi.",
     "previousDay": "Iepriekšējā diena",
     "nextDay": "Nākamā diena",
     "noTasksOnDate": "{date} nav uzdevumu"

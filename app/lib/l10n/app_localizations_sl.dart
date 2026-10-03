@@ -12323,6 +12323,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
+
+  @override
   String get previousDay => 'Prejšnji dan';
 
   @override

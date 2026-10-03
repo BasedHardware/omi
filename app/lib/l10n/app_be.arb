@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
     "diagnosticsLastDuration": "Апошнія {duration}",
+    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
     "previousDay": "Папярэдні дзень",
     "nextDay": "Наступны дзень",
     "noTasksOnDate": "Няма задач на {date}"

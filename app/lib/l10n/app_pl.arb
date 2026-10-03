@@ -3836,6 +3836,7 @@
     "diagnosticsLongestGap": "Najdłuższa przerwa",
     "diagnosticsSincePairingSummary": "Od sparowania: zerwania: {drops}, nieudane połączenia: {failed}.",
     "diagnosticsLastDuration": "Ostatnie {duration}",
+    "peopleStatsIncomplete": "Liczby mogą być niepełne.",
     "previousDay": "Poprzedni dzień",
     "nextDay": "Następny dzień",
     "noTasksOnDate": "Brak zadań {date}"

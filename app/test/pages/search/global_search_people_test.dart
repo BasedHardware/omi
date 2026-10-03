@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
@@ -60,12 +61,12 @@ void main() {
   testWidgets('the People scope hosts the shared list: the search field filters it, no management chrome',
       (tester) async {
     final people = PeopleProvider(
-      loadPeople: () async => [
+      loadPeople: () async => PeopleListResponse(people: [
         _person('p-maya', 'Maya Chen', confidence: 'confirmed'),
         _person('p-because', 'Because'),
         _person('p-cs', 'Cs'),
         _person('p-thanks', 'Thanks'),
-      ],
+      ]),
     );
     await tester.pumpWidget(MultiProvider(
       providers: [

@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "가장 긴 끊김",
     "diagnosticsSincePairingSummary": "페어링 이후: 끊김 {drops}회, 실패한 연결 {failed}회.",
     "diagnosticsLastDuration": "최근 {duration}",
+    "peopleStatsIncomplete": "집계가 불완전할 수 있습니다.",
     "previousDay": "이전 날",
     "nextDay": "다음 날",
     "noTasksOnDate": "{date}에 할 일이 없습니다"

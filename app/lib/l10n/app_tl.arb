@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Pinakamahabang puwang",
     "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
     "diagnosticsLastDuration": "Nakaraang {duration}",
+    "peopleStatsIncomplete": "Maaaring hindi kumpleto ang mga bilang.",
     "previousDay": "Nakaraang araw",
     "nextDay": "Susunod na araw",
     "noTasksOnDate": "Walang gawain noong {date}"

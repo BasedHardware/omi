@@ -12227,6 +12227,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'จำนวนอาจไม่ครบถ้วน';
+
+  @override
   String get previousDay => 'วันก่อนหน้า';
 
   @override

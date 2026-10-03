@@ -12104,6 +12104,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
   String get previousDay => '前の日';
 
   @override

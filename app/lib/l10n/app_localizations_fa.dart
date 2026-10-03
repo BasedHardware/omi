@@ -12291,6 +12291,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
   String get previousDay => 'روز قبل';
 
   @override

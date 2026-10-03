@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Längsta uppehåll",
     "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
     "diagnosticsLastDuration": "Senaste {duration}",
+    "peopleStatsIncomplete": "Antalen kan vara ofullständiga.",
     "previousDay": "Föregående dag",
     "nextDay": "Nästa dag",
     "noTasksOnDate": "Inga uppgifter {date}"

@@ -12324,6 +12324,9 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
+
+  @override
   String get previousDay => 'Hari sebelumnya';
 
   @override

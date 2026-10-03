@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Най-дълго прекъсване",
     "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
     "diagnosticsLastDuration": "Последните {duration}",
+    "peopleStatsIncomplete": "Бройките може да са непълни.",
     "previousDay": "Предишен ден",
     "nextDay": "Следващ ден",
     "noTasksOnDate": "Няма задачи на {date}"

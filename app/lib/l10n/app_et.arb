@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
     "diagnosticsLastDuration": "Viimased {duration}",
+    "peopleStatsIncomplete": "Arvud võivad olla puudulikud.",
     "previousDay": "Eelmine päev",
     "nextDay": "Järgmine päev",
     "noTasksOnDate": "{date} pole ülesandeid"

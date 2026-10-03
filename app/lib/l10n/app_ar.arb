@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
     "diagnosticsLastDuration": "آخر {duration}",
+    "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة.",
     "previousDay": "اليوم السابق",
     "nextDay": "اليوم التالي",
     "noTasksOnDate": "لا توجد مهام في {date}"

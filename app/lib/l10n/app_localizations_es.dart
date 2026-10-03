@@ -12329,6 +12329,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Los recuentos pueden estar incompletos.';
+
+  @override
   String get previousDay => 'Día anterior';
 
   @override

@@ -12288,6 +12288,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
+
+  @override
   String get previousDay => 'Ngày trước';
 
   @override

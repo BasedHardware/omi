@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "అతి పొడవైన విరామం",
     "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
     "diagnosticsLastDuration": "గత {duration}",
+    "peopleStatsIncomplete": "లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.",
     "previousDay": "మునుపటి రోజు",
     "nextDay": "తదుపరి రోజు",
     "noTasksOnDate": "{date} నాటికి పనులు లేవు"

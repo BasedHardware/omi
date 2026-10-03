@@ -12363,6 +12363,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
+
+  @override
   String get previousDay => 'Dia anterior';
 
   @override

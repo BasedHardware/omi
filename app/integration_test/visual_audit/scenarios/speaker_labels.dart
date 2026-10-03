@@ -7,6 +7,7 @@ import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speaker_labels.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
@@ -51,7 +52,8 @@ TranscriptSegment _line(int index, String text, int speaker, {bool isUser = fals
 
 Future<PeopleProvider> _people() async {
   final people = PeopleProvider(
-    loadPeople: () async => [_person('p-maya', 'Maya Chen'), _person('p-jordan', 'Jordan Lee')],
+    loadPeople: () async =>
+        PeopleListResponse(people: [_person('p-maya', 'Maya Chen'), _person('p-jordan', 'Jordan Lee')]),
   );
   await people.setPeople();
   return people;

@@ -411,6 +411,46 @@ jobs:
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 
+      - name: Provision backend route 5xx alert
+        id: backend-route-alert
+        if: github.event.inputs.environment == 'prod'
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_WORKFLOW_ROOT:-}" || {
+            echo "DEPLOY_WORKFLOW_ROOT is not set; cannot run the workflow-owned route alert script." >&2
+            exit 1
+          }
+          test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_backend_route_5xx_alert.py" || {
+            echo "Workflow-owned route alert script not found under $DEPLOY_WORKFLOW_ROOT/.github/scripts." >&2
+            exit 1
+          }
+          POLICY="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_backend_route_5xx_alert.py" \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS")"
+          {
+            echo "### Backend route 5xx alert"
+            echo ""
+            echo "Provisioned \`${POLICY}\` for metric \`backend_route_5xx\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report backend route 5xx alert provisioning failure
+        if: always() && github.event.inputs.environment == 'prod' && steps.backend-route-alert.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          echo "::warning title=Backend route 5xx alert::Provisioning failed; the deploy is unaffected but the per-route 5xx metric or alert policy may be missing or stale. Follow backend/docs/runbooks/backend-route-5xx.md."
+          {
+            echo "### Backend route 5xx alert"
+            echo ""
+            echo "**Provisioning failed.** The deployment remains successful, but the \`backend_route_5xx\` metric or its alert policy may be missing or stale."
+            echo ""
+            echo "Re-run the deploy to retry provisioning, then follow the [runbook](https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/backend-route-5xx.md)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Provision Firestore missing-index alert
         if: github.event.inputs.environment == 'prod'
         env:

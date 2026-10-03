@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Interrupció més llarga",
     "diagnosticsSincePairingSummary": "Des de l'aparellament: {drops} talls, {failed} connexions fallides.",
     "diagnosticsLastDuration": "Últims {duration}",
+    "peopleStatsIncomplete": "Els recomptes poden ser incomplets.",
     "previousDay": "Dia anterior",
     "nextDay": "Dia següent",
     "noTasksOnDate": "Cap tasca el {date}"

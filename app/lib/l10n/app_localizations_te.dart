@@ -12344,6 +12344,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
+
+  @override
   String get previousDay => 'మునుపటి రోజు';
 
   @override

@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Najdaljši premor",
     "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
+    "peopleStatsIncomplete": "Števila so lahko nepopolna.",
     "previousDay": "Prejšnji dan",
     "nextDay": "Naslednji dan",
     "noTasksOnDate": "Ni opravil za {date}"

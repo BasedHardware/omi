@@ -12083,6 +12083,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
   String get previousDay => '前一天';
 
   @override

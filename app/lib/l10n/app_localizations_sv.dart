@@ -12298,6 +12298,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
+
+  @override
   String get previousDay => 'Föregående dag';
 
   @override
