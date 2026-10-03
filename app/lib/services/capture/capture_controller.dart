@@ -744,8 +744,7 @@ class CaptureController extends ChangeNotifier
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
 
-  /// The source capturing now, as the Recordings sheet names sources: 'phone' for the phone
-  /// microphone, the pendant's conversation source (e.g. 'omi') for a device, or null.
+  /// The active source: 'phone' for the microphone, the pendant's source (e.g. 'omi'), or null.
   /// Derived solely from committed coordinator ownership, never recordingState.
   String? get liveCaptureSource => switch (_capture.readModel.liveOwnerName) {
         'phone' => ConversationSource.phone.name,
@@ -761,12 +760,12 @@ class CaptureController extends ChangeNotifier
   DateTime? _verifiedIngressStartedAt;
   String? _ingressDeviceId;
   bool get _usesNativeIngress =>
-      _recordingDevice?.type == DeviceType.omi && _ingressPort != null && _capture.stagedReadModel.pendantOwns;
+      _recordingDevice?.type == DeviceType.omi &&
+      _capture.stagedReadModel.pendantOwns &&
+      _ingressPort?.requiresVerification(_recordingDevice!.id) == true;
   CaptureIngressPort? get _ingressPort {
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
-    if (ble is! CaptureIngressPort) return null;
-    final port = ble as CaptureIngressPort;
-    return port.supportsIngressHealth ? port : null;
+    return ble is CaptureIngressPort ? ble as CaptureIngressPort : null;
   }
 
   bool get pendantCaptureVerified {
@@ -780,15 +779,16 @@ class CaptureController extends ChangeNotifier
     final target = authorized && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
     final previous = _ingressDeviceId;
     if (previous != null && previous != target) {
-      await port.setCaptureAuthorized(previous, false);
+      if (port.supportsIngressHealth) await port.setCaptureAuthorized(previous, false);
       _wedgeMonitor.setNativeIngressOwner(previous, false);
       _verifiedIngressStartedAt = null;
     }
     _ingressDeviceId = target;
-    if (target != null) {
+    if (target != null && port.supportsIngressHealth) {
       await port.setCaptureAuthorized(target, true);
       _wedgeMonitor.setNativeIngressOwner(target, true);
     }
+    if (target != null && !port.supportsIngressHealth) _onIngressHealthChanged();
   }
 
   void _onIngressHealthChanged() {
@@ -796,7 +796,7 @@ class CaptureController extends ChangeNotifier
     final deviceId = _ingressDeviceId;
     if (deviceId != null) {
       final health = _ingressPort?.ingressHealth(deviceId);
-      if (health?.verifiedAt(_now()) == true) {
+      if (_usesNativeIngress && health?.verifiedAt(_now()) == true) {
         _verifiedIngressStartedAt ??= _now();
         _recordingTelemetry.markStarted(evidence: 'native_ingress');
       } else if (health == null) {
@@ -2797,7 +2797,7 @@ class CaptureController extends ChangeNotifier
     await _resetState();
 
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
-      if (!_usesNativeIngress) _recordingTelemetry.markStarted();
+      if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _recordingTelemetry.markStarted();
     } else if (deviceRequested) {
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
       return const CaptureStageFailure('capture_unavailable');

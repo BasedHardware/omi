@@ -148,19 +148,20 @@ class BleBridge implements BleFlutterApi {
   void onDeviceReady(String peripheralUuid, List<BleService> services) {
     final key = peripheralUuid.toUpperCase();
     _recoveryDisconnects.remove(key);
-    _invalidateIngress(key);
+    if (_ingressHealth[key]?.reason != CaptureIngressHealth.cccdRecoveryReason) _invalidateIngress(key);
     _deviceReadyCallbacks[key]?.call(services);
   }
 
   @override
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
-    if (error == 'capture_recovery') {
+    final cccdRecovery = error == 'cccd_timeout' || error == 'cccd_timeout_exhausted';
+    if (error == 'capture_recovery' || cccdRecovery) {
       _recoveryDisconnects.add(key);
     } else {
       _recoveryDisconnects.remove(key);
     }
-    _invalidateIngress(key);
+    if (!cccdRecovery) _invalidateIngress(key);
     _disconnectCallbacks[key]?.call(false, error);
     if (error == 'pairing_lost') pairingLostCallback?.call();
   }

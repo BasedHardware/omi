@@ -76,6 +76,9 @@ class OmiBleManager private constructor(private val application: Application) {
 
         /** Bounds an accepted CCCD write that never produces onDescriptorWrite. */
         private const val CCCD_ACK_TIMEOUT_MS = 15000L
+        /** Two fresh links may repair CCCD state; then stop battery-draining retries until an ACK. */
+        internal const val CCCD_TIMEOUT_RECONNECT_BUDGET = 2
+        internal const val CCCD_TIMEOUT_STATUS = -2
     }
 
     // ── Listener for the foreground service ──
@@ -436,6 +439,15 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
+    internal val cccdReconnectPolicy = CccdReconnectPolicy(
+        budget = CCCD_TIMEOUT_RECONNECT_BUDGET,
+        loadTimeouts = { application.getSharedPreferences("cccd_recovery", Application.MODE_PRIVATE).getInt(it, 0) },
+        saveTimeouts = { address, count ->
+            application.getSharedPreferences("cccd_recovery", Application.MODE_PRIVATE)
+                .edit().putInt(address, count).commit()
+        },
+    )
+
     private val cccdWrites = CccdWriteCoordinator<BluetoothGatt, BluetoothGattDescriptor>(
         isConnected = { connectedGatts[it.device.address.uppercase()] === it },
         ownsCommand = { ownsCommand(it) },
@@ -443,6 +455,10 @@ class OmiBleManager private constructor(private val application: Application) {
         cancelTimeout = { mainHandler.removeCallbacks(it) },
         completeCommand = { completeCommand(it) },
         retireConnection = { retireGatt(it) },
+        onAcknowledged = {
+            val addr = it.device.address.uppercase()
+            if (cccdReconnectPolicy.onAcknowledged(addr)) flutterApi?.onCaptureHealth(addr, "null") {}
+        },
     )
 
     fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String,
@@ -495,7 +511,7 @@ class OmiBleManager private constructor(private val application: Application) {
         try { gatt.disconnect() } catch (e: Exception) { Log.w(TAG, "GATT disconnect failed: ${e.message}") }
         try { gatt.close() } catch (e: Exception) { Log.w(TAG, "GATT close failed: ${e.message}") }
         // The managed service retains reconnect policy, including user-disconnect guards.
-        connectionListener?.onGattDisconnected(addr, gatt.hashCode(), BluetoothGatt.GATT_FAILURE)
+        connectionListener?.onGattDisconnected(addr, gatt.hashCode(), CCCD_TIMEOUT_STATUS)
     }
 
     // ── RSSI keep-alive ──

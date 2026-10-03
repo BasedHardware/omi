@@ -8,6 +8,7 @@ internal class CccdWriteCoordinator<G : Any, D : Any>(
     private val cancelTimeout: (Runnable) -> Unit,
     private val completeCommand: (Runnable) -> Unit,
     private val retireConnection: (G) -> Unit,
+    private val onAcknowledged: (G) -> Unit = {},
 ) {
     class Write<G, D>(
         val gatt: G,
@@ -52,6 +53,7 @@ internal class CccdWriteCoordinator<G : Any, D : Any>(
         val write = active ?: return
         if (write.gatt !== gatt || write.descriptor !== descriptor ||
             !isConnected(gatt) || !ownsCommand(write.command)) return
+        if (result.isSuccess) onAcknowledged(gatt)
         settle(write, result)
     }
 

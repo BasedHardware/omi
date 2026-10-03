@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -169,6 +171,94 @@ class HeldStore implements LocalSegmentStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('Android CCCD recovery preserves intent, hides listening and only exhaustion shows a banner', () async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final dir = await Directory.systemTemp.createTemp('capture-cccd-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final bridge = BleBridge.instance;
+    var retries = 0;
+    final previousMonitor = CaptureWedgeMonitor.instance;
+    final monitor = CaptureWedgeMonitor(
+      now: world.clock.now,
+      featureGate: () async => true,
+      track: (_, __) {},
+      bleRetry: (_) async => retries++,
+      appBuild: () => 'test',
+      platform: () => 'android',
+    );
+    CaptureWedgeMonitor.instance = monitor;
+    const id = 'synthetic-device';
+    void report(bool exhausted) => bridge.onCaptureHealth(
+        id,
+        jsonEncode({
+          'phase': exhausted ? 'actionRequired' : 'recovering',
+          'generation': 'android-gatt',
+          'reason': CaptureIngressHealth.cccdRecoveryReason,
+          'valid_until_ms': 0,
+          'subscription_confirmed': false,
+          'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
+          'recovery_outcome': exhausted ? 'failed' : 'none',
+          'recovery_spent': exhausted,
+          'reconnect_spent': exhausted,
+        }));
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      report(true); // A background service may report exhaustion before capture binds its listeners.
+      final p = composeCaptureProvider(_deps(world: world, ble: const BleBridgeCaptureListeners()));
+      try {
+        final device = BtDevice(id: id, name: 'Omi', type: DeviceType.omi, rssi: -50);
+        await p.streamDeviceRecording(device: device);
+        expect(monitor.visiblePrompt, isNotNull, reason: 'binding replays the stored terminal failure');
+        expect(p.pendantCaptureVerified, isFalse);
+        bridge.onCaptureHealth(id, 'null');
+        expect(p.pendantCaptureVerified, isTrue, reason: 'healthy Android keeps its existing policy');
+        expect(p.liveCaptureStartedAt, isNotNull);
+        report(false);
+        bridge.onPeripheralDisconnected(id, 'cccd_timeout');
+        expect(bridge.preservesCaptureIntent(id), isTrue);
+        expect(p.liveCaptureSource, 'omi');
+        expect(p.pendantCaptureVerified, isFalse);
+        expect(p.liveCaptureStartedAt, isNull);
+        expect(monitor.visiblePrompt, isNull);
+        bridge.onDeviceReady(id, []);
+        expect(p.pendantCaptureVerified, isFalse, reason: 'ready alone cannot acknowledge a CCCD');
+        report(true);
+        bridge.onPeripheralDisconnected(id, 'cccd_timeout_exhausted');
+        expect(bridge.preservesCaptureIntent(id), isTrue);
+        expect(p.liveCaptureSource, 'omi');
+        expect(p.pendantCaptureVerified, isFalse);
+        expect(p.liveCaptureStartedAt, isNull);
+        expect(monitor.visiblePrompt!.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+        monitor.retryVisibleEpisode();
+        await pumpEventQueue();
+        expect(retries, 0, reason: 'shared recovery must not bypass the native budget');
+        bridge.onDeviceReady(id, []);
+        expect(monitor.visiblePrompt, isNotNull, reason: 'a fresh link still needs an ACK');
+        bridge.onCaptureHealth(id, 'null'); // Native publishes this only after a current, successful ACK.
+        expect(monitor.visiblePrompt, isNull);
+        expect(p.pendantCaptureVerified, isTrue);
+        expect(p.liveCaptureStartedAt, isNotNull);
+        report(true);
+        await p.pauseCapture();
+        expect(monitor.visiblePrompt, isNull, reason: 'pause releases recovery presentation');
+        report(true);
+        expect(monitor.visiblePrompt, isNull, reason: 'a late native result cannot re-open a paused capture');
+      } finally {
+        p.dispose();
+      }
+    } finally {
+      bridge.onCaptureHealth(id, 'null');
+      bridge.onPeripheralDisconnected(id, 'unmanaged');
+      CaptureWedgeMonitor.instance = previousMonitor;
+      monitor.dispose();
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
 
   test('real provider authorizes ingress but waits for audio before Recording Started and timer', () async {
     final dir = await Directory.systemTemp.createTemp('capture-ingress-');

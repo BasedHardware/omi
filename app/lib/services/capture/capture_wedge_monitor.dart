@@ -79,6 +79,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   final Map<String, _DeviceWedgeState> _devices = {};
   final Map<String, String> _ingressEvents = {};
   final Set<String> _nativeIngressDevices = {};
+  final Set<String> _cccdRecoveryDevices = {};
 
   void setNativeIngressOwner(String deviceId, bool active) {
     if (active) {
@@ -94,6 +95,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// projection, or let a transcript resolve an ingress failure.
   void observeIngressHealth(String deviceId, CaptureIngressHealth? health) {
     final state = _stateFor(deviceId);
+    if (health?.reason == CaptureIngressHealth.cccdRecoveryReason) {
+      _cccdRecoveryDevices.add(deviceId);
+      _nativeIngressDevices.add(deviceId);
+      if (state.episode?.trigger != triggerIngressRecoveryFailed) state.episode = null;
+    } else if (_cccdRecoveryDevices.remove(deviceId)) {
+      _nativeIngressDevices.remove(deviceId);
+    }
     if (health != null) {
       final event = '${health.generation}:${health.phase}:${health.reason}:'
           '${health.subscriptionConfirmed}:${health.recoveryOutcome}:${health.recoverySpent}:${health.reconnectSpent}';

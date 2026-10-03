@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 /// This cut proves native audio ingress, not a durable recording.
 class CaptureIngressHealth {
   static const hideUnverifiedListening = true;
+  static const cccdRecoveryReason = 'cccd_timeout_recovery';
 
   const CaptureIngressHealth({
     required this.phase,
@@ -61,4 +62,10 @@ abstract interface class CaptureIngressPort {
   void addIngressListener(VoidCallback listener);
   void removeIngressListener(VoidCallback listener);
   Future<void> setCaptureAuthorized(String deviceId, bool authorized);
+}
+
+extension CaptureIngressVerification on CaptureIngressPort {
+  // Android supplies health only for CCCD recovery; healthy captures keep their existing policy.
+  bool requiresVerification(String deviceId) =>
+      supportsIngressHealth || ingressHealth(deviceId)?.reason == CaptureIngressHealth.cccdRecoveryReason;
 }

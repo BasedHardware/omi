@@ -16,6 +16,7 @@ class CccdWriteCoordinatorTest {
         val results = mutableMapOf<String, MutableList<Result<Unit>>>()
         val queue = ArrayDeque<Runnable>()
         var releases = 0
+        var acknowledgements = 0
         val coordinator = CccdWriteCoordinator<Any, Any>(
             isConnected = { it in connected },
             ownsCommand = { queue.peek() === it },
@@ -31,6 +32,7 @@ class CccdWriteCoordinatorTest {
                 retired.add(it)
                 queue.clear()
             },
+            onAcknowledged = { acknowledgements++ },
         )
 
         fun enqueue(gatt: Any, descriptor: Any, label: String, earlyAck: Boolean = false,
@@ -59,6 +61,20 @@ class CccdWriteCoordinatorTest {
     }
 
     @Test
+    fun `failed descriptor ACK does not replenish recovery budget`() {
+        val h = Harness()
+        val gatt = Any()
+        val descriptor = Any()
+        h.connected.add(gatt)
+        h.enqueue(gatt, descriptor, "A")
+        h.start()
+        h.coordinator.onDescriptorWrite(gatt, descriptor, Result.failure(IllegalStateException("GATT failure")))
+        assertEquals(0, h.acknowledgements)
+        assertTrue(h.results.getValue("A").single().isFailure)
+        assertEquals(1, h.releases)
+    }
+
+    @Test
     fun `late ACK after timeout cannot settle a replacement connection write`() {
         val h = Harness()
         val oldGatt = Any()
@@ -76,9 +92,11 @@ class CccdWriteCoordinatorTest {
         h.enqueue(newGatt, descriptor, "B")
         h.start()
         h.ack(oldGatt, descriptor)
+        assertEquals(0, h.acknowledgements)
         assertFalse(h.results.containsKey("B"))
         assertEquals(1, h.queue.size)
         h.ack(newGatt, descriptor)
+        assertEquals(1, h.acknowledgements)
         assertTrue(h.results.getValue("B").single().isSuccess)
         assertEquals(1, h.releases)
     }

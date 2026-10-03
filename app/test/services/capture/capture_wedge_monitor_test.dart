@@ -85,6 +85,34 @@ void main() {
         ['unverified', 'repairing', 'reconnecting', 'quiet', 'actionRequired', 'flowing']);
   });
 
+  test('Android CCCD recovery suppresses legacy retries until acknowledgement clears it', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'recovering',
+          generation: 'android',
+          reason: CaptureIngressHealth.cccdRecoveryReason,
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 1,
+        ));
+    for (var i = 0; i < 6; i++) {
+      zeroSession(monitor);
+      monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
+    }
+    await pumpEventQueue();
+    expect(monitor.visiblePrompt, isNull);
+    expect(retriedDevices, isEmpty);
+    monitor.observeIngressHealth('dev-a', null);
+    for (var i = 0; i < 3; i++) {
+      zeroSession(monitor);
+    }
+    await pumpEventQueue();
+    expect(retriedDevices, ['dev-a'], reason: 'healthy Android regains its ordinary watchdog');
+  });
+
   group('zero-byte session streak', () {
     test('two zero-byte sessions do not declare a wedge', () async {
       final monitor = makeMonitor(withRetry: true);
