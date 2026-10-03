@@ -11339,5 +11339,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi পরের বার {name}-কে চিনতে পারবে।} pending{এতে কয়েক সেকেন্ড লাগবে।} disabled{Omi যাতে {name}-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।} other{Omi-র {name}-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।}}",
     "speakerLabelEarlierMatches": "এই ভয়েসের আগের কথোপকথন: {count}",
     "speakerLabelText": "{part, select, likely{সম্ভাব্য} soundsLike{{name}-এর মতো শোনাচ্ছে} notPerson{{name} নয়} carried{এখনও {name}। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।} change{পরিবর্তন} alsoTitle{এটিও কি {name}?} alsoBody{Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।} confirmed{আপনি এই লেবেল নিশ্চিত করেছেন} other{পর্যালোচনা}}",
-    "speakerLabelTalkTime": "এই ভয়েসের {duration}"
+    "speakerLabelTalkTime": "এই ভয়েসের {duration}",
+    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।"
 }

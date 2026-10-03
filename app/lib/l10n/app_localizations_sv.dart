@@ -12231,4 +12231,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av den här rösten';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
 }

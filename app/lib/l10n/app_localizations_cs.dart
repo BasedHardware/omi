@@ -12222,4 +12222,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
 }

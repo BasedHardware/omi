@@ -12274,4 +12274,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
 }

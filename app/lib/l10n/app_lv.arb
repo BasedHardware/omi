@@ -3782,5 +3782,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nākamreiz atpazīs {name}.} pending{Tas aizņem dažas sekundes.} disabled{Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt {name}.} other{Omi vajag vairāk skaidras {name} runas, un tas turpinās mēģināt.}}",
     "speakerLabelEarlierMatches": "Iepriekšējās sarunas ar šo balsi: {count}",
     "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
-    "speakerLabelTalkTime": "{duration} no šīs balss"
+    "speakerLabelTalkTime": "{duration} no šīs balss",
+    "peopleStatsIncomplete": "Skaitļi var būt nepilnīgi."
 }

@@ -12292,4 +12292,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';
 }

@@ -12260,4 +12260,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';
 }

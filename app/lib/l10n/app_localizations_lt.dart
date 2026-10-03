@@ -12243,4 +12243,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
 }

@@ -3782,5 +3782,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi erkennt {name} beim nächsten Mal.} pending{Das dauert ein paar Sekunden.} disabled{Aktiviere in den Einstellungen das Speichern von Stimmen, damit Omi {name} erkennen kann.} other{Omi braucht mehr klare Sprache von {name} und versucht es weiter.}}",
     "speakerLabelEarlierMatches": "Frühere Gespräche mit dieser Stimme: {count}",
     "speakerLabelText": "{part, select, likely{Wahrscheinlich} soundsLike{Klingt wie {name}} notPerson{Nicht {name}} carried{Weiterhin {name}. Aus deinem letzten Gespräch übernommen.} change{Ändern} alsoTitle{Ist das auch {name}?} alsoBody{Omi hat dieselbe Stimme in früheren Gesprächen gefunden.} confirmed{Du hast dieses Label bestätigt} other{Prüfen}}",
-    "speakerLabelTalkTime": "{duration} dieser Stimme"
+    "speakerLabelTalkTime": "{duration} dieser Stimme",
+    "peopleStatsIncomplete": "Die Angaben können unvollständig sein."
 }

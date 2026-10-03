@@ -12222,4 +12222,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
 }

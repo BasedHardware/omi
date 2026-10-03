@@ -12254,4 +12254,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
 }

@@ -12327,4 +12327,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
 }

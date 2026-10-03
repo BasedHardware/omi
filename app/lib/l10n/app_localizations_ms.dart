@@ -12256,4 +12256,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
 }

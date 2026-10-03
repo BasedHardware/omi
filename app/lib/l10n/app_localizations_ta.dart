@@ -12305,4 +12305,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
 }

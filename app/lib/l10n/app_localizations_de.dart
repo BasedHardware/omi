@@ -12320,4 +12320,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Die Angaben können unvollständig sein.';
 }

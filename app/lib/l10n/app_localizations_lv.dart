@@ -12249,4 +12249,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
 }

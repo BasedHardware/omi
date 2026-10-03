@@ -12260,4 +12260,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
 }

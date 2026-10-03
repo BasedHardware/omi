@@ -14575,5 +14575,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "peopleStatsIncomplete": "Counts may be incomplete."
 }

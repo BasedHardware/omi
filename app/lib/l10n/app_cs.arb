@@ -3782,5 +3782,6 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi příště pozná osobu {name}.} pending{Potrvá to několik sekund.} disabled{Zapněte v Nastavení ukládání hlasů, aby Omi mohl poznat osobu {name}.} other{Omi potřebuje více zřetelné řeči od osoby {name} a bude to zkoušet dál.}}",
     "speakerLabelEarlierMatches": "Dřívější rozhovory s tímto hlasem: {count}",
     "speakerLabelText": "{part, select, likely{Pravděpodobně} soundsLike{Zní jako {name}} notPerson{Není {name}} carried{Stále {name}. Převzato z vaší poslední konverzace.} change{Změnit} alsoTitle{Je to také {name}?} alsoBody{Omi našel stejný hlas v dřívějších rozhovorech.} confirmed{Tento štítek jste potvrdili} other{Zkontrolovat}}",
-    "speakerLabelTalkTime": "{duration} tohoto hlasu"
+    "speakerLabelTalkTime": "{duration} tohoto hlasu",
+    "peopleStatsIncomplete": "Počty mohou být neúplné."
 }

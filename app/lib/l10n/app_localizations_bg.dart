@@ -12268,4 +12268,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Бройките може да са непълни.';
 }

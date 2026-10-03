@@ -12031,4 +12031,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
 }

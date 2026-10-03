@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -110,7 +111,8 @@ Future<void> _pumpCapturingPage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => people)..people = people),
+        ChangeNotifierProvider(
+            create: (_) => PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
