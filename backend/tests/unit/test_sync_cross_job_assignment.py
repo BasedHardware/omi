@@ -531,5 +531,6 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'
