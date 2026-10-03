@@ -9,6 +9,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -166,13 +167,21 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
 
   @override
   Future<ApiResult<List<DailySummary>>> recapsOnDate(String query, DateTime date) async {
-    final result = await getDailySummaries(limit: 100);
-    if (!result.ok) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
-    final day = DateTime(date.year, date.month, date.day);
-    return ApiSuccess(result.items.where((recap) {
-      final recapDay = DateTime.tryParse(recap.date);
-      return recapDay != null && recapDay.year == day.year && recapDay.month == day.month && recapDay.day == day.day;
-    }).toList());
+    final targetDay = DateTime(date.year, date.month, date.day).toIso8601String().substring(0, 10);
+    // The list API has no date parameters, so page its reverse-chronological
+    // results until this date is found or we have passed it. Five pages cover
+    // the same 365-day history window as recap search with room for sparse days.
+    for (var offset = 0; offset < 500; offset += 100) {
+      final result = await getDailySummaries(limit: 100, offset: offset);
+      if (!result.ok) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      for (final recap in result.items) {
+        if (recap.date == targetDay) return ApiSuccess([recap]);
+      }
+      if (result.items.length < 100 || result.items.isEmpty || result.items.last.date.compareTo(targetDay) < 0) {
+        return const ApiSuccess(<DailySummary>[]);
+      }
+    }
+    return const ApiSuccess(<DailySummary>[]);
   }
 
   @override
@@ -358,7 +367,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
         }).catchError((_) {
           if (!settled) partial = true;
         }),
-        Future.sync(() => hasDate ? source.recapsOnDate(query, start!) : source.recaps(query)).then((r) {
+        Future.sync(() => hasDate ? source.recapsOnDate(query, start) : source.recaps(query)).then((r) {
           if (settled) return;
           recaps = rows(r);
         }).catchError((_) {

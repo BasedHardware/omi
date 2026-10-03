@@ -38,7 +38,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('date_range_remove')), findsNothing);
-    expect(tester.widget<CalendarDatePicker2>(find.byType(CalendarDatePicker2)).value, [DateTime(2026, 9, 12)]);
+    final calendar = tester.widget<CalendarDatePicker2>(find.byType(CalendarDatePicker2));
+    expect(calendar.value, [DateTime(2026, 9, 12)]);
+    expect(calendar.displayedMonthDate, DateTime(2026, 9, 12), reason: 'the sheet opens on its selected context month');
 
     tester.widget<CalendarDatePicker2>(find.byType(CalendarDatePicker2)).onValueChanged?.call([DateTime(2026, 9, 20)]);
     await tester.pump(const Duration(milliseconds: 100));

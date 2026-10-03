@@ -27,6 +27,7 @@ class _Capture {
 class _CapturingSource extends GlobalSearchSource {
   final conversationCapture = _Capture();
   int otherKindCalls = 0;
+  int dateRecapCalls = 0;
   List<ServerConversation> rows = const [];
 
   @override
@@ -52,6 +53,15 @@ class _CapturingSource extends GlobalSearchSource {
   Future<ApiResult<List<DailySummary>>> recaps(String query) async {
     otherKindCalls++;
     return const ApiSuccess(<DailySummary>[]);
+  }
+
+  DateTime? recapDate;
+
+  @override
+  Future<ApiResult<List<DailySummary>>> recapsOnDate(String query, DateTime date) async {
+    dateRecapCalls++;
+    recapDate = date;
+    return recaps(query);
   }
 
   @override
@@ -96,7 +106,7 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('"bluetooth sept 12" strips the phrase and sends the day bounds to conversations only', (tester) async {
+  testWidgets('"bluetooth sept 12" filters conversations and keeps the other result groups visible', (tester) async {
     final source = _CapturingSource()..rows = [_conversation('c1', 'Bluetooth Talk', DateTime(2026, 9, 12, 9))];
     await _pumpSearch(tester, source, initialQuery: 'bluetooth sept 12');
     await tester.pump();
@@ -108,7 +118,9 @@ void main() {
     expect(source.conversationCapture.query, 'bluetooth');
     expect(source.conversationCapture.start, expectedStart);
     expect(source.conversationCapture.end, expectedEnd);
-    expect(source.otherKindCalls, 0, reason: 'a date range searches conversations only');
+    expect(source.otherKindCalls, 3, reason: 'date filtering must not hide recaps, tasks, or memories');
+    expect(source.dateRecapCalls, 1, reason: 'the recap API is queried for the selected local day');
+    expect(source.recapDate, expectedStart);
     expect(find.text('Bluetooth Talk'), findsOneWidget);
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
   });
@@ -142,7 +154,7 @@ void main() {
     expect(source.conversationCapture.query, 'bluetooth');
     expect(source.conversationCapture.start, isNull);
     expect(source.conversationCapture.end, isNull);
-    expect(source.otherKindCalls, 3, reason: 'without a range the four-kind search returns');
+    expect(source.otherKindCalls, 6, reason: 'the date search and the cleared search both retain all result kinds');
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsNothing);
     expect(find.byKey(const ValueKey('global_search_field')), findsOneWidget);
     final field = tester.widget<TextField>(
@@ -189,7 +201,7 @@ void main() {
     expect(source.conversationCapture.query, 'bluetooth');
     expect(source.conversationCapture.start, DateTime(2026, 7, 1));
     expect(source.conversationCapture.end, DateTime(2026, 7, 4).subtract(const Duration(microseconds: 1)));
-    expect(source.otherKindCalls, 0);
+    expect(source.otherKindCalls, 6);
     final field = tester.widget<TextField>(
         find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)));
     expect(field.controller!.text, 'bluetooth');
@@ -236,6 +248,7 @@ void main() {
     expect(source.conversationCapture.query, 'bluetooth');
     expect(source.conversationCapture.start, DateTime(now.year, now.month, now.day),
         reason: 'the newly parsed phrase wins over the picked range');
+    expect(source.otherKindCalls, greaterThan(3), reason: 'date phrases retain the other result kinds');
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('global_search_date_filter')));

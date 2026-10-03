@@ -65,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Recap summary-0'), findsOneWidget, reason: 'rows survive a failed refresh');
-    expect(find.byType(OmiErrorState), findsOneWidget);
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget);
   });
 
   testWidgets('a failed refresh shows a first-viewport retry that keeps rows and scroll position', (tester) async {
@@ -84,7 +84,7 @@ void main() {
     await key.currentState!.refresh();
     await tester.pumpAndSettle();
 
-    expect(find.byType(OmiErrorState), findsOneWidget,
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget,
         reason: 'the refresh failure is visible without scrolling to the tail');
     final positionBefore = tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels;
 
@@ -93,11 +93,12 @@ void main() {
     await tester.pump();
     expect(find.text('Recap summary-0'), findsOneWidget, reason: 'rows stay put while the retry is pending');
     expect(tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels, positionBefore);
-    expect(find.byType(OmiErrorState), findsOneWidget, reason: 'the notice remains while the retry runs');
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsOneWidget,
+        reason: 'the notice remains while the retry runs');
 
     pending.complete((items: _page(0, 20), ok: true));
     await tester.pumpAndSettle();
-    expect(find.byType(OmiErrorState), findsNothing);
+    expect(find.byKey(const ValueKey('recaps_refresh_failed_banner')), findsNothing);
   });
 
   testWidgets('a throwing page load releases the spinner and offers a user retry, once', (tester) async {

@@ -95,6 +95,7 @@ Future<void> showConversationDateRangePicker(
                     calendarType: singleDayOnly ? CalendarDatePicker2Type.single : CalendarDatePicker2Type.range,
                   ),
                   value: range,
+                  displayedMonthDate: range.first ?? now,
                   onValueChanged: (dates) => range = dates,
                 ),
               ),
