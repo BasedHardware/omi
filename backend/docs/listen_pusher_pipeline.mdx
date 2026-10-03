@@ -170,6 +170,10 @@ Endpoint attribution goes one level deeper: scores, selection benches and
 probe leases partition by the actual serving endpoint, so evidence from one
 custom registry endpoint never moves its siblings or the configured default,
 while account quarantine stays credential-wide and dominates every sibling.
+Endpoint connection breakers share that partition under a 64-identity bound
+per process: the bound evicts only the oldest closed breaker, and while every
+cached breaker is open or half-open a new endpoint identity is refused by the
+same circuit/admission gate instead of resetting a live bench.
 While routing is off, connect snapshots report a neutral score and merge only
 family account benches — selection benches and scores are ignored without
 being erased. Per-language freshness is read for every bounded supported language at

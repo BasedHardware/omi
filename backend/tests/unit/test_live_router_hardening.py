@@ -234,12 +234,12 @@ async def test_text_cleanup_delete_cannot_remove_a_renewed_bench():
     probe_key = live_stt_state.fleet_probe_key('soniox', account=True)
 
     class RenewingRedis(MemoryRedis):
-        async def get(self, key):
-            value = await super().get(key)
-            if key == state_key:
-                self.data[key] = 'account:1900.000'
+        async def mget(self, keys):
+            values = await super().mget(keys)
+            if state_key in keys:
+                self.data[state_key] = 'account:1900.000'
                 self.data[probe_key] = '1'
-            return value
+            return values
 
     redis = RenewingRedis(clock=lambda: 1000.0)
     redis.data[state_key] = 'account:900.000'
@@ -674,7 +674,7 @@ def test_endpoint_edit_resets_views_but_keeps_in_flight_bench(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('pause_on', ['get', 'exec'])
+@pytest.mark.parametrize('pause_on', ['mget', 'exec'])
 async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(monkeypatch, pause_on):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
@@ -694,9 +694,9 @@ async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(m
                 self.started.set()
                 await self.release.wait()
 
-        async def get(self, key):
-            await self._maybe_pause('get')
-            return await super().get(key)
+        async def mget(self, keys):
+            await self._maybe_pause('mget')
+            return await super().mget(keys)
 
         def pipeline(self, *, transaction=False):
             redis = self
@@ -726,7 +726,7 @@ async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(m
     assert redis.data[account_probe] == '1'
     assert not any(key.startswith(new_prefix) for key in redis.data)
     written = [key for key in redis.data if key not in (account_state, account_probe)]
-    if pause_on == 'get':
+    if pause_on == 'mget':
         assert not written
     else:
         assert written and all(key.startswith(old_prefix) for key in written)
@@ -1182,6 +1182,103 @@ async def test_expired_account_cleanup_never_deletes_active_selection_state():
     await pod._write_result('soniox', 'en', 'text')
     assert account_key not in redis.data and account_probe not in redis.data
     assert redis.data[endpoint_key] == 'selection:1800.000'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['text', 'no_text'])
+@pytest.mark.parametrize('selection', [None, 'live', 'expired'])
+@pytest.mark.parametrize('account', [None, 'live', 'expired'])
+async def test_write_result_reads_both_bench_states_in_one_redis_trip(outcome, selection, account):
+    now = [1000.0]
+    calls = []
+
+    class CountingRedis(MemoryRedis):
+        async def get(self, key):
+            calls.append('get')
+            return await super().get(key)
+
+        async def mget(self, keys):
+            calls.append(('mget', tuple(keys)))
+            return await super().mget(keys)
+
+        async def eval(self, *args):
+            calls.append('eval')
+            return await super().eval(*args)
+
+        def pipeline(self, *, transaction=False):
+            class Pipe(MemoryPipeline):
+                async def execute(self):
+                    calls.append('exec')
+                    return await super().execute()
+
+            return Pipe(self)
+
+    redis = CountingRedis(clock=lambda: now[0])
+    selection_key = live_stt_state.fleet_state_key('soniox')
+    account_key = live_stt_state.fleet_state_key('soniox', account=True)
+    if selection == 'live':
+        redis.data[selection_key] = 'selection:1800.000'
+    elif selection == 'expired':
+        redis.data[selection_key] = 'selection:900.000'
+    if account == 'live':
+        redis.data[account_key] = 'account:1800.000'
+    elif account == 'expired':
+        redis.data[account_key] = 'account:900.000'
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    await pod._write_result('soniox', 'en', outcome)
+    mgets = [call for call in calls if isinstance(call, tuple)]
+    expired = sum(state == 'expired' for state in (selection, account))
+    assert calls.count('get') == 0
+    assert calls.count('exec') == 1
+    bucket = int(now[0] // live_health.SCORE_BUCKET_SECONDS)
+    text_key, no_text_key = pod._score_keys('soniox', 'en', bucket)
+    written, untouched = (text_key, no_text_key) if outcome == 'text' else (no_text_key, text_key)
+    assert redis.data[written] == '1'
+    assert untouched not in redis.data
+    if outcome == 'no_text':
+        assert len(calls) == 1 and not mgets
+        return
+    assert len(calls) == 2 + expired
+    assert mgets == [('mget', (selection_key, account_key))]
+    assert calls.count('eval') == expired
+    for state, key in ((selection, selection_key), (account, account_key)):
+        if state == 'expired':
+            assert key not in redis.data
+        elif state == 'live':
+            assert redis.data[key].startswith('selection:' if key == selection_key else 'account:')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('malformed', [None, ('selection:900.000', 'account:900.000'), [], ['selection:900.000']])
+async def test_write_result_malformed_state_batch_fails_to_local_retry(malformed):
+    now = [1000.0]
+
+    class MalformedRedis(MemoryRedis):
+        def __init__(self, clock=None):
+            super().__init__(clock=clock)
+            self.executed = False
+
+        async def mget(self, keys):
+            return malformed
+
+        def pipeline(self, *, transaction=False):
+            redis = self
+
+            class Pipe(MemoryPipeline):
+                async def execute(self):
+                    redis.executed = True
+                    return await super().execute()
+
+            return Pipe(self)
+
+    redis = MalformedRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
+    await pod._write_result('soniox', 'en', 'text')
+    assert not redis.executed
+    assert not any(':score:' in key for key in redis.data)
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1
+    assert pod._redis_retry_at == now[0] + 10.0
 
 
 @pytest.mark.asyncio
@@ -1717,6 +1814,152 @@ def test_target_circuit_cache_is_bounded(monkeypatch):
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     for index in range(70):
         live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    assert len(live_router._target_circuits) == 64
+
+
+def _opened(index: int, failures: int = 3) -> ProviderCircuitBreaker:
+    circuit = live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    for _ in range(failures):
+        circuit.record_failure()
+    assert circuit.state == 'open'
+    return circuit
+
+
+def test_target_circuit_cap_retains_oldest_open_and_evicts_oldest_closed(monkeypatch):
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    opened = _opened(0)
+    closed = [
+        live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+        for index in range(1, 64)
+    ]
+    assert len(live_router._target_circuits) == 64
+    for index in range(64, 80):
+        live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    assert len(live_router._target_circuits) == 64
+    retained = set(live_router._target_circuits.values())
+    assert opened in retained
+    assert len(retained & set(closed)) == len(closed) - 16
+    assert live_router.target_circuit(_target(id='t0', endpoint='wss://ep0.invalid/x')) is opened
+    assert not opened.allow_request()
+
+
+def test_target_circuit_cap_retains_half_open_and_its_occupied_probe(monkeypatch):
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    half_open = _opened(0)
+    assert half_open.allow_request(force=True)
+    assert half_open.state == 'half_open'
+    for index in range(1, 64):
+        live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    for index in range(64, 90):
+        live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    assert len(live_router._target_circuits) == 64
+    assert live_router.target_circuit(_target(id='t0', endpoint='wss://ep0.invalid/x')) is half_open
+    assert half_open.state == 'half_open'
+    assert not half_open.allow_request()
+    assert not half_open.allow_request(force=True)
+
+
+def test_target_circuit_all_open_refuses_new_identity_until_a_probe_closes(monkeypatch):
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    now = [0.0]
+    monkeypatch.setattr(
+        live_router,
+        'ProviderCircuitBreaker',
+        lambda **kwargs: ProviderCircuitBreaker(clock=lambda: now[0], **kwargs),
+    )
+    oldest = _opened(0)
+    for index in range(1, 64):
+        _opened(index)
+    before = dict(live_router._target_circuits)
+    new_target = _target(id='t-new', endpoint='wss://new.invalid/x')
+    denied = live_router.target_circuit(new_target)
+    assert denied is live_router.target_circuit(_target(id='t-other', endpoint='wss://other.invalid/x'))
+    assert denied is not oldest and denied not in set(before.values())
+    assert denied.state == 'open' and not denied.cooldown_elapsed()
+    assert not denied.allow_request() and not denied.allow_request(force=True)
+    denied.record_success()
+    denied.release_probe()
+    assert not denied.allow_request() and not denied.allow_request(force=True)
+    assert live_router._target_circuits == before
+    now[0] = 31.0
+    assert live_router.target_circuit(new_target) is denied
+    assert oldest.allow_request()
+    assert oldest.state == 'half_open'
+    assert not oldest.allow_request()
+    assert live_router.target_circuit(new_target) is denied
+    assert live_router._target_circuits == before
+    oldest.record_success()
+    assert oldest.state == 'closed'
+    admitted = live_router.target_circuit(new_target)
+    assert admitted is not denied and admitted.state == 'closed'
+    assert len(live_router._target_circuits) == 64
+    assert oldest not in set(live_router._target_circuits.values())
+    assert live_router.target_circuit(new_target) is admitted
+
+
+def test_target_circuit_full_mixed_bench_keeps_family_default_unaffected(monkeypatch):
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    _opened(0)
+    half_open = _opened(1)
+    assert half_open.allow_request(force=True)
+    assert half_open.state == 'half_open'
+    for index in range(2, 64):
+        _opened(index)
+    assert len(live_router._target_circuits) == 64
+    before = dict(live_router._target_circuits)
+    denied = live_router.target_circuit(_target(id='t-new', endpoint='wss://new.invalid/x'))
+    assert not denied.allow_request() and not denied.allow_request(force=True)
+    default = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+    assert live_router.target_circuit(None, default) is default
+    assert live_router.target_circuit(_target(id='modulate-velma-2'), default) is default
+    assert live_router._target_circuits == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(monkeypatch, isolated, recovery):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    _prime_chain(
+        monkeypatch,
+        [
+            {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+            {
+                'id': 'modulate-denied',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.05,
+                'endpoint': 'wss://denied.invalid/stream',
+            },
+        ],
+    )
+    for index in range(64):
+        _opened(index)
+    denied_target = next(target for target in live_chain.registry() if target.id == 'modulate-denied')
+    monkeypatch.setattr(live_chain, 'propose', Mock(return_value=[denied_target]))
+    dialed = []
+
+    async def modulate_connect():
+        dialed.append('modulate')
+        return SimpleNamespace(is_connection_dead=False)
+
+    async def deepgram_connect():
+        dialed.append('deepgram')
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=modulate_connect,
+        callbacks={st.STTService.deepgram: deepgram_connect},
+        failed=set(),
+        models=['modulate', 'dg-nova-3'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    assert service == st.STTService.deepgram
+    assert dialed == ['deepgram']
     assert len(live_router._target_circuits) == 64
 
 

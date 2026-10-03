@@ -152,6 +152,21 @@ def _circuit_identity(target: Target) -> str:
     return f'{target.family}@{live_stt_state.fleet_prefix(target.family, endpoint=target.endpoint)}'
 
 
+class _TargetCircuitAdmissionRefused(ProviderCircuitBreaker):
+    def allow_request(self, *, max_probes: int = 1, force: bool = False) -> bool:
+        return False
+
+    def cooldown_elapsed(self) -> bool:
+        return False
+
+    @property
+    def state(self) -> str:
+        return 'open'
+
+
+_target_circuit_admission_refused = _TargetCircuitAdmissionRefused(failure_threshold=3, cooldown_seconds=30)
+
+
 def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None = None) -> ProviderCircuitBreaker:
     if target is None or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None):
         if default is None:
@@ -162,7 +177,13 @@ def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None
         circuit = _target_circuits.get(identity)
         if circuit is None:
             if len(_target_circuits) >= _TARGET_CIRCUITS_CAP:
-                _target_circuits.pop(next(iter(_target_circuits)))
+                evicted = next(
+                    (key for key, entry in _target_circuits.items() if entry.state == 'closed'),
+                    None,
+                )
+                if evicted is None:
+                    return _target_circuit_admission_refused
+                del _target_circuits[evicted]
             circuit = _target_circuits[identity] = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
     return circuit
 

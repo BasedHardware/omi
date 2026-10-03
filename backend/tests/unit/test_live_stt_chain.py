@@ -855,7 +855,8 @@ async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff
         monkeypatch.setattr(
             st, '_soniox_circuit', resilience.ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
         )
-        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+        _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+        assert service == st.STTService.modulate
     assert soniox.await_count == expected_dials
     state = connect_backoff._states.get('soniox')
     assert state is None or not state.refusals

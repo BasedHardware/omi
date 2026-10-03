@@ -331,11 +331,13 @@ class FleetHealth(CostHealthMixin):
         try:
             expired: list[tuple[str, str, str]] = []
             if outcome == 'text':
-                for state_key, probe_key in states:
-                    raw = await self._bounded(self._redis().get(state_key))
-                    if self._check_identity() != identity:
-                        FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
-                        return
+                values = await self._bounded(self._redis().mget([state_key for state_key, _ in states]))
+                if self._check_identity() != identity:
+                    FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+                    return
+                if not isinstance(values, list) or len(values) != len(states):
+                    raise ValueError('invalid fleet health read')
+                for (state_key, probe_key), raw in zip(states, values):
                     if raw:
                         try:
                             if float(str(raw).split(':', 1)[1]) <= self._clock():
