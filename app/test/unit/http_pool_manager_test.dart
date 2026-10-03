@@ -124,6 +124,26 @@ class _FakeResponse extends Stream<List<int>> implements HttpClientResponse {
       throw UnimplementedError('fake response does not implement ${invocation.memberName}');
 }
 
+class _FakeHungBodyResponse extends _FakeResponse {
+  _FakeHungBodyResponse(super.statusCode, super.body);
+
+  late final StreamController<List<int>> bodyStream = StreamController<List<int>>(
+    onCancel: () => cancelObserved = true,
+  );
+
+  bool cancelObserved = false;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> data)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return bodyStream.stream.listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  }
+}
+
 class _FakeHttpHeaders implements HttpHeaders {
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -398,6 +418,47 @@ void main() {
       expect(outcome.harnessError, isNull);
       expect(callerResponse, isNull, reason: 'a stalled body must not produce a response');
       expect(callerError, isA<TimeoutException>(), reason: 'the deadline covers body consumption');
+      expect(outcome.unhandled, isEmpty);
+    });
+
+    test('a response whose body never closes times out, aborts the stream, and frees the GET dedup slot', () async {
+      final url = Uri.parse('http://pool-http-fake.invalid/get-hung-body');
+      final hung = _FakeHungBodyResponse(200, '');
+      http.Response? laterResponse;
+      Object? firstError, laterError;
+
+      final outcome = await runInGuardedZone(() async {
+        final first = HttpPoolManager.instance
+            .send(() => http.Request('GET', url), timeout: const Duration(milliseconds: 50), retries: 0);
+        final observedFirst = () async {
+          try {
+            await first;
+          } catch (e) {
+            firstError = e;
+          }
+        }();
+        (await waitForOpen(0)).complete(_FakeRequest(hung));
+        await observedFirst;
+        await flushEventQueue();
+
+        final later = HttpPoolManager.instance.send(() => http.Request('GET', url), retries: 0);
+        final observedLater = () async {
+          try {
+            laterResponse = await later;
+          } catch (e) {
+            laterError = e;
+          }
+        }();
+        (await waitForOpen(1)).complete(_FakeRequest(_FakeResponse(200, 'recovered')));
+        await observedLater;
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(firstError, isA<TimeoutException>());
+      expect(hung.cancelObserved, isTrue);
+      expect(laterError, isNull);
+      expect(laterResponse?.body, 'recovered');
+      expect(client.openCount, 2);
       expect(outcome.unhandled, isEmpty);
     });
   });

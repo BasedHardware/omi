@@ -20,7 +20,9 @@ DateTime? parseRecapDate(String value) {
   final month = int.tryParse(parts[1]);
   final day = int.tryParse(parts[2]);
   if (year == null || month == null || day == null) return null;
-  return DateTime(year, month, day);
+  final date = DateTime(year, month, day);
+  if (date.year != year || date.month != month || date.day != day) return null;
+  return date;
 }
 
 /// A recap's day as a group header ("Today", "Yesterday", "Wed, Sep 23"), in the reader's locale.
@@ -212,9 +214,7 @@ class DailySummariesListState extends State<DailySummariesList> {
 
     return SliverMainAxisGroup(
       slivers: [
-        // A failed refresh with rows on screen must surface at the viewport,
-        // not only in the tail below the fold (hub audit #24 keeps
-        // pull-to-refresh honest: the failure is visible where the user is).
+        // Keep refresh failures visible in the viewport while retaining rows and scroll position.
         if (_loadFailed)
           SliverToBoxAdapter(
             child: Padding(
@@ -233,8 +233,6 @@ class DailySummariesListState extends State<DailySummariesList> {
                   OmiButton.secondary(
                     label: context.l10n.tryAgain,
                     size: OmiButtonSize.compact,
-                    // Rows are on screen; a full shimmer would throw away the
-                    // scroll position the user is already looking at.
                     onPressed: () => _loadSummaries(showSpinner: false),
                   ),
                 ],
@@ -243,7 +241,6 @@ class DailySummariesListState extends State<DailySummariesList> {
           ),
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
-            // Extra tail item for spinner / bottom padding
             if (index == _summaries.length) {
               if (_isLoadingMore) {
                 return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
@@ -255,8 +252,6 @@ class DailySummariesListState extends State<DailySummariesList> {
                     child: OmiButton.secondary(
                       label: context.l10n.tryAgain,
                       size: OmiButtonSize.compact,
-                      // Rows are on screen; a full shimmer would throw away the
-                      // scroll position the user is already looking at.
                       onPressed: _retryLoadMore,
                     ),
                   ),
@@ -265,11 +260,9 @@ class DailySummariesListState extends State<DailySummariesList> {
               return SizedBox(height: widget.bottomPadding);
             }
 
-            // Prefetch more when approaching end
             if (_hasMore && !_isLoadingMore && !_loadMoreFailed && !_loadFailed && index >= _summaries.length - 3) {
               WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
             }
-
             return _buildSummaryCard(_summaries[index]);
           }, childCount: _summaries.length + 1),
         ),

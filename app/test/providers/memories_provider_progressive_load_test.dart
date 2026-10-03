@@ -38,20 +38,6 @@ Memory _supersededFact() => Memory(
       intentBacked: true,
     );
 
-Memory _currentFact() => Memory(
-      id: 'current-fact',
-      uid: _uid,
-      content: 'Lives in Brooklyn',
-      category: MemoryCategory.system,
-      createdAt: DateTime.utc(2026, 8, 23),
-      updatedAt: DateTime.utc(2026, 8, 23),
-      visibility: MemoryVisibility.private,
-      ledgerSchemaVersion: 'knowledge_ledger.v1',
-      ledgerKind: KnowledgeLedgerKind.fact,
-      ledgerSlot: 'home_city',
-      intentBacked: true,
-    );
-
 Memory _revertReplacement(Memory source) => Memory(
       id: 'restored-fact',
       uid: source.uid,
@@ -388,10 +374,11 @@ void main() {
     await pumpEventQueue();
     gate.complete();
     await load;
-    await pumpEventQueue();
+    await SiriIntegration.current.drainIndexForTest();
 
     expect(provider.loadFailed, isTrue);
     expect(provider.memories.map((m) => m.id), ['m1']);
+    expect(host.calls, contains('upsert'), reason: 'the visible first page is still indexed provisionally');
     expect(host.calls, isNot(contains('reconcile')));
   });
 
@@ -414,11 +401,156 @@ void main() {
     await load;
     await pumpEventQueue();
 
+    expect(provider.loadFailed, isTrue);
     expect(provider.memories.map((m) => m.id), ['m1']);
     expect(host.calls, contains('upsert'), reason: 'retained partial rows must reach Siri/search indexing');
     expect(host.calls, isNot(contains('reconcile')), reason: 'a partial traversal is never authoritative');
   });
 
+  test('provisional pages upsert to Siri while the traversal is still pending', () async {
+    final host = _RecordingIndex();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);
+    final gate = Completer<void>();
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
+        GetMemoriesResult([_row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    await SiriIntegration.current.drainIndexForTest();
+    expect(provider.memories.map((m) => m.id), ['m1']);
+    expect(host.calls, contains('upsert'));
+    expect(host.calls, isNot(contains('reconcile')));
+
+    gate.complete();
+    await load;
+    await SiriIntegration.current.drainIndexForTest();
+    expect(host.calls.last, 'reconcile');
+  });
+
+  test('a confirmed create while a continuation is pending survives the late page', () async {
+    final gate = Completer<void>();
+    final serverRow = _row('server-created');
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
+        GetMemoriesResult([_row('m1'), _row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      createMemoryRequest: (content, visibility, category) async => serverRow,
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    expect(provider.memories.map((m) => m.id), ['m1']);
+    expect(await provider.createMemory('remembered'), isTrue);
+    expect(provider.memories.map((m) => m.id), contains('server-created'));
+
+    gate.complete();
+    await load;
+    expect(provider.memories.map((m) => m.id), contains('server-created'));
+  });
+
+  test('a confirmed delete while a continuation is pending keeps the row out', () async {
+    final gate = Completer<void>();
+    final deleted = _row('m1');
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([deleted], true, nextCursor: 'c2'),
+        GetMemoriesResult([deleted, _row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      deleteMemoryRequest: (id) async => true,
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    expect(provider.memories.map((m) => m.id), ['m1']);
+    await provider.deleteMemory(deleted);
+    await provider.confirmPendingDeletion();
+    expect(provider.memories, isEmpty);
+
+    gate.complete();
+    await load;
+    expect(provider.memories.map((m) => m.id), isNot(contains('m1')));
+  });
+
+  test('a confirmed delete removes only its own id from the owner cache', () async {
+    SharedPreferencesUtil().cachedMemories = [_row('cached-deleted'), _row('unseen')];
+    final gate = Completer<void>();
+    final deleted = _row('cached-deleted');
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([deleted], true, nextCursor: 'c2'),
+        GetMemoriesResult([deleted, _row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      deleteMemoryRequest: (id) async => true,
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    await provider.deleteMemory(deleted);
+    await provider.confirmPendingDeletion();
+    expect(SharedPreferencesUtil().cachedMemories.map((m) => m.id), ['unseen']);
+
+    gate.complete();
+    await load;
+    expect(SharedPreferencesUtil().cachedMemories.map((m) => m.id), ['unseen']);
+  });
+
+  test('a confirmed create upserts into the owner cache while a page is pending', () async {
+    SharedPreferencesUtil().cachedMemories = [_row('unseen')];
+    final gate = Completer<void>();
+    final serverRow = _row('server-created');
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
+        GetMemoriesResult([_row('m1'), _row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      createMemoryRequest: (content, visibility, category) async => serverRow,
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    expect(await provider.createMemory('remembered'), isTrue);
+    gate.complete();
+    await load;
+    expect(SharedPreferencesUtil().cachedMemories.map((m) => m.id), containsAll(['unseen', 'server-created']));
+  });
+
+  test('a confirmed create evicts the optimistic uuid from the owner cache', () async {
+    String? optimisticId;
+    final serverRow = _row('server-created');
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([_row('m1')], true),
+      fetchLedgerHistoryRequest: _noHistory(),
+      createMemoryRequest: (content, visibility, category) async {
+        optimisticId = SharedPreferencesUtil().pendingMemories.last.id;
+        SharedPreferencesUtil().cachedMemories = [...SharedPreferencesUtil().cachedMemories, _row(optimisticId!)];
+        return serverRow;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    SharedPreferencesUtil().cachedMemories = [_row('unseen')];
+    expect(await provider.createMemory('remembered'), isTrue);
+    final cachedIds = SharedPreferencesUtil().cachedMemories.map((m) => m.id).toList();
+    expect(cachedIds, unorderedEquals(['unseen', 'server-created']));
+    expect(cachedIds, isNot(contains(optimisticId)));
+  });
   test('a thrown continuation upserts the retained rows so Siri matches what is shown', () async {
     final host = _RecordingIndex();
     SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);

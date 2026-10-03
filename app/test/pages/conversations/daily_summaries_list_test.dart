@@ -65,6 +65,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Recap summary-0'), findsOneWidget, reason: 'rows survive a failed refresh');
+    expect(find.byType(OmiErrorState), findsOneWidget);
+  });
+
+  testWidgets('a failed refresh shows a first-viewport retry that keeps rows and scroll position', (tester) async {
+    final pending = Completer<({List<DailySummary> items, bool ok})>();
+    var mode = 0;
+    final key = GlobalKey<DailySummariesListState>();
+    await tester.pumpWidget(_app(({int limit = 20, int offset = 0}) {
+      if (mode == 2) return pending.future;
+      if (mode == 1) return Future.value((items: <DailySummary>[], ok: false));
+      return Future.value((items: _page(0, 20), ok: true));
+    }, key: key));
+    await tester.pumpAndSettle();
+    expect(find.text('Recap summary-0'), findsOneWidget);
+
+    mode = 1;
+    await key.currentState!.refresh();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OmiErrorState), findsOneWidget,
+        reason: 'the refresh failure is visible without scrolling to the tail');
+    final positionBefore = tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels;
+
+    mode = 2;
+    await tester.tap(find.text('Try Again'));
+    await tester.pump();
+    expect(find.text('Recap summary-0'), findsOneWidget, reason: 'rows stay put while the retry is pending');
+    expect(tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels, positionBefore);
+    expect(find.byType(OmiErrorState), findsOneWidget, reason: 'the notice remains while the retry runs');
+
+    pending.complete((items: _page(0, 20), ok: true));
+    await tester.pumpAndSettle();
     expect(find.byType(OmiErrorState), findsNothing);
   });
 
@@ -141,9 +173,7 @@ void main() {
 
     await tester.fling(find.byType(CustomScrollView), const Offset(0, -3000), 1000);
     await tester.pump();
-    // The stale-marker assertion below is only meaningful if the deferred page
-    // request actually started: completing a future nothing awaits would pass
-    // vacuously.
+    // Completing a future nothing awaits would make the stale-marker assertion vacuous.
     expect(pendingIssued, isTrue, reason: 'the deferred page request must be in flight to be invalidated');
 
     await key.currentState!.refresh();

@@ -81,6 +81,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           _memories.add(pending);
         }
       }
+      SiriIntegration.current.queueUpsertMemories(_memories);
       _deviceScopeSupported = deviceScopeSupported;
       _loadFailed = failed;
       _loading = false;

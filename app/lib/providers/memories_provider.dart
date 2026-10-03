@@ -615,6 +615,14 @@ class MemoriesProvider extends ChangeNotifier {
               // assessment fields that are absent from an offline draft.
               _memories[idx] = serverMemory;
             }
+            _ledgerProjectionRevision++;
+            _inFlightLoad = null;
+            SharedPreferencesUtil().cachedMemories = [
+              ...SharedPreferencesUtil()
+                  .cachedMemories
+                  .where((cached) => cached.id != memory.id && cached.id != serverMemory.id),
+              serverMemory,
+            ];
             SiriIntegration.current.queueUpsertMemories([serverMemory]);
           }
           if (generation != _sessionGeneration) return;
