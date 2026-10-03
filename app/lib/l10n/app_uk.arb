@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "приблизно {count} на годину",
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
-    "diagnosticsLastDuration": "Останні {duration}"
+    "diagnosticsLastDuration": "Останні {duration}",
+    "chatReplyOffline": "Не вдалося під'єднатися. Перевірте з'єднання та повторіть спробу.",
+    "chatReplyServerError": "Щось пішло не так з нашого боку. Спробуйте ще раз.",
+    "chatReplyTimeout": "Відповідь забрала забагато часу. Спробуйте ще раз.",
+    "chatReplyNotSignedIn": "Ви не ввійшли. Увійдіть і спробуйте ще раз.",
+    "chatAppsLoadFailed": "Не вдалося завантажити застосунки чату. Спробуйте ще раз."
 }

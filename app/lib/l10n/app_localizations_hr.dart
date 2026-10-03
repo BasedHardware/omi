@@ -12327,4 +12327,19 @@ class AppLocalizationsHr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Posljednjih $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nije moguće povezivanje. Provjerite vezu i pokušajte ponovno.';
+
+  @override
+  String get chatReplyServerError => 'Nešto je pošlo po zlu s naše strane. Pokušajte ponovno.';
+
+  @override
+  String get chatReplyTimeout => 'Odgovor je predugo trajao. Pokušajte ponovno.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se i pokušajte ponovno.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nije moguće učitati aplikacije za razgovor. Pokušajte ponovno.';
 }

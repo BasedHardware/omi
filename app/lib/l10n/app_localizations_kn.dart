@@ -12328,4 +12328,19 @@ class AppLocalizationsKn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'ಕಳೆದ $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'ಸಂಪರ್ಕ ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyServerError => 'ನಮ್ಮ ಬದೆಯಲ್ಲಿ ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyTimeout => 'ಪ್ರತಿಕ್ರಿಯೆ ಬಹಳ ಸಮಯ ತೆಗೆದುಕೊಂಡಿತು. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyNotSignedIn => 'ನೀವು ಸೈನ್ ಇನ್ ಮಾಡಿಲ್ಲ. ಸೈನ್ ಇನ್ ಮಾಡಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatAppsLoadFailed => 'ಚಾಟ್ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

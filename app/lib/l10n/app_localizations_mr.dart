@@ -12298,4 +12298,19 @@ class AppLocalizationsMr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'गेले $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'कनेक्ट होऊ शकलो नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get chatReplyServerError => 'आमच्या बाजूने काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get chatReplyTimeout => 'उत्तर येण्यासाठी खूप वेळ लागला. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get chatReplyNotSignedIn => 'तुम्ही साइन इन केलेले नाही. साइन इन करा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get chatAppsLoadFailed => 'चॅट अॅप्स लोड होऊ शकले नाहीत. कृपया पुन्हा प्रयत्न करा.';
 }

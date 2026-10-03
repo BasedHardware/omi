@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "približno {count} na uro",
     "diagnosticsLongestGap": "Najdaljši premor",
     "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
-    "diagnosticsLastDuration": "Zadnjih {duration}"
+    "diagnosticsLastDuration": "Zadnjih {duration}",
+    "chatReplyOffline": "Povezava ni uspela. Preverite povezavo in poskusite znova.",
+    "chatReplyServerError": "Na naši strani je šlo nekaj narobe. Poskusite znova.",
+    "chatReplyTimeout": "Odgovor je trajal predolgo. Poskusite znova.",
+    "chatReplyNotSignedIn": "Niste prijavljeni. Prijavite se in poskusite znova.",
+    "chatAppsLoadFailed": "Aplikacij za klepet ni bilo mogoče naložiti. Poskusite znova."
 }

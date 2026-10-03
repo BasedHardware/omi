@@ -12291,4 +12291,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'শেষ $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'সংযোগ করা যাচ্ছে না। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyServerError => 'আমাদের দিক থেকে কিছু ভুল হয়েছে। আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyTimeout => 'উত্তরটি আসতে বেশি সময় নিয়েছে। আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyNotSignedIn => 'আপনি সাইন ইন করেননি। সাইন ইন করে আবার চেষ্টা করুন।';
+
+  @override
+  String get chatAppsLoadFailed => 'চ্যাট অ্যাপ লোড করা যায়নি। আবার চেষ্টা করুন।';
 }

@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "khoảng {count} lần mỗi giờ",
     "diagnosticsLongestGap": "Lần gián đoạn lâu nhất",
     "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần ngắt, {failed} kết nối thất bại.",
-    "diagnosticsLastDuration": "{duration} gần nhất"
+    "diagnosticsLastDuration": "{duration} gần nhất",
+    "chatReplyOffline": "Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.",
+    "chatReplyServerError": "Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.",
+    "chatReplyTimeout": "Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.",
+    "chatReplyNotSignedIn": "Bạn chưa đăng nhập. Đăng nhập và thử lại.",
+    "chatAppsLoadFailed": "Không thể tải ứng dụng trò chuyện. Vui lòng thử lại."
 }

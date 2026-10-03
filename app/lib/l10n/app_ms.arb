@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "kira-kira {count} sejam",
     "diagnosticsLongestGap": "Jurang terpanjang",
     "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
-    "diagnosticsLastDuration": "{duration} lepas"
+    "diagnosticsLastDuration": "{duration} lepas",
+    "chatReplyOffline": "Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.",
+    "chatReplyServerError": "Sesuatu telah berlaku di pihak kami. Sila cuba lagi.",
+    "chatReplyTimeout": "Respons mengambil masa terlalu lama. Sila cuba lagi.",
+    "chatReplyNotSignedIn": "Anda belum log masuk. Log masuk dan cuba lagi.",
+    "chatAppsLoadFailed": "Tidak dapat memuatkan aplikasi sembang. Sila cuba lagi."
 }

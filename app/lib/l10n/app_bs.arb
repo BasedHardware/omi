@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "otprilike {count} na sat",
     "diagnosticsLongestGap": "Najduži prekid",
     "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspjelih veza {failed}.",
-    "diagnosticsLastDuration": "Posljednjih {duration}"
+    "diagnosticsLastDuration": "Posljednjih {duration}",
+    "chatReplyOffline": "Nije moguće povezivanje. Provjerite vezu i pokušajte ponovo.",
+    "chatReplyServerError": "Nešto je pošlo po zlu s naše strane. Pokušajte ponovo.",
+    "chatReplyTimeout": "Odgovor je predugo trajao. Pokušajte ponovo.",
+    "chatReplyNotSignedIn": "Niste prijavljeni. Prijavite se i pokušajte ponovo.",
+    "chatAppsLoadFailed": "Nije moguće učitati aplikacije za ćaskanje. Pokušajte ponovo."
 }

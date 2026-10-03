@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "மணிக்கு சுமார் {count}",
     "diagnosticsLongestGap": "நீண்ட இடைவெளி",
     "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
-    "diagnosticsLastDuration": "கடந்த {duration}"
+    "diagnosticsLastDuration": "கடந்த {duration}",
+    "chatReplyOffline": "இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyServerError": "எங்கள் பக்கத்தில் ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyTimeout": "பதில் அதிக நேரம் எடுத்தது. மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyNotSignedIn": "நீங்கள் உள்நுழையவில்லை. உள்நுழைந்து மீண்டும் முயற்சிக்கவும்.",
+    "chatAppsLoadFailed": "அரட்டை செயலிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்."
 }

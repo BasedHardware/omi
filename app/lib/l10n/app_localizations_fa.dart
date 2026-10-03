@@ -12289,4 +12289,19 @@ class AppLocalizationsFa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration گذشته';
   }
+
+  @override
+  String get chatReplyOffline => 'اتصال برقرار نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyServerError => 'مشکلی از سمت ما پیش آمد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyTimeout => 'پاسخ بیش از حد طول کشید. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyNotSignedIn => 'شما وارد نشده‌اید. وارد شوید و دوباره تلاش کنید.';
+
+  @override
+  String get chatAppsLoadFailed => 'بارگیری برنامه‌های گفتگو ممکن نشد. لطفاً دوباره تلاش کنید.';
 }

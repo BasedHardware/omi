@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
-    "diagnosticsLastDuration": "Апошнія {duration}"
+    "diagnosticsLastDuration": "Апошнія {duration}",
+    "chatReplyOffline": "Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.",
+    "chatReplyServerError": "Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.",
+    "chatReplyTimeout": "Адказ заняў занадта шмат часу. Паспрабуйце яшчэ раз.",
+    "chatReplyNotSignedIn": "Вы не ўвайшлі. Увайдзіце і паспрабуйце яшчэ раз.",
+    "chatAppsLoadFailed": "Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз."
 }

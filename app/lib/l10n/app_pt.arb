@@ -3835,5 +3835,10 @@
     "diagnosticsDropsPerHour": "cerca de {count} por hora",
     "diagnosticsLongestGap": "Maior intervalo",
     "diagnosticsSincePairingSummary": "Desde o emparelhamento: {drops} quedas, {failed} falhas de conexão.",
-    "diagnosticsLastDuration": "Últimos {duration}"
+    "diagnosticsLastDuration": "Últimos {duration}",
+    "chatReplyOffline": "Não foi possível conectar. Verifique sua conexão e tente novamente.",
+    "chatReplyServerError": "Algo deu errado do nosso lado. Tente novamente.",
+    "chatReplyTimeout": "A resposta demorou demais. Tente novamente.",
+    "chatReplyNotSignedIn": "Você não está conectado à sua conta. Entre e tente novamente.",
+    "chatAppsLoadFailed": "Não foi possível carregar os aplicativos de chat. Tente novamente."
 }

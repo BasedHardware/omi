@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "asi {count} za hodinu",
     "diagnosticsLongestGap": "Najdlhší výpadok",
     "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
-    "diagnosticsLastDuration": "Posledných {duration}"
+    "diagnosticsLastDuration": "Posledných {duration}",
+    "chatReplyOffline": "Nedá sa pripojiť. Skontrolujte pripojenie a skúste to znova.",
+    "chatReplyServerError": "Niečo sa pokazilo na našej strane. Skúste to znova.",
+    "chatReplyTimeout": "Odpoveď trvala príliš dlho. Skúste to znova.",
+    "chatReplyNotSignedIn": "Nie ste prihlásení. Prihláste sa a skúste to znova.",
+    "chatAppsLoadFailed": "Aplikácie četu sa nepodarilo načítať. Skúste to znova."
 }

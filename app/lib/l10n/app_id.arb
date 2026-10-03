@@ -3835,5 +3835,10 @@
     "diagnosticsDropsPerHour": "sekitar {count} per jam",
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
-    "diagnosticsLastDuration": "{duration} terakhir"
+    "diagnosticsLastDuration": "{duration} terakhir",
+    "chatReplyOffline": "Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.",
+    "chatReplyServerError": "Terjadi kesalahan di sisi kami. Silakan coba lagi.",
+    "chatReplyTimeout": "Respons memakan waktu terlalu lama. Silakan coba lagi.",
+    "chatReplyNotSignedIn": "Anda belum masuk. Masuk dan coba lagi.",
+    "chatAppsLoadFailed": "Tidak dapat memuat aplikasi chat. Silakan coba lagi."
 }

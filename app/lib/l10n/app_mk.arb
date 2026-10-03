@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "околу {count} на час",
     "diagnosticsLongestGap": "Најдолг прекин",
     "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
-    "diagnosticsLastDuration": "Последните {duration}"
+    "diagnosticsLastDuration": "Последните {duration}",
+    "chatReplyOffline": "Не може да се воспостави врска. Проверете ја врската и обидете се повторно.",
+    "chatReplyServerError": "Нешто тргна наопаку од наша страна. Обидете се повторно.",
+    "chatReplyTimeout": "Одговорот траеше предолго. Обидете се повторно.",
+    "chatReplyNotSignedIn": "Не сте најавени. Најавете се и обидете се повторно.",
+    "chatAppsLoadFailed": "Не може да се вчитаат апликациите за разговор. Обидете се повторно."
 }

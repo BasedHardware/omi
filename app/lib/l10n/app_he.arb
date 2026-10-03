@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "בערך {count} בשעה",
     "diagnosticsLongestGap": "הפער הארוך ביותר",
     "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
-    "diagnosticsLastDuration": "{duration} אחרונות"
+    "diagnosticsLastDuration": "{duration} אחרונות",
+    "chatReplyOffline": "לא ניתן להתחבר. בדקו את החיבור ונסו שוב.",
+    "chatReplyServerError": "משהו השתבש אצלנו. נסה שוב.",
+    "chatReplyTimeout": "התשובה ארכה יותר מדי זמן. נסה שוב.",
+    "chatReplyNotSignedIn": "לא התחברת. התחבר ונסה שוב.",
+    "chatAppsLoadFailed": "לא ניתן לטעון את אפליקציות הצ'אט. נסה שוב."
 }

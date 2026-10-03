@@ -3896,5 +3896,10 @@
     "diagnosticsDropsPerHour": "kb. {count} óránként",
     "diagnosticsLongestGap": "Leghosszabb kiesés",
     "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
-    "diagnosticsLastDuration": "Utolsó {duration}"
+    "diagnosticsLastDuration": "Utolsó {duration}",
+    "chatReplyOffline": "Nem sikerült csatlakozni. Ellenőrizze a kapcsolatot, és próbálja újra.",
+    "chatReplyServerError": "Valami hiba történt a mi oldalunkon. Kérjük, próbáld újra.",
+    "chatReplyTimeout": "A válasz túl sokáig tartott. Kérjük, próbáld újra.",
+    "chatReplyNotSignedIn": "Nem vagy bejelentkezve. Jelentkezz be, és próbáld újra.",
+    "chatAppsLoadFailed": "Nem sikerült betölteni a csevegőalkalmazásokat. Kérjük, próbáld újra."
 }

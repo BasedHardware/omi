@@ -12336,4 +12336,19 @@ class AppLocalizationsBg extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последните $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Неуспешно свързване. Проверете връзката си и опитайте отново.';
+
+  @override
+  String get chatReplyServerError => 'Нещо се обърка от наша страна. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyTimeout => 'Отговорът отне твърде много време. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Не сте влезли. Влезте и опитайте отново.';
+
+  @override
+  String get chatAppsLoadFailed => 'Неуспешно зареждане на чат приложенията. Моля, опитайте отново.';
 }

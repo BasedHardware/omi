@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "लगभग {count} प्रति घंटा",
     "diagnosticsLongestGap": "सबसे लंबा अंतराल",
     "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
-    "diagnosticsLastDuration": "पिछले {duration}"
+    "diagnosticsLastDuration": "पिछले {duration}",
+    "chatReplyOffline": "कनेक्ट नहीं हो सका। अपना कनेक्शन जांचें और फिर से प्रयास करें।",
+    "chatReplyServerError": "हमारी ओर से कुछ गड़बड़ हुई। कृपया फिर से प्रयास करें।",
+    "chatReplyTimeout": "जवाब देने में बहुत समय लगा। कृपया फिर से प्रयास करें।",
+    "chatReplyNotSignedIn": "आपने साइन इन नहीं किया है। साइन इन करें और फिर से प्रयास करें।",
+    "chatAppsLoadFailed": "चैट ऐप लोड नहीं हो सके। कृपया फिर से प्रयास करें।"
 }

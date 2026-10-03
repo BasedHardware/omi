@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "περίπου {count} την ώρα",
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
     "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
-    "diagnosticsLastDuration": "Τελευταία {duration}"
+    "diagnosticsLastDuration": "Τελευταία {duration}",
+    "chatReplyOffline": "Δεν είναι δυνατή η σύνδεση. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
+    "chatReplyServerError": "Κάτι πήγε στραβά από την πλευρά μας. Δοκιμάστε ξανά.",
+    "chatReplyTimeout": "Η απάντηση καθυστέρησε πολύ. Δοκιμάστε ξανά.",
+    "chatReplyNotSignedIn": "Δεν έχετε συνδεθεί. Συνδεθείτε και δοκιμάστε ξανά.",
+    "chatAppsLoadFailed": "Δεν ήταν δυνατή η φόρτωση των εφαρμογών συνομιλίας. Δοκιμάστε ξανά."
 }

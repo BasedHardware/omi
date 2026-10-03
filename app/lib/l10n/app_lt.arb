@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "maždaug {count} per valandą",
     "diagnosticsLongestGap": "Ilgiausia pertrauka",
     "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
-    "diagnosticsLastDuration": "Paskutinės {duration}"
+    "diagnosticsLastDuration": "Paskutinės {duration}",
+    "chatReplyOffline": "Nepavyko prisijungti. Patikrinkite ryšį ir bandykite dar kartą.",
+    "chatReplyServerError": "Mūsų pusėje įvyko klaida. Bandykite dar kartą.",
+    "chatReplyTimeout": "Atsakymas užtruko per ilgai. Bandykite dar kartą.",
+    "chatReplyNotSignedIn": "Nesate prisijungę. Prisijunkite ir bandykite dar kartą.",
+    "chatAppsLoadFailed": "Nepavyko įkelti pokalbių programų. Bandykite dar kartą."
 }

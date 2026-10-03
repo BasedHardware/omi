@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "cirka {count} i timmen",
     "diagnosticsLongestGap": "Längsta uppehåll",
     "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
-    "diagnosticsLastDuration": "Senaste {duration}"
+    "diagnosticsLastDuration": "Senaste {duration}",
+    "chatReplyOffline": "Det går inte att ansluta. Kontrollera din anslutning och försök igen.",
+    "chatReplyServerError": "Något gick fel på vår sida. Försök igen.",
+    "chatReplyTimeout": "Svaret tog för lång tid. Försök igen.",
+    "chatReplyNotSignedIn": "Du är inte inloggad. Logga in och försök igen.",
+    "chatAppsLoadFailed": "Kunde inte ladda chattappar. Försök igen."
 }

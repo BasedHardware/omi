@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "గంటకు సుమారు {count}",
     "diagnosticsLongestGap": "అతి పొడవైన విరామం",
     "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
-    "diagnosticsLastDuration": "గత {duration}"
+    "diagnosticsLastDuration": "గత {duration}",
+    "chatReplyOffline": "కనెక్ట్ చేయలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyServerError": "మా వైపు ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyTimeout": "సమాధానం చాలా సమయం పట్టింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyNotSignedIn": "మీరు సైన్ ఇన్ చేయలేదు. సైన్ ఇన్ చేసి మళ్లీ ప్రయత్నించండి.",
+    "chatAppsLoadFailed": "చాట్ యాప్‌లను లోడ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి."
 }

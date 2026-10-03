@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "ongeveer {count} per uur",
     "diagnosticsLongestGap": "Langste onderbreking",
     "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
-    "diagnosticsLastDuration": "Laatste {duration}"
+    "diagnosticsLastDuration": "Laatste {duration}",
+    "chatReplyOffline": "Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.",
+    "chatReplyServerError": "Er is iets misgegaan aan onze kant. Probeer het opnieuw.",
+    "chatReplyTimeout": "De reactie duurde te lang. Probeer het opnieuw.",
+    "chatReplyNotSignedIn": "Je bent niet ingelogd. Log in en probeer het opnieuw.",
+    "chatAppsLoadFailed": "Chat-apps konden niet worden geladen. Probeer het opnieuw."
 }

@@ -12295,4 +12295,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimeiset $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Yhteyttä ei voitu muodostaa. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String get chatReplyServerError => 'Jotain meni pieleen meidän puolellamme. Yritä uudelleen.';
+
+  @override
+  String get chatReplyTimeout => 'Vastaus kesti liian kauan. Yritä uudelleen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Et ole kirjautunut sisään. Kirjaudu sisään ja yritä uudelleen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-sovelluksia ei voitu ladata. Yritä uudelleen.';
 }

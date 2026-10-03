@@ -3842,5 +3842,10 @@
     "diagnosticsDropsPerHour": "ca. {count} i timen",
     "diagnosticsLongestGap": "Længste pause",
     "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
-    "diagnosticsLastDuration": "Seneste {duration}"
+    "diagnosticsLastDuration": "Seneste {duration}",
+    "chatReplyOffline": "Kan ikke oprette forbindelse. Tjek din forbindelse, og prøv igen.",
+    "chatReplyServerError": "Noget gik galt på vores side. Prøv venligst igen.",
+    "chatReplyTimeout": "Svaret tog for lang tid. Prøv venligst igen.",
+    "chatReplyNotSignedIn": "Du er ikke logget ind. Log ind og prøv igen.",
+    "chatAppsLoadFailed": "Kunne ikke indlæse chat-apps. Prøv venligst igen."
 }

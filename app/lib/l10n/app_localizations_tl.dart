@@ -12392,4 +12392,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Nakaraang $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.';
+
+  @override
+  String get chatReplyServerError => 'May nangyaring mali sa aming panig. Subukan muli.';
+
+  @override
+  String get chatReplyTimeout => 'Napakatagal ng sagot. Subukan muli.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Hindi ka naka-sign in. Mag-sign in at subukan muli.';
+
+  @override
+  String get chatAppsLoadFailed => 'Hindi ma-load ang mga chat app. Subukan muli.';
 }

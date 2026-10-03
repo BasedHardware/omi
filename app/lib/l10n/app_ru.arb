@@ -3835,5 +3835,10 @@
     "diagnosticsDropsPerHour": "примерно {count} в час",
     "diagnosticsLongestGap": "Самый долгий перерыв",
     "diagnosticsSincePairingSummary": "С момента сопряжения: обрывов — {drops}, неудачных подключений — {failed}.",
-    "diagnosticsLastDuration": "Последние {duration}"
+    "diagnosticsLastDuration": "Последние {duration}",
+    "chatReplyOffline": "Не удалось подключиться. Проверьте соединение и попробуйте ещё раз.",
+    "chatReplyServerError": "Что-то пошло не так с нашей стороны. Попробуйте ещё раз.",
+    "chatReplyTimeout": "Ответ занял слишком много времени. Попробуйте ещё раз.",
+    "chatReplyNotSignedIn": "Вы не вошли в аккаунт. Войдите и попробуйте ещё раз.",
+    "chatAppsLoadFailed": "Не удалось загрузить приложения чата. Попробуйте ещё раз."
 }

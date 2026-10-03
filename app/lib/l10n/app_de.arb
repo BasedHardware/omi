@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "etwa {count} pro Stunde",
     "diagnosticsLongestGap": "Längste Lücke",
     "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
-    "diagnosticsLastDuration": "Letzte {duration}"
+    "diagnosticsLastDuration": "Letzte {duration}",
+    "chatReplyOffline": "Verbindung nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
+    "chatReplyServerError": "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es erneut.",
+    "chatReplyTimeout": "Die Antwort hat zu lange gedauert. Bitte versuche es erneut.",
+    "chatReplyNotSignedIn": "Du bist nicht angemeldet. Melde dich an und versuche es erneut.",
+    "chatAppsLoadFailed": "Chat-Apps konnten nicht geladen werden. Bitte versuche es erneut."
 }

@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "около {count} на час",
     "diagnosticsLongestGap": "Най-дълго прекъсване",
     "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
-    "diagnosticsLastDuration": "Последните {duration}"
+    "diagnosticsLastDuration": "Последните {duration}",
+    "chatReplyOffline": "Неуспешно свързване. Проверете връзката си и опитайте отново.",
+    "chatReplyServerError": "Нещо се обърка от наша страна. Моля, опитайте отново.",
+    "chatReplyTimeout": "Отговорът отне твърде много време. Моля, опитайте отново.",
+    "chatReplyNotSignedIn": "Не сте влезли. Влезте и опитайте отново.",
+    "chatAppsLoadFailed": "Неуспешно зареждане на чат приложенията. Моля, опитайте отново."
 }

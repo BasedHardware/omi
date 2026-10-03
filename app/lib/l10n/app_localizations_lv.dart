@@ -12319,4 +12319,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Pēdējās $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nevar izveidot savienojumu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyServerError => 'Mūsu pusē kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyTimeout => 'Atbilde aizņēma pārāk daudz laika. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Jūs neesat pierakstījies. Pierakstieties un mēģiniet vēlreiz.';
+
+  @override
+  String get chatAppsLoadFailed => 'Neizdevās ielādēt tērzēšanas lietotnes. Lūdzu, mēģiniet vēlreiz.';
 }

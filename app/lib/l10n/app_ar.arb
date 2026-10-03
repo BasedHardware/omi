@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
-    "diagnosticsLastDuration": "آخر {duration}"
+    "diagnosticsLastDuration": "آخر {duration}",
+    "chatReplyOffline": "تعذر الاتصال. تحقق من اتصالك وحاول مرة أخرى.",
+    "chatReplyServerError": "حدث خطأ ما من جانبنا. يُرجى المحاولة مرة أخرى.",
+    "chatReplyTimeout": "استغرقت الاستجابة وقتاً طويلاً. يُرجى المحاولة مرة أخرى.",
+    "chatReplyNotSignedIn": "لم تسجّل الدخول. سجّل الدخول وحاول مرة أخرى.",
+    "chatAppsLoadFailed": "تعذّر تحميل تطبيقات الدردشة. يُرجى المحاولة مرة أخرى."
 }

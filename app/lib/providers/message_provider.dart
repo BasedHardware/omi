@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -16,12 +17,15 @@ import 'package:uuid/uuid.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/chat_history_state.dart';
@@ -51,15 +55,19 @@ class _ChatTelemetryAttempt {
   void dispose() => timeout?.cancel();
 }
 
+typedef ChatAppsLoader = Future<ApiResult<wire.GeneratedAppSearchResponse>> Function({int offset, int limit});
+
 /// What to send again when the reader taps Try Again on a failed reply.
 class _FailedReply {
-  const _FailedReply({this.text, this.context, this.fileIds = const []});
+  const _FailedReply({this.text, this.context, this.fileIds = const [], this.failure = ChatStreamFailureClass.unknown});
 
   /// The user's message as it was sent (with any quoted context). Null when the reply cannot be
   /// retried from here (a voice message: its audio is gone).
   final String? text;
   final ChatPageContext? context;
   final List<String> fileIds;
+
+  final ChatStreamFailureClass failure;
 
   bool get canRetry => text != null;
 }
@@ -110,6 +118,11 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
 
+  ApiProblem? chatAppsProblem;
+
+  @visibleForTesting
+  ChatAppsLoader? chatAppsLoaderOverride;
+
   // Chat quota exceeded — set transiently when backend returns 402
   bool _chatQuotaExceeded = false;
   bool get isChatQuotaExceeded => _chatQuotaExceeded;
@@ -125,6 +138,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   /// Whether a failed [message] can be sent again (typed messages can; voice messages cannot).
   bool canRetryReply(ServerMessage message) => _failedReplies[message]?.canRetry ?? false;
 
+  ChatStreamFailureClass? replyFailure(ServerMessage message) => _failedReplies[message]?.failure;
+
   void _markReplyFailed(ServerMessage message, _FailedReply reply) {
     message.text = '';
     _failedReplies[message] = reply;
@@ -139,6 +154,16 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  App? _selectedChatApp() {
+    final id = appProvider?.selectedChatAppId;
+    if (id != null) {
+      for (final app in chatApps) {
+        if (app.id == id) return app;
+      }
+    }
+    return appProvider?.getSelectedApp();
   }
 
   void _registerChatTelemetryAttempt(String messageId, ProductAttempt attempt) {
@@ -209,12 +234,37 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     notifyListeners();
 
     try {
-      final result = await retrieveAppsSearch(installedApps: true, limit: 50);
-
-      chatApps = result.apps.where((app) => app.worksWithChat()).toList();
+      final loader = chatAppsLoaderOverride ?? retrieveInstalledChatApps;
+      final apps = <App>[];
+      const limit = 100;
+      var offset = 0;
+      while (true) {
+        final result = await loader(offset: offset, limit: limit);
+        if (result is ApiFailure<wire.GeneratedAppSearchResponse>) {
+          chatAppsProblem = result.problem;
+          Logger.warning(
+            'mobile_chat_failure class=${result.problem.kind} stage=chatAppsFetch status=${result.problem.statusCode}',
+          );
+          return;
+        }
+        final page = (result as ApiSuccess<wire.GeneratedAppSearchResponse>).data;
+        apps.addAll(
+          (page.data ?? const <wire.GeneratedAppCatalogItem>[])
+              .map(App.fromGeneratedCatalogItem)
+              .where((app) => !app.deleted),
+        );
+        if (!page.pagination.hasNext) break;
+        offset += limit;
+      }
+      chatApps = apps.where((app) => app.worksWithChat()).toList();
+      chatAppsProblem = null;
     } catch (e) {
       Logger.debug('Error fetching chat apps: $e');
-      chatApps = [];
+      chatAppsProblem = ApiProblem(
+        e is TimeoutException || e is SocketException || e is http.ClientException
+            ? ApiProblemKind.transport
+            : ApiProblemKind.server,
+      );
     } finally {
       isLoadingChatApps = false;
       notifyListeners();
@@ -586,7 +636,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       currentAppId = null;
     }
     String chatTargetId = currentAppId ?? 'omi';
-    bool isPersonaChat = false;
+    bool isPersonaChat = _selectedChatApp()?.hasCapability('persona') ?? false;
 
     PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
@@ -661,7 +711,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             );
           }
           notifyListeners();
-          continue;
+          return;
         }
 
         if (chunk.type == MessageChunkType.message) {
@@ -683,7 +733,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             notifyListeners();
             return;
           }
-          if (_tryParseQuotaError(chunk.text)) {
+          if (chunk.errorCode == 'quota_exceeded' || _tryParseQuotaError(chunk.text)) {
+            _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
@@ -692,25 +743,29 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             }
             notifyListeners();
             setShowTypingIndicator(false);
+            _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             return;
           }
-          Logger.debug('Voice chat reply failed: ${chunk.text}');
-          _markReplyFailed(message, const _FailedReply());
+          final failure = _chunkFailureClass(chunk);
+          _logChatFailure(failure, stage: 'voice_stream');
+          _markReplyFailed(message, _FailedReply(failure: failure));
           if (playResponseAudio) {
             await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
           }
-          completeChat(ProductOutcome.failure, failure: ProductFailure.server);
+          completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          continue;
+          return;
         }
       }
     } catch (e) {
-      _markReplyFailed(message, const _FailedReply());
+      final failure = classifyChatStreamFailure(e);
+      _logChatFailure(failure.kind, stage: 'voice_transport', status: failure.statusCode);
+      _markReplyFailed(message, _FailedReply(failure: failure.kind));
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
       }
-      completeChat(ProductOutcome.failure, failure: ProductFailure.network);
+      completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
     } finally {
       _voiceSendInFlight = false;
@@ -732,6 +787,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   Future<void> _streamReply(String text, {ChatPageContext? context, List<String>? retryFileIds}) async {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
+    beginChatTurn();
     // If Omi was still speaking a prior voice reply, stop it — the user's
     // typed message takes precedence.
     if (OmiVoicePlaybackService.instance.isSpeaking) {
@@ -744,7 +800,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     }
 
     String chatTargetId = currentAppId ?? 'omi';
-    bool isPersonaChat = false;
+    bool isPersonaChat = _selectedChatApp()?.hasCapability('persona') ?? false;
 
     PlatformManager.instance.analytics.chatMessageSent(
       message: text,
@@ -776,7 +832,6 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       clearSelectedFiles();
       clearUploadedFiles();
     }
-    final failedReply = _FailedReply(text: text, context: context, fileIds: fileIds);
     String textBuffer = '';
     Timer? timer;
 
@@ -840,29 +895,34 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           nameChatSession();
           chatAttemptCompleted = true;
           notifyListeners();
-          continue;
+          return;
         }
 
         if (chunk.type == MessageChunkType.error) {
-          if (_tryParseQuotaError(chunk.text)) {
+          if (chunk.errorCode == 'quota_exceeded' || _tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
+            _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             notifyListeners();
             return;
           }
-          Logger.debug('Chat reply failed: ${chunk.text}');
-          _markReplyFailed(message, failedReply);
-          completeChat(ProductOutcome.failure, failure: ProductFailure.server);
+          final failure = _chunkFailureClass(chunk);
+          _logChatFailure(failure, stage: 'stream');
+          _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure));
+          completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          continue;
+          return;
         }
       }
     } catch (e) {
-      _markReplyFailed(message, failedReply);
-      completeChat(ProductOutcome.failure, failure: ProductFailure.network);
+      final failure = classifyChatStreamFailure(e);
+      _logChatFailure(failure.kind, stage: 'transport', status: failure.statusCode);
+      _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure.kind));
+      completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
     } finally {
       timer?.cancel();
@@ -872,8 +932,36 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       setSendingMessage(false);
     }
     if (!chatAttemptCompleted) {
+      _logChatFailure(ChatStreamFailureClass.server, stage: 'eof');
+      if (message.text.isEmpty) {
+        _markReplyFailed(message,
+            _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server));
+        notifyListeners();
+      }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
+  }
+
+  ChatStreamFailureClass _chunkFailureClass(ServerMessageChunk chunk) => switch (chunk.errorCode) {
+        'offline' => ChatStreamFailureClass.offline,
+        'server_error' => ChatStreamFailureClass.server,
+        'timeout' => ChatStreamFailureClass.timeout,
+        'quota_exceeded' => ChatStreamFailureClass.quota,
+        'not_signed_in' => ChatStreamFailureClass.notSignedIn,
+        _ => ChatStreamFailureClass.server,
+      };
+
+  ProductFailure _productFailureFor(ChatStreamFailureClass failure) => switch (failure) {
+        ChatStreamFailureClass.offline => ProductFailure.network,
+        ChatStreamFailureClass.server => ProductFailure.server,
+        ChatStreamFailureClass.timeout => ProductFailure.timeout,
+        ChatStreamFailureClass.quota => ProductFailure.quota,
+        ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
+        ChatStreamFailureClass.unknown => ProductFailure.unknown,
+      };
+
+  void _logChatFailure(ChatStreamFailureClass failure, {required String stage, int? status}) {
+    Logger.warning('mobile_chat_failure class=${failure.name} stage=$stage status=$status');
   }
 
   /// Sends the user message behind the failed reply [message] again: the failed reply is removed

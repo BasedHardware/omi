@@ -12286,4 +12286,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get chatReplyOffline => 'Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.';
+
+  @override
+  String get chatReplyServerError => 'Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyTimeout => 'Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Bạn chưa đăng nhập. Đăng nhập và thử lại.';
+
+  @override
+  String get chatAppsLoadFailed => 'Không thể tải ứng dụng trò chuyện. Vui lòng thử lại.';
 }

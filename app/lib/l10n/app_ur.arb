@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "تقریباً {count} فی گھنٹہ",
     "diagnosticsLongestGap": "طویل ترین وقفہ",
     "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
-    "diagnosticsLastDuration": "پچھلے {duration}"
+    "diagnosticsLastDuration": "پچھلے {duration}",
+    "chatReplyOffline": "منسلک نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "chatReplyServerError": "ہماری طرف سے کچھ غلط ہوا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "chatReplyTimeout": "جواب میں بہت زیادہ وقت لگا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "chatReplyNotSignedIn": "آپ نے سائن ان نہیں کیا۔ سائن ان کریں اور دوبارہ کوشش کریں۔",
+    "chatAppsLoadFailed": "چیٹ ایپس لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
 }

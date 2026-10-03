@@ -3835,5 +3835,10 @@
     "diagnosticsDropsPerHour": "saatte yaklaşık {count}",
     "diagnosticsLongestGap": "En uzun kesinti",
     "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
-    "diagnosticsLastDuration": "Son {duration}"
+    "diagnosticsLastDuration": "Son {duration}",
+    "chatReplyOffline": "Bağlanılamıyor. Bağlantınızı kontrol edin ve yeniden deneyin.",
+    "chatReplyServerError": "Bizim tarafta bir sorun oluştu. Lütfen tekrar deneyin.",
+    "chatReplyTimeout": "Yanıt çok uzun sürdü. Lütfen tekrar deneyin.",
+    "chatReplyNotSignedIn": "Oturum açmadınız. Oturum açın ve tekrar deneyin.",
+    "chatAppsLoadFailed": "Sohbet uygulamaları yüklenemedi. Lütfen tekrar deneyin."
 }

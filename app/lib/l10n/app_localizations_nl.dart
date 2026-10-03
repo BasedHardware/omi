@@ -12327,4 +12327,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Laatste $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get chatReplyServerError => 'Er is iets misgegaan aan onze kant. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyTimeout => 'De reactie duurde te lang. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Je bent niet ingelogd. Log in en probeer het opnieuw.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-apps konden niet worden geladen. Probeer het opnieuw.';
 }

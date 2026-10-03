@@ -3800,5 +3800,10 @@
     "diagnosticsDropsPerHour": "aptuveni {count} stundā",
     "diagnosticsLongestGap": "Garākais pārtraukums",
     "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
-    "diagnosticsLastDuration": "Pēdējās {duration}"
+    "diagnosticsLastDuration": "Pēdējās {duration}",
+    "chatReplyOffline": "Nevar izveidot savienojumu. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
+    "chatReplyServerError": "Mūsu pusē kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.",
+    "chatReplyTimeout": "Atbilde aizņēma pārāk daudz laika. Lūdzu, mēģiniet vēlreiz.",
+    "chatReplyNotSignedIn": "Jūs neesat pierakstījies. Pierakstieties un mēģiniet vēlreiz.",
+    "chatAppsLoadFailed": "Neizdevās ielādēt tērzēšanas lietotnes. Lūdzu, mēģiniet vēlreiz."
 }

@@ -12361,4 +12361,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últims $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'No s\'ha pogut connectar. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get chatReplyServerError => 'Alguna cosa ha fallat per part nostra. Torna-ho a provar.';
+
+  @override
+  String get chatReplyTimeout => 'La resposta ha trigat massa. Torna-ho a provar.';
+
+  @override
+  String get chatReplyNotSignedIn => 'No has iniciat sessió. Inicia sessió i torna-ho a provar.';
+
+  @override
+  String get chatAppsLoadFailed => 'No s\'han pogut carregar les apps de xat. Torna-ho a provar.';
 }

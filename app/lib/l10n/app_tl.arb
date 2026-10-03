@@ -11357,5 +11357,10 @@
     "diagnosticsDropsPerHour": "mga {count} kada oras",
     "diagnosticsLongestGap": "Pinakamahabang puwang",
     "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
-    "diagnosticsLastDuration": "Nakaraang {duration}"
+    "diagnosticsLastDuration": "Nakaraang {duration}",
+    "chatReplyOffline": "Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.",
+    "chatReplyServerError": "May nangyaring mali sa aming panig. Subukan muli.",
+    "chatReplyTimeout": "Napakatagal ng sagot. Subukan muli.",
+    "chatReplyNotSignedIn": "Hindi ka naka-sign in. Mag-sign in at subukan muli.",
+    "chatAppsLoadFailed": "Hindi ma-load ang mga chat app. Subukan muli."
 }
