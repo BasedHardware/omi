@@ -12102,4 +12102,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '直近$duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => '集計が不完全な場合があります。';
 }

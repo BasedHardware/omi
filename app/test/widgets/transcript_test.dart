@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -48,7 +49,8 @@ void main() {
   testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
     await setupSharedPreferences();
     var loaded = <Person>[];
-    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final people =
+        PeopleProvider(loadPeople: () async => PeopleListResponse(people: loaded), renamePerson: (_, __) async => true);
     final segment = segmentFor('reactive', 2)..personId = 'later';
     await tester.pumpWidget(ChangeNotifierProvider.value(
         value: people,

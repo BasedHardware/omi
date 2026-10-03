@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "asi {count} za hodinu",
     "diagnosticsLongestGap": "Najdlhší výpadok",
     "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
-    "diagnosticsLastDuration": "Posledných {duration}"
+    "diagnosticsLastDuration": "Posledných {duration}",
+    "peopleStatsIncomplete": "Počty môžu byť neúplné."
 }

@@ -12371,4 +12371,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Τελευταία $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Οι μετρήσεις μπορεί να είναι ελλιπείς.';
 }

@@ -3835,5 +3835,6 @@
     "diagnosticsDropsPerHour": "cerca de {count} por hora",
     "diagnosticsLongestGap": "Maior intervalo",
     "diagnosticsSincePairingSummary": "Desde o emparelhamento: {drops} quedas, {failed} falhas de conexão.",
-    "diagnosticsLastDuration": "Últimos {duration}"
+    "diagnosticsLastDuration": "Últimos {duration}",
+    "peopleStatsIncomplete": "As contagens podem estar incompletas."
 }

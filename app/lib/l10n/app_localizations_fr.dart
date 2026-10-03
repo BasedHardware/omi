@@ -12393,4 +12393,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Dernières $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';
 }

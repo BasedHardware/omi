@@ -12291,4 +12291,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Siste $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Antallene kan være ufullstendige.';
 }

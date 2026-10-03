@@ -12296,4 +12296,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Senaste $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
 }

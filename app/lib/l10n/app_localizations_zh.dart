@@ -12081,4 +12081,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '最近 $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => '统计可能不完整。';
 }

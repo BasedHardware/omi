@@ -12327,4 +12327,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últimos $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Los recuentos pueden estar incompletos.';
 }

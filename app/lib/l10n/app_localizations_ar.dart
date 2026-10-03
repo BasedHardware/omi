@@ -12220,4 +12220,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'آخر $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
 }
