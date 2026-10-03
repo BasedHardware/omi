@@ -12308,6 +12308,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
 
   @override
+  String get previousDay => 'Önceki gün';
+
+  @override
+  String get nextDay => 'Sonraki gün';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date için görev yok';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
 
   @override

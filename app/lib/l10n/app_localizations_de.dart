@@ -12392,6 +12392,17 @@ class AppLocalizationsDe extends AppLocalizations {
   String get peopleStatsIncomplete => 'Die Angaben können unvollständig sein.';
 
   @override
+  String get previousDay => 'Vorheriger Tag';
+
+  @override
+  String get nextDay => 'Nächster Tag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Keine Aufgaben am $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Gespräch wird neu verarbeitet…';
 
   @override

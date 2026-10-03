@@ -12301,6 +12301,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
 
   @override
+  String get previousDay => 'Föregående dag';
+
+  @override
+  String get nextDay => 'Nästa dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Inga uppgifter $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Bearbetar samtalet igen…';
 
   @override

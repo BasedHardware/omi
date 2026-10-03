@@ -12324,6 +12324,17 @@ class AppLocalizationsUk extends AppLocalizations {
   String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
 
   @override
+  String get previousDay => 'Попередній день';
+
+  @override
+  String get nextDay => 'Наступний день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Немає завдань на $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Повторна обробка розмови…';
 
   @override

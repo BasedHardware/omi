@@ -14677,6 +14677,21 @@
         }
     },
     "peopleStatsIncomplete": "Counts may be incomplete.",
+    "previousDay": "Previous day",
+    "@previousDay": {
+        "description": "Day page navigation: go to the day before"
+    },
+    "nextDay": "Next day",
+    "@nextDay": {
+        "description": "Day page navigation: go to the day after"
+    },
+    "noTasksOnDate": "No tasks on {date}",
+    "@noTasksOnDate": {
+        "description": "Empty state on the single-day tasks page",
+        "placeholders": {
+            "date": {}
+        }
+    },
     "reprocessingConversationProgress": "Reprocessing conversation…",
     "@reprocessingConversationProgress": {
         "description": "Shown with a progress bar while the open conversation is reprocessed."

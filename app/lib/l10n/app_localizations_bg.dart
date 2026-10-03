@@ -12341,6 +12341,17 @@ class AppLocalizationsBg extends AppLocalizations {
   String get peopleStatsIncomplete => 'Бройките може да са непълни.';
 
   @override
+  String get previousDay => 'Предишен ден';
+
+  @override
+  String get nextDay => 'Следващ ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задачи на $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';
 
   @override

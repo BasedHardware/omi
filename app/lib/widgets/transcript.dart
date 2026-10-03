@@ -1039,10 +1039,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             const SizedBox(width: 4),
                             SpeakerLabelBadge(source: data.speakerLabelSource),
                           ],
-                          if (isTagging) ...[
-                            const SizedBox(width: 6),
-                            const OmiSpinner(size: OmiSpinnerSize.small),
-                          ],
+                          if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],
                       ),
                     ),
@@ -1228,14 +1225,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 const SizedBox(width: 8),
                 Text(
                   time,
-                  style:
-                      label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
+                  style: label.copyWith(
+                    fontWeight: FontWeight.w400,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ],
-              if (isTagging) ...[
-                const SizedBox(width: 6),
-                const OmiSpinner(size: OmiSpinnerSize.small),
-              ],
+              if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
             ],
           );
 
@@ -1289,10 +1285,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (startsTurn || isTagging) ...[
-            who,
-            const SizedBox(height: 3),
-          ],
+          if (startsTurn || isTagging) ...[who, const SizedBox(height: 3)],
           words,
           if (asksToConfirm)
             Padding(

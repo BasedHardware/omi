@@ -12376,6 +12376,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String get peopleStatsIncomplete => 'Οι μετρήσεις μπορεί να είναι ελλιπείς.';
 
   @override
+  String get previousDay => 'Προηγούμενη ημέρα';
+
+  @override
+  String get nextDay => 'Επόμενη ημέρα';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Δεν υπάρχουν εργασίες στις $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Γίνεται επανεπεξεργασία της συνομιλίας…';
 
   @override

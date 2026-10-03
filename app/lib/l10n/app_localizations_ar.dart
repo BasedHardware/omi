@@ -12225,6 +12225,17 @@ class AppLocalizationsAr extends AppLocalizations {
   String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
 
   @override
+  String get previousDay => 'اليوم السابق';
+
+  @override
+  String get nextDay => 'اليوم التالي';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'لا توجد مهام في $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';
 
   @override
