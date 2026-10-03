@@ -48,7 +48,7 @@ def get_import_job(job_id: str) -> Optional[Dict[str, Any]]:
 
 def get_import_jobs(uid: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Get all import jobs for a user, ordered by created_at descending."""
-    if not uid or not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         return []
     clamped_limit = max(1, min(int(limit), 1000))
     query = (

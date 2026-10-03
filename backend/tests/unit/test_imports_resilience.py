@@ -102,7 +102,7 @@ async def test_import_limitless_data_shields_storage_exceptions():
     mock_file.filename = 'export.zip'
     mock_file.read = AsyncMock(return_value=b'PK\x03\x04')
 
-    with patch('routers.imports.run_blocking') as mock_run_blocking, patch('os.makedirs'):
+    with patch('routers.imports.run_blocking', new_callable=AsyncMock) as mock_run_blocking, patch('os.makedirs'):
         mock_job = MagicMock()
         mock_job.id = 'job_999'
 

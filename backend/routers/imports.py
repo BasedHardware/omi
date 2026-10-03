@@ -28,21 +28,14 @@ TEMP_DIR = '_temp'
 
 
 def _validate_job_id(job_id: str) -> None:
-    if (
-        not job_id
-        or not isinstance(job_id, str)
-        or not job_id.strip()
-        or '/' in job_id
-        or '\\' in job_id
-        or '..' in job_id
-        or len(job_id) > 128
-    ):
+    if not job_id or not job_id.strip() or '/' in job_id or '\\' in job_id or '..' in job_id or len(job_id) > 128:
         raise HTTPException(status_code=400, detail="Invalid job ID format")
 
 
 def _sanitize_upload_filename(filename: str) -> str:
     """Sanitize client-supplied filename to prevent path traversal and arbitrary file write."""
-    base_name = os.path.basename(filename or '')
+    normalized = (filename or '').replace('\\', '/')
+    base_name = os.path.basename(normalized)
     safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', base_name)
     if not safe_name.lower().endswith('.zip') or safe_name in ('.zip', '..zip') or safe_name.startswith('.'):
         return 'upload.zip'
