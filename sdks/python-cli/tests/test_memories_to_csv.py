@@ -11,6 +11,7 @@ import csv
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 import unittest
 
@@ -153,6 +154,37 @@ class TestMemoriesToCsv(unittest.TestCase):
         undated = [{"id": "mem_none", "content": "Undated fact", "category": "other"}]
         rows = self._rows(m2c.memories_to_csv(undated))
         self.assertEqual(rows[0]["created_at"], "")
+
+    def test_leading_space_formula_is_guarded(self):
+        """A leading-space formula (e.g. ' =1+1') must still be neutralized.
+
+        Exercises sanitize_cell directly since fields like tags are not
+        stripped before sanitization (content is stripped upstream).
+        """
+        self.assertEqual(m2c.sanitize_cell(" =1+1"), "' =1+1")
+        self.assertEqual(m2c.sanitize_cell("\t+SUM(1,2)"), "'\t+SUM(1,2)")
+
+    def test_main_decodes_bom_prefixed_stdin(self):
+        """CLI entrypoint decodes BOM-prefixed UTF-8 stdin and exports CSV."""
+        from unittest import mock
+
+        payload = json.dumps([self.sample_memories[0]]).encode("utf-8")
+        bom_payload = b"\xef\xbb\xbf" + payload
+
+        fake_stdin = mock.Mock()
+        fake_stdin.buffer.read.return_value = bom_payload
+        captured = io.StringIO()
+
+        with mock.patch.object(sys, "argv", ["memories_to_csv.py", "-"]), \
+                mock.patch.object(sys, "stdin", fake_stdin), \
+                mock.patch.object(sys, "stdout", captured):
+            rc = m2c.main()
+
+        self.assertEqual(rc, 0)
+        rows = self._rows(captured.getvalue())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "mem_01_work")
+        self.assertIn("Prefers asynchronous", rows[0]["content"])
 
 
 if __name__ == "__main__":

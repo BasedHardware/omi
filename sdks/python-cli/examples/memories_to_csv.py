@@ -5,17 +5,25 @@ Complements memories_to_markdown.py with a tabular export for Excel, Google
 Sheets, Numbers, and pandas. stdlib-only (csv module); no third-party deps.
 
 Usage:
-    # Pipe directly from omi CLI to stdout
-    omi --json memory list | python memories_to_csv.py -
+    # Pipe directly from omi CLI to stdout (with an explicit page limit)
+    omi --json memory list --limit 100 | python memories_to_csv.py -
 
     # Export to a specific CSV file
-    omi --json memory list | python memories_to_csv.py - --output memories.csv
+    omi --json memory list --limit 100 | python memories_to_csv.py - --output memories.csv
+
+    # Larger accounts: page through memories with --offset, then concatenate
+    omi --json memory list --limit 100 --offset 0 | python memories_to_csv.py - --output page0.csv
+    omi --json memory list --limit 100 --offset 100 | python memories_to_csv.py - --output page1.csv
 
     # Export a saved JSON export
     python memories_to_csv.py memories.json --output memories.csv
 
     # Filter specific categories and visibility
-    omi --json memory list | python memories_to_csv.py - --category work,learnings --visibility private
+    omi --json memory list --limit 100 | python memories_to_csv.py - --category work,learnings --visibility private
+
+Note: ``omi memory list`` returns only its default page (25 items) unless you
+pass ``--limit``. Use ``--limit`` together with ``--offset`` to page through
+larger accounts so older memories are not silently omitted.
 
 Security: spreadsheet cells that would begin with ``=``, ``+``, ``-``, ``@``,
 or a tab/CR are prefixed with a single quote (``'``) so that opening the file
@@ -36,7 +44,9 @@ from typing import Any, Dict, List, Optional
 COLUMNS = ["id", "content", "category", "visibility", "tags", "created_at"]
 
 # Characters that can turn a spreadsheet cell into a formula / command.
-_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+# Line feed is included because some spreadsheet applications treat a leading
+# newline as the start of a formula context.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
@@ -55,8 +65,13 @@ def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
 
 
 def sanitize_cell(value: str) -> str:
-    """Neutralize spreadsheet formula injection for a single cell."""
-    if value.startswith(_FORMULA_LEAD):
+    """Neutralize spreadsheet formula injection for a single cell.
+
+    Leading whitespace is stripped before testing so values such as
+    ``" =1+1"`` are still guarded instead of slipping through as an
+    executable formula.
+    """
+    if value.lstrip(" \t\r\n").startswith(_FORMULA_LEAD):
         return "'" + value
     return value
 
