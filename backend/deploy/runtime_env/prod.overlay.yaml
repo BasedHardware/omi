@@ -10,6 +10,9 @@ overlay:
       env:
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -187,6 +190,9 @@ overlay:
       env:
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -361,6 +367,9 @@ overlay:
         env:
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
           FIREBASE_SIGNER_SERVICE_ACCOUNT:

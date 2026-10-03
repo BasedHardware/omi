@@ -42,6 +42,7 @@ AUDIT_KEYS = {
     'model',
     'question_version',
     'mode',
+    'flattened_ancestor_count',
 }
 GATE = ('legal_hold_deletion_gates', UID)
 MARKER = ('account_deletions', UID)
@@ -175,7 +176,7 @@ def test_no_audit_and_no_gate_read_when_the_pair_is_skipped_or_rejected(world, r
     world.add('n', 71, 10)  # gap outside the window: never reaches Jev
     assert world.finish('n') is False
     result = smart_merge_db.absorb_conversation(
-        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None)
+        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None, {})
     )
     assert result.outcome == 'rejected' and result.audit == 'none'
     assert GATE not in [path for _, path in reads]
