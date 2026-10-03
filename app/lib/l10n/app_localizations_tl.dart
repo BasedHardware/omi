@@ -12348,4 +12348,20 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Hintaying matapos ang muling pagproseso.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Speaker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Hindi pinaghihiwalay ang mga speaker sa iba\'t ibang recording.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tungkol sa mga Label ng Speaker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.';
+
+  @override
+  String get nameSpeakerTitle => 'Pangalanan ang Speaker';
 }

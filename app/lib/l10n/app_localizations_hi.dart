@@ -12226,4 +12226,20 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'दोबारा प्रोसेसिंग पूरी होने तक प्रतीक्षा करें।';
+
+  @override
+  String get unnamedSpeakerLabel => 'स्पीकर';
+
+  @override
+  String get unresolvedSpeakersNotice => 'रिकॉर्डिंग में वक्ताओं को अलग नहीं किया गया है।';
+
+  @override
+  String get unresolvedSpeakersTitle => 'स्पीकर लेबल के बारे में';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi रिकॉर्डिंग में अन्य आवाज़ों को अलग नहीं कर सका। कौन बोल रहा है, यह नाम देने के लिए किसी स्पीकर लेबल पर टैप करें।';
+
+  @override
+  String get nameSpeakerTitle => 'वक्ता का नाम दें';
 }

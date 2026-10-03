@@ -144,10 +144,13 @@ Future<void> showNameSpeakerSheet(
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
   Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
+  bool unresolvedSpeakers = false,
 }) {
   return showOmiSheet<void>(
     context: context,
-    title: context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
+    title: unresolvedSpeakers
+        ? context.l10n.nameSpeakerTitle
+        : context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
     builder: (_) => NameSpeakerBottomSheet(
       speakerId: speakerId,
       segmentId: segmentId,

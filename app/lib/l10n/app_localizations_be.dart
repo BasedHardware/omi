@@ -12276,4 +12276,20 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Пачакайце, пакуль скончыцца паўторная апрацоўка.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Дыктар';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Спікары не падзелены паміж запісамі.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Пра пазнакі спікераў';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.';
+
+  @override
+  String get nameSpeakerTitle => 'Назваць дыктара';
 }

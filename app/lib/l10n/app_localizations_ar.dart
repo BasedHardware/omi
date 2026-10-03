@@ -12171,4 +12171,20 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'انتظر حتى تنتهي إعادة المعالجة.';
+
+  @override
+  String get unnamedSpeakerLabel => 'المتحدث';
+
+  @override
+  String get unresolvedSpeakersNotice => 'لا يتم الفصل بين المتحدثين عبر التسجيلات.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'حول تسميات المتحدثين';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.';
+
+  @override
+  String get nameSpeakerTitle => 'تسمية المتحدث';
 }

@@ -21926,6 +21926,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Wait for reprocessing to finish.'**
   String get waitForReprocessing;
+
+  /// Neutral label for an unnamed voice when cross-recording speaker resolution is unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker'**
+  String get unnamedSpeakerLabel;
+
+  /// Quiet line under the transcript heading explaining that voices could not be separated across recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Speakers aren\'t separated across recordings.'**
+  String get unresolvedSpeakersNotice;
+
+  /// Title of the sheet explaining unresolved speaker labels
+  ///
+  /// In en, this message translates to:
+  /// **'About Speaker Labels'**
+  String get unresolvedSpeakersTitle;
+
+  /// Body of the About Speaker Labels sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.'**
+  String get unresolvedSpeakersMessage;
+
+  /// Title of the name-speaker sheet when the speaker has no resolvable number
+  ///
+  /// In en, this message translates to:
+  /// **'Name Speaker'**
+  String get nameSpeakerTitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -12298,4 +12298,20 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Așteaptă finalizarea reprocesării.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Vorbitor';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Vocile nu sunt separate între înregistrări.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Despre etichetele vorbitorilor';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.';
+
+  @override
+  String get nameSpeakerTitle => 'Denumiți vorbitorul';
 }

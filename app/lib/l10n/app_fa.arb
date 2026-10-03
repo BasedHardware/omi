@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "بارگیری متن ممکن نشد.",
     "processingConversationProgress": "در حال پردازش گفتگو…",
     "conversationProcessingFailedMessage": "پردازش این گفتگو ممکن نشد.",
-    "waitForReprocessing": "صبر کنید تا پردازش دوباره تمام شود."
+    "waitForReprocessing": "صبر کنید تا پردازش دوباره تمام شود.",
+    "unnamedSpeakerLabel": "سخنران",
+    "unresolvedSpeakersNotice": "گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.",
+    "unresolvedSpeakersTitle": "درباره برچسب‌های گوینده",
+    "unresolvedSpeakersMessage": "Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.",
+    "nameSpeakerTitle": "نام‌گذاری گوینده"
 }

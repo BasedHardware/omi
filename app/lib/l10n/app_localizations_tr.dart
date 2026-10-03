@@ -12256,4 +12256,20 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Yeniden işlemenin bitmesini bekleyin.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Konuşmacı';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Konuşmacılar kayıtlar arasında ayrıştırılamadı.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Konuşmacı Etiketleri Hakkında';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.';
+
+  @override
+  String get nameSpeakerTitle => 'Konuşmacıyı Adlandır';
 }

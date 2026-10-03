@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Kan het transcript niet laden.",
     "processingConversationProgress": "Gesprek wordt verwerkt…",
     "conversationProcessingFailedMessage": "Dit gesprek kon niet worden verwerkt.",
-    "waitForReprocessing": "Wacht tot het opnieuw verwerken klaar is."
+    "waitForReprocessing": "Wacht tot het opnieuw verwerken klaar is.",
+    "unnamedSpeakerLabel": "Spreker",
+    "unresolvedSpeakersNotice": "Sprekers zijn niet gescheiden over opnames heen.",
+    "unresolvedSpeakersTitle": "Over sprekerlabels",
+    "unresolvedSpeakersMessage": "Omi kon de andere stemmen niet uit elkaar houden over opnames heen. Tik op een sprekerlabel om te benoemen wie er spreekt.",
+    "nameSpeakerTitle": "Spreker benoemen"
 }

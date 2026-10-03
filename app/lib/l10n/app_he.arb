@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "לא ניתן לטעון את התמליל.",
     "processingConversationProgress": "מעבד את השיחה…",
     "conversationProcessingFailedMessage": "לא ניתן היה לעבד את השיחה הזו.",
-    "waitForReprocessing": "המתן לסיום העיבוד מחדש."
+    "waitForReprocessing": "המתן לסיום העיבוד מחדש.",
+    "unnamedSpeakerLabel": "דובר",
+    "unresolvedSpeakersNotice": "הדוברים אינם מופרדים בין ההקלטות.",
+    "unresolvedSpeakersTitle": "על תוויות הדוברים",
+    "unresolvedSpeakersMessage": "Omi לא הצליח להבדיל בין הקולות האחרים בין ההקלטות. הקשו על תווית דובר כדי לתת שם למי שמדבר.",
+    "nameSpeakerTitle": "תן שם לדובר"
 }

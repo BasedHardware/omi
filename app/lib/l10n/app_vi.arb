@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Không thể tải bản ghi.",
     "processingConversationProgress": "Đang xử lý cuộc trò chuyện…",
     "conversationProcessingFailedMessage": "Không thể xử lý cuộc trò chuyện này.",
-    "waitForReprocessing": "Hãy đợi quá trình xử lý lại hoàn tất."
+    "waitForReprocessing": "Hãy đợi quá trình xử lý lại hoàn tất.",
+    "unnamedSpeakerLabel": "Người nói",
+    "unresolvedSpeakersNotice": "Người nói không được tách ra giữa các bản ghi.",
+    "unresolvedSpeakersTitle": "Giới thiệu về nhãn người nói",
+    "unresolvedSpeakersMessage": "Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.",
+    "nameSpeakerTitle": "Đặt tên người nói"
 }

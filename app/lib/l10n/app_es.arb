@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "No se pudo cargar la transcripción.",
     "processingConversationProgress": "Procesando la conversación…",
     "conversationProcessingFailedMessage": "No se pudo procesar esta conversación.",
-    "waitForReprocessing": "Espera a que termine el reprocesamiento."
+    "waitForReprocessing": "Espera a que termine el reprocesamiento.",
+    "unnamedSpeakerLabel": "Hablante",
+    "unresolvedSpeakersNotice": "Las voces no están separadas entre grabaciones.",
+    "unresolvedSpeakersTitle": "Acerca de las etiquetas de hablante",
+    "unresolvedSpeakersMessage": "Omi no pudo distinguir las demás voces entre las grabaciones. Toca una etiqueta de hablante para nombrar a quién habla.",
+    "nameSpeakerTitle": "Nombrar hablante"
 }

@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Litterointia ei voitu ladata.",
     "processingConversationProgress": "Keskustelua käsitellään…",
     "conversationProcessingFailedMessage": "Tätä keskustelua ei voitu käsitellä.",
-    "waitForReprocessing": "Odota, kunnes uudelleenkäsittely on valmis."
+    "waitForReprocessing": "Odota, kunnes uudelleenkäsittely on valmis.",
+    "unnamedSpeakerLabel": "Puhuja",
+    "unresolvedSpeakersNotice": "Puhujia ei ole eroteltu äänitteiden välillä.",
+    "unresolvedSpeakersTitle": "Tietoa puhujamerkinnöistä",
+    "unresolvedSpeakersMessage": "Omi ei pystynyt erottamaan muita ääniä äänitteiden välillä. Napauta puhujamerkintää nimetäksesi, kuka puhuu.",
+    "nameSpeakerTitle": "Nimeä puhuja"
 }

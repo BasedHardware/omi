@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Neizdevās ielādēt transkripciju.",
     "processingConversationProgress": "Saruna tiek apstrādāta…",
     "conversationProcessingFailedMessage": "Šo sarunu neizdevās apstrādāt.",
-    "waitForReprocessing": "Uzgaidiet, līdz atkārtotā apstrāde beigsies."
+    "waitForReprocessing": "Uzgaidiet, līdz atkārtotā apstrāde beigsies.",
+    "unnamedSpeakerLabel": "Runātājs",
+    "unresolvedSpeakersNotice": "Runātāji nav atdalīti starp ierakstiem.",
+    "unresolvedSpeakersTitle": "Par runātāju etiķetēm",
+    "unresolvedSpeakersMessage": "Omi nevarēja atšķirt pārējās balsis starp ierakstiem. Pieskarieties runātāja etiķetei, lai nosauktu, kas runā.",
+    "nameSpeakerTitle": "Nosaukt runātāju"
 }

@@ -12252,4 +12252,20 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Vänta tills bearbetningen är klar.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Talare';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Talarna är inte separerade mellan inspelningar.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Om talarmarkeringar';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kunde inte skilja de andra rösterna åt mellan inspelningarna. Tryck på en talarmarkering för att namnge vem som talar.';
+
+  @override
+  String get nameSpeakerTitle => 'Namnge talare';
 }

@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Transcrierea nu a putut fi încărcată.",
     "processingConversationProgress": "Se procesează conversația…",
     "conversationProcessingFailedMessage": "Această conversație nu a putut fi procesată.",
-    "waitForReprocessing": "Așteaptă finalizarea reprocesării."
+    "waitForReprocessing": "Așteaptă finalizarea reprocesării.",
+    "unnamedSpeakerLabel": "Vorbitor",
+    "unresolvedSpeakersNotice": "Vocile nu sunt separate între înregistrări.",
+    "unresolvedSpeakersTitle": "Despre etichetele vorbitorilor",
+    "unresolvedSpeakersMessage": "Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.",
+    "nameSpeakerTitle": "Denumiți vorbitorul"
 }

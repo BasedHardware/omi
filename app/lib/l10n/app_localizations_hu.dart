@@ -12290,4 +12290,20 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Várd meg, amíg az újrafeldolgozás befejeződik.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Beszélő';
+
+  @override
+  String get unresolvedSpeakersNotice => 'A beszélők nincsenek elkülönítve a felvételek között.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'A beszélőcímkékről';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nem tudta elkülöníteni a többi hangot a felvételek között. Koppintson egy beszélőcímkére, hogy megnevezze, ki beszél.';
+
+  @override
+  String get nameSpeakerTitle => 'Beszélő elnevezése';
 }

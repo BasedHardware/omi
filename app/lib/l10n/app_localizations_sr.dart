@@ -12259,4 +12259,20 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Сачекајте да се поновна обрада заврши.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Говорник';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Говорници нису одвојени кроз снимке.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'О ознакама говорника';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi није могао да разликује остале гласове кроз снимке. Додирните ознаку говорника да именујете ко говори.';
+
+  @override
+  String get nameSpeakerTitle => 'Именуј говорника';
 }

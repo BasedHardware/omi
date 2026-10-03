@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Не вдалося завантажити транскрипцію.",
     "processingConversationProgress": "Обробка розмови…",
     "conversationProcessingFailedMessage": "Не вдалося обробити цю розмову.",
-    "waitForReprocessing": "Зачекайте, доки завершиться повторна обробка."
+    "waitForReprocessing": "Зачекайте, доки завершиться повторна обробка.",
+    "unnamedSpeakerLabel": "Доповідач",
+    "unresolvedSpeakersNotice": "Голоси не розділені між записами.",
+    "unresolvedSpeakersTitle": "Про мітки спікерів",
+    "unresolvedSpeakersMessage": "Omi не змогла розрізнити інші голоси між записами. Торкніться мітки спікера, щоб назвати, хто говорить.",
+    "nameSpeakerTitle": "Назвати спікера"
 }

@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.",
     "processingConversationProgress": "உரையாடல் செயலாக்கப்படுகிறது…",
     "conversationProcessingFailedMessage": "இந்த உரையாடலைச் செயலாக்க முடியவில்லை.",
-    "waitForReprocessing": "மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்."
+    "waitForReprocessing": "மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.",
+    "unnamedSpeakerLabel": "பேச்சாளர்",
+    "unresolvedSpeakersNotice": "பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.",
+    "unresolvedSpeakersTitle": "பேச்சாளர் லேபிள்கள் பற்றி",
+    "unresolvedSpeakersMessage": "பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.",
+    "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்"
 }

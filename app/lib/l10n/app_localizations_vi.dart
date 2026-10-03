@@ -12237,4 +12237,20 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Hãy đợi quá trình xử lý lại hoàn tất.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Người nói';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Người nói không được tách ra giữa các bản ghi.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Giới thiệu về nhãn người nói';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.';
+
+  @override
+  String get nameSpeakerTitle => 'Đặt tên người nói';
 }

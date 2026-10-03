@@ -12237,4 +12237,20 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Počkajte na dokončenie opätovného spracovania.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Hovorca';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Rečníci nie sú oddelení naprieč nahrávkami.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O popiskoch rečníkov';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.';
+
+  @override
+  String get nameSpeakerTitle => 'Pomenovať rečníka';
 }

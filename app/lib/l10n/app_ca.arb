@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "No s'ha pogut carregar la transcripció.",
     "processingConversationProgress": "S'està processant la conversa…",
     "conversationProcessingFailedMessage": "No s'ha pogut processar aquesta conversa.",
-    "waitForReprocessing": "Espera que acabi el reprocessament."
+    "waitForReprocessing": "Espera que acabi el reprocessament.",
+    "unnamedSpeakerLabel": "Parlant",
+    "unresolvedSpeakersNotice": "Les veus no estan separades entre enregistraments.",
+    "unresolvedSpeakersTitle": "Quant a les etiquetes de parlant",
+    "unresolvedSpeakersMessage": "Omi no ha pogut distingir les altres veus entre els enregistraments. Toca una etiqueta de parlant per posar nom a qui parla.",
+    "nameSpeakerTitle": "Anomena el parlant"
 }

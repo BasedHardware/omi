@@ -3824,5 +3824,10 @@
     "transcriptLoadFailed": "Не удалось загрузить расшифровку.",
     "processingConversationProgress": "Обработка разговора…",
     "conversationProcessingFailedMessage": "Не удалось обработать этот разговор.",
-    "waitForReprocessing": "Дождитесь окончания повторной обработки."
+    "waitForReprocessing": "Дождитесь окончания повторной обработки.",
+    "unnamedSpeakerLabel": "Докладчик",
+    "unresolvedSpeakersNotice": "Голоса не разделены между записями.",
+    "unresolvedSpeakersTitle": "О метках говорящих",
+    "unresolvedSpeakersMessage": "Omi не смогла различить остальные голоса в записях. Коснитесь метки говорящего, чтобы назвать, кто говорит.",
+    "nameSpeakerTitle": "Назвать говорящего"
 }

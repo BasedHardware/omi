@@ -12270,4 +12270,20 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Uzgaidiet, līdz atkārtotā apstrāde beigsies.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Runātājs';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Runātāji nav atdalīti starp ierakstiem.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Par runātāju etiķetēm';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nevarēja atšķirt pārējās balsis starp ierakstiem. Pieskarieties runātāja etiķetei, lai nosauktu, kas runā.';
+
+  @override
+  String get nameSpeakerTitle => 'Nosaukt runātāju';
 }

@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Transkriptsiooni ei õnnestunud laadida.",
     "processingConversationProgress": "Vestlust töödeldakse…",
     "conversationProcessingFailedMessage": "Seda vestlust ei õnnestunud töödelda.",
-    "waitForReprocessing": "Oota, kuni uuesti töötlemine lõpeb."
+    "waitForReprocessing": "Oota, kuni uuesti töötlemine lõpeb.",
+    "unnamedSpeakerLabel": "Kõneleja",
+    "unresolvedSpeakersNotice": "Kõnelejaid ei ole salvestuste vahel eraldatud.",
+    "unresolvedSpeakersTitle": "Kõnelejate siltidest",
+    "unresolvedSpeakersMessage": "Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.",
+    "nameSpeakerTitle": "Nimeta kõneleja"
 }

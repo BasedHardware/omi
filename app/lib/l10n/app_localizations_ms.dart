@@ -12277,4 +12277,20 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Tunggu sehingga pemprosesan semula selesai.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Penceramah';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Pembicara tidak dipisahkan merentasi rakaman.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Perihal Label Pembicara';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi tidak dapat membezakan suara lain merentasi rakaman. Ketik label pembicara untuk menamakan siapa yang bercakap.';
+
+  @override
+  String get nameSpeakerTitle => 'Namakan Pembicara';
 }

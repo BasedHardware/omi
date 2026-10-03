@@ -3824,5 +3824,10 @@
     "transcriptLoadFailed": "Não foi possível carregar a transcrição.",
     "processingConversationProgress": "Processando a conversa…",
     "conversationProcessingFailedMessage": "Não foi possível processar esta conversa.",
-    "waitForReprocessing": "Aguarde o fim do reprocessamento."
+    "waitForReprocessing": "Aguarde o fim do reprocessamento.",
+    "unnamedSpeakerLabel": "Palestrante",
+    "unresolvedSpeakersNotice": "As vozes não estão separadas entre as gravações.",
+    "unresolvedSpeakersTitle": "Sobre as etiquetas de falante",
+    "unresolvedSpeakersMessage": "Omi não conseguiu distinguir as outras vozes entre as gravações. Toque numa etiqueta de falante para nomear quem está a falar.",
+    "nameSpeakerTitle": "Nomear falante"
 }

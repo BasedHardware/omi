@@ -12295,4 +12295,20 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి.';
+
+  @override
+  String get unnamedSpeakerLabel => 'స్పీకర్';
+
+  @override
+  String get unresolvedSpeakersNotice => 'రికార్డింగ్‌లలో స్పీకర్లు వేరుచేయబడలేదు.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'స్పీకర్ లేబుల్స్ గురించి';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'రికార్డింగ్‌లలో ఇతర స్వరాలను Omi వేరుచేయలేకపోయింది. ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి స్పీకర్ లేబుల్‌ను నొక్కండి.';
+
+  @override
+  String get nameSpeakerTitle => 'స్పీకర్‌కు పేరు పెట్టండి';
 }

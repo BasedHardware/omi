@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "Prepisa ni bilo mogoče naložiti.",
     "processingConversationProgress": "Obdelava pogovora…",
     "conversationProcessingFailedMessage": "Tega pogovora ni bilo mogoče obdelati.",
-    "waitForReprocessing": "Počakajte, da se ponovna obdelava konča."
+    "waitForReprocessing": "Počakajte, da se ponovna obdelava konča.",
+    "unnamedSpeakerLabel": "Govorec",
+    "unresolvedSpeakersNotice": "Govorci niso ločeni med posnetki.",
+    "unresolvedSpeakersTitle": "O oznakah govorcev",
+    "unresolvedSpeakersMessage": "Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.",
+    "nameSpeakerTitle": "Poimenujte govorca"
 }

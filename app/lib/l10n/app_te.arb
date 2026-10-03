@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "ట్రాన్స్‌క్రిప్ట్‌ను లోడ్ చేయలేకపోయాం.",
     "processingConversationProgress": "సంభాషణను ప్రాసెస్ చేస్తోంది…",
     "conversationProcessingFailedMessage": "ఈ సంభాషణను ప్రాసెస్ చేయలేకపోయాం.",
-    "waitForReprocessing": "మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి."
+    "waitForReprocessing": "మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి.",
+    "unnamedSpeakerLabel": "స్పీకర్",
+    "unresolvedSpeakersNotice": "రికార్డింగ్‌లలో స్పీకర్లు వేరుచేయబడలేదు.",
+    "unresolvedSpeakersTitle": "స్పీకర్ లేబుల్స్ గురించి",
+    "unresolvedSpeakersMessage": "రికార్డింగ్‌లలో ఇతర స్వరాలను Omi వేరుచేయలేకపోయింది. ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి స్పీకర్ లేబుల్‌ను నొక్కండి.",
+    "nameSpeakerTitle": "స్పీకర్‌కు పేరు పెట్టండి"
 }

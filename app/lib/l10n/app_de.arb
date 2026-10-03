@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Das Transkript konnte nicht geladen werden.",
     "processingConversationProgress": "Gespräch wird verarbeitet…",
     "conversationProcessingFailedMessage": "Dieses Gespräch konnte nicht verarbeitet werden.",
-    "waitForReprocessing": "Warte, bis die Neuverarbeitung abgeschlossen ist."
+    "waitForReprocessing": "Warte, bis die Neuverarbeitung abgeschlossen ist.",
+    "unnamedSpeakerLabel": "Sprecher",
+    "unresolvedSpeakersNotice": "Sprecher werden nicht aufnahmeübergreifend getrennt.",
+    "unresolvedSpeakersTitle": "Über Sprecher-Bezeichnungen",
+    "unresolvedSpeakersMessage": "Omi konnte die anderen Stimmen aufnahmeübergreifend nicht unterscheiden. Tippe auf eine Sprecher-Bezeichnung, um zu benennen, wer spricht.",
+    "nameSpeakerTitle": "Sprecher benennen"
 }

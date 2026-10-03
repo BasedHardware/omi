@@ -3824,5 +3824,10 @@
     "transcriptLoadFailed": "Impossible de charger la transcription.",
     "processingConversationProgress": "Traitement de la conversation…",
     "conversationProcessingFailedMessage": "Impossible de traiter cette conversation.",
-    "waitForReprocessing": "Attendez la fin du retraitement."
+    "waitForReprocessing": "Attendez la fin du retraitement.",
+    "unnamedSpeakerLabel": "Locuteur",
+    "unresolvedSpeakersNotice": "Les locuteurs ne sont pas séparés d'un enregistrement à l'autre.",
+    "unresolvedSpeakersTitle": "À propos des étiquettes de locuteur",
+    "unresolvedSpeakersMessage": "Omi n'a pas pu distinguer les autres voix d'un enregistrement à l'autre. Touchez une étiquette de locuteur pour nommer qui parle.",
+    "nameSpeakerTitle": "Nommer le locuteur"
 }

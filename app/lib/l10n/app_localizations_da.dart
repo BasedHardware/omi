@@ -12230,4 +12230,20 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Vent, til genbehandlingen er færdig.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Taler';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Talerne er ikke adskilt på tværs af optagelser.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Om taler-mærker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kunne ikke skelne de andre stemmer på tværs af optagelserne. Tryk på et taler-mærke for at navngive, hvem der taler.';
+
+  @override
+  String get nameSpeakerTitle => 'Navngiv taler';
 }

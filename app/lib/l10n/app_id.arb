@@ -3824,5 +3824,10 @@
     "transcriptLoadFailed": "Tidak dapat memuat transkrip.",
     "processingConversationProgress": "Memproses percakapan…",
     "conversationProcessingFailedMessage": "Percakapan ini tidak dapat diproses.",
-    "waitForReprocessing": "Tunggu hingga pemrosesan ulang selesai."
+    "waitForReprocessing": "Tunggu hingga pemrosesan ulang selesai.",
+    "unnamedSpeakerLabel": "Pembicara",
+    "unresolvedSpeakersNotice": "Pembicara tidak dipisahkan di seluruh rekaman.",
+    "unresolvedSpeakersTitle": "Tentang Label Pembicara",
+    "unresolvedSpeakersMessage": "Omi tidak dapat membedakan suara lain di seluruh rekaman. Ketuk label pembicara untuk menamai siapa yang berbicara.",
+    "nameSpeakerTitle": "Beri Nama Pembicara"
 }

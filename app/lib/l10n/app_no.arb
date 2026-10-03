@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Kunne ikke laste transkripsjonen.",
     "processingConversationProgress": "Behandler samtalen…",
     "conversationProcessingFailedMessage": "Denne samtalen kunne ikke behandles.",
-    "waitForReprocessing": "Vent til den nye behandlingen er ferdig."
+    "waitForReprocessing": "Vent til den nye behandlingen er ferdig.",
+    "unnamedSpeakerLabel": "Taler",
+    "unresolvedSpeakersNotice": "Talerne er ikke adskilt på tvers av opptak.",
+    "unresolvedSpeakersTitle": "Om taleretiketter",
+    "unresolvedSpeakersMessage": "Omi klarte ikke å skille de andre stemmene på tvers av opptakene. Trykk på en taleretikett for å navngi hvem som snakker.",
+    "nameSpeakerTitle": "Navngi taler"
 }

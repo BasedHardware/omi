@@ -12346,4 +12346,20 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Attendez la fin du retraitement.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Locuteur';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Les locuteurs ne sont pas séparés d\'un enregistrement à l\'autre.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'À propos des étiquettes de locuteur';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi n\'a pas pu distinguer les autres voix d\'un enregistrement à l\'autre. Touchez une étiquette de locuteur pour nommer qui parle.';
+
+  @override
+  String get nameSpeakerTitle => 'Nommer le locuteur';
 }

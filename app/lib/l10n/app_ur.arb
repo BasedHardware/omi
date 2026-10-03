@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "ٹرانسکرپٹ لوڈ نہیں ہو سکی۔",
     "processingConversationProgress": "گفتگو پروسیس ہو رہی ہے…",
     "conversationProcessingFailedMessage": "اس گفتگو کو پروسیس نہیں کیا جا سکا۔",
-    "waitForReprocessing": "دوبارہ پروسیسنگ مکمل ہونے کا انتظار کریں۔"
+    "waitForReprocessing": "دوبارہ پروسیسنگ مکمل ہونے کا انتظار کریں۔",
+    "unnamedSpeakerLabel": "مقرر",
+    "unresolvedSpeakersNotice": "مقررین ریکارڈنگز میں الگ نہیں کیے گئے۔",
+    "unresolvedSpeakersTitle": "مقرر لیبلز کے بارے میں",
+    "unresolvedSpeakersMessage": "Omi ریکارڈنگز میں دوسری آوازوں کو الگ نہیں کر سکا۔ کون بات کر رہا ہے اسے نام دینے کے لیے اسپیکر لیبل پر ٹیپ کریں۔",
+    "nameSpeakerTitle": "مقرر کا نام رکھیں"
 }

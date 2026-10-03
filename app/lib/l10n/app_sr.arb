@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "Учитавање транскрипта није успело.",
     "processingConversationProgress": "Обрада разговора…",
     "conversationProcessingFailedMessage": "Овај разговор није могао да се обради.",
-    "waitForReprocessing": "Сачекајте да се поновна обрада заврши."
+    "waitForReprocessing": "Сачекајте да се поновна обрада заврши.",
+    "unnamedSpeakerLabel": "Говорник",
+    "unresolvedSpeakersNotice": "Говорници нису одвојени кроз снимке.",
+    "unresolvedSpeakersTitle": "О ознакама говорника",
+    "unresolvedSpeakersMessage": "Omi није могао да разликује остале гласове кроз снимке. Додирните ознаку говорника да именујете ко говори.",
+    "nameSpeakerTitle": "Именуј говорника"
 }

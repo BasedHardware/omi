@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Δεν ήταν δυνατή η φόρτωση της απομαγνητοφώνησης.",
     "processingConversationProgress": "Επεξεργασία συνομιλίας…",
     "conversationProcessingFailedMessage": "Δεν ήταν δυνατή η επεξεργασία αυτής της συνομιλίας.",
-    "waitForReprocessing": "Περιμένετε να ολοκληρωθεί η επανεπεξεργασία."
+    "waitForReprocessing": "Περιμένετε να ολοκληρωθεί η επανεπεξεργασία.",
+    "unnamedSpeakerLabel": "Ομιλητής",
+    "unresolvedSpeakersNotice": "Οι ομιλητές δεν διαχωρίζονται μεταξύ ηχογραφήσεων.",
+    "unresolvedSpeakersTitle": "Σχετικά με τις ετικέτες ομιλητών",
+    "unresolvedSpeakersMessage": "Το Omi δεν μπόρεσε να διακρίνει τις άλλες φωνές μεταξύ των ηχογραφήσεων. Πατήστε μια ετικέτα ομιλητή για να ονομάσετε ποιος μιλάει.",
+    "nameSpeakerTitle": "Ονομασία ομιλητή"
 }

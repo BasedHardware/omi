@@ -14603,5 +14603,25 @@
     "waitForReprocessing": "Wait for reprocessing to finish.",
     "@waitForReprocessing": {
         "description": "Toast when the reader tries to edit the transcript or a speaker while the conversation is being reprocessed."
+    },
+    "unnamedSpeakerLabel": "Speaker",
+    "@unnamedSpeakerLabel": {
+        "description": "Neutral label for an unnamed voice when cross-recording speaker resolution is unavailable"
+    },
+    "unresolvedSpeakersNotice": "Speakers aren't separated across recordings.",
+    "@unresolvedSpeakersNotice": {
+        "description": "Quiet line under the transcript heading explaining that voices could not be separated across recordings"
+    },
+    "unresolvedSpeakersTitle": "About Speaker Labels",
+    "@unresolvedSpeakersTitle": {
+        "description": "Title of the sheet explaining unresolved speaker labels"
+    },
+    "unresolvedSpeakersMessage": "Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.",
+    "@unresolvedSpeakersMessage": {
+        "description": "Body of the About Speaker Labels sheet"
+    },
+    "nameSpeakerTitle": "Name Speaker",
+    "@nameSpeakerTitle": {
+        "description": "Title of the name-speaker sheet when the speaker has no resolvable number"
     }
 }

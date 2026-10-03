@@ -12243,4 +12243,20 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'পুনরায় প্রক্রিয়াকরণ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।';
+
+  @override
+  String get unnamedSpeakerLabel => 'স্পিকার';
+
+  @override
+  String get unresolvedSpeakersNotice => 'রেকর্ডিং জুড়ে স্পিকাররা আলাদা করা হয়নি।';
+
+  @override
+  String get unresolvedSpeakersTitle => 'স্পিকার লেবেল সম্পর্কে';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'রেকর্ডিং জুড়ে Omi অন্য কণ্ঠস্বরগুলো আলাদা করতে পারেনি। কে কথা বলছে তা নাম দিতে স্পিকার লেবেলে ট্যাপ করুন।';
+
+  @override
+  String get nameSpeakerTitle => 'স্পিকারের নাম দিন';
 }

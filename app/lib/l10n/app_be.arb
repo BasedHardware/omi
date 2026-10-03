@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "Не ўдалося загрузіць транскрыпцыю.",
     "processingConversationProgress": "Апрацоўка размовы…",
     "conversationProcessingFailedMessage": "Не ўдалося апрацаваць гэту размову.",
-    "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка."
+    "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка.",
+    "unnamedSpeakerLabel": "Дыктар",
+    "unresolvedSpeakersNotice": "Спікары не падзелены паміж запісамі.",
+    "unresolvedSpeakersTitle": "Пра пазнакі спікераў",
+    "unresolvedSpeakersMessage": "Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.",
+    "nameSpeakerTitle": "Назваць дыктара"
 }

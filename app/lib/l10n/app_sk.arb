@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Prepis sa nepodarilo načítať.",
     "processingConversationProgress": "Konverzácia sa spracúva…",
     "conversationProcessingFailedMessage": "Túto konverzáciu sa nepodarilo spracovať.",
-    "waitForReprocessing": "Počkajte na dokončenie opätovného spracovania."
+    "waitForReprocessing": "Počkajte na dokončenie opätovného spracovania.",
+    "unnamedSpeakerLabel": "Hovorca",
+    "unresolvedSpeakersNotice": "Rečníci nie sú oddelení naprieč nahrávkami.",
+    "unresolvedSpeakersTitle": "O popiskoch rečníkov",
+    "unresolvedSpeakersMessage": "Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.",
+    "nameSpeakerTitle": "Pomenovať rečníka"
 }

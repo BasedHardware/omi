@@ -12243,4 +12243,20 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'صبر کنید تا پردازش دوباره تمام شود.';
+
+  @override
+  String get unnamedSpeakerLabel => 'سخنران';
+
+  @override
+  String get unresolvedSpeakersNotice => 'گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'درباره برچسب‌های گوینده';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.';
+
+  @override
+  String get nameSpeakerTitle => 'نام‌گذاری گوینده';
 }

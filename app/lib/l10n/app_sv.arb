@@ -3789,5 +3789,10 @@
     "transcriptLoadFailed": "Det gick inte att läsa in transkriptionen.",
     "processingConversationProgress": "Bearbetar samtalet…",
     "conversationProcessingFailedMessage": "Det gick inte att bearbeta samtalet.",
-    "waitForReprocessing": "Vänta tills bearbetningen är klar."
+    "waitForReprocessing": "Vänta tills bearbetningen är klar.",
+    "unnamedSpeakerLabel": "Talare",
+    "unresolvedSpeakersNotice": "Talarna är inte separerade mellan inspelningar.",
+    "unresolvedSpeakersTitle": "Om talarmarkeringar",
+    "unresolvedSpeakersMessage": "Omi kunde inte skilja de andra rösterna åt mellan inspelningarna. Tryck på en talarmarkering för att namnge vem som talar.",
+    "nameSpeakerTitle": "Namnge talare"
 }

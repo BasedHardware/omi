@@ -11346,5 +11346,10 @@
     "transcriptLoadFailed": "Hindi ma-load ang transcript.",
     "processingConversationProgress": "Pinoproseso ang pag-uusap…",
     "conversationProcessingFailedMessage": "Hindi maproseso ang pag-uusap na ito.",
-    "waitForReprocessing": "Hintaying matapos ang muling pagproseso."
+    "waitForReprocessing": "Hintaying matapos ang muling pagproseso.",
+    "unnamedSpeakerLabel": "Speaker",
+    "unresolvedSpeakersNotice": "Hindi pinaghihiwalay ang mga speaker sa iba't ibang recording.",
+    "unresolvedSpeakersTitle": "Tungkol sa mga Label ng Speaker",
+    "unresolvedSpeakersMessage": "Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.",
+    "nameSpeakerTitle": "Pangalanan ang Speaker"
 }

@@ -3885,5 +3885,10 @@
     "transcriptLoadFailed": "Nem sikerült betölteni az átiratot.",
     "processingConversationProgress": "A beszélgetés feldolgozása…",
     "conversationProcessingFailedMessage": "Ezt a beszélgetést nem sikerült feldolgozni.",
-    "waitForReprocessing": "Várd meg, amíg az újrafeldolgozás befejeződik."
+    "waitForReprocessing": "Várd meg, amíg az újrafeldolgozás befejeződik.",
+    "unnamedSpeakerLabel": "Beszélő",
+    "unresolvedSpeakersNotice": "A beszélők nincsenek elkülönítve a felvételek között.",
+    "unresolvedSpeakersTitle": "A beszélőcímkékről",
+    "unresolvedSpeakersMessage": "Omi nem tudta elkülöníteni a többi hangot a felvételek között. Koppintson egy beszélőcímkére, hogy megnevezze, ki beszél.",
+    "nameSpeakerTitle": "Beszélő elnevezése"
 }

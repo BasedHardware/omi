@@ -12243,4 +12243,20 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Počkejte na dokončení opětovného zpracování.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Mluvčí';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Mluvčí nejsou napříč nahrávkami odděleni.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O popiscích mluvčích';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nedokázalo napříč nahrávkami rozeznat ostatní hlasy. Klepnutím na popisek mluvčího pojmenujete, kdo mluví.';
+
+  @override
+  String get nameSpeakerTitle => 'Pojmenovat mluvčího';
 }

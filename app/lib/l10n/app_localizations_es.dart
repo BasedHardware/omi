@@ -12280,4 +12280,20 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Espera a que termine el reprocesamiento.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Hablante';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Las voces no están separadas entre grabaciones.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Acerca de las etiquetas de hablante';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi no pudo distinguir las demás voces entre las grabaciones. Toca una etiqueta de hablante para nombrar a quién habla.';
+
+  @override
+  String get nameSpeakerTitle => 'Nombrar hablante';
 }

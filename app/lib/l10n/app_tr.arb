@@ -3824,5 +3824,10 @@
     "transcriptLoadFailed": "Döküm yüklenemedi.",
     "processingConversationProgress": "Konuşma işleniyor…",
     "conversationProcessingFailedMessage": "Bu konuşma işlenemedi.",
-    "waitForReprocessing": "Yeniden işlemenin bitmesini bekleyin."
+    "waitForReprocessing": "Yeniden işlemenin bitmesini bekleyin.",
+    "unnamedSpeakerLabel": "Konuşmacı",
+    "unresolvedSpeakersNotice": "Konuşmacılar kayıtlar arasında ayrıştırılamadı.",
+    "unresolvedSpeakersTitle": "Konuşmacı Etiketleri Hakkında",
+    "unresolvedSpeakersMessage": "Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.",
+    "nameSpeakerTitle": "Konuşmacıyı Adlandır"
 }

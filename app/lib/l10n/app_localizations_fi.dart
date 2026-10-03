@@ -12248,4 +12248,20 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get waitForReprocessing => 'Odota, kunnes uudelleenkäsittely on valmis.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Puhuja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Puhujia ei ole eroteltu äänitteiden välillä.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tietoa puhujamerkinnöistä';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei pystynyt erottamaan muita ääniä äänitteiden välillä. Napauta puhujamerkintää nimetäksesi, kuka puhuu.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeä puhuja';
 }

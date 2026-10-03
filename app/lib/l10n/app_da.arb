@@ -3831,5 +3831,10 @@
     "transcriptLoadFailed": "Transskriptionen kunne ikke indlæses.",
     "processingConversationProgress": "Behandler samtalen…",
     "conversationProcessingFailedMessage": "Samtalen kunne ikke behandles.",
-    "waitForReprocessing": "Vent, til genbehandlingen er færdig."
+    "waitForReprocessing": "Vent, til genbehandlingen er færdig.",
+    "unnamedSpeakerLabel": "Taler",
+    "unresolvedSpeakersNotice": "Talerne er ikke adskilt på tværs af optagelser.",
+    "unresolvedSpeakersTitle": "Om taler-mærker",
+    "unresolvedSpeakersMessage": "Omi kunne ikke skelne de andre stemmer på tværs af optagelserne. Tryk på et taler-mærke for at navngive, hvem der taler.",
+    "nameSpeakerTitle": "Navngiv taler"
 }
