@@ -33,6 +33,24 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
+  group('user node label', () {
+    test('falls back to the localized "You", not English "Me"', () {
+      expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('es'))), 'Tú');
+      expect(memoryGraphUserLabel('  ', lookupAppLocalizations(const Locale('de'))), 'Sie');
+      expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('en'))), 'You');
+    });
+
+    test('only backend labels and the given name identify the user node', () {
+      expect(memoryGraphKnownUserLabels(''), {'me', 'the user'});
+      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'ana'});
+      expect(memoryGraphKnownUserLabels('').contains('tú'), isFalse);
+    });
+
+    test('uses the given name when one is set', () {
+      expect(memoryGraphUserLabel(' Ana ', lookupAppLocalizations(const Locale('es'))), 'Ana');
+    });
+  });
+
   testWidgets('full-page empty state sits below the app bar and wraps its message', (tester) async {
     await tester.binding.setSurfaceSize(const Size(414, 896));
     addTearDown(() => tester.binding.setSurfaceSize(null));

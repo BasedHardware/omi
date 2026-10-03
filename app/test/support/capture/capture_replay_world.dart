@@ -365,6 +365,9 @@ class CaptureReplayWorld {
       phonePeriodic: scheduler.periodic,
       phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
       phoneCoverageTelemetry: coverageEvents.add,
+      // The replay world has no real disk-space plugin; report ample space so
+      // the storage-admission gate proves capacity instead of failing closed.
+      phoneFreeDiskBytes: () async => 1 << 40,
     );
     wal.start();
     await wal.syncs.phone.walReady;

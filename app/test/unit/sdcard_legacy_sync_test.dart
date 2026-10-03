@@ -39,6 +39,15 @@ class _FakeLocalSync implements LocalWalSync {
   }
 
   @override
+  Future<bool> ensureStorageAdmission({required int bytes, required int admittedGeneration}) async => true;
+
+  @override
+  Future<bool> hasDurableWal(Wal wal, {required int admittedGeneration}) async => added.contains(wal);
+
+  @override
+  void releaseStorageAdmission(int bytes) {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

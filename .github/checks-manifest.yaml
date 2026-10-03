@@ -564,6 +564,16 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-l10n-arb-contract
+    command: ["python3", "app/scripts/l10n.py", "check"]
+    triggers: ["app/lib/l10n/*.arb", "app/scripts/l10n.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "62 simple translations in da/de/fi/hi/id/sk/vi silently dropped an English placeholder (Danish showed 'Estimeret tid' with no ETA); gen-l10n accepts that, so the ARB contract must run on every ARB change, not only when an author remembers scripts/l10n.py check"
+  - id: mobile-l10n-arb-contract-tests
+    command: ["python3", "app/scripts/test_l10n_placeholders.py"]
+    triggers: ["app/scripts/l10n.py", "app/scripts/test_l10n_placeholders.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "The placeholder guard must keep a case proving it rejects a dropped placeholder and exempts plural/select messages"
   - id: rayban-dat-plugin-boundary
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
