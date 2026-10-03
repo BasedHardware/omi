@@ -404,7 +404,16 @@ def _segments(texts):
 
 
 def _drive_process_segment(
-    pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None, finish_impl=None, wal_ts=T0 + 40
+    pipeline,
+    monkeypatch,
+    store,
+    texts,
+    *,
+    target=LIVE_ID,
+    response=None,
+    finish_impl=None,
+    wal_ts=T0 + 40,
+    lineage_binding=None,
 ):
     from utils.conversations import lifecycle
 
@@ -436,6 +445,7 @@ def _drive_process_segment(
         [],
         target_conversation_id=target,
         client_device_id='pendant',
+        lineage_binding=lineage_binding,
     )
     return ok, response, finish
 

@@ -150,7 +150,7 @@ from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync.recording_lineage import (
     fallback_segment_targets,
     lineage_resolution_requested,
-    resolve_segment_targets,
+    plan_segment_targets,
     merge_lineage_partial_results,
     restore_lineage_enrichment_intent,
     lineage_partial_result,
@@ -1196,6 +1196,7 @@ def process_segment(
     segment_key: str | None = None,
     attempt_ref: str | None = None,
     source_position_map: tuple[dict, int] | None = None,
+    lineage_binding: Optional[str] = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1340,6 +1341,8 @@ def process_segment(
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
+        if lineage_binding is not None and target_conversation_id:
+            incoming['_sync_lineage_binding'] = lineage_binding
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -2388,11 +2391,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 },
             )
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            (
-                private_cloud_sync_enabled,
-                data_protection_level,
-                person_embeddings_cache,
-            ) = await _load_sync_segment_context(uid)
+            private_cloud_sync_enabled, data_protection_level, person_embeddings_cache = (
+                await _load_sync_segment_context(uid)
+            )
 
             # --- Phase 5: Process segments (STT + LLM) ---
             job_phase = 'persistence'
@@ -2426,11 +2427,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             already_processed = set()
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
-                if already_processed:
-                    logger.info(
-                        'event=sync_transcription_retry outcome=deduplicated segment_count=%d',
-                        len(already_processed),
-                    )
+            if already_processed:
+                logger.info(
+                    'event=sync_transcription_retry outcome=deduplicated segment_count=%d', len(already_processed)
+                )
 
             durable_processed_segment_ids: set[str] = set()
             segment_ids_by_path: dict[str, str] = {}
@@ -2439,8 +2439,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     db_executor, get_processed_sync_segment_ids, uid, content_id
                 )
                 segment_ids_by_path = {
-                    path: await run_blocking(sync_executor, compute_sync_segment_id, uid, path)
-                    for path in segmented_paths
+                    p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
@@ -2449,31 +2448,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
             segment_targets: dict = {}
+            segment_binding_reasons: dict = {}
             if use_lineage and segment_list:
-
-                def _segment_targets() -> dict:
-                    spans = {
-                        p: (get_timestamp_from_path(p), get_timestamp_from_path(p) + get_wav_duration(p))
-                        for p in segment_list
-                    }
-                    return resolve_segment_targets(
+                try:
+                    segment_targets = await run_blocking(
+                        db_executor,
+                        plan_segment_targets,
+                        segment_list,
+                        get_timestamp_from_path,
+                        get_wav_duration,
                         uid,
                         str(recording_session_id),
-                        spans,
-                        stamped_target=target_conversation_id,
-                        source=source,
-                        client_device_id=client_device_id,
-                        is_locked=is_locked,
-                        job_id=job_id,
+                        target_conversation_id,
+                        source,
+                        client_device_id,
+                        is_locked,
+                        job_id,
+                        segment_binding_reasons,
                     )
-
-                try:
-                    segment_targets = await run_blocking(db_executor, _segment_targets)
                 except Exception:
                     # Span construction and the executor call are also part of
                     # planning. Keep the stamp if either fails, then ingest
                     # siblings normally under the existing persistence fences.
-                    segment_targets = fallback_segment_targets(segment_list, target_conversation_id, job_id=job_id)
+                    segment_targets = fallback_segment_targets(
+                        segment_list, target_conversation_id, job_id=job_id, binding_reasons=segment_binding_reasons
+                    )
 
             def _process_one_segment(path: str):
                 segment_target = segment_targets.get(path, target_conversation_id)
@@ -2507,6 +2506,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     segment_key=segment_id or path,
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
+                    **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

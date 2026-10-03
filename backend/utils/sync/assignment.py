@@ -6,7 +6,9 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
+from datetime import datetime
 import logging
+import math
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
 from config.sync_lineage import sync_lineage_resolve_active_for
@@ -123,6 +125,45 @@ def auto_mergeable(row: dict) -> bool:
     )
 
 
+def _row_epoch(value: Any) -> float:
+    return value.timestamp() if isinstance(value, datetime) else float(value)
+
+
+def _lineage_span_delta_bucket(
+    stamp_fallback: bool, live_target_id: Optional[str], current: Optional[dict], result: dict
+) -> str:
+    """Fixed extent-growth bucket for a stamp-fallback append to the explicit live row.
+
+    Growth compares row ``started_at``/``finished_at`` only — never transcript
+    sums, ids or text. A rollover elsewhere leaves the live extent unchanged,
+    which is a zero growth, not a stretch of the new sync row.
+    """
+    if not stamp_fallback:
+        return 'none'
+    if not live_target_id:
+        return 'unknown'
+    if current is None or result.get('id') != live_target_id:
+        return '0'
+    try:
+        grown_end = _row_epoch(result.get('finished_at'))
+        grown_start = _row_epoch(result.get('started_at'))
+        prior_end = _row_epoch(current.get('finished_at'))
+        prior_start = _row_epoch(current.get('started_at'))
+    except Exception:
+        return 'unknown'
+    endpoints = (grown_end, grown_start, prior_end, prior_start)
+    if not all(map(math.isfinite, endpoints)) or grown_end < grown_start or prior_end < prior_start:
+        return 'unknown'
+    growth = (grown_end - grown_start) - (prior_end - prior_start)
+    if growth <= 0:
+        return '0'
+    if growth <= 60:
+        return '0_60'
+    if growth <= 300:
+        return '60_300'
+    return 'gt_300'
+
+
 class _Plan(NamedTuple):
     """One complete, unwritten assignment: what the transaction would commit."""
 
@@ -166,6 +207,7 @@ def assign_in_transaction(
     untouched: the chunk's new speech goes to another conversation instead.
     """
     incoming = deepcopy(incoming)
+    lineage_binding = incoming.pop('_sync_lineage_binding', None)
     index = AssignmentIndex(transaction, user_ref)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
@@ -230,6 +272,12 @@ def assign_in_transaction(
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
         target_id, target = None, None
+    stamp_fallback_live = bool(
+        lineage_binding == 'stamp_fallback'
+        and target_id
+        and target is not None
+        and sync_lineage_resolve_active_for(user_ref.id)
+    )
     anchor_mismatch = capture_mismatch(own_anchor, incoming) if own_anchor else 'none'
     if anchor_mismatch != 'none':
         logger.warning('event=sync_assignment_target outcome=anchor_rejected mismatch=%s', anchor_mismatch)
@@ -501,6 +549,9 @@ def assign_in_transaction(
             'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': True,
+            'span_delta_bucket': _lineage_span_delta_bucket(
+                stamp_fallback_live, target_id, chosen.matched.get(chosen.canonical), no_op
+            ),
         }
         return no_op, False, []
     trigger = None
@@ -588,7 +639,14 @@ def assign_in_transaction(
             'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': False,
+            'span_delta_bucket': _lineage_span_delta_bucket(
+                stamp_fallback_live, target_id, matched.get(canonical), result
+            ),
         }
+    elif stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
+        result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
+            True, target_id, matched.get(canonical), result
+        )
     return result, created, survivors
 
 

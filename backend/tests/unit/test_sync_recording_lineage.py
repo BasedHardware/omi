@@ -518,13 +518,22 @@ class _LineageDb:
         ]
         return deepcopy(matching[: limit + 1])
 
+    def get_recording_id_probe(self, uid, origin_id, *, firestore_client=None):
+        self.calls.append('probe')
+        if 'probe' in self.failing:
+            raise TimeoutError('probe deadline')
+        for row in self.rows:
+            if row.get('id') == origin_id:
+                return deepcopy(row)
+        return None
+
 
 @pytest.fixture
 def lineage_db(monkeypatch):
     from database import sync_recording_lineage
 
     fake = _LineageDb([generation(k) for k in range(GENERATIONS)])
-    for name in ('get_recording_generations', 'get_origin_generation'):
+    for name in ('get_recording_generations', 'get_origin_generation', 'get_recording_id_probe'):
         monkeypatch.setattr(sync_recording_lineage, name, getattr(fake, name))
     return fake
 
@@ -781,14 +790,14 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
         return True
 
     pipeline.process_segment = capture
-    if hasattr(pipeline, 'resolve_segment_targets'):
+    if hasattr(pipeline, 'plan_segment_targets'):
         # Also supports replaying the coordinator against origin/main's
         # pipeline, which has no lineage call. Its observed targets must still
         # satisfy the assertion below; absence is not the failure criterion.
         monkeypatch.setattr(
-            sys.modules[pipeline.resolve_segment_targets.__module__],
+            sys.modules[pipeline.plan_segment_targets.__module__],
             '_load_lineage',
-            lambda *_args: ([generation(k) for k in range(GENERATIONS)], None, False),
+            lambda *_args, **_kwargs: ([generation(k) for k in range(GENERATIONS)], None, False),
         )
     candidates = [generation(0)]
     monkeypatch.setattr(
@@ -828,7 +837,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
     def failed(*_args, **_kwargs):
         raise RuntimeError('synthetic planner failure')
 
-    monkeypatch.setattr(stubs['pipeline'], 'resolve_segment_targets', failed)
+    monkeypatch.setattr(stubs['pipeline'], 'plan_segment_targets', failed)
     metrics = MagicMock()
     lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
     monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)

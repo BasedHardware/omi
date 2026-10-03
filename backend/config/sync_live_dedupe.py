@@ -10,8 +10,11 @@ anything ambiguous is kept.
 
 ``SYNC_LINEAGE_LIVE_DEDUPE_ENABLED`` unset or blank means on. Only an explicit
 on-token keeps it on when set; every other value — including a mistyped kill
-switch — means off, and off restores the exact previous intake path with no
-result fields, log lines or writes added.
+switch — means off, and off restores the exact previous intake path: identical
+persistence, results and enrichment decisions, with no dedupe stats or markers.
+Lineage diagnostics stay additive under the lineage gate, so off may still emit
+``event=sync_lineage_stamp_append`` for a stamp-fallback live append — a
+content-free telemetry line, never a stored field or behavior change.
 
 The switch alone does not widen the change: activation additionally requires
 ``sync_lineage_resolve_active_for(uid)``, so it reaches only users admitted to

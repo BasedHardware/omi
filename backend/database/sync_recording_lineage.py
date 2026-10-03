@@ -79,6 +79,20 @@ def get_recording_generations(
     return _rows(query)
 
 
+def get_recording_id_probe(uid: str, origin_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+    snapshot = (
+        _collection(uid, firestore_client).document(origin_id).get(field_paths=list(LINEAGE_FIELD_PATHS), timeout=5.0)
+    )
+    data = snapshot.to_dict()
+    record_firestore_read(
+        FirestoreReadFamily.SYNC_RECORDING_LINEAGE, FirestoreReadMode.BOUNDED, 1 if isinstance(data, dict) else 0
+    )
+    if isinstance(data, dict):
+        data['id'] = snapshot.id
+        return data
+    return None
+
+
 def get_origin_generation(
     uid: str, origin_id: str, *, limit: int, firestore_client: Any = None
 ) -> list[dict[str, Any]]:

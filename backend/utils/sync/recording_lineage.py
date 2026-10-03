@@ -34,10 +34,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.sync_lineage import sync_lineage_resolve_enabled, sync_lineage_resolve_uid_allowed
+from config.sync_lineage import (
+    sync_lineage_resolve_active_for,
+    sync_lineage_resolve_enabled,
+    sync_lineage_resolve_uid_allowed,
+)
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
+from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
 from utils.sync.lineage_intervals import pick_overlapping
 from utils.sync.recording_session_target import (
     START_SKEW_SECONDS,
@@ -96,6 +101,9 @@ class LineagePlan:
     generations: int = 0
     rows: int = 0
     degraded: bool = False
+    filter_counts: dict[str, int] = field(default_factory=dict)
+    binding_reasons: dict[str, str] = field(default_factory=dict)
+    id_probe: str = 'not_run'
 
 
 def lineage_resolution_requested(
@@ -178,42 +186,55 @@ def _generations(
     source: Any,
     client_device_id: Optional[str],
     is_locked: bool,
+    diagnostics: Optional[dict[str, int]] = None,
 ) -> list[_Generation]:
-    """Provenance-compatible generations of ``origin_id`` with valid intervals."""
+    """Provenance-compatible generations of ``origin_id`` with valid intervals.
+
+    ``diagnostics`` receives truthful (uncapped) stage counts: the shared
+    classifier's first exclusion per row, plus ``unstamped_origin`` for rows
+    that predate the origin stamp but may still match through the legacy
+    session id. Emission caps each count separately.
+    """
     wanted_source = source_value(source)
     device_id = clean_text(client_device_id)
     redirects: dict[str, str] = {}
     candidates: list[tuple[str, float, float, bool, Optional[float]]] = []
     for row in rows:
         row_id = clean_text(row.get('id'))
-        external = row.get('external_data')
-        external = external if isinstance(external, Mapping) else {}
-        linked = origin_id in (
-            clean_text(external.get('recording_origin_id')),
-            clean_text(external.get('recording_session_id')),
+        reason = classify_generation_row(
+            row,
+            origin_id=origin_id,
+            source=wanted_source,
+            client_device_id=device_id,
+            is_locked=bool(is_locked),
         )
-        if not row_id or not linked:
+        if diagnostics is not None:
+            diagnostics['candidate_count_before'] = diagnostics.get('candidate_count_before', 0) + 1
+            if reason is not None:
+                diagnostics[reason] = diagnostics.get(reason, 0) + 1
+            external = row.get('external_data')
+            external = external if isinstance(external, Mapping) else {}
+            if reason != 'dropped_invalid' and not clean_text(external.get('recording_origin_id')):
+                diagnostics['unstamped_origin'] = diagnostics.get('unstamped_origin', 0) + 1
+        if reason in ('dropped_invalid', 'dropped_unstamped', 'dropped_deleted'):
             continue
         redirect = clean_text(row.get('sync_merged_into'))
-        if row.get('deleted') and not redirect:
-            # Only redirect tombstones stay in the lineage; nothing else sets deleted.
-            continue
         if redirect:
             redirects[row_id] = redirect
-        if (
-            source_value(row.get('source')) != wanted_source
-            or clean_text(row.get('client_device_id')) != device_id
-            or bool(row.get('is_locked')) != bool(is_locked)
-        ):
+        if reason is not None:
             continue
-        start, end = unix_seconds(row.get('started_at')), unix_seconds(row.get('finished_at'))
-        if start is None or end is None or end < start:
+        start = unix_seconds(row.get('started_at'))
+        end = unix_seconds(row.get('finished_at'))
+        if start is None or end is None:
             continue
         candidates.append((row_id, start, end, bool(row.get('deleted')), unix_seconds(row.get('created_at'))))
-    return [
+    generations = [
         _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted, created)
         for row_id, start, end, deleted, created in sorted(candidates)
     ]
+    if diagnostics is not None:
+        diagnostics['candidate_count_after'] = len(generations)
+    return generations
 
 
 def _unique(matches: list[_Generation]) -> Optional[str]:
@@ -262,11 +283,17 @@ def select_segment_targets(
     lookup_failed: bool = False,
 ) -> LineagePlan:
     """Pure per-segment plan: unique generation, else the stamp, else unbound."""
+    filter_counts: dict[str, int] = {}
     generations = (
         []
         if lookup_failed
         else _generations(
-            rows, clean_text(origin_id), source=source, client_device_id=client_device_id, is_locked=is_locked
+            rows,
+            clean_text(origin_id),
+            source=source,
+            client_device_id=client_device_id,
+            is_locked=is_locked,
+            diagnostics=filter_counts,
         )
     )
     canonical_by_id = {generation.id: generation.canonical for generation in generations}
@@ -274,6 +301,7 @@ def select_segment_targets(
     stamp_canonical = canonical_by_id.get(stamp, stamp) if stamp else None
     targets: dict[str, Optional[str]] = {}
     counts = {'bound': 0, 'stamp_overridden': 0, 'stamp_fallback': 0, 'unbound': 0}
+    binding_reasons: dict[str, str] = {}
     bound_canonicals: set[str] = set()
     misses: set[str] = set()
     for key in sorted(spans):
@@ -296,11 +324,14 @@ def select_segment_targets(
         if bound is not None:
             canonical = canonical_by_id.get(bound, bound)
             bound_canonicals.add(canonical)
-            counts['stamp_overridden' if stamp and stamp_canonical != canonical else 'bound'] += 1
+            binding = 'stamp_overridden' if stamp and stamp_canonical != canonical else 'bound'
+            counts[binding] += 1
             targets[key] = bound
         else:
-            counts['stamp_fallback' if stamp else 'unbound'] += 1
+            binding = 'stamp_fallback' if stamp else 'unbound'
+            counts[binding] += 1
             targets[key] = stamp
+        binding_reasons[key] = binding
     reason = next(
         (item for item in ('lookup_failed', 'no_rows', 'truncated', 'interval_miss') if item in misses), 'none'
     )
@@ -319,16 +350,27 @@ def select_segment_targets(
         counts=counts,
         generations=len(bound_canonicals),
         rows=len(generations),
+        filter_counts=filter_counts,
+        binding_reasons=binding_reasons,
     )
 
 
 def _load_lineage(
-    uid: str, origin_id: str, started_before: datetime, firestore_client: Any, finished_after: datetime
+    uid: str,
+    origin_id: str,
+    started_before: datetime,
+    firestore_client: Any,
+    finished_after: datetime,
+    *,
+    on_module: Any = None,
 ) -> tuple[list[dict[str, Any]], Optional[float], bool]:
     """Lineage rows, an incomplete-overlap marker, and whether the lookup degraded."""
     # Import on use, like recording_session_target: pipeline.py loads this module
     # while unit harnesses stub google.cloud and the database package.
     from database import sync_recording_lineage as lineage_db
+
+    if on_module is not None:
+        on_module(lineage_db)
 
     degraded = False
     try:
@@ -367,6 +409,35 @@ def _load_lineage(
     return rows, truncated_before, degraded
 
 
+def _id_probe(
+    lineage_db: Any,
+    uid: str,
+    origin_id: str,
+    *,
+    source: Any,
+    client_device_id: Optional[str],
+    is_locked: bool,
+    firestore_client: Any,
+) -> str:
+    """One metadata-only read of the document whose id is the recording origin.
+
+    Diagnostic only: the token explains the observable state of that row; it
+    never becomes a target and never changes the plan's outcome.
+    """
+    try:
+        row = lineage_db.get_recording_id_probe(uid, origin_id, firestore_client=firestore_client)
+    except Exception as exc:
+        _warning('event=sync_lineage_probe outcome=failed exception_type=%s', bounded_exception_class(exc))
+        return 'lookup_failed'
+    return probe_token(
+        row,
+        origin_id=clean_text(origin_id),
+        source=source_value(source),
+        client_device_id=clean_text(client_device_id),
+        is_locked=bool(is_locked),
+    )
+
+
 def resolve_segment_targets(
     uid: str,
     origin_id: str,
@@ -378,10 +449,14 @@ def resolve_segment_targets(
     is_locked: bool,
     job_id: Optional[str] = None,
     firestore_client: Any = None,
+    binding_reasons: Optional[dict] = None,
 ) -> dict[str, Optional[str]]:
     """Per-segment explicit targets; blocking (one bounded indexed query, sometimes two)."""
     if not spans:
         return {}
+    truncated_before: Optional[float] = None
+    failed = True
+    lineage_module: list = []
     try:
         try:
             started_before = datetime.fromtimestamp(
@@ -389,7 +464,12 @@ def resolve_segment_targets(
             )
             finished_after = datetime.fromtimestamp(min(start for start, _ in spans.values()), tz=timezone.utc)
             rows, truncated_before, degraded = _load_lineage(
-                uid, clean_text(origin_id), started_before, firestore_client, finished_after
+                uid,
+                clean_text(origin_id),
+                started_before,
+                firestore_client,
+                finished_after,
+                on_module=lineage_module.append,
             )
             failed = False
         except Exception as exc:
@@ -412,6 +492,29 @@ def resolve_segment_targets(
             targets={key: stamped_target for key in spans}, outcome='lookup_failed', reason='lookup_failed'
         )
         degraded = False
+    if binding_reasons is not None:
+        binding_reasons.update(
+            plan.binding_reasons or {key: 'stamp_fallback' if stamped_target else 'unbound' for key in spans}
+        )
+    if (
+        lineage_module
+        and not failed
+        and plan.outcome != 'lookup_failed'
+        and not degraded
+        and truncated_before is None
+        and plan.rows == 0
+        and clean_text(origin_id)
+        and sync_lineage_resolve_active_for(uid)
+    ):
+        plan.id_probe = _id_probe(
+            lineage_module[0],
+            uid,
+            origin_id,
+            source=source,
+            client_device_id=client_device_id,
+            is_locked=is_locked,
+            firestore_client=firestore_client,
+        )
     if plan.outcome == 'lookup_failed' or degraded:
         plan.degraded = degraded
         record_fallback(
@@ -425,8 +528,44 @@ def resolve_segment_targets(
     return plan.targets
 
 
+def plan_segment_targets(
+    segment_list: Sequence[str],
+    timestamp_of: Any,
+    duration_of: Any,
+    uid: str,
+    origin_id: str,
+    stamped_target: Optional[str],
+    source: Any,
+    client_device_id: Optional[str],
+    is_locked: bool,
+    job_id: Optional[str],
+    binding_reasons: Optional[dict],
+) -> dict[str, Optional[str]]:
+    """Blocking span construction plus per-segment lineage resolution for one upload.
+
+    ``timestamp_of``/``duration_of`` are the caller's WAV clock functions; the
+    ``binding_reasons`` dict collects each segment's binding token.
+    """
+    spans = {path: (timestamp_of(path), timestamp_of(path) + duration_of(path)) for path in segment_list}
+    return resolve_segment_targets(
+        uid,
+        origin_id,
+        spans,
+        stamped_target=stamped_target,
+        source=source,
+        client_device_id=client_device_id,
+        is_locked=is_locked,
+        job_id=job_id,
+        binding_reasons=binding_reasons,
+    )
+
+
 def fallback_segment_targets(
-    keys: Sequence[str], stamped_target: Optional[str], *, job_id: Optional[str] = None
+    keys: Sequence[str],
+    stamped_target: Optional[str],
+    *,
+    job_id: Optional[str] = None,
+    binding_reasons: Optional[dict] = None,
 ) -> dict[str, Optional[str]]:
     """Fail-open at the coordinator boundary, including span/executor failures."""
     plan = LineagePlan(
@@ -434,7 +573,10 @@ def fallback_segment_targets(
         outcome='lookup_failed',
         reason='lookup_failed',
         counts={'stamp_fallback' if stamped_target else 'unbound': len(keys)},
+        binding_reasons={key: 'stamp_fallback' if stamped_target else 'unbound' for key in keys},
     )
+    if binding_reasons is not None:
+        binding_reasons.update(plan.binding_reasons)
     record_fallback(
         component='other',
         from_mode='sync_lineage',
@@ -454,10 +596,15 @@ def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
     except Exception:
         pass
     counts = plan.counts
+    filters = plan.filter_counts
+    emitted = lambda key: min(filters.get(key, 0), 16)
     try:
         logger.info(
             'event=sync_lineage_resolve outcome=%s reason=%s segments=%d bound=%d stamp_overridden=%d '
-            'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s job_ref=%s',
+            'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s candidates=%d accepted=%d '
+            'dropped_invalid=%d dropped_unstamped=%d dropped_deleted=%d dropped_source=%d '
+            'dropped_device=%d dropped_lock=%d dropped_interval=%d unstamped_origin=%d id_probe=%s '
+            'job_ref=%s',
             outcome,
             plan.reason,
             len(plan.targets),
@@ -468,6 +615,17 @@ def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
             plan.generations,
             plan.rows,
             'origin_row_only' if plan.degraded else 'lineage',
+            emitted('candidate_count_before'),
+            emitted('candidate_count_after'),
+            emitted('dropped_invalid'),
+            emitted('dropped_unstamped'),
+            emitted('dropped_deleted'),
+            emitted('dropped_source'),
+            emitted('dropped_device'),
+            emitted('dropped_lock'),
+            emitted('dropped_interval'),
+            emitted('unstamped_origin'),
+            plan.id_probe,
             bounded_correlation_ref(job_id),
         )
     except Exception:

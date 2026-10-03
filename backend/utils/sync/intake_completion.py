@@ -102,13 +102,22 @@ def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> N
     try:
         logger.info(
             'event=sync_lineage_append appended_seconds=%.2f dropped_as_repeat_seconds=%.2f '
-            'alignment_method=%s repeat_only=%s existing_completion=%s',
+            'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s',
             stats['appended_seconds'],
             stats['dropped_as_repeat_seconds'],
             stats['alignment_method'],
             stats['repeat_only'],
             existing_completion,
+            stats.get('span_delta_bucket', 'none'),
         )
+    except Exception:
+        pass
+
+
+def log_sync_lineage_stamp_append(span_delta_bucket: str) -> None:
+    """Dedupe-off lineage observability: one bounded token, no dedupe markers."""
+    try:
+        logger.info('event=sync_lineage_stamp_append span_delta_bucket=%s', span_delta_bucket)
     except Exception:
         pass
 
@@ -139,6 +148,7 @@ def complete_sync_intake(
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)
+    stamp_bucket = assigned.pop('_sync_lineage_stamp_append', None)
     # An exact sync-scoped retry may owe enrichment from an earlier partial
     # run. That existing debt still enrolls and finishes even though this
     # upload wrote nothing; pristine live repeats invent no new debt.
@@ -154,6 +164,8 @@ def complete_sync_intake(
             response.setdefault('_merged', {})[conversation_id] = language
     if stats is not None:
         log_sync_lineage_append(stats, existing_completion=existing_completion and repeat_only)
+    if stamp_bucket is not None:
+        log_sync_lineage_stamp_append(stamp_bucket)
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:
