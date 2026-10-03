@@ -366,7 +366,7 @@ def precache_conversation_audio_endpoint(
     Returns immediately - caching happens in background.
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -390,7 +390,7 @@ def get_audio_signed_urls_endpoint(
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.SYNC_AUDIO_URLS_POLL
     )
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -456,7 +456,7 @@ def download_audio_file_endpoint(
     """
     # Verify user owns the conversation
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
