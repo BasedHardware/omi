@@ -42,7 +42,7 @@ class DeviceDiagnosticsContractTest {
         assertFalse(FirmwareDiagnosticsParser.parse(tail, 123)!!.getBoolean("soc_frozen"))
         for (offset in 25..29) tail[offset] = 0xff.toByte()
         val unknownTail = FirmwareDiagnosticsParser.parse(tail, 123)!!
-        for (key in listOf("last_off_charger_mv", "charge_pin_edges", "soc_frozen")) assertTrue(unknownTail.isNull(key))
+        for (key in listOf("last_off_charger_mv", "charge_pin_edges", "soc_frozen")) assertFalse(unknownTail.has(key))
         for (length in 26..29) {
             val partial = FirmwareDiagnosticsParser.parse(tail.copyOf(length), 123)!!
             assertFalse(partial.has("last_off_charger_mv"))
@@ -55,7 +55,7 @@ class DeviceDiagnosticsContractTest {
                 var stored = """[{"ts":0,"level":100},{"ts":5,"level":45$unknown}]"""
                 var writes = 0
                 val recorder = BatteryHistoryRecorder({ stored }, { _, value -> stored = value; writes++ })
-                recorder.backfillCharging("device", charging)
+                recorder.backfillCharging("device", charging, nowMs = 5)
                 val history = JSONArray(stored)
                 assertEquals(2, history.length())
                 assertTrue(history.getJSONObject(0).isNull("charging"))
@@ -66,6 +66,9 @@ class DeviceDiagnosticsContractTest {
                 recorder.backfillCharging("device", !charging)
                 assertEquals(1, writes)
                 assertEquals(stored, history.toString())
+                // A point older than the backfill window stays unknown.
+                recorder.backfillCharging("device", !charging, nowMs = 6 + BatteryHistoryRecorder.BACKFILL_MAX_AGE_MS)
+                assertEquals(1, writes)
             }
         }
     }

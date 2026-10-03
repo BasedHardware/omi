@@ -226,17 +226,19 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                         OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 0, level: 100, charging: nil),
                         OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 5, level: 45, charging: nil),
                     ]
-                    let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging)!
+                    let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging, nowMs: 5 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs)!
                     precondition(updated.count == 2)
                     precondition(updated[0]["charging"] == nil)
                     precondition(updated[1]["ts"] as? Int64 == 5)
                     precondition(updated[1]["level"] as? Int == 45)
                     precondition(updated[1]["charging"] as? Bool == charging)
-                    precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging(updated, charging: !charging) == nil)
+                    precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging(updated, charging: !charging, nowMs: 5 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs) == nil)
+                    // A point older than the backfill window stays unknown.
+                    precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging, nowMs: 6 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs) == nil)
                     defaults.set(updated, forKey: "battery_history_backfill")
                     precondition((defaults.array(forKey: "battery_history_backfill") as? [[String: Any]])?.last?["charging"] as? Bool == charging)
                 }
-                precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging([], charging: true) == nil)
+                precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging([], charging: true, nowMs: 0) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 24), timestampMs: 1) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 25), timestampMs: 1) == nil)
                 var diagnostic = Data(repeating: 0, count: 25)

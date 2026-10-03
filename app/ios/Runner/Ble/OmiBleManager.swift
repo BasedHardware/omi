@@ -735,6 +735,8 @@ final class OmiBleManager: NSObject {
     private static let batteryHistoryRetentionMs: Int64 = 7 * 24 * 3600 * 1000
 
     private static let batteryLevelCharUuid = CBUUID(string: "2A19")
+    // 15-minute reads over the 7-day retention: 4/hour * 24 * 7 = 672.
+    private static let maxFirmwareDiagnosticsEntries = 672
 
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
@@ -861,6 +863,12 @@ final class OmiBleManager: NSObject {
         peripheral.readValue(for: diagnostic)
     }
 
+    /// True while the 15-minute diagnostics cadence gate still suppresses reads.
+    private func isDiagnosticsReadThrottled(uuid: String) -> Bool {
+        guard let last = lastDiagnosticsReadUptime[uuid] else { return false }
+        return ProcessInfo.processInfo.systemUptime - last < 15 * 60
+    }
+
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
         guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.epochMs()) else { return }
         let defaults = UserDefaults.standard
@@ -869,7 +877,9 @@ final class OmiBleManager: NSObject {
             rehydrateBatteryBaselineIfNeeded(uuid: uuid)
             let batteryKey = Self.batteryHistoryKey(uuid)
             let history = defaults.array(forKey: batteryKey) as? [[String: Any]] ?? []
-            if let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging),
+            if let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(
+                history, charging: charging, nowMs: CheckedIntegerConversion.epochMs()
+            ),
                persistPropertyListRecords(updated, forKey: batteryKey, in: defaults) {
                 lastPersistedBatteryCharging[uuid] = charging
             }
@@ -877,7 +887,10 @@ final class OmiBleManager: NSObject {
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
         reads.append(value)
-        persistPropertyListRecords(Array(reads.suffix(20)), forKey: key, in: defaults)
+        // 15-minute reads over the 7-day retention: 4/hour * 24 * 7 = 672. The
+        // daily rollup reports the previous calendar day, so a 20-entry ring
+        // could evict that day's samples before emission.
+        persistPropertyListRecords(Array(reads.suffix(Self.maxFirmwareDiagnosticsEntries)), forKey: key, in: defaults)
         logBle(uuid: uuid, event: "firmware_diagnostics_read", detail: "v\(data[0])")
     }
 
@@ -1265,7 +1278,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
         connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
-        chargingState.removeValue(forKey: uuid)
+        // Keep the last-known charging flag while the 15-minute diagnostics
+        // cadence gate is still warm: a reconnect inside that window skips the
+        // read, and clearing here would leave battery points untagged.
+        if let retainedCharging = chargingState.removeValue(forKey: uuid), isDiagnosticsReadThrottled(uuid: uuid) {
+            chargingState[uuid] = retainedCharging
+        }
         lastPacketIndex.removeValue(forKey: uuid)
         audioReceived[uuid] = 0
         audioExpected[uuid] = 0

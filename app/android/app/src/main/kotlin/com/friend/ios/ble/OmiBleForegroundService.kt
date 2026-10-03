@@ -58,6 +58,10 @@ class OmiBleForegroundService : Service() {
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
         private const val MAX_DISCONNECT_HISTORY = 500
         private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
+        // 15-minute reads over the 7-day retention: 4/hour * 24 * 7 = 672. The
+        // daily rollup reports the previous calendar day, so a 20-entry ring
+        // could evict that day's samples before emission.
+        private const val FIRMWARE_DIAGNOSTICS_LIMIT = 672
         private const val BATTERY_LEVEL_CHAR = "00002a19-0000-1000-8000-00805f9b34fb"
         private const val AUDIO_CHAR = "19b10001-e8f2-537e-4f6c-d104768a1214"
 
@@ -185,7 +189,13 @@ class OmiBleForegroundService : Service() {
             managed.connectionStartTime = System.currentTimeMillis()
             bleManager.lastRssi.remove(addr)
             bleManager.rssiHistory.remove(addr)
-            bleManager.chargingState.remove(addr)
+            // Keep the last-known charging flag while the 15-minute diagnostics
+            // cadence gate is still warm: a reconnect inside that window skips
+            // the read, and clearing here would leave battery points untagged.
+            val retainedCharging = bleManager.chargingState.remove(addr)
+            if (retainedCharging != null && bleManager.isDiagnosticsReadThrottled(addr)) {
+                bleManager.chargingState[addr] = retainedCharging
+            }
             audioCounters[addr] = BleAudioPacketCounter()
             getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).let { prefs ->
                 val key = "counters_since_$addr"
@@ -244,7 +254,7 @@ class OmiBleForegroundService : Service() {
                 result.getOrNull()?.let { value ->
                     FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
                         if (!parsed.isNull("charging")) bleManager.recordChargingState(address, parsed.getBoolean("charging"))
-                        appendJsonRing("firmware_$address", parsed, 20, DISCONNECT_RETENTION_MS)
+                        appendJsonRing("firmware_$address", parsed, FIRMWARE_DIAGNOSTICS_LIMIT, DISCONNECT_RETENTION_MS)
                         logBle(address, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
                     }
                 }

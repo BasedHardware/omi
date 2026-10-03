@@ -365,6 +365,12 @@ class OmiBleManager private constructor(private val application: Application) {
     // ── Characteristic operations ──
 
     /** Best-effort diagnostics; attempts share a per-device cadence across reconnects. */
+    fun isDiagnosticsReadThrottled(address: String): Boolean {
+        val addr = address.uppercase()
+        val last = lastDiagnosticsReadUptime[addr] ?: return false
+        return SystemClock.elapsedRealtime() - last < 15 * 60_000L
+    }
+
     fun readFirmwareDiagnosticsIfDue(address: String, completion: (Result<ByteArray>) -> Unit) {
         mainHandler.post {
             val addr = address.uppercase()

@@ -58,8 +58,8 @@ void main() {
     }, day);
     expect(result['drain_percent_per_hour'], closeTo(55 * 3600 / 5, 0.00001));
     expect(result['charge_events'], 0);
-    expect(result['cliff_count'], greaterThanOrEqualTo(1));
-    expect(result['max_step_drop'], greaterThanOrEqualTo(55));
+    expect(result['cliff_count'], 1);
+    expect(result['max_step_drop'], 55);
     expect(result['max_step_drop_seconds'], 5);
   });
 
@@ -84,7 +84,6 @@ void main() {
     for (final states in [
       [null, false],
       [false, null],
-      [true, null],
       [null, null],
     ]) {
       final result = DeviceHealthTelemetry.rollup({
@@ -95,6 +94,24 @@ void main() {
       }, day);
       expect(result['drain_percent_per_hour'], 2);
       expect(result['charge_events'], states[0] == true ? 1 : 0);
+    }
+  });
+
+  test('an explicitly charging endpoint excludes the interval even when the other side is unknown', () {
+    final day = DateTime(2026, 9, 27);
+    final start = day.millisecondsSinceEpoch;
+    for (final states in [
+      [true, null],
+      [null, true],
+      [true, false],
+    ]) {
+      final result = DeviceHealthTelemetry.rollup({
+        'battery_history_v2': [
+          {'ts': start, 'level': 80, 'charging': states[0]},
+          {'ts': start + 3600000, 'level': 78, 'charging': states[1]},
+        ],
+      }, day);
+      expect(result['drain_percent_per_hour'], 0);
     }
   });
 
@@ -125,14 +142,16 @@ void main() {
     final start = day.millisecondsSinceEpoch;
     final result = DeviceHealthTelemetry.rollup({
       'firmware_diagnostics': [
-        {'ts': start - 1, 'charge_pin_edges': 100, 'soc_frozen': true},
-        {'ts': start, 'charge_pin_edges': 4, 'soc_frozen': true},
-        {'ts': start + 1000, 'charge_pin_edges': 7, 'soc_frozen': true},
-        {'ts': start + 2000, 'charge_pin_edges': 2, 'soc_frozen': false},
+        {'ts': start - 1, 'charge_pin_edges': 100, 'soc_frozen': true, 'last_off_charger_mv': 999},
+        {'ts': start, 'charge_pin_edges': 4, 'soc_frozen': true, 'last_off_charger_mv': 4000},
+        {'ts': start + 1000, 'charge_pin_edges': 7, 'soc_frozen': true, 'last_off_charger_mv': 3700},
+        {'ts': start + 2000, 'charge_pin_edges': 2, 'soc_frozen': false, 'last_off_charger_mv': null},
         {'ts': start + 3000, 'charge_pin_edges': null, 'soc_frozen': null},
       ],
     }, day);
     expect(result['charge_pin_edges_max'], 7);
     expect(result['soc_frozen_samples'], 2);
+    expect(result['last_off_charger_mv_min'], 3700);
+    expect(result['last_off_charger_mv_max'], 4000);
   });
 }

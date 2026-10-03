@@ -71,6 +71,8 @@ class DeviceHealthTelemetry {
     var maxStepDrop = 0;
     var maxStepDropSeconds = 0.0;
     Map? previousBattery;
+    int? lastOffChargerMvMin;
+    int? lastOffChargerMvMax;
     for (final point in battery) {
       final ts = (point['ts'] as num?)?.toInt() ?? 0;
       if (ts < start || ts >= end) {
@@ -82,8 +84,9 @@ class DeviceHealthTelemetry {
         final priorTs = (previousBattery['ts'] as num?)?.toInt() ?? 0;
         final elapsed = (ts - priorTs) / 3600000;
         final drop = ((previousBattery['level'] as num?) ?? 0) - ((point['level'] as num?) ?? 0);
-        final unknownCharging = point['charging'] is! bool || previousBattery['charging'] is! bool;
-        final draining = unknownCharging || (point['charging'] == false && previousBattery['charging'] == false);
+        // Unknown flags still count as drain, but an explicitly charging
+        // endpoint on either side excludes the interval.
+        final draining = point['charging'] != true && previousBattery['charging'] != true;
         if (priorTs >= start && priorTs < end && elapsed > 0 && elapsed <= 2 && drop > 0 && draining) {
           drainLevels += drop.toInt();
           drainHours += elapsed;
@@ -107,6 +110,12 @@ class DeviceHealthTelemetry {
       final edges = read['charge_pin_edges'];
       if (edges is num && (chargePinEdgesMax == null || edges > chargePinEdgesMax)) {
         chargePinEdgesMax = edges.toInt();
+      }
+      final offChargerMv = read['last_off_charger_mv'];
+      if (offChargerMv is num) {
+        final value = offChargerMv.toInt();
+        if (lastOffChargerMvMin == null || value < lastOffChargerMvMin) lastOffChargerMvMin = value;
+        if (lastOffChargerMvMax == null || value > lastOffChargerMvMax) lastOffChargerMvMax = value;
       }
       if (read['soc_frozen'] is bool) {
         socFrozenSamples = (socFrozenSamples ?? 0) + (read['soc_frozen'] == true ? 1 : 0);
@@ -134,6 +143,8 @@ class DeviceHealthTelemetry {
       'max_step_drop': maxStepDrop,
       'max_step_drop_seconds': maxStepDropSeconds,
       if (chargePinEdgesMax != null) 'charge_pin_edges_max': chargePinEdgesMax,
+      if (lastOffChargerMvMin != null) 'last_off_charger_mv_min': lastOffChargerMvMin,
+      if (lastOffChargerMvMax != null) 'last_off_charger_mv_max': lastOffChargerMvMax,
       if (socFrozenSamples != null) 'soc_frozen_samples': socFrozenSamples,
       'device_resets_by_reason': resets,
     };
