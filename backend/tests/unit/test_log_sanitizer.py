@@ -2,7 +2,7 @@
 
 import pytest
 
-from utils.log_sanitizer import sanitize, sanitize_pii
+from utils.log_sanitizer import sanitize, sanitize_pii, sanitize_provider_error
 
 
 class TestSanitizeShortStrings:
@@ -276,3 +276,112 @@ class TestSanitizeBoundaryEdgeCases:
         text = "a" * 200
         result = sanitize_pii(text)
         assert "..." not in result
+
+
+class TestSanitizeProviderError:
+    """Provider diagnostics emit only a validated code and canonical phrase."""
+
+    def test_none(self):
+        assert sanitize_provider_error(None) == 'code=unknown diagnostic=[redacted]'
+
+    def test_pure_alpha_secret_redacted(self):
+        result = sanitize_provider_error('quixotictranscriptzebra')
+        assert 'quixotictranscriptzebra' not in result
+        assert '[redacted]' in result
+
+    def test_canonical_phrase_from_string(self):
+        assert sanitize_provider_error('429 limit_exceeded retry later') == 'code=unknown diagnostic=limit_exceeded'
+
+    def test_explicit_valid_codes_preserved(self):
+        assert sanitize_provider_error('anything', code=429).startswith('code=429 ')
+        assert sanitize_provider_error('anything', code='500').startswith('code=500 ')
+        assert sanitize_provider_error('anything', code=1005).startswith('code=1005 ')
+
+    def test_invalid_codes_become_unknown(self):
+        for bad in (True, 'nope', '12345', 99, 700, 1016, 3.5, {'code': 500}):
+            assert sanitize_provider_error('anything', code=bad).startswith('code=unknown '), bad
+
+    def test_mapping_extracts_code_and_message(self):
+        result = sanitize_provider_error(
+            {'error_code': 402, 'error_type': 'x', 'error_message': 'Organization balance exhausted, uid user-secret'}
+        )
+        assert result.startswith('code=402 ')
+        assert 'user-secret' not in result
+
+    def test_mapping_non_string_values_not_stringified(self):
+        result = sanitize_provider_error({'error': {'nested': 'payload-secret'}, 'code': 500})
+        assert result.startswith('code=500 ')
+        assert 'payload-secret' not in result
+        assert '[redacted]' in result
+
+    def test_exception_uses_str_for_matching_only(self):
+        result = sanitize_provider_error(RuntimeError('connection timed out: victim@example.com'))
+        assert result == 'code=unknown diagnostic=timed out'
+
+    def test_exception_status_code_attribute(self):
+        class ProviderError(Exception):
+            status_code = 503
+
+        assert sanitize_provider_error(ProviderError('opaque')).startswith('code=503 ')
+
+    def test_exception_response_status_code_attribute(self):
+        class Response:
+            status_code = 502
+
+        class HttpError(Exception):
+            response = Response()
+
+        assert sanitize_provider_error(HttpError('opaque')).startswith('code=502 ')
+
+    def test_canonical_phrase_never_carries_surrounding_text(self):
+        result = sanitize_provider_error(
+            'Internal server error for account victim@sentinel.example key abcdef1234567890'
+        )
+        assert result == 'code=unknown diagnostic=internal server error'
+
+    def test_long_payload_stays_under_cap(self):
+        result = sanitize_provider_error('x' * 12000, code=429)
+        assert len(result) <= 160
+        assert 'xxx' not in result
+
+    @pytest.mark.parametrize(
+        'payload',
+        [
+            'victim@sentinel-domain.example',
+            'https://signed.example.invalid/audio?sig=abcdef123456',
+            '/home/user/private/audio.wav',
+            'line one\nline two secret',
+            'uid 12345 name zebra',
+        ],
+    )
+    def test_sensitive_shapes_redacted(self, payload):
+        result = sanitize_provider_error(payload)
+        assert result == 'code=unknown diagnostic=[redacted]'
+        assert '\n' not in result
+        for fragment in payload.split():
+            assert fragment not in result
+
+    @pytest.mark.parametrize(
+        'phrase',
+        [
+            'organization_balance_exhausted',
+            'organization_monthly_budget_exhausted',
+            'project_monthly_budget_exhausted',
+            'invalid_api_key',
+            'invalid language hint',
+            'no audio received',
+            'max_duration_reached',
+            'request_timeout',
+            'rate_limit_exceeded',
+            'limit_exceeded',
+            'internal server error',
+            'unable to complete the request',
+            'invalid input audio',
+            'timeout',
+            'timed out',
+            'connection closed',
+        ],
+    )
+    def test_each_canonical_phrase_emits_exact_constant(self, phrase):
+        result = sanitize_provider_error(f'vendor said "{phrase}" uid 12345 victim@sentinel-domain.example')
+        assert result == f'code=unknown diagnostic={phrase}'

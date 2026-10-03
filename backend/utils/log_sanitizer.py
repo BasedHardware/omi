@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, cast
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,92 @@ def sanitize_validation_error(error: _ValidationErrorLike) -> str:
             }
         )
     return sanitize(json.dumps(safe_errors, default=str))
+
+
+_PROVIDER_DIAGNOSTIC_PHRASES = (
+    'organization_balance_exhausted',
+    'organization_monthly_budget_exhausted',
+    'project_monthly_budget_exhausted',
+    'invalid_api_key',
+    'invalid language hint',
+    'no audio received',
+    'max_duration_reached',
+    'request_timeout',
+    'rate_limit_exceeded',
+    'limit_exceeded',
+    'internal server error',
+    'unable to complete the request',
+    'invalid input audio',
+    'timeout',
+    'timed out',
+    'connection closed',
+)
+
+_PROVIDER_CODE_KEYS = ('error_code', 'status_code', 'code')
+_PROVIDER_DIAGNOSTIC_KEYS = ('message', 'error_message', 'error', 'description')
+_PROVIDER_ERROR_MAX_LENGTH = 160
+_PROVIDER_TEXT_SCAN_LENGTH = 2000
+
+
+def _provider_code(candidate: object) -> str:
+    """Return a bounded numeric provider status, or '' when unusable."""
+    if isinstance(candidate, bool):
+        return ''
+    if isinstance(candidate, int):
+        number = candidate
+    elif isinstance(candidate, str) and len(candidate) <= 4 and candidate.isascii() and candidate.isdigit():
+        number = int(candidate)
+    else:
+        return ''
+    if 100 <= number <= 599 or 1000 <= number <= 1015:
+        return str(number)
+    return ''
+
+
+def _provider_code_candidate(value: object) -> object:
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[str, object], value)
+        for key in _PROVIDER_CODE_KEYS:
+            candidate = mapping.get(key)
+            if candidate is not None:
+                return candidate
+        return None
+    candidate = getattr(value, 'status_code', None)
+    if candidate is not None:
+        return candidate
+    response = getattr(value, 'response', None)
+    return getattr(response, 'status_code', None)
+
+
+def _provider_diagnostic_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[str, object], value)
+        for key in _PROVIDER_DIAGNOSTIC_KEYS:
+            candidate = mapping.get(key)
+            if isinstance(candidate, str):
+                return candidate
+        return ''
+    if isinstance(value, BaseException):
+        return str(value)
+    return ''
+
+
+def sanitize_provider_error(value: object, *, code: object = None) -> str:
+    """Return a bounded diagnostic for a provider error without echoing raw text.
+
+    Provider and user payloads can carry secrets, paths, or transcript text even
+    when purely alphabetic, so nothing from ``value`` is copied to the output.
+    Only a canonical diagnostic phrase matched against the provider text and a
+    validated numeric status code are emitted; anything else is redacted.
+    """
+    if code is None:
+        code = _provider_code_candidate(value)
+    code_text = _provider_code(code) or 'unknown'
+    text = _provider_diagnostic_text(value)[:_PROVIDER_TEXT_SCAN_LENGTH].lower()
+    diagnostic = next((phrase for phrase in _PROVIDER_DIAGNOSTIC_PHRASES if phrase in text), '[redacted]')
+    return sanitize(f'code={code_text} diagnostic={diagnostic}')[:_PROVIDER_ERROR_MAX_LENGTH]
 
 
 def _mask_email(match: re.Match[str]) -> str:
