@@ -5,6 +5,7 @@
 #include <zephyr/sys/ring_buffer.h>
 
 #include "config.h"
+#include "diagnostics.h"
 #include "utils.h"
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
@@ -35,6 +36,7 @@ int codec_receive_pcm(int16_t *data, size_t len) // this gets called after mic d
 
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *) data, len * 2);
     if (written != len * 2) {
+        omi_diagnostics_inc_mic_overrun();
         LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
         return -1;
     }
