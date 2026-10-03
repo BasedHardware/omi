@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_settings.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -569,7 +573,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final connected = provider.connectedDevice;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.deviceSettings)),
       body: ListView(
@@ -602,6 +606,43 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         ],
       ),
     );
+    if (!iosSwiftUiEnabled) return classic;
+    final l10n = context.l10n;
+    final projected = nativeSettingsSections([
+      if (provider.isConnected) _customizationGroup(paired ?? connected, provider),
+      _deviceGroup(provider),
+      DeviceInfoGroups(
+              pairedDevice: paired,
+              isDeviceConnected: connected != null,
+              rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null)
+          .build(context),
+      _forgetGroup(provider),
+    ],
+        trailingText: (trailing) => trailing is _PendingSyncChip
+            ? OmiDuration.compact(trailing.seconds, l10n)
+            : trailing is OmiSpinner
+                ? l10n.loading
+                : null);
+    if (projected == null) return classic;
+    return IosNativeSurface(title: l10n.deviceSettings, fallback: classic, toolbar: [
+      NativeRow('device_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+    ], sections: [
+      NativeSection('device_status', [
+        NativeRow('device_name', paired?.name ?? l10n.omiAppName,
+            kind: 'label', subtitle: provider.isConnected ? l10n.connected : l10n.disconnected),
+        if (connected != null && provider.batteryLevel > 0)
+          NativeRow('device_battery', l10n.battery,
+              kind: 'label', subtitle: '${provider.batteryLevel}%${provider.isCharging ? ' · ${l10n.charging}' : ''}'),
+      ]),
+      ...projected,
+      if (connected != null && capture != null && capture.havingRecordingDevice)
+        NativeSection('device_streaming', [
+          NativeRow('device_stream_rates', l10n.diagnostics,
+              kind: 'label',
+              subtitle:
+                  'BLE ${l10n.dataRateKbps(capture.bleReceiveRateKbps.toStringAsFixed(1))} · WebSocket ${l10n.dataRateKbps(capture.wsSendRateKbps.toStringAsFixed(1))}'),
+        ]),
+    ]);
   }
 }
 

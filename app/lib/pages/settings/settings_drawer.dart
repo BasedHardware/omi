@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_settings.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +31,10 @@ class SettingsDrawer extends StatefulWidget {
 
   /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
   static Future<void> show(BuildContext context) {
+    if (iosSwiftUiEnabled) {
+      return Navigator.of(context)
+          .push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: SettingsDrawer())));
+    }
     // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
     // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
     // a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
@@ -263,7 +270,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    return Column(
+    final classic = Column(
       children: [
         AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
         const SizedBox(height: OmiSpacing.xs),
@@ -277,5 +284,32 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         ),
       ],
     );
+    final settings = _buildSettings(context) as Column;
+    final sections = _searchQuery.trim().isNotEmpty
+        ? [
+            NativeSection('settings_search', [
+              for (final entry in searchSettings(context.l10n, _searchQuery, _searchScope(context)))
+                NativeRow('settings_search_${entry.destination.name}', entry.title(context.l10n),
+                    destructive: entry.destination == SettingsDestination.signOut,
+                    action: (_) => _open(entry.destination))
+            ])
+          ]
+        : nativeSettingsSections(settings.children);
+    if (sections == null) return classic;
+    return IosNativeSurface(
+        title: context.l10n.settings,
+        sections: sections,
+        fallback: classic,
+        empty: context.l10n.noResultsFound,
+        search: (value) {
+          setState(() => _searchQuery = value as String);
+        },
+        searchValue: _searchQuery,
+        searchPlaceholder: context.l10n.searchSettings,
+        toolbar: [
+          NativeRow('settings_close', context.l10n.close, symbol: 'xmark', action: (_) {
+            Navigator.of(context).pop();
+          })
+        ]);
   }
 }

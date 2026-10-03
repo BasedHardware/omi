@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -176,7 +179,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
-        return Scaffold(
+        final classic = Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(
             leading: const OmiBackButton(),
@@ -274,6 +277,56 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             ],
           ),
         );
+        if (!iosSwiftUiEnabled) return classic;
+        return IosNativeSurface(
+            title: context.l10n.memories,
+            fallback: classic,
+            loading: provider.loading && _isInitialLoad,
+            failed: provider.showLoadError,
+            empty: provider.searchQuery.isEmpty ? context.l10n.noMemoriesYet : context.l10n.noMemoriesFound,
+            searchValue: provider.searchQuery,
+            searchPlaceholder: context.l10n.searchMemories,
+            search: (value) => provider.setSearchQuery(value as String),
+            onRefresh: (_) => provider.init(),
+            toolbar: [
+              NativeRow('memories_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+                Navigator.of(context).pop();
+              }),
+              NativeRow('memories_add', context.l10n.createMemoryTooltip,
+                  symbol: 'plus', action: (_) => _createMemory(provider)),
+              NativeRow('memories_manage', context.l10n.memoryManagement, symbol: 'line.3.horizontal.decrease',
+                  action: (_) {
+                _showMemoryManagementSheet(context, provider);
+              }),
+            ],
+            sections: [
+              if (widget.showMindMap && provider.memories.isNotEmpty)
+                NativeSection('memory_graph', [
+                  NativeRow('memory_graph_open', context.l10n.mindMap, action: (_) async {
+                    await routeToPage(context, MemoryGraphPage(loadGraph: widget.loadGraph));
+                  }),
+                ]),
+              NativeSection('memories', [
+                for (final memory in provider.filteredMemories)
+                  NativeRow('memory_${memory.id}',
+                      memory.isLocked ? context.l10n.upgradeToUnlimited : memory.content.decodeString, action: (_) {
+                    _showQuickEditSheet(context, memory, provider);
+                  })
+              ]),
+              if (provider.memoryBeliefEnabled && provider.showHistory && provider.ledgerHistoryHasMore)
+                NativeSection('memory_history', [
+                  NativeRow('memory_history_more', context.l10n.showMore, action: (_) => provider.loadMoreHistory())
+                ]),
+              if (provider.searchQuery.isNotEmpty || provider.filterThisDeviceOnly)
+                NativeSection('memory_reset', [
+                  NativeRow('memory_reset_filters', context.l10n.resetFilters, action: (_) {
+                    provider.setSearchQuery('');
+                    provider.clearCategoryFilter();
+                    provider.setFilterThisDeviceOnly(false);
+                    provider.setCollectionView(MemoryCollectionView.all);
+                  })
+                ]),
+            ]);
       },
     );
   }

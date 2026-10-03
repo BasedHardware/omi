@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -43,7 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final uid = _prefs.uid;
     final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
 
-    return Scaffold(
+    final classic = Scaffold(
       key: const ValueKey('settings_page_account'),
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.account)),
       body: ListView(
@@ -98,5 +99,25 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
     );
+    return IosNativeSurface(title: l10n.account, fallback: classic, toolbar: [
+      NativeRow('account_back', l10n.back, symbol: 'chevron.left', action: (_) {
+        Navigator.of(context).pop();
+      })
+    ], sections: [
+      NativeSection('account_identity', [
+        NativeRow('account_name', l10n.name,
+            subtitle: _prefs.givenName.isEmpty ? l10n.notSet : _prefs.givenName, action: (_) => _editName()),
+        NativeRow('account_email', l10n.email,
+            kind: 'label', subtitle: _prefs.email.isEmpty ? l10n.notSet : _prefs.email),
+        NativeRow('account_uid', l10n.userId,
+            subtitle: truncatedUid, action: (_) => OmiClipboard.copy(context, uid, what: l10n.userId)),
+      ]),
+      NativeSection('account_actions', [
+        NativeRow('account_sign_out', l10n.signOut,
+            destructive: true, action: (_) => _open(SettingsDestination.signOut)),
+        NativeRow('account_delete', l10n.deleteAccountTitle,
+            destructive: true, action: (_) => _open(SettingsDestination.deleteAccount)),
+      ]),
+    ]);
   }
 }

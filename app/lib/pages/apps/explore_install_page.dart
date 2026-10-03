@@ -1,5 +1,7 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -351,7 +353,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   Widget build(BuildContext context) {
     // Wrap with NotificationListener to catch SelectAppNotification
     super.build(context);
-    return NotificationListener<SelectAppNotification>(
+    final classic = NotificationListener<SelectAppNotification>(
       onNotification: _handleSelectAppNotification,
       child: Selector<
           AppProvider,
@@ -680,6 +682,61 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         },
       ),
     );
+    // Integrations supplies additional service controls; keep those reachable until projected.
+    if (!iosSwiftUiEnabled || widget.leadingSlivers.isNotEmpty) return classic;
+    final provider = context.watch<AppProvider>();
+    final filtered = provider.isFilterActive() || provider.isSearchActive();
+    NativeRow appRow(App app, String group) =>
+        NativeRow('${group}_${app.id}', app.getName(), subtitle: app.description, action: (_) async {
+          await routeToPage(context, AppDetailPage(app: app));
+        });
+    return IosNativeSurface(
+        title: context.l10n.apps,
+        fallback: classic,
+        loading: provider.isLoading || provider.isSearching,
+        empty: context.l10n.noAppsFound,
+        searchValue: provider.searchQuery,
+        searchPlaceholder: context.l10n.searchApps,
+        search: (value) {
+          provider.searchApps(value as String);
+        },
+        onRefresh: (_) => provider.forceRefreshApps(),
+        toolbar: [
+          NativeRow('apps_filters', context.l10n.filters, symbol: 'line.3.horizontal.decrease', action: (_) {
+            FilterBottomSheet.show(context);
+          }),
+          NativeRow('apps_clear', context.l10n.resetFilters, symbol: 'arrow.counterclockwise', action: (_) {
+            provider.clearFilters();
+          }),
+        ],
+        sections: filtered
+            ? [
+                NativeSection('apps_results', [for (final app in provider.filteredApps) appRow(app, 'result')])
+              ]
+            : [
+                if (provider.popularApps.isNotEmpty)
+                  NativeSection('apps_popular', [for (final app in provider.popularApps) appRow(app, 'popular')],
+                      title: context.l10n.popularApps),
+                for (var index = 0; index < provider.groupedApps.length; index++)
+                  NativeSection(
+                      'apps_category_$index',
+                      [
+                        for (final app in (provider.groupedApps[index]['data'] as List<App>? ?? <App>[]))
+                          appRow(app, 'category_$index')
+                      ],
+                      title: _nativeGroupTitle(provider.groupedApps[index])),
+              ]);
+  }
+
+  String _nativeGroupTitle(Map<String, dynamic> group) {
+    final capability = group['capability'] as Map<String, dynamic>?;
+    final category = group['category'] as Map<String, dynamic>?;
+    final metadata = capability ?? category;
+    final title = (metadata?['title'] as String? ?? '').trim();
+    final id = metadata?['id'] as String? ?? '';
+    if (title.isEmpty) return context.l10n.apps;
+    if (capability != null) return AppCapability(title: title, id: id).getLocalizedTitle(context);
+    return Category(title: title, id: id).getLocalizedTitle(context);
   }
 
   @override

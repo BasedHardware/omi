@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -253,7 +256,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
           // is a transcript it turns solid so long answers stay readable.
           final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
-          return AnimatedContainer(
+          final classic = AnimatedContainer(
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOut,
             color: isGlass ? Colors.transparent : OmiColors.surface0,
@@ -311,10 +314,124 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
               ),
             ),
           );
+          if (!iosSwiftUiEnabled) return classic;
+          final voice = context.watch<VoiceRecorderProvider>();
+          // Existing attachment and voice recovery controls remain available in their full renderer.
+          if (voice.isActive || provider.selectedFiles.isNotEmpty) return classic;
+          final latest = provider.messages.lastOrNull;
+          final followup = latest?.sender == MessageSender.ai &&
+                  !provider.chatMutationInProgress &&
+                  !provider.isReplyFailed(latest!) &&
+                  connectivityProvider.isConnected
+              ? latest.followUpQuestion
+              : null;
+          final l10n = context.l10n;
+          final greeting = DateTime.now().hour < 12
+              ? l10n.greetingMorning
+              : DateTime.now().hour < 18
+                  ? l10n.greetingAfternoon
+                  : l10n.greetingEvening;
+          return IosNativeSurface(
+              title: context.watch<AppProvider>().getSelectedApp()?.getName() ?? l10n.askOmi,
+              fallback: classic,
+              loading: provider.isLoadingMessages || provider.isClearingChat,
+              failed: provider.historyProblem != null,
+              empty: l10n.greetingWithName(greeting, prefs.givenName),
+              onRefresh: (_) => provider.refreshMessages(),
+              sections: [
+                NativeSection('chat_messages', [
+                  if (provider.hasOlderMessages)
+                    NativeRow('chat_older', l10n.showMore,
+                        enabled: !provider.loadingOlderMessages && provider.canSwitchChat,
+                        action: (_) => provider.loadOlderMessages()),
+                  for (final message in provider.messages)
+                    NativeRow('chat_message_${message.id}',
+                        provider.isReplyFailed(message) ? l10n.chatReplyFailed : message.text,
+                        kind: message.sender == MessageSender.ai ? 'message_ai' : 'message_user',
+                        subtitle: provider.isReplyFailed(message) ? l10n.tryAgain : l10n.open,
+                        onVisible: (_) {
+                          if (message.sender == MessageSender.ai && !message.isEmpty) {
+                            provider.markChatResultVisible(message.id);
+                          }
+                        },
+                        action: (_) => provider.canRetryReply(message)
+                            ? _retryReply(message)
+                            : _openNativeMessage(message, provider)),
+                  if (_chatScope != null)
+                    NativeRow('chat_scope', l10n.chatScopeAbout(_chatScope!.title ?? l10n.conversationTab),
+                        action: (_) => setState(() => _chatScope = null)),
+                  if (_selectedContext != null)
+                    NativeRow('chat_context', _selectedContext!,
+                        action: (_) => setState(() => _selectedContext = null)),
+                  if (provider.messages.isEmpty && connectivityProvider.isConnected) ...[
+                    for (final prompt in [l10n.askSuggestDecide, l10n.askSuggestOwe, l10n.askSuggestNotice])
+                      NativeRow('chat_prompt_$prompt', prompt,
+                          action: (_) => setState(() => textController.text = prompt)),
+                  ],
+                ])
+              ],
+              toolbar: [
+                NativeRow('chat_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).pop()),
+                NativeRow('chat_options', l10n.chatAppsTitle,
+                    symbol: 'ellipsis', action: (_) => _openNativeChatOptions()),
+              ],
+              chat: NativeChat(
+                  draft: textController.text,
+                  placeholder: l10n.askOmi,
+                  streaming: provider.chatMutationInProgress,
+                  followup: followup ?? '',
+                  actions: [
+                    NativeRow('chat_draft', l10n.askOmi,
+                        kind: 'text',
+                        value: textController.text,
+                        action: (value) => setState(() => textController.text = value as String)),
+                    if (textController.text.trim().isEmpty)
+                      NativeRow('chat_voice', l10n.startVoiceRecording,
+                          symbol: 'mic',
+                          enabled: connectivityProvider.isConnected && !provider.chatMutationInProgress,
+                          action: (_) => voice.startRecording()),
+                    NativeRow('chat_send', l10n.chatSendMessage,
+                        symbol: 'arrow.up',
+                        enabled: textController.text.trim().isNotEmpty &&
+                            connectivityProvider.isConnected &&
+                            !provider.chatMutationInProgress &&
+                            !provider.isLoadingMessages,
+                        action: (_) => _sendMessageUtil(textController.text.trim())),
+                    if (followup != null)
+                      NativeRow('chat_followup', followup,
+                          symbol: 'sparkles', action: (_) => _sendMessageUtil(followup)),
+                  ]));
         },
       ),
     );
   }
+
+  Future<void> _openNativeChatOptions() => showOmiSheet<void>(
+      context: context,
+      builder: (_) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * .8,
+          child: ChatAppsDrawer(
+              onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+              onEnableApps: _navigateToChatAppsPage,
+              onDisableApp: _disableChatApp,
+              onClearChat: _showClearChatDialog)));
+
+  Future<void> _openNativeMessage(ServerMessage message, MessageProvider provider) => showOmiSheet<void>(
+      context: context,
+      builder: (_) => SingleChildScrollView(
+          child: message.sender == MessageSender.ai
+              ? AIMessage(
+                  displayOptions: true,
+                  message: message,
+                  sendMessage: _sendMessageUtil,
+                  onAskOmi: (text) => setState(() => _selectedContext = text),
+                  appSender: provider.messageSenderApp(message.appId),
+                  updateConversation: (conversation) =>
+                      context.read<ConversationProvider>().updateConversation(conversation),
+                  setMessageNps: (value, {reason}) => provider.setMessageNps(message, value, reason: reason),
+                  replyFailed: provider.isReplyFailed(message),
+                  onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null)
+              : HumanMessage(message: message, onAskOmi: (text) => setState(() => _selectedContext = text))));
 
   Future<void> _loadOlderMessages(MessageProvider provider) async {
     final before = scrollController.hasClients ? scrollController.position.maxScrollExtent : 0.0;

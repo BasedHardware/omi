@@ -594,6 +594,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "PR 12935: speech availability must return on deadline without awaiting shared downloads, and recognition cleanup must precede retry"
+  - id: ios-native-home-contract
+    command: ["ruby", "app/ios/test/native_home_contract_test.rb"]
+    triggers: ["app/ios/Runner/NativeUI/**", "app/ios/Runner/SafeFoundationSinks.swift", "app/ios/test/native_home_contract_test.*", "app/test/fixtures/native_home_v1.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "PR #19844 established live mobile appearance changes; the staged native renderer tracked in #20426 must preserve that setting and reject stale revisions, duplicate identities and locked-content projections using its production decoder"
+  - id: ios-native-surface-contract
+    command: ["ruby", "app/ios/test/native_surface_contract_test.rb"]
+    triggers: ["app/ios/Runner/NativeUI/**", "app/ios/Runner/SafeFoundationSinks.swift", "app/ios/test/native_surface_contract_test.*", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#20426: native forms must validate values and identities and clear private fields when their owning account session ends"
   - id: ios-flutter-launch-engine-guard
     command: ["ruby", "app/ios/test/flutter_launch_engine_guard_test.rb"]
     triggers: ["app/ios/Runner/FlutterLaunchEngineGuard.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/test/flutter_launch_engine_guard_test.rb", ".github/checks-manifest.yaml"]

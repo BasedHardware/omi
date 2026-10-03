@@ -38,6 +38,8 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 
 ## Native Bridge
 
+SwiftUI preview: [guide](docs/ios-native-ui.md).
+
 ### Pigeon Interface (bidirectional, iOS ↔ Dart)
 - Contract: `lib/pigeon_interfaces.dart` — paired host/Flutter APIs for the watch recorder, BLE, and Ray-Ban Meta
 - Dart side: `lib/gen/pigeon_communicator.g.dart`
@@ -106,7 +108,6 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
-- Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.

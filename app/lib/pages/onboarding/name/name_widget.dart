@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
@@ -49,7 +50,7 @@ class _NameWidgetState extends State<NameWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingStep(
+    final classic = OnboardingStep(
       card: OnboardingCard(
         content: [
           Semantics(
@@ -94,5 +95,16 @@ class _NameWidgetState extends State<NameWidget> {
         ],
       ),
     );
+    return IosNativeSurface(title: context.l10n.whatsYourName, fallback: classic, sections: [
+      NativeSection('name', [
+        NativeRow('onboarding_name', context.l10n.enterYourName, kind: 'text', value: nameController.text,
+            action: (value) {
+          setState(() => nameController.text = value as String);
+        }),
+        NativeRow('onboarding_name_continue', context.l10n.continueButton, enabled: _canContinue, action: (_) {
+          _submit();
+        }),
+      ]),
+    ]);
   }
 }

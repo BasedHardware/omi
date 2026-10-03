@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
@@ -143,7 +144,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.permissions)),
       body: _isLoading
           ? const OmiLoadingState()
@@ -190,6 +191,33 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
               ],
             ),
     );
+    final l10n = context.l10n;
+    NativeRow permission(String id, String title, bool granted, Future<void> Function() request) => NativeRow(id, title,
+        subtitle: granted ? l10n.permissionEnabled : l10n.permissionEnable, action: (_) => request());
+    return IosNativeSurface(
+        title: l10n.permissions,
+        fallback: classic,
+        loading: _isLoading,
+        onRefresh: (_) => _checkPermissions(),
+        toolbar: [
+          NativeRow('permissions_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop())
+        ],
+        sections: [
+          if (!_isLoading)
+            NativeSection(
+                'permissions',
+                [
+                  permission('notifications', l10n.notifications, _notificationsGranted,
+                      () => _handlePermissionTap(Permission.notification, _notificationsGranted, 'notifications')),
+                  permission('location', l10n.location, _locationGranted, _handleLocationTap),
+                  permission('bluetooth', l10n.bluetooth, _bluetoothGranted, _handleBluetoothTap),
+                  permission('microphone', l10n.microphone, _microphoneGranted,
+                      () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone')),
+                  if (Platform.isAndroid)
+                    permission('background', l10n.backgroundActivity, _backgroundGranted, _handleBackgroundTap),
+                ],
+                footer: l10n.permissionsPageDescription)
+        ]);
   }
 
   Widget _buildPermissionRow({

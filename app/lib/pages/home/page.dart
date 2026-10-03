@@ -12,6 +12,17 @@ import 'package:upgrader/upgrader.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -145,6 +156,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final GlobalKey<HomeContentPageState> _homeContentPageKey = GlobalKey<HomeContentPageState>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
+  final _nativeHomeKey = GlobalKey<IosNativeHomeState>();
+  final _nativeRecordKey = GlobalKey<HomeRecordButtonState>();
+  late final Future<bool> _nativeSupport = supportsIosSwiftUi();
   // Keep the IndexedStack slots stable, but defer constructing non-selected
   // tabs until the user visits them. Once created, a tab remains in the stack
   // so its scroll position and other state are preserved.
@@ -230,7 +244,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _scrollToTop(int pageIndex) {
     switch (pageIndex) {
       case HomeProvider.homeTab:
-        _homeContentPageKey.currentState?.scrollToTop();
+        if (iosSwiftUiEnabled && Platform.isIOS) {
+          _nativeHomeKey.currentState?.scrollToTop();
+        } else {
+          _homeContentPageKey.currentState?.scrollToTop();
+        }
         break;
       case HomeProvider.tasksTab:
         final actionItemsState = _actionItemsPageKey.currentState;
@@ -434,6 +452,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _prewarmRemainingTabs(homePageIdx);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (iosSwiftUiEnabled && Platform.isIOS && mounted) {
+        unawaited(context.read<SpeakerTagPromptsProvider>().loadIfDue());
+      }
       // Android needs a foreground service to keep capture/location work alive.
       // On iOS this plugin boots a second Flutter engine; conversation location
       // is captured directly at recording start and first transcript instead.
@@ -748,7 +769,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, selectedIndex, _) {
             final onHome = selectedIndex == HomeProvider.homeTab;
             // D6: Android back on Tasks returns to Home before it leaves the app.
-            return PopScope(
+            final classic = PopScope(
               canPop: onHome,
               onPopInvokedWithResult: (didPop, _) {
                 if (didPop || onHome) return;
@@ -821,10 +842,125 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
               ),
             );
+            if (!iosSwiftUiEnabled || !Platform.isIOS) return classic;
+            return FutureBuilder<bool>(
+                future: _nativeSupport,
+                builder: (context, support) {
+                  if (support.hasError || support.data == false) return classic;
+                  if (support.connectionState != ConnectionState.done) {
+                    return const Scaffold(body: Center(child: OmiSpinner()));
+                  }
+                  return Scaffold(
+                      body: Stack(children: [
+                    IndexedStack(index: onHome ? 0 : 1, children: [
+                      _buildNativeHome(context),
+                      ActionItemsPage(key: _actionItemsPageKey),
+                    ]),
+                    if (!onHome) const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
+                    Offstage(child: HomeRecordButton(key: _nativeRecordKey)),
+                  ]));
+                });
           },
         ),
       ),
     );
+  }
+
+  Widget _buildNativeHome(BuildContext context) {
+    final l10n = context.l10n;
+    final device = context.watch<DeviceProvider>();
+    final capture = context.watch<CaptureProvider>();
+    final home = context.watch<HomeProvider>();
+    final prompts = context.watch<SpeakerTagPromptsProvider>();
+    final sync = context.watch<SyncProvider>();
+    final wedge = CaptureWedgeMonitor.instance;
+    final pending = sync.missingWalsOnDevice.length + sync.pendingLocalTranscriptionWals.length;
+    final phoneRecording = capture.recordingState == RecordingState.record || capture.isPhoneMicPaused;
+    final deviceLabel = device.isConnected
+        ? device.batteryLevel > 0
+            ? '${device.batteryLevel}%'
+            : device.connectedDevice!.name
+        : device.isConnecting
+            ? l10n.deviceConnecting
+            : device.pairedDevice == null
+                ? l10n.connect
+                : l10n.disconnected;
+    return ListenableBuilder(
+        listenable: wedge,
+        builder: (context, _) => IosNativeHome(
+              key: _nativeHomeKey,
+              header: [
+                NativeHomeAction(
+                    'device', deviceLabel, device.isCharging ? 'battery.100percent.bolt' : 'battery.75percent',
+                    () async {
+                  await routeToPage(
+                      context, device.pairedDevice == null ? const ConnectDevicePage() : const ConnectedDevice());
+                }),
+                NativeHomeAction('calls', l10n.phoneCallsWithOmi, 'phone', () async {
+                  await routeToPage(context, const PhoneCallsPage());
+                }),
+                if (device.pairedDevice != null || pending > 0)
+                  NativeHomeAction('sync', pending > 0 ? '${l10n.sync} ($pending)' : l10n.sync, 'icloud', () async {
+                    await routeToPage(context, device.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
+                  }),
+                NativeHomeAction('search', l10n.search, 'magnifyingglass', _openSearch),
+                NativeHomeAction('settings', l10n.settings, 'gearshape', _openSettings),
+              ],
+              footer: [
+                NativeHomeAction('chat', l10n.askOmi, 'bubble.left', () => _openChat()),
+                NativeHomeAction('voice', l10n.voiceMode, 'mic', () => _openChat(voice: true)),
+                NativeHomeAction('record', phoneRecording ? l10n.stopRecording : l10n.startRecording,
+                    phoneRecording ? 'stop.fill' : 'record.circle', () async {
+                  await _nativeRecordKey.currentState?.performPrimaryAction();
+                }, enabled: capture.recordingState != RecordingState.initialising),
+                NativeHomeAction('tasks', l10n.tasks, 'checklist', () {
+                  context.read<HomeProvider>().setIndex(HomeProvider.tasksTab);
+                }),
+              ],
+              alerts: [
+                if (wedge.visiblePrompt != null)
+                  NativeHomeAction('recovery', l10n.captureRecoveryBanner, 'exclamationmark.triangle', () async {
+                    wedge.markPromptShown();
+                    wedge.onRecoveryActioned(surface: 'banner');
+                    if (wedge.visiblePrompt?.trigger == CaptureWedgeMonitor.triggerStorageAtRisk) {
+                      wedge.retryVisibleEpisode();
+                    } else {
+                      await HomeNavigation.openRoute('/settings/device');
+                    }
+                  }),
+                if (!home.isLoading &&
+                    !home.hasSpeakerProfile &&
+                    device.isConnected &&
+                    device.pairedDevice?.firmwareRevision != '1.0.2')
+                  NativeHomeAction('voiceProfile', l10n.teachOmiYourVoice, 'waveform', () async {
+                    final before = SharedPreferencesUtil().hasSpeakerProfile;
+                    await openVoiceProfile(context);
+                    if (!mounted || before == SharedPreferencesUtil().hasSpeakerProfile) return;
+                    await capture.onRecordProfileSettingChanged();
+                    if (mounted) home.setSpeakerProfile(SharedPreferencesUtil().hasSpeakerProfile);
+                  }),
+                if (device.havingNewFirmware)
+                  NativeHomeAction('firmware', l10n.updateOmiFirmware, 'arrow.up.circle', () async {
+                    final isGlass = device.pairedDevice?.type == DeviceType.openglass ||
+                        (device.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
+                    PlatformManager.instance.analytics.pageOpened('Update Firmware Memories');
+                    await routeToPage(
+                        context,
+                        isGlass
+                            ? OmiGlassOtaUpdate(
+                                device: device.pairedDevice,
+                                latestFirmwareDetails: device.latestOmiGlassFirmwareDetails)
+                            : FirmwareUpdate(device: device.pairedDevice));
+                  }),
+                if (prompts.visible && (prompts.finished || prompts.current != null))
+                  NativeHomeAction('speakers', l10n.speakerTagPromptTitle, 'person.wave.2', () async {
+                    await showOmiSheet<void>(
+                        context: context,
+                        title: l10n.speakerTagPromptTitle,
+                        builder: (_) => const SpeakerTagPromptCard());
+                  }),
+              ],
+            ));
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.
