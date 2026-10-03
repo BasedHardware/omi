@@ -14,7 +14,7 @@ from utils.proactivity import enabled
 logger = logging.getLogger(__name__)
 
 
-def schedule_followup(uid: str, task_id: str, due_at: datetime | str) -> None:
+def schedule_followup(uid: str, task_id: str, due_at: datetime | str, *, retry_on_failure: bool = False) -> None:
     """No task mutation; stale wakes are fenced by canonical due revision at execution."""
     queue = os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE', '')
     url = os.getenv('COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL', '')
@@ -47,6 +47,8 @@ def schedule_followup(uid: str, task_id: str, due_at: datetime | str) -> None:
         )
     except Exception:
         logger.info('commitment_followup scheduling_unavailable')
+        if retry_on_failure:
+            raise
 
 
 def verify_followup_task(request: Request) -> int:

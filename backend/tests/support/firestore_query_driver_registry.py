@@ -2506,7 +2506,7 @@ _add(
         covered_by=('database.proactivity_producers.delivered_mentor_items',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='58d7145835dc52e60251c5034bd57a2b9897ab9bf3c07ad823abd94a0ae404fd',
+        body_digest='bfeda8200c63abd13036317d112a6f27d8367f0d246c395bb9331c6a8de57fe3',
     )
 )
 
@@ -2516,7 +2516,7 @@ _add(
         covered_by=('database.proactivity_producers.record_mentor_reply',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='3a5d81d77cd6379c50c6ecb3e4f35dca71cc63a4cb99e7ed77c11ab8db6631d5',
+        body_digest='6f5a40a51a64b70602500589d9493395d87cf696ea2528d95a5e2b6b411c3803',
     )
 )
 
@@ -2526,6 +2526,6 @@ _add(
         covered_by=('database.proactivity_producers.record_task_completion',),
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
-        body_digest='851391e841741bcf7b990b3e8b38828c0f8955ad59e64b9987e74a81eeb83ad8',
+        body_digest='1b1d3cbd9bc4897e195a6978308aeeffc86e94f79bca9762971583e180fcede3',
     )
 )

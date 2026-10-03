@@ -136,6 +136,13 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
+    if message_data.get('sender') == 'human' and message_data.get('plugin_id', message_data.get('app_id')) == 'mentor':
+        from database.proactivity_producers import record_mentor_reply
+
+        try:
+            record_mentor_reply(uid, firestore_client=db)
+        except Exception:
+            logger.info('mentor_v2 outcome_unavailable')
     return message_data
 
 

@@ -38,19 +38,19 @@ INDEX_ONLY_REQUIREMENTS = (
         'proactivity_followup_source_outcomes',
         'proactivity_items',
         'COLLECTION',
-        (_asc('source_id'), _desc('created_at'), _desc('__name__')),
+        (_asc('source_id'), _asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'proactivity_mentor_delivered_history',
         'proactivity_items',
         'COLLECTION',
-        (_asc('producer'), _asc('delivered'), _desc('delivered_at'), _desc('__name__')),
+        (_asc('producer'), _asc('state'), _asc('delivered'), _desc('delivered_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'proactivity_mentor_recent_outcomes',
         'proactivity_items',
         'COLLECTION',
-        (_asc('producer'), _desc('created_at'), _desc('__name__')),
+        (_asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'proactivity_feed_state_created',

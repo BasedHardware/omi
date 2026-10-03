@@ -9,6 +9,14 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "producer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "created_at",
           "order": "DESCENDING"
         },
@@ -24,6 +32,10 @@
       "fields": [
         {
           "fieldPath": "producer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
           "order": "ASCENDING"
         },
         {
@@ -46,6 +58,10 @@
       "fields": [
         {
           "fieldPath": "producer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
           "order": "ASCENDING"
         },
         {

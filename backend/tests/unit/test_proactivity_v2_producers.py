@@ -413,3 +413,16 @@ async def test_gateway_dedupe_routing_and_typed_budget_denial(monkeypatch):
         )
     assert client.post.call_args.args[0].endswith('/v1/systemone')
     assert client.post.call_args.kwargs['json']['model'] == 'omi:auto:jev-decisions'
+
+
+@pytest.mark.asyncio
+async def test_publication_due_race_closed_suppressed(lane):
+    due = datetime.now(timezone.utc) - timedelta(minutes=1)
+    lane.monkeypatch.setattr(
+        producers.tasks,
+        'get_action_item',
+        MagicMock(return_value={'conversation_id': 'c', 'due_at': due, 'completed': False}),
+    )
+    lane.publish.side_effect = ProactivityDenied('source_changed')
+    await producers.produce_followup('u', 't', due.isoformat())
+    lane.close.assert_awaited_once_with(item=lane.item, state='suppressed', reason='source_changed')

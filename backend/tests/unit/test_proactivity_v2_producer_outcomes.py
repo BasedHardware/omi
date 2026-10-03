@@ -79,3 +79,34 @@ def test_followup_publish_source_guard_checks_inside_transaction(store):
             now=NOW,
         )
     assert store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['state'] == 'claimed'
+
+
+def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
+    import inspect
+    import database.chat as chat
+
+    events = []
+    messages = SimpleNamespace(add=lambda payload: events.append('persisted'))
+    owner = SimpleNamespace(collection=lambda name: messages)
+    monkeypatch.setattr(
+        chat, 'db', SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: owner))
+    )
+    monkeypatch.setattr(mapping, 'record_mentor_reply', lambda uid, **kwargs: events.append('observed'))
+    # Exercise the persistence body; encryption/plan wrappers have independent contract coverage.
+    inspect.unwrap(chat.add_message)('u', {'memories': [], 'sender': 'human', 'plugin_id': 'mentor'})
+    assert events == ['persisted', 'observed']
+
+
+def test_canonical_task_completion_observation_is_post_commit(store, monkeypatch):
+    import database.action_items as tasks
+
+    events = []
+    monkeypatch.setattr(tasks, 'db', store)
+    monkeypatch.setattr(tasks, 'bump_action_items_list_version', lambda uid: None)
+    monkeypatch.setattr(
+        tasks,
+        '_record_followup_completion',
+        lambda uid, task_id: events.append(store.rows[('users', uid, 'action_items', task_id)]['completed']),
+    )
+    assert tasks.mark_action_item_completed('u', 'a', True)
+    assert events == [True]

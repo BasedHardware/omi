@@ -274,10 +274,15 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
             target=ProactivityTarget(kind='action_item', id=action_item_id),
             source_guard={'completed': False, 'status': 'active', 'due_at': due, 'deleted': False, 'is_deleted': False},
         )
-    except Exception:
+    except Exception as exc:
         if item is not None:
             try:
-                await spine.close_item(item=item, state='failed', reason='generation_failed')
+                changed = isinstance(exc, ProactivityDenied) and exc.reason == 'source_changed'
+                await spine.close_item(
+                    item=item,
+                    state='suppressed' if changed else 'failed',
+                    reason='source_changed' if changed else 'generation_failed',
+                )
             except Exception:
                 logger.info('proactivity_v2 terminal_write_unavailable')
         logger.info('commitment_followup evaluation_denied_or_failed')
@@ -345,21 +350,3 @@ def mentor_delivery_history(uid: str) -> list[str]:
         if message.get('sender') == 'ai' and not message.get('proactivity_item_id'):
             candidates.append((message['created_at'], message['text']))
     return [text for _, text in sorted(candidates, key=lambda x: x[0], reverse=True)[:5]]
-
-
-def observe_mentor_reply(uid: str) -> None:
-    from database.proactivity_producers import record_mentor_reply
-
-    try:
-        record_mentor_reply(uid)
-    except Exception:
-        logger.info('mentor_v2 outcome_unavailable')
-
-
-def observe_task_completion(uid: str, task_id: str) -> None:
-    from database.proactivity_producers import record_task_completion
-
-    try:
-        record_task_completion(uid, task_id)
-    except Exception:
-        logger.info('commitment_followup outcome_unavailable')

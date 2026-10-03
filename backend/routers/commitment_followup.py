@@ -39,7 +39,7 @@ async def run_commitment_followup(request: Request, retry_count: int = Depends(v
         if isinstance(current_due, str):
             current_due = datetime.fromisoformat(current_due.replace('Z', '+00:00'))
         if task and not task.get('completed') and task.get('status', 'active') == 'active' and current_due == due:
-            await run_blocking(db_executor, schedule_followup, uid, task_id, due)
+            await run_blocking(db_executor, schedule_followup, uid, task_id, due, retry_on_failure=True)
         return {'status': 'scheduled'}
     await produce_followup(uid, task_id, revision)
     return {'status': 'acked'}
