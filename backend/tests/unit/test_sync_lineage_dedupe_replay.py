@@ -324,7 +324,7 @@ def _segments(texts):
     ]
 
 
-def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None):
+def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None, finish_impl=None):
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
@@ -343,7 +343,7 @@ def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_I
             store, incoming, candidate_id=candidate_id, target_id=target_id
         ),
     )
-    finish = MagicMock()
+    finish = finish_impl or MagicMock()
     monkeypatch.setattr(pipeline, 'finish_sync_segment', finish)
     if response is None:
         response = {'new_memories': set(), 'updated_memories': set()}
@@ -418,6 +418,81 @@ def test_new_speech_enrolls_and_finishes_normally(pipeline_module, monkeypatch, 
     lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
     assert len(lines) == 1
     assert 'appended_seconds=30.00' in lines[0] and 'repeat_only=False' in lines[0]
+
+
+def test_sync_scoped_retry_after_a_failed_finish_completes_the_existing_debt(pipeline_module, monkeypatch, caplog):
+    """A commit whose finish fails is completed by the identical re-upload.
+
+    The second attempt's sync-scoped segments match stored ranges and text
+    exactly, so the intake writes nothing again but still enrolls the owed
+    enrichment debt and invokes finish.
+    """
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE] + NEW
+
+    def boom(*args, **kwargs):
+        raise RuntimeError('finish failed')
+
+    ok = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=boom)[0]
+    assert ok is False
+    committed = deepcopy(store.rows)
+
+    finish = MagicMock()
+    with caplog.at_level(logging.INFO):
+        ok, response, finish = _drive_process_segment(
+            pipeline, monkeypatch, store, texts, response=None, finish_impl=finish
+        )
+    assert ok is True
+    assert response['new_memories'] == set() and response['updated_memories'] == set()
+    assert response.get('_merged') == {LIVE_ID: 'en'}
+    finish.assert_called_once()
+    assert store.rows == committed
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
+    assert len(lines) == 1 and len(lines[0]) <= 512
+    assert 'repeat_only=True' in lines[0] and 'existing_completion=True' in lines[0]
+    for forbidden in (LIVE_ID, 'WAL-', 'quarterly'):
+        assert forbidden not in lines[0]
+
+
+def test_lexical_repeats_on_a_pristine_live_row_still_invent_no_debt(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE]
+    finish = MagicMock()
+    ok, response, _ = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=finish)
+    assert ok is True
+    assert '_merged' not in response
+    finish.assert_not_called()
+
+
+def test_repeat_on_a_row_with_merged_sync_content_completes_uncertain_debt(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    store = seeded_store([live_row(sync_merged_from=['DONOR-1'])])
+    texts = [reworded(text) for text in LIVE]
+    finish = MagicMock()
+    ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=finish)
+    assert ok is True
+    assert response.get('_merged') == {LIVE_ID: 'en'}
+    finish.assert_called_once()
+
+
+def test_committed_append_logs_telemetry_before_a_failing_finish(pipeline_module, monkeypatch, caplog):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE] + NEW
+
+    def boom(*args, **kwargs):
+        raise RuntimeError('finish failed')
+
+    with caplog.at_level(logging.INFO):
+        ok = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=boom)[0]
+    assert ok is False
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
+    assert len(lines) == 1 and len(lines[0]) <= 512
+    assert 'appended_seconds=30.00' in lines[0] and 'repeat_only=False' in lines[0]
+    for forbidden in (LIVE_ID, 'WAL-', 'quarterly'):
+        assert forbidden not in lines[0]
 
 
 def test_flag_off_logs_nothing_and_enrolls_normally(pipeline_module, monkeypatch, caplog):

@@ -184,14 +184,57 @@ def test_changed_or_omitted_digit_tokens_are_never_repeats():
 
 def test_exact_retry_drops_only_identical_text_and_range():
     existing = [{'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}]
-    kept, dropped = drop_exact_retries(
+    kept, dropped, sync_retry = drop_exact_retries(
         [incoming(LIVE[0], 0.0), incoming(LIVE[1], 0.0), incoming(LIVE[0], 20.0)], existing
     )
-    assert dropped == 1 and [segment['text'] for segment in kept] == [LIVE[1], LIVE[0]]
-    kept, dropped = drop_exact_retries([{**incoming(LIVE[0], 99.0), 'id': 'seg-a'}], existing)
-    assert dropped == 1 and kept == []
-    kept, dropped = drop_exact_retries([{**incoming(LIVE[1], 0.0), 'id': 'seg-a'}], existing)
-    assert dropped == 0 and len(kept) == 1
+    assert dropped == 1 and sync_retry is False
+    assert [segment['text'] for segment in kept] == [LIVE[1], LIVE[0]]
+    kept, dropped, sync_retry = drop_exact_retries([{**incoming(LIVE[0], 99.0), 'id': 'seg-a'}], existing)
+    assert dropped == 1 and kept == [] and sync_retry is False
+    kept, dropped, sync_retry = drop_exact_retries([{**incoming(LIVE[1], 0.0), 'id': 'seg-a'}], existing)
+    assert dropped == 0 and len(kept) == 1 and sync_retry is False
+
+
+def test_exact_retry_marks_sync_scoped_matches_for_completion():
+    sync_scoped = {
+        'timestamp': ORIGIN,
+        'start': 0.0,
+        'end': 9.5,
+        'text': LIVE[0],
+        'id': 'seg-a',
+        'speaker_id_scope': 'sync:wal-1:0',
+    }
+    _, dropped, sync_retry = drop_exact_retries([incoming(LIVE[0], 0.0)], [sync_scoped])
+    assert dropped == 1 and sync_retry is True
+    _, dropped, sync_retry = drop_exact_retries([incoming(LIVE[0], 0.0)], [{**sync_scoped, 'speaker_id_scope': ''}])
+    assert dropped == 1 and sync_retry is False
+
+
+def test_exact_retry_keeps_invalid_ranges_and_oversized_text():
+    existing = [{'timestamp': ORIGIN, 'start': 0.0, 'end': 9.5, 'text': LIVE[0], 'id': 'seg-a'}]
+    for segment in (
+        {**incoming(LIVE[0], 0.0), 'timestamp': float('inf')},
+        {**incoming(LIVE[0], 0.0), 'start': 5.0, 'end': 1.0},
+        {**incoming(LIVE[0], 0.0), 'text': 'x' * 5000},
+    ):
+        kept, dropped, _ = drop_exact_retries([segment], existing)
+        assert dropped == 0 and kept == [segment]
+    stored = dict(existing[0])
+    stored['end'] = stored['start']
+    _, dropped, _ = drop_exact_retries([incoming(LIVE[0], 0.0)], [stored])
+    assert dropped == 0
+
+
+def test_oversized_live_text_never_enters_windows_or_matching():
+    huge = 'the ' + 'word ' * 2000
+    live = [live_segment(0, text=huge)]
+    incoming_segment = incoming(LIVE[0], 40.0)
+    kept, report = drop([incoming_segment], live=live)
+    assert kept == [incoming_segment]
+    live = [live_segment(0)]
+    incoming_segment = incoming('x' * 5000, 40.0)
+    kept, report = drop([incoming_segment], live=live)
+    assert kept == [incoming_segment]
 
 
 def test_bounded_span_seconds_clamps_pathological_inputs():

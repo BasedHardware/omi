@@ -112,18 +112,26 @@ def _incoming_span(segment: dict) -> Optional[tuple[float, float]]:
     offset_start, offset_end = _finite(segment.get('start')), _finite(segment.get('end'))
     if start is None or offset_start is None or offset_end is None or offset_end <= offset_start:
         return None
-    return start, start + (offset_end - offset_start)
+    abs_end = start + (offset_end - offset_start)
+    if not math.isfinite(abs_end) or not math.isfinite(start + abs_end):
+        return None
+    return start, abs_end
 
 
 def _live_segment_bounds(segment: dict, origin: float, pinned: bool) -> Optional[tuple[float, float, str]]:
     capture_start = _finite(segment.get('audio_capture_start'))
     capture_end = _finite(segment.get('audio_capture_end'))
     if capture_start is not None and capture_end is not None and capture_end > capture_start:
-        return capture_start, capture_end, 'capture_window'
+        if math.isfinite(capture_start + capture_end):
+            return capture_start, capture_end, 'capture_window'
+        return None
     start, end = _finite(segment.get('start')), _finite(segment.get('end'))
     if start is None or end is None or end <= start:
         return None
-    return origin + start, origin + end, 'capture_window' if pinned else 'content_window'
+    abs_start, abs_end = origin + start, origin + end
+    if not (math.isfinite(abs_start) and math.isfinite(abs_end) and math.isfinite(abs_start + abs_end)):
+        return None
+    return abs_start, abs_end, 'capture_window' if pinned else 'content_window'
 
 
 def pinned_audio_timeline(marker: object) -> bool:
@@ -153,9 +161,7 @@ def bounded_span_seconds(segments: list[dict]) -> float:
     for segment in segments:
         start, end = _finite(segment.get('start')), _finite(segment.get('end'))
         if start is not None and end is not None:
-            total += max(0.0, end - start)
-    if not math.isfinite(total):
-        return 0.0
+            total += min(max(0.0, end - start), MAX_TOTAL_SPAN_SECONDS)
     return min(max(total, 0.0), MAX_TOTAL_SPAN_SECONDS)
 
 
@@ -172,47 +178,61 @@ def append_alignment_method(report: dict, exact_retries: int) -> str:
     return report['alignment_method']
 
 
-def drop_exact_retries(incoming_segments: list[dict], existing_segments: list[dict]) -> tuple[list[dict], int]:
+def drop_exact_retries(incoming_segments: list[dict], existing_segments: list[dict]) -> tuple[list[dict], int, bool]:
     """Drop incoming segments that provably replay something already stored.
 
     A segment drops only when an existing segment shares its normalized text
     AND either the same rounded-2-decimal absolute range or the same non-empty
     segment id. Range-only or relative-only coincidence never drops: unrelated
-    new speech at an occupied absolute range is retained.
+    new speech at an occupied absolute range is retained. Non-finite or
+    inverted ranges and oversized text never participate on either side, so
+    an unreadable segment is always kept. The third return marks whether any
+    drop matched sync-scoped speech: that replay completes an earlier partial
+    sync and still owes downstream completion.
     """
-    existing_keys: set[tuple[str, tuple[float, float]]] = set()
-    existing_ids: dict[str, str] = {}
+    existing_keys: dict[tuple[str, tuple[float, float]], str] = {}
+    existing_ids: dict[str, tuple[str, str]] = {}
     for segment in existing_segments:
         start, end = _finite(segment.get('timestamp')), _finite(segment.get('end'))
         offset_start = _finite(segment.get('start'))
-        if start is None or end is None or offset_start is None:
+        raw_text = segment.get('text') or ''
+        if start is None or end is None or offset_start is None or end <= offset_start or len(raw_text) > MAX_CHARS:
             continue
         abs_key = (round(start, 2), round(start + (end - offset_start), 2))
-        text = ' '.join(_tokens(segment.get('text') or ''))
+        text = ' '.join(_tokens(raw_text))
+        scope = str(segment.get('speaker_id_scope') or '')
         if text:
-            existing_keys.add((text, abs_key))
+            existing_keys[(text, abs_key)] = scope
         segment_id = segment.get('id')
         if isinstance(segment_id, str) and segment_id and text:
-            existing_ids[segment_id] = text
+            existing_ids[segment_id] = (text, scope)
     kept: list[dict] = []
     dropped = 0
+    sync_retry = False
     for segment in incoming_segments:
         start, end = _finite(segment.get('timestamp')), _finite(segment.get('end'))
         offset_start = _finite(segment.get('start'))
-        text = ' '.join(_tokens(segment.get('text') or ''))
-        segment_id = segment.get('id')
+        raw_text = segment.get('text') or ''
+        text = ' '.join(_tokens(raw_text)) if len(raw_text) <= MAX_CHARS else ''
+        segment_id = str(segment.get('id') or '')
+        scope = ''
         abs_match = False
-        if text and start is not None and end is not None and offset_start is not None:
+        if text and start is not None and end is not None and offset_start is not None and end > offset_start:
             abs_key = (round(start, 2), round(start + (end - offset_start), 2))
-            abs_match = (text, abs_key) in existing_keys
-        id_match = (
-            isinstance(segment_id, str) and bool(segment_id) and bool(text) and existing_ids.get(segment_id) == text
-        )
+            hit = existing_keys.get((text, abs_key))
+            if hit is not None:
+                abs_match = True
+                scope = hit
+        id_match = bool(segment_id) and bool(text) and existing_ids.get(segment_id, ('', ''))[0] == text
+        if id_match:
+            scope = scope or existing_ids[segment_id][1]
         if abs_match or id_match:
             dropped += 1
+            if scope.startswith(EXCLUDED_SCOPES):
+                sync_retry = True
         else:
             kept.append(segment)
-    return kept, dropped
+    return kept, dropped, sync_retry
 
 
 def drop_covered_repeats(
@@ -233,9 +253,10 @@ def drop_covered_repeats(
         if not _eligible_live(segment):
             continue
         bounds = _live_segment_bounds(segment, live_origin, live_pinned)
-        if bounds is None:
+        text = segment.get('text') or ''
+        if bounds is None or len(text) > MAX_CHARS:
             continue
-        live.append((bounds, segment, _tokens(segment.get('text') or '')))
+        live.append((bounds, segment, _tokens(text)))
     live.sort(key=lambda item: (item[0][0], item[0][1], item[1].get('text') or ''))
 
     kept: list[dict] = []

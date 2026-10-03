@@ -3,8 +3,11 @@
 process_segment hands the real store/finish callbacks in from its module
 globals so existing monkeypatches keep working; this helper only decides
 whether the intake wrote anything. A transient repeat-only intake is
-acknowledged without enrollment, audio storage or enrichment, and the
-transient markers never escape into persistence or receipts.
+acknowledged without new enrollment, audio storage or enrichment — except
+when it provably completes previously admitted sync work (a sync-scoped
+exact retry or a row already carrying merged sync content), where existing
+debt still enrolls and finishes. Transient markers never escape into
+persistence or receipts.
 """
 
 from __future__ import annotations
@@ -95,16 +98,17 @@ def record_capture_evidence_metric(incoming: dict) -> None:
         ).inc()
 
 
-def log_sync_lineage_append(stats: dict) -> None:
+def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> None:
     """One bounded, id-free telemetry line per dedupe-evaluated intake."""
     try:
         logger.info(
             'event=sync_lineage_append appended_seconds=%.2f dropped_as_repeat_seconds=%.2f '
-            'alignment_method=%s repeat_only=%s',
+            'alignment_method=%s repeat_only=%s existing_completion=%s',
             stats['appended_seconds'],
             stats['dropped_as_repeat_seconds'],
             stats['alignment_method'],
             stats['repeat_only'],
+            existing_completion,
         )
     except Exception:
         pass
@@ -134,25 +138,33 @@ def complete_sync_intake(
     ``acknowledge`` keep the caller's phase and outcome bookkeeping order.
     """
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
+    completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)
+    # An exact sync-scoped retry, or a live row already carrying merged sync
+    # content, may owe enrichment from an earlier partial run. That existing
+    # debt still enrolls and finishes even though this upload wrote nothing;
+    # pristine live repeats invent no new debt.
+    existing_completion = completion_pending or bool(assigned.get('sync_merged_from'))
     conversation_id = assigned['id']
     with lock:
         if not repeat_only:
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
             if assigned['sync_relevance'] == 'keep':
                 response.setdefault('_merged', {})[conversation_id] = language
+        elif existing_completion:
+            response.setdefault('_merged', {})[conversation_id] = language
+    if stats is not None:
+        log_sync_lineage_append(stats, existing_completion=existing_completion and repeat_only)
     store_audio(conversation_id)
     mark_finalize()
-    if not repeat_only:
+    if not repeat_only or existing_completion:
         finish(
             uid,
             assigned,
             response,
             lock,
             language,
-            audio_source_id=conversation_id if audio_enabled else None,
+            audio_source_id=(None if repeat_only else (conversation_id if audio_enabled else None)),
         )
-    if stats is not None:
-        log_sync_lineage_append(stats)
     acknowledge()
     return conversation_id

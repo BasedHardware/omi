@@ -20,19 +20,14 @@ client id as `external_data.recording_origin_id`. Sync binds each VAD segment of
 a recording-id upload on its own to the one generation of that recording whose
 source, client device, lock state and interval (5 s before its start, 60 s
 after its last word) hold the segment; smart-merge donors resolve to their
-survivor, and overlapping generations to the later-created row whose creation
-interval proxy covers the segment; batches straddle generations. Otherwise
-the segment keeps the phone's `conversation_id` stamp or takes the ordinary
-unbound path, which never adopts a live row.
-Bound segments are then dropped when their normalized tokens fit a contiguous
-live-transcript window inside a bounded timing band (kill switch
-`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist, unrecognized value
-off); an all-repeat upload acknowledges without writes or enrichment.
-`SYNC_LINEAGE_RESOLVE_ENABLED=false` (on backend-listen, Cloud Run backend
-for inline sync, backend-sync and backend-sync-backfill) restores the earlier
-whole-batch binding: a conversation whose recording id equals the client id
-must contain the whole upload, and a miss drops the stamp. See
-`backend/utils/sync/ARCHITECTURE.md`.
+survivor, overlapping generations to the later-created row whose creation
+interval proxy covers the segment, and straddles split. Otherwise a segment
+keeps the phone's `conversation_id` stamp or takes the unbound path, which
+never adopts a live row. Bound segments lexically repeating a live window
+inside a bounded timing band drop (`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`,
+same allowlist, typo off); all-repeat uploads acknowledge without writes or
+enrichment. `SYNC_LINEAGE_RESOLVE_ENABLED=false` on those same services
+restores whole-batch binding. See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
 empty admits everyone) limits per-segment binding, the pinned live origin, the
