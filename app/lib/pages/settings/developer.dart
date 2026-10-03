@@ -282,13 +282,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           onChanged: provider.onTranscriptionDiagnosticChanged,
         ),
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.userPlus),
-          title: l10n.autoCreateSpeakers,
-          subtitle: l10n.autoCreateWhenNameDetected,
-          value: provider.autoCreateSpeakersEnabled,
-          onChanged: provider.onAutoCreateSpeakersChanged,
-        ),
-        OmiSettingsRow.toggle(
           leading: const FaIcon(FontAwesomeIcons.microphoneSlash),
           title: l10n.vadGate,
           subtitle: l10n.vadGateDescription,
@@ -413,7 +406,7 @@ class _DeveloperTextField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         border: border,
         enabledBorder: border,
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: OmiRadius.mdAll,
           borderSide: BorderSide(color: OmiColors.textTertiary),
         ),

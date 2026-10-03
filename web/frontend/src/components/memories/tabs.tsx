@@ -1,13 +1,17 @@
 'use client';
 
-import { Page, List, Message } from 'iconoir-react';
-
 interface TabsProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onNewChat?: () => void;
   showNewChat?: boolean;
 }
+
+const TABS = [
+  { id: 'sum', label: 'Notes' },
+  { id: 'trs', label: 'Transcript' },
+  { id: 'chat', label: 'Ask Omi' },
+];
 
 export default function Tabs({
   currentTab,
@@ -17,32 +21,23 @@ export default function Tabs({
 }: TabsProps) {
   return (
     <div className="sn-tabs">
-      <div className="sn-tabs-list">
-        <button
-          onClick={() => setCurrentTab('sum')}
-          className={`sn-tab${currentTab === 'sum' ? ' sn-tab-active' : ''}`}
-        >
-          <List className="h-4 w-4" />
-          Summary
-        </button>
-        <button
-          onClick={() => setCurrentTab('trs')}
-          className={`sn-tab${currentTab === 'trs' ? ' sn-tab-active' : ''}`}
-        >
-          <Page className="h-4 w-4" />
-          Transcript
-        </button>
-        <button
-          onClick={() => setCurrentTab('chat')}
-          className={`sn-tab${currentTab === 'chat' ? ' sn-tab-active' : ''}`}
-        >
-          <Message className="h-4 w-4" />
-          Chat
-        </button>
+      <div className="sn-tabs-list" role="tablist" aria-label="Note views">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={currentTab === tab.id}
+            onClick={() => setCurrentTab(tab.id)}
+            className={`sn-tab${currentTab === tab.id ? ' sn-tab-active' : ''}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       {showNewChat && currentTab === 'chat' && onNewChat && (
-        <button onClick={onNewChat} className="sn-newchat">
-          New Chat
+        <button type="button" onClick={onNewChat} className="sn-newchat">
+          New chat
         </button>
       )}
     </div>

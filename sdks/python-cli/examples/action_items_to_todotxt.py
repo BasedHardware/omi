@@ -43,7 +43,7 @@ def task_text(value):
             word = f"{key}{ZWSP}:{rest}"  # would otherwise override due:, omi:, ...
         words.append(word)
     text = " ".join(words) or "(no description)"
-    if re.match(r"x |\([A-Z]\) |\d{4}-\d{2}-\d{2}( |$)", text):
+    if re.match(r"(?:x|\([A-Z]\)|\d{4}-\d{2}-\d{2})(?: |$)", text):
         text = ZWSP + text  # would otherwise become a completion mark, priority or date
     return text
 
@@ -102,9 +102,23 @@ def task_line(done, due, item, zone):
     return " ".join(parts)
 
 
+def extract_action_items(data):
+    """Unwrap action items from bare lists or wrapped envelope dictionaries."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        # Match documented wrapper precedence: action_items, items, data.
+        # An empty list is falsy, so avoid `or` chains that drop empty envelopes.
+        for key in ("action_items", "items", "data"):
+            if isinstance(data.get(key), list):
+                return data[key]
+    return None
+
+
 def convert(source, destination, zone):
-    items = json.loads(Path(source).read_bytes())
-    if not isinstance(items, list):
+    raw = json.loads(Path(source).read_bytes().decode("utf-8-sig"))
+    items = extract_action_items(raw)
+    if items is None or not isinstance(items, list):
         raise ValueError("Expected the JSON array from omi --json action-item list")
     entries = []
     for item in items:

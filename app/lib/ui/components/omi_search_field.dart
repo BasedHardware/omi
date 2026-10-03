@@ -103,7 +103,7 @@ class _OmiSearchFieldState extends State<OmiSearchField> {
           enabledBorder: border,
           focusedBorder: border,
           contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          prefixIcon: const ExcludeSemantics(child: Icon(Icons.search, color: OmiColors.textTertiary, size: 20)),
+          prefixIcon: ExcludeSemantics(child: Icon(Icons.search, color: OmiColors.textTertiary, size: 20)),
           suffixIcon: _controller.text.isEmpty
               ? null
               : OmiIconButton(

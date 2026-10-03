@@ -78,6 +78,25 @@ jobs:
             echo "revision_suffix=$revision_suffix"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.candidate-identity.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3
@@ -247,6 +266,7 @@ jobs:
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             USE_VERTEX_AI=true
+            TTS_PROVIDER=gemini
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com

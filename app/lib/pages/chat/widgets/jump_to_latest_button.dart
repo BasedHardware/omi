@@ -30,7 +30,7 @@ class ChatJumpToLatestButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: OmiColors.surface2.withValues(alpha: 0.95),
                   borderRadius: OmiRadius.pillAll,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+                  border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.18), width: 1),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0, 4)),
                   ],
@@ -38,7 +38,7 @@ class ChatJumpToLatestButton extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
+                    Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
                     const SizedBox(width: 6),
                     Text(
                       label,

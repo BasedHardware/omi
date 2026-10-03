@@ -78,7 +78,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
             contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
             border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
             enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
-            focusedBorder: const OutlineInputBorder(
+            focusedBorder: OutlineInputBorder(
               borderRadius: OmiRadius.smAll,
               borderSide: BorderSide(color: OmiColors.textTertiary),
             ),

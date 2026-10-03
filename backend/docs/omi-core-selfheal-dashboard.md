@@ -55,15 +55,18 @@ later pages are unexplored.
   second revision. Rows carrying any `finalization_job_id` are refused at the
   admission transaction and page for manual review instead.
 - **Synchronous guard before persist, not compensation after.** A
-  SERVER_RECOVERY run that produces only the deterministic minimum raises a
-  typed error before the persist transaction and before any derived-effect
-  fanout, preserving the row's in-progress/processing state and content.
+  SERVER_RECOVERY run that keeps a conversation but produces only the
+  deterministic minimum raises a typed error before the persist transaction
+  and derived-effect fanout. An explicit relevance discard is a valid terminal
+  outcome: it is persisted with its server-recovery decision and its transcript
+  and audio must still pass the next-tick nonshrink and identifier checks.
 - **Admission protects existing titles; output must still be rich.** A
   non-empty `structured.title`, conversation-level `user_title`, overview, or
   any derived list refuses admission even when the row would not count as
   rich — a useful title is never overwritten. Verification still requires
-  rich output (overview or a derived list): a deterministic-minimum title
-  alone is not a successful recovery.
+  rich output (overview or a derived list) for a kept row, or an explicit
+  server-recovery relevance discard with preserved capture content. A
+  deterministic-minimum title alone is not a successful recovery.
 - **Scan windows, not global snapshots.** The sweep examines at most 2000
   rows per tick on a rotated CAS cursor; every `selfheal_tick` count is
   explicitly the scanned window.
@@ -82,8 +85,10 @@ later pages are unexplored.
   failures write `sync_dead_letters/{job_id}` (pending → dead_letter) before
   and after the Redis terminal publish. The app still sees only the existing
   `failed`/`partial_failure` statuses — no new `dead_letter` client status —
-  and only ACKs `completed`, so a poll without a ledger record 503s instead of
-  draining the WAL. A terminal failed/partial backfill task also leaves its
+  and only ACKs `completed`. A terminal backfill poll whose job predates the
+  ledger (no record, and no publisher left to write one) records it as
+  `pending` on read — no confirmed event, no replay — and 503s only when that
+  ledger read or write fails or the record belongs to another job/uid. A terminal failed/partial backfill task also leaves its
   staged blobs untouched: this is **not** durable server-side audio retention
   — the existing object-lifecycle expiry still applies — the client WAL stays
   the primary retry material.

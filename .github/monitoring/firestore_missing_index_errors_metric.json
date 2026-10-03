@@ -1,0 +1,18 @@
+{
+  "description": "Cloud Run revision log entries reporting a Firestore query that requires a composite index.",
+  "filter": "resource.type=\"cloud_run_revision\" AND (textPayload:\"The query requires an index\" OR jsonPayload.message:\"The query requires an index\")",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "labels": [
+      {
+        "key": "service_name",
+        "valueType": "STRING",
+        "description": "Cloud Run service that emitted the missing-index error."
+      }
+    ]
+  },
+  "labelExtractors": {
+    "service_name": "EXTRACT(resource.labels.service_name)"
+  }
+}

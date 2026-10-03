@@ -77,6 +77,10 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     def put(mod: ModuleType, attr: str, value: Any) -> None:
         setattr(mod, attr, value)
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    put(refresh, 'preserve', lambda *a, **k: False)
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     put(database_pkg, '__path__', [str(_BACKEND / 'database')])
     add('database', database_pkg)
@@ -84,6 +88,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     client_mod = ModuleType('database._client')
     put(client_mod, 'db', MagicMock(name='db'))
     put(client_mod, 'get_firestore_client', lambda: getattr(client_mod, 'db'))
+    put(client_mod, 'get_data_plane_firestore_client', lambda: getattr(client_mod, 'db'))
     put(client_mod, 'document_id_from_seed', lambda seed: 'seed-id')
     add('database._client', client_mod)
 
@@ -686,7 +691,6 @@ def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, '_calendar_auto_link_enabled', lambda: False)
     monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     monkeypatch.setattr(pc.folders_db, 'get_folders', MagicMock(return_value=[{'id': 'folder-1'}]))
     monkeypatch.setattr(pc.folders_db, 'resolve_category_folder_id', MagicMock(return_value=None))

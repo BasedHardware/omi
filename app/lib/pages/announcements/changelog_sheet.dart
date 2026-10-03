@@ -144,7 +144,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xxs, OmiSpacing.xxs),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: OmiColors.surface2, width: 1)),
       ),
       child: Row(
@@ -157,14 +157,14 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   child: Container(
                     width: 180,
                     height: 22,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: OmiColors.surface2,
                       borderRadius: OmiRadius.smAll,
                     ),
                   ),
                 )
               : Expanded(child: Semantics(header: true, child: Text(title, style: OmiType.headline))),
-          const OmiCloseButton(color: OmiColors.textSecondary),
+          OmiCloseButton(color: OmiColors.textSecondary),
         ],
       ),
     );
@@ -188,7 +188,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Container(
                     width: 24,
                     height: 24,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: OmiColors.surface2,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -198,7 +198,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Expanded(
                     child: Container(
                       height: 20,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),
@@ -214,7 +214,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   children: [
                     Container(
                       height: 14,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),
@@ -223,7 +223,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                     Container(
                       height: 14,
                       width: MediaQuery.of(context).size.width * 0.6,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),
@@ -294,7 +294,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(top: BorderSide(color: OmiColors.surface2, width: 1)),
       ),
       child: Row(

@@ -53,24 +53,26 @@ class FilterBottomSheet extends StatelessWidget {
 
                       const SizedBox(height: OmiSpacing.xl),
 
-                      // Categories
-                      _buildSectionTitle(AppLocalizations.of(context).categories),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _buildCategoryChips(context, provider),
-
-                      const SizedBox(height: OmiSpacing.xl),
+                      // Categories (hidden while the catalog offers none)
+                      if (provider.categories.isNotEmpty) ...[
+                        _buildSectionTitle(AppLocalizations.of(context).categories),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _buildCategoryChips(context, provider),
+                        const SizedBox(height: OmiSpacing.xl),
+                      ],
 
                       // Sort Options
                       _buildSectionTitle(AppLocalizations.of(context).sortBy),
                       const SizedBox(height: OmiSpacing.sm),
                       _buildSortOptions(context, provider),
 
-                      const SizedBox(height: OmiSpacing.xl),
-
-                      // Capabilities
-                      _buildSectionTitle(AppLocalizations.of(context).capabilities),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _buildCapabilities(context, provider),
+                      // Capabilities (hidden while the catalog offers none)
+                      if (provider.capabilities.isNotEmpty) ...[
+                        const SizedBox(height: OmiSpacing.xl),
+                        _buildSectionTitle(AppLocalizations.of(context).capabilities),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _buildCapabilities(context, provider),
+                      ],
                     ],
                   ),
                 ),
@@ -79,7 +81,7 @@ class FilterBottomSheet extends StatelessWidget {
               // Bottom buttons
               Container(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: OmiColors.border, width: 1)),
                 ),
                 child: Row(
@@ -273,7 +275,7 @@ class FilterBottomSheet extends StatelessWidget {
                         width: 2,
                       ),
                     ),
-                    child: isSelected ? const Icon(Icons.check, size: 12, color: OmiColors.onAccent) : null,
+                    child: isSelected ? Icon(Icons.check, size: 12, color: OmiColors.onAccent) : null,
                   ),
                   const SizedBox(width: OmiSpacing.sm),
                   Text(

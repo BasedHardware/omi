@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/providers/action_items_provider.dart';
 
+import '../fakes.dart';
 import '../harness.dart';
+import 'capture.dart' show AuditCaptureProvider, AuditLive, HomeFrame;
 
 void _openTaskForm(BuildContext context, {ActionItemWithMetadata? item}) {
   showModalBottomSheet(
@@ -34,7 +39,8 @@ final tasksScenarios = <AuditScenario>[
       await a.shot('Tap Add Due Date', step: 'date-picker');
       await a.tap(find.text('Done'));
       await a.shot('Confirm the date and return to the draft', step: 'date-selected');
-      expect(find.text('29/4096'), findsOneWidget);
+      // The character counter appears only near the 4096 limit.
+      expect(find.byKey(const Key('task_character_count')), findsNothing);
       await a.tap(find.byKey(const ValueKey('task_quick_date_1')));
       await a.shot('Choose Tomorrow in one tap', step: 'quick-date');
       // A non-retryable rejection reaches the form; transient 503s are retried by the HTTP client.
@@ -63,6 +69,39 @@ final tasksScenarios = <AuditScenario>[
       );
       await a.pumpHost((context) => _openTaskForm(context, item: item));
       await a.shot('Open an existing task for editing');
+    },
+  ),
+  AuditScenario(
+    id: 'tasks-in-shell',
+    title: 'Tasks selected in the Home | Tasks switcher',
+    page: 'lib/pages/home/widgets/home_tab_switcher.dart (HomeTabSwitcher) over ActionItemsPage',
+    state: 'The shell with Tasks selected; a parent task and one indented child',
+    run: (a) async {
+      final actionItems = ActionItemsProvider(
+        getActionItems: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async =>
+            const ActionItemsResponse(actionItems: [
+          ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+          ActionItemWithMetadata(
+              id: 'child', description: 'Book the venue', completed: false, sortOrder: 2000, indentLevel: 1),
+        ]),
+      );
+      await a.tester.runAsync(actionItems.ensureLoaded);
+      await a.pump(const HomeFrame(tasks: ActionItemsPage()), scaffold: false, providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
+        ChangeNotifierProvider<HomeProvider>(create: (_) => HomeProvider()..setIndex(HomeProvider.tasksTab)),
+        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
+        ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.idle)),
+      ]);
+      await a.shot('Tap Tasks in the switcher');
     },
   ),
   AuditScenario(

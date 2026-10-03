@@ -170,15 +170,12 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                l10n.connectExternalAiTools,
-                style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-              ),
+              Text(l10n.connectExternalAiTools, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
               const SizedBox(height: OmiSpacing.xxl),
               TextFormField(
                 controller: _nameController,
                 decoration: appFormInputDecoration(label: l10n.appName, hint: 'e.g. Mixpanel Analytics'),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                style: TextStyle(color: OmiColors.textPrimary),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return l10n.appName;
@@ -189,15 +186,16 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _descriptionController,
-                decoration: appFormInputDecoration(label: l10n.descriptionOptional),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                decoration: appFormInputDecoration(label: l10n.descriptionOptional).copyWith(hintMaxLines: 1),
+                style: TextStyle(color: OmiColors.textPrimary),
+                minLines: 1,
                 maxLines: 2,
               ),
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _urlController,
                 decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/mcp'),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                style: TextStyle(color: OmiColors.textPrimary),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 validator: (value) {
@@ -218,10 +216,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
                   children: [
                     const OmiSpinner(size: OmiSpinnerSize.small),
                     const SizedBox(width: OmiSpacing.xs),
-                    Text(
-                      l10n.authorizingMcpServer,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                    ),
+                    Text(l10n.authorizingMcpServer, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                   ],
                 ),
                 const SizedBox(height: OmiSpacing.sm),

@@ -506,7 +506,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
         return DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
           child: SizedBox(
             height: MediaQuery.sizeOf(context).height * 0.85,
             child: ListView(
@@ -522,8 +522,6 @@ class _PlansSheetState extends State<PlansSheet> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const ExcludeSemantics(child: FaIcon(FontAwesomeIcons.crown, color: Colors.amber, size: 20)),
-                          const SizedBox(width: OmiSpacing.xs),
                           Flexible(
                             child: Semantics(
                               header: true,
@@ -723,7 +721,7 @@ class _PlansSheetState extends State<PlansSheet> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const ExcludeSemantics(
+                  ExcludeSemantics(
                     child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18),
                   ),
                   const SizedBox(width: OmiSpacing.xs),

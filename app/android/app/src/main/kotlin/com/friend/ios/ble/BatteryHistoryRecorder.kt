@@ -13,11 +13,11 @@ internal class BatteryHistoryRecorder(
         const val MAX_POINTS = 2000
     }
 
-    private data class Point(val level: Int, val timestamp: Long)
+    private data class Point(val level: Int, val timestamp: Long, val charging: Boolean?)
     private val baselines = mutableMapOf<String, Point?>()
 
     @Synchronized
-    fun record(key: String, level: Int, nowMs: Long) {
+    fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null) {
         var history: JSONArray? = null
         if (!baselines.containsKey(key)) {
             val loaded = history(key)
@@ -28,9 +28,7 @@ internal class BatteryHistoryRecorder(
         }
         val previous = baselines[key]
         if (previous != null && nowMs >= previous.timestamp &&
-            nowMs - previous.timestamp < 15 * 60_000L &&
-            kotlin.math.abs(level - previous.level) < 5 &&
-            (level < 20) == (previous.level < 20)) return
+            nowMs - previous.timestamp < 60 * 60_000L && level == previous.level && charging == previous.charging) return
 
         val source = history ?: history(key)
         val pruned = JSONArray()
@@ -40,16 +38,16 @@ internal class BatteryHistoryRecorder(
             val sample = point(entry) ?: continue
             if (sample.timestamp >= cutoff) pruned.put(entry)
         }
-        pruned.put(JSONObject().put("ts", nowMs).put("level", level))
+        pruned.put(JSONObject().put("ts", nowMs).put("level", level).put("charging", charging ?: JSONObject.NULL))
         while (pruned.length() > MAX_POINTS) pruned.remove(0)
         write(key, pruned.toString())
         // Advance only after the persistence call succeeds; retries keep the last submitted baseline.
-        baselines[key] = Point(level, nowMs)
+        baselines[key] = Point(level, nowMs, charging)
     }
 
     private fun history(key: String): JSONArray = try { JSONArray(read(key)) } catch (_: Exception) { JSONArray() }
 
     private fun point(json: JSONObject): Point? = try {
-        Point(json.getInt("level"), json.getLong("ts"))
+        Point(json.getInt("level"), json.getLong("ts"), if (json.isNull("charging")) null else json.optBoolean("charging"))
     } catch (_: Exception) { null }
 }

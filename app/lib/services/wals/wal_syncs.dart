@@ -79,6 +79,7 @@ class WalSyncs implements IWalSync {
     DateTime Function()? phoneNow,
     Timer Function(Duration, void Function(Timer))? phonePeriodic,
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
   }) {
     _phoneSync = LocalWalSyncImpl(
       listener,
@@ -86,6 +87,7 @@ class WalSyncs implements IWalSync {
       now: phoneNow,
       periodic: phonePeriodic,
       jobStatusFetcher: phoneJobStatusFetcher,
+      coverageTelemetry: phoneCoverageTelemetry,
     );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
@@ -202,11 +204,7 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    return wal.codec.estimatedRecordingBytes(
-      seconds: wal.seconds,
-      sampleRate: wal.sampleRate,
-      channels: wal.channel,
-    );
+    return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -228,6 +226,10 @@ class WalSyncs implements IWalSync {
   /// Terminal corruption is produced by the phone-local WAL owner. Device
   /// stores keep their existing pending-deletion semantics.
   Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+
+  /// Bounded phone-only drain used while iOS/Android grants background time.
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _phoneSync.syncLiveCaptureOnly(progress: progress);
 
   @override
   void start() {

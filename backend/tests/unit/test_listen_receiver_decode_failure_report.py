@@ -49,7 +49,7 @@ class _FramesWebSocket:
 
 def _host(websocket):
     return SimpleNamespace(
-        request=SimpleNamespace(websocket=websocket, codec='opus', sample_rate=16000),
+        request=SimpleNamespace(websocket=websocket, codec='opus', sample_rate=16000, source='omi'),
         state=SimpleNamespace(
             active=True,
             close_code=1001,
@@ -62,6 +62,7 @@ def _host(websocket):
         limits=SimpleNamespace(ws_receive_timeout=1.0),
         is_multi_channel=False,
         use_custom_stt=True,
+        client_device_context=SimpleNamespace(platform='ios'),
         audio_bytes_send=None,
         transcripts=SimpleNamespace(enqueue=lambda _segments: None),
         start_live_transcription=lambda: None,
@@ -103,10 +104,13 @@ async def test_whole_stream_undecodable_reports_a_silent_mic_once(recorded_fallb
     frame = b'\xff\xff\xff'
     frames = [{'bytes': frame}] * (DECODE_FAILURE_STREAK_ALERT + 3)
     receiver = _receiver(frames, _ScriptedDecoder({frame}))
+    counter = receiver_module.OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec='opus', client_platform='ios')
+    before = counter._value.get()
 
     await receiver.receive_data()
 
     assert receiver.decode_failure_streak == DECODE_FAILURE_STREAK_ALERT + 3
+    assert counter._value.get() - before == DECODE_FAILURE_STREAK_ALERT + 3
     assert recorded_fallbacks == [
         {
             'component': 'silent_mic',
@@ -116,6 +120,36 @@ async def test_whole_stream_undecodable_reports_a_silent_mic_once(recorded_fallb
             'outcome': 'exhausted',
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_decode_failure_logs_once_and_emits_one_streak_event(caplog, recorded_fallbacks):
+    frame = b'\xff\xff\xff'
+    frames = [{'bytes': frame}] * (DECODE_FAILURE_STREAK_ALERT + 2)
+    receiver = _receiver(frames, _ScriptedDecoder({frame}))
+
+    with caplog.at_level(logging.WARNING, logger=receiver_module.__name__):
+        await receiver.receive_data()
+
+    messages = [record.getMessage() for record in caplog.records]
+    failures = [message for message in messages if 'event=listen_audio_decode_failed' in message]
+    streaks = [message for message in messages if 'event=listen_audio_decode_streak_exceeded' in message]
+    assert len(failures) == 1
+    assert 'transcription_source=omi' in failures[0]
+    assert 'client_platform=ios' in failures[0]
+    assert len(streaks) == 1
+    assert f'failures={DECODE_FAILURE_STREAK_ALERT}' in streaks[0]
+
+
+def test_decode_metric_preserves_declared_opus_frame_codec():
+    receiver = _receiver([], _ScriptedDecoder(set()))
+    receiver.host.declared_codec = 'opus_fs320'
+    counter = receiver_module.OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec='opus_fs320', client_platform='ios')
+    before = counter._value.get()
+
+    receiver._record_decode_failure('opus', _OpusError('corrupted stream'), 40)
+
+    assert counter._value.get() - before == 1
 
 
 @pytest.mark.anyio

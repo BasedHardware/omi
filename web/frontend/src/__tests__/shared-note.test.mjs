@@ -31,6 +31,15 @@ const summarySource = readFileSync(
   new URL('../components/memories/summary/sumary.tsx', import.meta.url),
   'utf8',
 );
+const appHeaderSource = readFileSync(
+  new URL('../components/shared/app-header.tsx', import.meta.url),
+  'utf8',
+);
+const announcementSource = readFileSync(
+  new URL('../components/shared/announcement-bar.tsx', import.meta.url),
+  'utf8',
+);
+const layoutSource = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
 const cssSource = readFileSync(
   new URL('../app/memories/[id]/share-note.css', import.meta.url),
   'utf8',
@@ -43,6 +52,7 @@ const SHARE_RENDER_SOURCES = [
   '../components/memories/memory-header.tsx',
   '../components/memories/summary/sumary.tsx',
   '../components/memories/summary/action-items.tsx',
+  '../components/memories/summary/screen-moments.tsx',
   '../components/memories/summary/memory-with-tabs.tsx',
   '../components/memories/events/memory-events.tsx',
   '../components/memories/tabs.tsx',
@@ -256,7 +266,7 @@ describe('meetingTypeLabel', () => {
 describe('share note page wiring', () => {
   it('scopes the route through share-note.css with light/dark schemes', () => {
     assert.match(pageSource, /share-note\.css/);
-    assert.match(pageSource, /className="share-note"/);
+    assert.match(pageSource, /className=\{`share-note \$\{shareFonts\}`\}/);
     assert.match(cssSource, /\.share-note/);
     assert.match(cssSource, /prefers-color-scheme:\s*dark/);
   });
@@ -273,15 +283,13 @@ describe('share note page wiring', () => {
     assert.match(summarySource, /In this note/);
   });
 
-  it('clears the fixed global header and keeps markdown bullets visible', () => {
-    const pagePadding = cssSource.match(
-      /\.share-note \.sn-page \{[^}]*padding:\s*(\d+)px/,
-    );
-    assert.ok(pagePadding, '.sn-page must define padding');
-    assert.ok(
-      Number(pagePadding[1]) >= 88,
-      '.sn-page top padding must clear the fixed global header',
-    );
+  it('replaces the marketplace chrome and keeps markdown bullets visible', () => {
+    assert.match(pageSource, /<ShareTopbar /);
+    assert.match(pageSource, /<ShareInstallBar /);
+    assert.match(appHeaderSource, /isShareNotePath\(pathname\)/);
+    assert.match(announcementSource, /isShareNotePath\(pathname\)/);
+    assert.match(layoutSource, /<AnnouncementBar \/>/);
+    assert.doesNotMatch(layoutSource, /elfsight-app-/);
     assert.match(cssSource, /\.sn-md ul\s*,[^}]*list-style-type:\s*disc/);
     assert.match(cssSource, /\.sn-md ol\s*,[^}]*list-style-type:\s*decimal/);
     assert.match(

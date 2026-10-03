@@ -68,7 +68,7 @@ class ConversationsListWidget extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 18),
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 20)),
+        Text(title, style: TextStyle(color: OmiColors.textPrimary, fontSize: 20)),
         const SizedBox(height: 10),
         ListView.separated(
           shrinkWrap: true,

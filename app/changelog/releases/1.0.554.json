@@ -1,0 +1,9 @@
+{
+  "version": "1.0.554",
+  "date": "2026-09-30",
+  "changes": [
+    "Pick up past chats with Omi or start a new one, delete chats you no longer need, and pull chat down to close it",
+    "Settings keeps the right colors after you switch between Light and Dark",
+    "The app opens in the light appearance from the very first frame unless you chose Dark or System"
+  ]
+}

@@ -66,7 +66,10 @@
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
         "desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift",
         "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift",
-        "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift"
+        "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift",
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
@@ -83,6 +86,26 @@
         {
           "path": "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
           "symbol": "client.updateActionItem",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift",
+          "symbol": "client.deleteTask",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+          "symbol": "client.createActionItem",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+          "symbol": "client.updateActionItem",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift",
+          "symbol": "client.createTask",
           "discover": true
         }
       ]

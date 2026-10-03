@@ -21,8 +21,8 @@ class McpApiKeyListItem extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-            child: const FaIcon(FontAwesomeIcons.key, color: OmiColors.textTertiary, size: 16),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: FaIcon(FontAwesomeIcons.key, color: OmiColors.textTertiary, size: 16),
           ),
           const SizedBox(width: 14),
           Expanded(

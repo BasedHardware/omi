@@ -49,7 +49,7 @@ void main() {
   });
 
   group('showOmiSheet', () {
-    Future<Future<String?>> openSheet(WidgetTester tester) async {
+    Future<Future<String?>> openSheet(WidgetTester tester, {bool dismissible = true}) async {
       late Future<String?> result;
       await pumpUi(
         tester,
@@ -60,6 +60,8 @@ void main() {
                 result = showOmiSheet<String>(
                   context: context,
                   title: 'Move to Folder',
+                  isDismissible: dismissible,
+                  enableDrag: dismissible,
                   builder: (sheetContext) => TextButton(
                     onPressed: () => Navigator.of(sheetContext).pop('work'),
                     child: const Text('Work'),
@@ -89,6 +91,12 @@ void main() {
       final sheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
       expect(sheet.showDragHandle, isTrue);
       expect(sheet.backgroundColor, OmiColors.surface1);
+    });
+
+    testWidgets('a sheet nothing can swipe or tap away has no drag handle', (tester) async {
+      await openSheet(tester, dismissible: false);
+      expect(tester.widget<BottomSheet>(find.byType(BottomSheet)).showDragHandle, isFalse);
+      expect(find.bySemanticsLabel('Dismiss'), findsNothing);
     });
 
     testWidgets('closes on X with a null result', (tester) async {

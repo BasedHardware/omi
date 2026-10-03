@@ -20,7 +20,7 @@ class PaymentDetailsWidget extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(top: 12.0),
         child: Container(
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           padding: const EdgeInsets.all(14.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -33,7 +33,7 @@ class PaymentDetailsWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                 margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                 width: double.infinity,
                 child: TextFormField(
                   keyboardType: TextInputType.number,
@@ -74,7 +74,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                   padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
-                  decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                   width: double.infinity,
                   child: Row(
                     children: [
@@ -87,7 +87,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      const Icon(Icons.arrow_forward_ios_rounded, color: OmiColors.textTertiary),
+                      Icon(Icons.arrow_forward_ios_rounded, color: OmiColors.textTertiary),
                       const SizedBox(width: 12),
                     ],
                   ),
@@ -109,7 +109,7 @@ class PaymentDetailsWidget extends StatelessWidget {
           return ListView.separated(
             shrinkWrap: true,
             itemCount: provider.paymentPlans.length,
-            separatorBuilder: (context, index) => const Divider(color: OmiColors.border, height: 1),
+            separatorBuilder: (context, index) => Divider(color: OmiColors.border, height: 1),
             itemBuilder: (context, index) {
               final plan = provider.paymentPlans[index];
               void select() {
@@ -130,7 +130,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                       Checkbox(
                         value: provider.selectePaymentPlan == plan.id,
                         onChanged: (_) => select(),
-                        side: const BorderSide(color: OmiColors.textSecondary),
+                        side: BorderSide(color: OmiColors.textSecondary),
                         shape: const CircleBorder(),
                       ),
                     ],

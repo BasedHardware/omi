@@ -36,12 +36,12 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
     // Neutral accent (INV-UI-1): a white selection with black text, today in bold white.
     selectedDayHighlightColor: OmiColors.accent,
     selectedRangeHighlightColor: OmiColors.surface3,
-    dayTextStyle: const TextStyle(color: OmiColors.textPrimary),
-    selectedDayTextStyle: const TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.bold),
-    todayTextStyle: const TextStyle(color: OmiColors.textPrimary, fontWeight: FontWeight.w800),
-    weekdayLabelTextStyle: const TextStyle(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
+    dayTextStyle: TextStyle(color: OmiColors.textPrimary),
+    selectedDayTextStyle: TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.bold),
+    todayTextStyle: TextStyle(color: OmiColors.textPrimary, fontWeight: FontWeight.w800),
+    weekdayLabelTextStyle: TextStyle(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
     controlsTextStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
-    disabledDayTextStyle: const TextStyle(color: OmiColors.textDisabled),
+    disabledDayTextStyle: TextStyle(color: OmiColors.textDisabled),
   );
 }
 

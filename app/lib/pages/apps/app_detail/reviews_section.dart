@@ -282,12 +282,12 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             style: OmiType.subhead.copyWith(color: OmiColors.textPrimary),
             decoration: InputDecoration(
               hintText: context.l10n.writeReviewOptional,
-              hintStyle: const TextStyle(color: OmiColors.textTertiary),
+              hintStyle: TextStyle(color: OmiColors.textTertiary),
               filled: true,
               fillColor: OmiColors.surface0.withValues(alpha: 0.3),
               border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
               contentPadding: const EdgeInsets.all(OmiSpacing.sm),
-              counterStyle: const TextStyle(color: OmiColors.textTertiary),
+              counterStyle: TextStyle(color: OmiColors.textTertiary),
             ),
           ),
           const SizedBox(height: OmiSpacing.sm),
@@ -348,7 +348,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         ),
                         if (isUserReview) ...[
                           const Spacer(),
-                          const ExcludeSemantics(child: Icon(Icons.edit, size: 14, color: OmiColors.textTertiary)),
+                          ExcludeSemantics(child: Icon(Icons.edit, size: 14, color: OmiColors.textTertiary)),
                         ],
                       ],
                     ),

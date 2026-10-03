@@ -59,7 +59,7 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
           ),
           if (canOpen) ...[
             const SizedBox(width: 8),
-            const Icon(Icons.open_in_new, size: 16, color: OmiColors.textSecondary),
+            Icon(Icons.open_in_new, size: 16, color: OmiColors.textSecondary),
           ],
         ],
       ),

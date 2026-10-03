@@ -36,13 +36,14 @@ array bodies, status codes, and rate buckets.
 
 - Stateless core: each POST is self-contained; the 2026-07-28 revision is
   declared per message via `_meta`/header and never negotiated.
-- Messages that explicitly declare `2026-07-28` (header or `_meta`) must also
+- Requests that explicitly declare `2026-07-28` (header or `_meta`) must also
   carry `_meta["io.modelcontextprotocol/clientCapabilities"]` as an object —
   `{}` is valid — else `-32602` on HTTP 400. Both official clients stamp it on
   every modern call (Python `mcp` SDK 2.0.0 `client/session.py`, and Inspector
   2.8.0's bundled `@modelcontextprotocol/client` 2.0.0), so the requirement is
-  enforced strictly rather than leniently; older revisions and undeclared
-  messages are untouched.
+  enforced strictly rather than leniently. Notifications (messages with no
+  `id`, including `id: null`) and `initialize` are exempt; older revisions and
+  undeclared messages are untouched.
 - Legacy-era batches (2025-03-26 / 2024-11-05 / undeclared) are capped at 20
   messages; modern revisions reject arrays. An initialize's requested revision
   counts as a batch-level declaration, so a modern initialize inside an array

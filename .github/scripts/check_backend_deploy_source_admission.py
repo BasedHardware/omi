@@ -12,11 +12,16 @@ if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 
 from workflow_composite_contract import backend_deploy_contract_text
+
 AUTO_WORKFLOW_PATH = Path(".github/workflows/gcp_backend_auto_dev.yml")
 MANUAL_WORKFLOW_PATH = Path(".github/workflows/gcp_backend.yml")
 DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
+FIRESTORE_READINESS_ACTION = Path(".github/actions/firestore-readiness/action.yml")
 ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_backend_release_admission.py")
 AUTO_ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_auto_backend_release_admission.py")
+FIRESTORE_CONTROL_CHECKOUT_STEP = "Checkout immutable Firestore gate controls"
+FIRESTORE_GATE_STEP = "Verify serving Firestore indexes"
+FIRESTORE_GATE_USES = "./.github/firestore-workflow/.github/actions/firestore-readiness"
 AUTO_PROOF_SHA = "${{ github.event.workflow_run.head_sha }}"
 AUTO_PROOF_RUN_ATTEMPT = "${{ github.event.workflow_run.run_attempt }}"
 AUTO_FIRESTORE_ADMITTED_SHA = "${{ steps.admitted_source.outputs.admitted_sha }}"
@@ -133,6 +138,79 @@ def validate_fail_closed_step(errors: list[str], step: str, label: str) -> None:
         errors.append(f"{label} must not contain a shell fail-open path")
 
 
+def validate_firestore_gate_steps(
+    errors: list[str],
+    readiness_steps: str,
+    *,
+    source_sha_binding: str,
+    verify_credential_project: str | None,
+    label: str,
+) -> None:
+    """Pin the Firestore readiness gate to the shared immutable composite."""
+
+    control_checkout = require_step(
+        errors,
+        readiness_steps,
+        FIRESTORE_CONTROL_CHECKOUT_STEP,
+        f"{label} immutable gate-control checkout",
+    )
+    for fragment, message in (
+        ("uses: actions/checkout@v7", f"{label} must stage gate controls with actions/checkout"),
+        ("ref: ${{ github.workflow_sha }}", f"{label} must stage gate controls from the workflow's immutable commit"),
+        ("path: .github/firestore-workflow", f"{label} must stage gate controls under .github/firestore-workflow"),
+        ("persist-credentials: false", f"{label} gate-control checkout must not persist credentials"),
+    ):
+        require_fragment(errors, control_checkout, fragment, message)
+    if re.search(r"(?m)^        [\"']?(?:if|continue-on-error)[\"']?:", control_checkout):
+        errors.append(f"{label} immutable gate-control checkout must not be conditionally skipped or tolerated")
+
+    gate = require_step(
+        errors,
+        readiness_steps,
+        FIRESTORE_GATE_STEP,
+        f"{label} Firestore readiness gate",
+    )
+    for fragment, message in (
+        (f"uses: {FIRESTORE_GATE_USES}", f"{label} must run the shared Firestore readiness composite"),
+        (f"source_sha: {source_sha_binding}", f"{label} must bind the gate to the admitted source SHA"),
+        ("project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}", f"{label} must target the runtime project"),
+        (
+            "credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}",
+            f"{label} must pass read-only Firestore credentials to the gate",
+        ),
+    ):
+        require_fragment(errors, gate, fragment, message)
+    if verify_credential_project is None:
+        if "verify_credential_project" in gate:
+            errors.append(f"{label} must leave credential-project verification at its default")
+    else:
+        require_fragment(
+            errors,
+            gate,
+            f"verify_credential_project: '{verify_credential_project}'",
+            f"{label} must verify the read-only credential project",
+        )
+    if re.search(r"(?m)^        [\"']?(?:if|continue-on-error)[\"']?:", gate):
+        errors.append(f"{label} Firestore readiness gate must not be conditionally skipped or tolerated")
+
+    control_index = named_step_index(readiness_steps, FIRESTORE_CONTROL_CHECKOUT_STEP)
+    gate_index = named_step_index(readiness_steps, FIRESTORE_GATE_STEP)
+    admitted_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
+    if control_index is not None and admitted_index is not None and control_index < admitted_index:
+        errors.append(f"{label} immutable gate controls must be staged after the admitted-source checkout")
+    if control_index is not None and gate_index is not None and control_index > gate_index:
+        errors.append(f"{label} must stage immutable gate controls before invoking the readiness composite")
+    for forbidden, message in (
+        ("FIRESTORE_SOURCE_COMMIT", f"{label} must not retain an inline Firestore source binding"),
+        ("reconcile_firestore_indexes.py", f"{label} must not invoke the reconciler outside the composite"),
+        ("google-github-actions/auth", f"{label} must not retain inline Firestore authentication"),
+        ("--check-only", f"{label} must not retain an inline readiness check"),
+        ("upload-artifact", f"{label} must not retain an inline proposal upload"),
+    ):
+        if forbidden in readiness_steps:
+            errors.append(message)
+
+
 def folded_job_condition(job: str) -> str | None:
     """Return an exact folded job-level ``if: >-`` condition.
 
@@ -214,7 +292,10 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
                 "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
                 "auto backend scope decision must diff the triggering SHA against its parent",
             ),
-            ("echo \"applies=true\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish an in-scope result"),
+            (
+                "echo \"applies=true\" >> \"$GITHUB_OUTPUT\"",
+                "auto backend scope decision must publish an in-scope result",
+            ),
             ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
             ("Green no-op", "auto backend scope decision must summarize green no-ops"),
         ):
@@ -246,9 +327,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         )
         condition = folded_job_condition(firestore_job)
         if condition != AUTO_SOURCE_ADMISSION_CONDITION:
-            errors.append(
-                "auto source-admission job must use exactly the fail-closed Release Eligibility predicate"
-            )
+            errors.append("auto source-admission job must use exactly the fail-closed Release Eligibility predicate")
         require_fragment(
             errors,
             firestore_job,
@@ -335,17 +414,26 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         admission_index = named_step_index(readiness_steps, "Resolve and verify the newest proven main source")
         credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
-        auth_index = named_step_index(readiness_steps, "Google Auth for read-only Firestore inventory")
+        gate_index = named_step_index(readiness_steps, FIRESTORE_GATE_STEP)
         if admission_index is not None and credential_index is not None and admission_index > credential_index:
             errors.append("automatic release-proof freshness validation must run before read-only credential use")
         if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
-            errors.append("automatic release-proof freshness validation must run before admitted-source checkout or execution")
-        if admission_index is not None and auth_index is not None and admission_index > auth_index:
-            errors.append("automatic release-proof freshness validation must run before read-only Firestore authentication")
+            errors.append(
+                "automatic release-proof freshness validation must run before admitted-source checkout or execution"
+            )
+        if admission_index is not None and gate_index is not None and admission_index > gate_index:
+            errors.append("automatic release-proof freshness validation must run before the Firestore readiness gate")
         if credential_index is not None and checkout_index is not None and credential_index > checkout_index:
             errors.append("read-only credential use must run before admitted-source checkout")
-        if checkout_index is not None and auth_index is not None and checkout_index > auth_index:
-            errors.append("admitted-source checkout must run before read-only Firestore authentication")
+        if checkout_index is not None and gate_index is not None and checkout_index > gate_index:
+            errors.append("admitted-source checkout must run before the Firestore readiness gate")
+        validate_firestore_gate_steps(
+            errors,
+            readiness_steps,
+            source_sha_binding=AUTO_FIRESTORE_ADMITTED_SHA,
+            verify_credential_project="true",
+            label="automatic backend source admission",
+        )
 
     deploy_job = mapping_block(text, "deploy", 2)
     if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):
@@ -354,7 +442,9 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         errors.append("auto backend deploy must not override source-admission dependency")
 
     if text.count(AUTO_PROOF_SHA) != 3:
-        errors.append("auto backend deploy must use workflow_run.head_sha only in scope decision and current-main admission guard")
+        errors.append(
+            "auto backend deploy must use workflow_run.head_sha only in scope decision and current-main admission guard"
+        )
     if text.count(AUTO_PROOF_RUN_ATTEMPT) != 1:
         errors.append("auto backend deploy must use workflow_run.run_attempt only in the source-admission guard")
     contract = backend_deploy_contract_text(text, root, DEPLOY_BACKEND_STACK_ACTION)
@@ -363,8 +453,10 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         errors.append("auto backend deploy must not use github.sha after workflow_run admission")
     if text.count(f"ref: {AUTO_FIRESTORE_ADMITTED_SHA}") != 1:
         errors.append("auto backend deploy must check out the verified SHA before Firestore readiness")
-    if text.count(f"FIRESTORE_SOURCE_COMMIT: {AUTO_FIRESTORE_ADMITTED_SHA}") != 2:
-        errors.append("auto backend deploy must bind Firestore readiness to the verified SHA")
+    if "FIRESTORE_SOURCE_COMMIT" in text:
+        errors.append("auto backend deploy must bind Firestore readiness through the composite, not inline env")
+    if text.count(f"uses: {FIRESTORE_GATE_USES}") != 1:
+        errors.append("auto backend deploy must invoke the shared Firestore readiness composite exactly once")
     if contract.count('ref: ${{ inputs.admitted_sha }}') != 1:
         errors.append("auto backend deploy must check out the verified SHA before deployment")
     if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
@@ -470,7 +562,10 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         ("--sha \"$DEPLOY_SHA\"", "manual source admission must verify the requested SHA"),
         ("--repository \"$GITHUB_REPOSITORY\"", "manual source admission must verify the source repository"),
         ("--workflow-runs \"$proof_path\"", "manual source admission must verify the queried workflow runs"),
-        ("printf 'admitted_sha=%s\\n' \"$DEPLOY_SHA\" >> \"$GITHUB_OUTPUT\"", "manual source admission must publish the checked SHA"),
+        (
+            "printf 'admitted_sha=%s\\n' \"$DEPLOY_SHA\" >> \"$GITHUB_OUTPUT\"",
+            "manual source admission must publish the checked SHA",
+        ),
     ):
         require_fragment(errors, admission, fragment, message)
 
@@ -481,6 +576,19 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         "ref: ${{ steps.admitted_source.outputs.admitted_sha }}",
         "manual backend deploy must check out the admitted SHA",
     )
+    readiness_steps = mapping_block(firestore_job, "steps", 4)
+    if readiness_steps is None:
+        errors.append("manual source admission must contain its steps")
+    else:
+        validate_firestore_gate_steps(
+            errors,
+            readiness_steps,
+            source_sha_binding="${{ steps.admitted_source.outputs.admitted_sha }}",
+            verify_credential_project=None,
+            label="manual backend source admission",
+        )
+        if "FIRESTORE_SOURCE_COMMIT" in readiness_steps:
+            errors.append("manual backend deploy must bind Firestore readiness through the composite, not inline env")
 
     deploy_job = mapping_block(text, "deploy", 2)
     contract = backend_deploy_contract_text(text, root, DEPLOY_BACKEND_STACK_ACTION)
@@ -513,6 +621,7 @@ def validate(root: Path = ROOT) -> list[str]:
         ADMISSION_VERIFIER_PATH,
         AUTO_ADMISSION_VERIFIER_PATH,
         DEPLOY_BACKEND_STACK_ACTION,
+        FIRESTORE_READINESS_ACTION,
     )
     missing = [str(path) for path in paths if not (root / path).is_file()]
     if missing:

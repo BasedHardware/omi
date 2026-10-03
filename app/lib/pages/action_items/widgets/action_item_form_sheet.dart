@@ -15,6 +15,7 @@ import 'package:omi/pages/action_items/task_delete_undo.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/utils/share_sheet.dart';
 
@@ -32,6 +33,11 @@ Future<void> showActionItemFormSheet(
     builder: (_) => ActionItemFormSheet(actionItem: actionItem, defaultDueDate: defaultDueDate, onRefresh: onRefresh),
   );
 }
+
+const int _kTaskMaxLength = 4096;
+
+/// The character counter appears in the last 10% before [_kTaskMaxLength].
+const int _kTaskCounterThreshold = _kTaskMaxLength * 9 ~/ 10;
 
 /// Creates or edits one task. Explicit Cancel and Save; completion (edit mode) applies the moment
 /// it is ticked, like the list's checkbox. Delete is immediate with an Undo toast.
@@ -183,11 +189,20 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
     if (result != null && result['url'] != null) {
       final url = result['url'] as String;
+      final sid = newShareId();
       OmiHaptics.light();
-      await Share.share(url, sharePositionOrigin: shareSheetOrigin());
+      final outcome = await SharePlus.instance.share(
+        ShareParams(text: tagShareUrl(url, sid: sid), sharePositionOrigin: shareSheetOrigin()),
+      );
+      final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
       PlatformManager.instance.analytics.track(
         'Action Item Shared',
-        properties: {'actionItemId': widget.actionItem!.id},
+        properties: {
+          'actionItemId': widget.actionItem!.id,
+          'share_id': sid,
+          'share_status': outcome.status.name,
+          if (targetApp != null) 'target_app': targetApp,
+        },
       );
     } else {
       OmiFeedback.error(context, context.l10n.failedToCreateShareLink);
@@ -268,7 +283,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
               autofocus: true,
               maxLines: 5,
               minLines: 2,
-              maxLength: 4096,
+              maxLength: _kTaskMaxLength,
               textInputAction: TextInputAction.done,
               style: OmiType.callout.copyWith(height: 1.4),
               cursorColor: OmiColors.accent,
@@ -294,7 +309,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
                 child: Row(
                   children: [
-                    const Icon(Icons.schedule_outlined, size: 20, color: OmiColors.textSecondary),
+                    Icon(Icons.schedule_outlined, size: 20, color: OmiColors.textSecondary),
                     const SizedBox(width: OmiSpacing.md),
                     Expanded(
                       child: Text(
@@ -327,17 +342,19 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                   onPressed: _isSaving ? null : () => _selectQuickDate(days),
                   backgroundColor: OmiColors.surface2,
                   labelStyle: OmiType.footnote,
-                  side: const BorderSide(color: OmiColors.border),
+                  side: BorderSide(color: OmiColors.border),
                 ),
             ]),
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: Text(
-                '${_textController.text.characters.length}/4096',
-                key: const Key('task_character_count'),
-                style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+            // The counter only matters near the limit: it shows in the last 10%.
+            if (_textController.text.characters.length >= _kTaskCounterThreshold)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text(
+                  '${_textController.text.characters.length}/$_kTaskMaxLength',
+                  key: const Key('task_character_count'),
+                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                ),
               ),
-            ),
             const SizedBox(height: OmiSpacing.sm),
             if (_saveFailed) ...[
               Semantics(
@@ -450,12 +467,12 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: OmiColors.accent,
-              onPrimary: OmiColors.onAccent,
-              surface: OmiColors.surface1,
-              onSurface: OmiColors.textPrimary,
-            ),
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: OmiColors.accent,
+                  onPrimary: OmiColors.onAccent,
+                  surface: OmiColors.surface1,
+                  onSurface: OmiColors.textPrimary,
+                ),
             timePickerTheme: TimePickerThemeData(
               backgroundColor: OmiColors.surface1,
               hourMinuteColor: WidgetStateColor.resolveWith(
@@ -476,7 +493,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
               dayPeriodTextColor: WidgetStateColor.resolveWith(
                 (states) => states.contains(WidgetState.selected) ? OmiColors.onAccent : OmiColors.textTertiary,
               ),
-              dayPeriodBorderSide: const BorderSide(color: OmiColors.textTertiary),
+              dayPeriodBorderSide: BorderSide(color: OmiColors.textTertiary),
             ),
           ),
           child: child!,
@@ -507,7 +524,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
       color: Colors.transparent,
       child: Container(
         height: MediaQuery.of(context).size.height * 0.65,
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
         child: Column(
           children: [
             const SizedBox(height: OmiSpacing.sm),
@@ -577,7 +594,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: OmiSpacing.sm),
                           child: Row(
                             children: [
-                              const Icon(Icons.access_time, color: OmiColors.textSecondary, size: 20),
+                              Icon(Icons.access_time, color: OmiColors.textSecondary, size: 20),
                               const SizedBox(width: OmiSpacing.sm),
                               Expanded(child: Text(context.l10n.time, style: OmiType.callout)),
                               Text(

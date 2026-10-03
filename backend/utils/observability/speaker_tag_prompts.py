@@ -20,6 +20,11 @@ SPEAKER_TAG_PROMPTS_SERVED = Counter(
     'Tag prompts returned to a client, by kind.',
     ['kind'],
 )
+SPEAKER_TAG_PROMPTS_SKIPPED = Counter(
+    'omi_speaker_tag_prompts_skipped_total',
+    'Candidate prompts excluded by stored-audio coverage or clip verification.',
+    ['reason'],
+)
 SPEAKER_TAG_PROMPT_SETS = Counter(
     'omi_speaker_tag_prompt_sets_total',
     'Tag-prompt sets the client reported as shown or dismissed without an answer.',

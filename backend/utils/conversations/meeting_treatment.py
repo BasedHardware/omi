@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
-from datetime import datetime
 from typing import Any, Literal, NamedTuple
+
+from utils.conversations.duration import conversation_duration_seconds
 
 MIN_MEETING_DURATION_SECONDS = 5 * 60
 MIN_TRANSCRIBED_SPEECH_SECONDS = 60
@@ -86,14 +87,9 @@ def meeting_treatment_verdict(conversation: Any) -> MeetingTreatmentVerdict:
     segments = _value(conversation, 'transcript_segments', []) or []
     dedup_speech_s = deduplicated_transcribed_speech_seconds(segments)
 
-    started_at = _value(conversation, 'started_at')
-    finished_at = _value(conversation, 'finished_at')
-    duration_s = 0.0
-    if isinstance(started_at, datetime) and isinstance(finished_at, datetime):
-        try:
-            duration_s = max(0.0, (finished_at - started_at).total_seconds())
-        except TypeError:
-            pass
+    # Transcript span, not the wall window: `started_at` is the streaming-session origin,
+    # so `finished_at - started_at` read a short call inside a long socket as minutes (#4056).
+    duration_s = conversation_duration_seconds(conversation) or 0.0
 
     if source_value != 'desktop' or external_data.get('conversation_role') != 'meeting':
         return MeetingTreatmentVerdict(False, 'not_desktop_meeting', duration_s, dedup_speech_s)

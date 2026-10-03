@@ -275,7 +275,10 @@
       let descriptor = DesktopAutomationActionRegistry.shared.descriptors().first {
         $0.name == "probe_context_bucket_director"
       }
-      XCTAssertEqual(descriptor?.safety, "network_or_model")
+      // Main later added notification/journal delivery-state persistence to the
+      // probe, so its typed effects now include .remoteWrite — which the derived
+      // coarse label surfaces ahead of network_or_model.
+      XCTAssertEqual(descriptor?.safety, "remote_write")
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("without it nothing is delivered") }) == true)
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("reasoning quota") }) == true)
       XCTAssertEqual(

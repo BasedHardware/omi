@@ -159,9 +159,6 @@ struct OMIApp: App {
         .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
-        .onAppear {
-          log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
-        }
     }
     .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
@@ -328,10 +325,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // screenshots in the temp directory, and its close handler never ran. This is the first moment
     // anything of ours can take them off disk.
     ScreenFrameQuickLook.purgeStaleScratch()
-
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
     let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    CaptureLaunchContext.setPendingRelaunch(pendingUpdateRelaunch)
     let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
@@ -484,7 +481,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
-    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
@@ -539,8 +535,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // the app launches; the client also retries on owner restoration, app
     // activation, and periodic network recovery.
     Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
-
-    Task { await ContextWorkstreamReconciler.shared.start() }
 
     scheduleAppLifecycleMaintenance()
 
@@ -666,6 +660,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
         restoreMainWindowAfterUpdateRelaunch: restoreMainWindowAfterUpdateRelaunch)
     }
 
+    SiriIndexLifecycle.shared.start(launchMode: OMIApp.launchMode.rawValue)
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
@@ -1442,8 +1437,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
-
-    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.

@@ -26,7 +26,7 @@ class DevicePairingSheet extends StatelessWidget {
                     borderRadius: OmiRadius.lgAll,
                     child: Image.asset(product.localImagePath!, height: 180, width: 180, fit: BoxFit.contain),
                   )
-                : const SizedBox(
+                : SizedBox(
                     height: 180,
                     width: 180,
                     child: Icon(Icons.bluetooth_searching, size: 64, color: OmiColors.textSecondary),

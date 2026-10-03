@@ -37,9 +37,11 @@ vi.mock('@/hooks/useScreenFrames', () => ({
   }),
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: {
-    transcriptEdited: vi.fn(),
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: {
+    track: vi.fn(),
+    init: vi.fn(),
+    identify: vi.fn(),
   },
 }));
 

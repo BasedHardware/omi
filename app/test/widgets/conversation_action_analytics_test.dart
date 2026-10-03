@@ -44,10 +44,14 @@ void main() {
 
   Future<List<Map<String, Object>>> actions() async {
     await AnalyticsManager.flushPending(force: true);
-    // The manager adds its own app_* provenance to every event; the event itself carries only these.
+    // The manager adds its own provenance to every event (app_*, plus the
+    // churn-instrumentation platform/trigger classification); the event itself
+    // carries only these.
     return adapter.events
         .where((e) => e.$1 == 'Conversation Action')
-        .map((e) => Map<String, Object>.fromEntries(e.$2.entries.where((p) => !p.key.startsWith('app_'))))
+        .map((e) => Map<String, Object>.fromEntries(
+              e.$2.entries.where((p) => !p.key.startsWith('app_') && p.key != 'platform' && p.key != 'trigger'),
+            ))
         .toList();
   }
 
@@ -169,9 +173,11 @@ void main() {
 
     testWidgets('a swipe to delete records row_swipe', (tester) async {
       await pumpRow(tester, _conversation('b'));
-      await tester.fling(find.byType(Dismissible), const Offset(-600, 0), 2000);
+      await tester.fling(find.byKey(const ValueKey('conversation_card')), const Offset(-600, 0), 2000);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      // The confirm is a menu from the row's delete button; a tap outside it cancels.
+      expect(find.text('Delete Conversation'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 400));
       await tester.pumpAndSettle();
       expect(await tester.runAsync(actions), [
         {'action': 'delete', 'surface': 'row_swipe'},

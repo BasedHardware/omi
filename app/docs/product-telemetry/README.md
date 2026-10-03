@@ -44,7 +44,6 @@ the authenticated feedback ledger retain richer diagnostic feedback.
 
 ## Component guides
 
-- [Experiment runtime, whole-page boundaries and inactive provisioning](../experiments/README.md)
 - [Executable scorecard, billing snapshots and agent evidence packets](../../../docs/product-telemetry/README.md)
 - [Typed event registry](../../lib/utils/analytics/registry/REGISTRY.md)
 

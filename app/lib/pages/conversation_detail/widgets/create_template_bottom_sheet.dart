@@ -291,7 +291,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                 const SizedBox(height: OmiSpacing.lg),
                 Container(
                   padding: const EdgeInsets.all(OmiSpacing.md),
-                  decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                   child: Row(
                     children: [
                       FaIcon(

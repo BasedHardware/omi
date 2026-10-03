@@ -22,7 +22,7 @@ export default function Transcription({
   } else if (transcript.length === 0 && !externalData) {
     return (
       <div>
-        <h2 className="sn-h3 mt-10">Transcription</h2>
+        <h2 className="sn-h3 mt-10">Transcript</h2>
         <p className="sn-muted mt-4">No available data.</p>
       </div>
     );
@@ -32,11 +32,11 @@ export default function Transcription({
     );
     return (
       <div>
-        <h2 className="sn-h3 mt-10">Transcription</h2>
+        <h2 className="sn-h3 mt-10">Transcript</h2>
         <span className="sn-muted text-sm md:text-base">
-          Total Speakers: {uniqueSpeakers.length}
+          {uniqueSpeakers.length} {uniqueSpeakers.length === 1 ? 'speaker' : 'speakers'}
         </span>
-        <ul className="mt-4">
+        <ul className="sn-transcript">
           {transcript.map((segment, index) => (
             <TranscriptionSegment key={index} segment={segment} people={people} />
           ))}

@@ -93,10 +93,10 @@ class _CardRow extends StatelessWidget {
                   const SizedBox(width: OmiSpacing.md),
                   Expanded(child: Text(label, style: OmiType.callout)),
                   if (badge) ...[
-                    const Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
+                    Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
                     const SizedBox(width: OmiSpacing.xs),
                   ],
-                  const Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+                  Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
                 ],
               ),
             ),
@@ -188,6 +188,7 @@ getTranscriptWidget(
   bool topMargin = true,
   bool canDisplaySeconds = true,
   bool isConversationDetail = false,
+  bool unresolvedSpeakers = false,
   double bottomMargin = 100.0,
   Function(String, int)? editSegment,
   List<String> taggingSegmentIds = const [],
@@ -206,6 +207,9 @@ getTranscriptWidget(
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
   TranscriptSegmentBuilder? segmentBuilder,
+  void Function(TranscriptSegment segment)? onConfirmSpeakerLabel,
+  void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
+  DateTime? startedAt,
 }) {
   if (conversationCreating) {
     return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
@@ -222,6 +226,7 @@ getTranscriptWidget(
     return TranscriptWidget(
       key: transcriptKey,
       segments: segments,
+      unresolvedSpeakers: unresolvedSpeakers,
       horizontalMargin: horizontalMargin,
       topMargin: topMargin,
       canDisplaySeconds: canDisplaySeconds,
@@ -242,6 +247,9 @@ getTranscriptWidget(
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
       segmentBuilder: segmentBuilder,
+      onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+      onRejectSpeakerLabel: onRejectSpeakerLabel,
+      startedAt: startedAt,
     );
   }
 

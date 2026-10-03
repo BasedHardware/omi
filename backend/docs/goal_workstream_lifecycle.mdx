@@ -17,6 +17,12 @@ route is a deprecated compatibility projection that soft-abandons and retains li
 lifecycle endpoint so `retain` versus `detach` is always explicit; the compatibility exception remains only until
 the released route is removed in the cleanup phase.
 
+Every metric-bearing progress event commits the journal entry, current goal metric, and daily
+`goal_history` chart point in the same Firestore transaction. This includes canonical events, released
+progress routes, and internal extraction. History uses the user's local calendar day and the event's
+timestamp; metricless events leave it unchanged. A replay of an existing event never rewrites history
+or creates a point on the retry's day. Historical missing/inconsistent chart points are not backfilled.
+
 Every new canonical goal/workstream mutation requires `Idempotency-Key` and `X-Account-Generation`. The backend
 checks the per-user workflow control inside the same transaction and permits product-state mutation only in
 `write` or `read`; `off`, `shadow`, and stale generations fail closed. Mutation receipts make retries stable.

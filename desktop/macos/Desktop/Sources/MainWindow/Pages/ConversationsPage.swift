@@ -145,6 +145,9 @@ struct ConversationsPage: View {
         mergeError = nil
       }
       .onAppear {
+        if let pendingSearch = SiriPendingConversationSearch.take() {
+          searchQuery = pendingSearch
+        }
         // Load conversations when view appears
         if appState.conversations.isEmpty {
           Task {
@@ -172,13 +175,16 @@ struct ConversationsPage: View {
       .onReceive(
         NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
       ) { notification in
-        searchQuery = (notification.userInfo?["query"] as? String) ?? ""
+        searchQuery =
+          SiriPendingConversationSearch.take()
+          ?? (notification.userInfo?["query"] as? String) ?? ""
       }
       // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
       // this page's local state (active search results, multi-select/merge state,
       // folder sheets) otherwise keeps rendering the previous account's rows even
       // after AppState and the repository reset.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        SiriPendingConversationSearch.clear()
         selectedConversation = nil
         searchQuery = ""
         searchResults = []

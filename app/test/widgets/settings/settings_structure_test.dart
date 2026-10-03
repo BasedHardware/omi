@@ -10,6 +10,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -86,6 +87,7 @@ void main() {
           ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
           ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
           ChangeNotifierProvider<CaptureProvider>(create: (_) => _Capture()),
+          ChangeNotifierProvider<AppearanceProvider>(create: (_) => AppearanceProvider()),
         ],
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -98,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed',
+  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed',
       (tester) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
@@ -111,6 +113,8 @@ void main() {
       'settings_group_notifications',
       'settings_group_integrations',
       'settings_group_privacy',
+      'settings_row_memories',
+      'settings_row_goals',
       'settings_group_help',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
@@ -126,6 +130,8 @@ void main() {
       en.notificationsAndDisplay,
       en.integrations,
       en.dataAndPrivacy,
+      en.memories,
+      en.goals,
       en.helpAndAbout,
       en.feedbackBug,
       en.developerSettings,
@@ -173,6 +179,9 @@ void main() {
       SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
       SettingsDestination.referral: 'settings_row_referral',
       SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)
+      // Memories and Goals moved onto the sheet when they left the Home tabs (2026-09-29).
+      SettingsDestination.memories: 'settings_row_memories',
+      SettingsDestination.goals: 'settings_row_goals',
     };
     const movedOffSheet = [
       SettingsDestination.notifications,
@@ -182,7 +191,6 @@ void main() {
       SettingsDestination.conversationTimeout,
       SettingsDestination.offlineSync,
       SettingsDestination.phoneCalls,
-      SettingsDestination.homeScreen,
       SettingsDestination.dataPrivacy,
       SettingsDestination.exportData,
       SettingsDestination.importData,
@@ -202,7 +210,6 @@ void main() {
     const wasOnProfile = [
       SettingsDestination.language,
       SettingsDestination.customVocabulary,
-      SettingsDestination.memories,
       SettingsDestination.voiceProfile,
       SettingsDestination.people,
       SettingsDestination.deleteAccount,
@@ -217,7 +224,6 @@ void main() {
       en.email,
       en.language,
       en.customVocabulary,
-      en.memories,
       en.speechProfile,
       en.identifyingOthers,
       en.voiceResponseMode,
@@ -270,10 +276,13 @@ void main() {
       en.conversationTimeout,
       en.transcribeLaterTitle,
     ]);
-    expect(pageTitles['settings_page_notifications'], [en.notifications, en.homeScreen, en.conversationDisplay]);
+    expect(pageTitles['settings_page_notifications'], [
+      en.notifications,
+      en.conversationDisplay,
+      en.appearance,
+    ]);
     expect(pageTitles['settings_page_privacy'], [
       en.dataProtection,
-      en.memories,
       en.exportAllData,
       en.importData,
     ]);

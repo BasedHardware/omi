@@ -10,6 +10,7 @@ import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -19,6 +20,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -82,10 +84,12 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider(create: (_) => CaptureProvider()),
       ChangeNotifierProvider(create: (_) => UserProvider()),
       ChangeNotifierProvider(create: (_) => LocaleProvider()),
+      ChangeNotifierProvider(create: (_) => AppearanceProvider()),
       ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
       ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
       ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
-      ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => const [])),
+      ChangeNotifierProvider(
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
       ChangeNotifierProvider(create: (_) => OnboardingProvider()),
       ChangeNotifierProvider(create: (_) => McpProvider()),
       ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),

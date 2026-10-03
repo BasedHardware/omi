@@ -209,7 +209,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       Container(
                         width: 120,
                         height: 120,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,

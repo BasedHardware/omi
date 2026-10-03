@@ -66,11 +66,19 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.deterministic_minimum import (
+    build_deterministic_minimum_structured,
+    deterministic_minimum_title,
+)
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
-from utils.conversations.recovery import RecoveryStructureUnavailableError, structured_is_rich
+from utils.conversations.recovery import (
+    RecoveryStructureUnavailableError,
+    recovery_minimum_terminal_enabled,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
@@ -79,8 +87,14 @@ from utils.conversations.relevance import (
     final_relevance,
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
-from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip
-from config.jev_decisions import conversation_relevance_jev_enabled, memory_owner_jev_flip_enabled
+from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip, owner_state
+from utils.conversations.jev_shadow import (
+    owner_shadow_identity,
+    select_owner_shadow_indices,
+    submit_owner_shadow,
+    submit_relevance_shadow,
+)
+from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
@@ -89,6 +103,7 @@ from utils.conversations.relevance_io import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
+    clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,
     sanitize_untrusted_provenance_field,
@@ -97,6 +112,7 @@ from utils.conversations.projection_payload import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -107,7 +123,12 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral, record_memory_owner_jev
+from utils.metrics import (
+    record_jit_first_open,
+    record_lazy_desktop_deferral,
+    record_memory_owner_jev,
+    record_jev_shadow_outcome,
+)
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -195,10 +216,9 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
-from utils.conversations.calendar_linking import (
-    get_overlapping_calendar_event,
-    write_conversation_link_to_calendar_event,
-)
+from utils.conversations.action_item_refresh import preserve as preserve_refresh_tasks
+from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
     MIN_TRANSCRIBED_SPEECH_SECONDS,
@@ -234,10 +254,6 @@ from utils.other.storage import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _calendar_auto_link_enabled() -> bool:
-    return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def _flag_enabled(name: str, *, default: bool = False) -> bool:
@@ -424,8 +440,13 @@ def _get_structured(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Tuple[Structured, bool]:
     try:
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and not recovery_transcript_decoded:
+            # An unreadable stored blob is never evidence of an empty capture.
+            # Keep the pre-discard typed minimum failure before persistence.
+            return Structured(), False
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
@@ -455,18 +476,20 @@ def _get_structured(
                 if calendar_data:
                     calendar_context = CalendarMeetingContext(**calendar_data)
 
-        if (
+        # Source records provenance; segment uploads can carry integration labels
+        # without the text-only fields of an external-integration create request.
+        if isinstance(conversation, ExternalIntegrationCreateConversation) and (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
-            ext_conv = cast(ExternalIntegrationCreateConversation, conversation)
+            ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
                 if _conversation_notes_v2_enabled():
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
                     if _meeting_notes_rich_context_enabled():
-                        roster, meeting_context_block, _desktop_capture = rich_notes_inputs(
+                        roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
                             conversation,
                             calendar_context,
@@ -575,12 +598,41 @@ def _get_structured(
 
         # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
+            # A clear rule-level discard (empty transcript, filler, mic check)
+            # is what ordinary capture-end processing would have concluded, so
+            # recovery records the same verdict as an explicit server-recovery
+            # discard instead of surfacing an untitled row with nothing in it.
+            # Discard stays restorable (Show discarded), and no paid LLM call runs.
+            ordinary = decide_relevance(
+                trigger=ProcessingTrigger.CAPTURE_END,
+                texts=[segment.text for segment in segments],
+                speech_seconds=None,
+                # An undescribed photo still contains user data, so never
+                # classify that capture as obvious transcript filler.
+                has_photos=bool(main_conv.photos),
+                user_kept=user_kept,
+                exempt=is_release_probe_uid(uid),
+                trusted_wake_word=has_wake_word_marker,
+                model_discards=None,
+                calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                    uid, main_conv.started_at, main_conv.finished_at
+                ),
+            )
+            if ordinary.discard and ordinary.decided_by == 'rule':
+                logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                return Structured(), True
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
+        arm = relevance_arm(uid, prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
-        if conversation_relevance_jev_enabled() and not has_described_photos and not has_wake_word_marker:
-            jev_transcript = relevance_transcript(segments)
+        jev_transcript = relevance_transcript(segments)
+        if arm == 'jev' and not has_described_photos and not has_wake_word_marker:
             if jev_tier_applies(jev_transcript):
                 jev_discard = lambda: jev_discard_probability(jev_transcript)
 
@@ -602,6 +654,20 @@ def _get_structured(
             ),
             neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
             jev_discard_probability=jev_discard,
+            arm=arm,
+            record_arm=relevance_experiment_active(),
+        )
+        submit_relevance_shadow(
+            uid=uid,
+            conversation_id=prompt_conversation_id,
+            transcript=jev_transcript,
+            decision=decision,
+            arm=arm,
+            source=getattr(main_conv.source, 'value', main_conv.source),
+            # Must match the live Jev gate above: a conversation whose photos
+            # all lack descriptions is transcript-only to the model tier, so
+            # it belongs in the shadow's calibration population too.
+            transcript_only=not has_described_photos and not has_wake_word_marker,
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -621,9 +687,9 @@ def _get_structured(
         if _conversation_notes_v2_enabled():
             roster: Optional[MeetingRoster] = None
             meeting_context_block: Optional[str] = None
-            desktop_capture = False
+            desktop_capture, screen_frames = False, ()
             if _meeting_notes_rich_context_enabled():
-                roster, meeting_context_block, desktop_capture = rich_notes_inputs(
+                roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
                     calendar_context,
@@ -657,6 +723,7 @@ def _get_structured(
                     meeting_context=meeting_context_block,
                     rich_context_enabled=roster is not None,
                     roster=roster,
+                    screen_frames=screen_frames,
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
@@ -709,8 +776,24 @@ def _get_conversation_obj(
     structured: Structured,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
+    *,
+    relevance_discarded: Optional[bool] = None,
 ) -> Conversation:
-    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    if relevance_discarded is False and not structured.title.strip():
+        # A kept conversation must never become an empty-title row merely
+        # because structure generation returned a partial object. Use the same
+        # deterministic, model-free title as the minimum-processing path. An
+        # explicit relevance discard keeps its empty title: that remains the
+        # durable discard verdict and is hidden by default at the list boundary.
+        structured.title = deterministic_minimum_title(
+            conversation,
+            tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+        )
+    discarded = (
+        relevance_discarded
+        if relevance_discarded is not None
+        else structured.title == '' and not is_release_probe_uid(uid)
+    )
     # The empty-title fallback is the discard gate's second verdict and is
     # covered by the same release-probe exemption as the LLM discard above:
     # an LLM mood must not terminalize the probe lane's synthetic capture.
@@ -772,11 +855,12 @@ def get_default_conversation_summarized_apps() -> List[App]:
     redis_app_ids = redis_db.get_conversation_summary_app_ids()
 
     if redis_app_ids:
-        # Use apps from Redis
+        # Use apps from Redis. A malformed/legacy stored app doc must be skipped, not fail the
+        # whole conversation's processing (same class as the chat/app fetch guards).
         for app_id in redis_app_ids:
-            app_data = get_app_by_id_db(app_id.strip())
-            if app_data:
-                default_apps.append(App(**app_data))
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
     else:
         # Fallback to environment variable for backward compatibility
         env_app_ids = os.getenv(
@@ -784,9 +868,9 @@ def get_default_conversation_summarized_apps() -> List[App]:
         ).split(',')
 
         for app_id in env_app_ids:
-            app_data = get_app_by_id_db(app_id.strip())
-            if app_data:
-                default_apps.append(App(**app_data))
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
 
     return default_apps
 
@@ -1464,6 +1548,19 @@ def _canonical_conversation_write_payload(
     return payload
 
 
+def _owner_candidate_quotes(conversation: Conversation, evidence_quotes: List[str]) -> List[Tuple[Optional[str], str]]:
+    quotes: List[Tuple[Optional[str], str]] = []
+    for quote in evidence_quotes:
+        try:
+            ref = _canonical_quote_ref(
+                quote=quote, source_id=conversation.id, segments=conversation.transcript_segments
+            )
+        except RuntimeError:
+            ref = {}
+        quotes.append((ref.get("speaker_label"), quote))
+    return quotes
+
+
 def _jev_owner_flip_for_candidate(
     conversation: Conversation,
     *,
@@ -1474,15 +1571,7 @@ def _jev_owner_flip_for_candidate(
     subject_kind: str,
 ) -> Optional[OwnerFlip]:
     """Ask Jev whether a third-party candidate is the user's own fact (MEMORY_OWNER_JEV_FLIP_ENABLED)."""
-    quotes: List[Tuple[Optional[str], str]] = []
-    for quote in evidence_quotes:
-        try:
-            ref = _canonical_quote_ref(
-                quote=quote, source_id=conversation.id, segments=conversation.transcript_segments
-            )
-        except RuntimeError:
-            ref = {}
-        quotes.append((ref.get("speaker_label"), quote))
+    quotes = _owner_candidate_quotes(conversation, evidence_quotes)
     structured = getattr(conversation, "structured", None)
     flip, outcome = jev_owner_flip(
         candidate=candidate_content,
@@ -1496,6 +1585,60 @@ def _jev_owner_flip_for_candidate(
     )
     record_memory_owner_jev(outcome)
     return flip
+
+
+def _owner_shadow_state(
+    conversation: Conversation, candidate_content: str, evidence_quotes: List[str], user_name: str
+) -> str:
+    quotes = _owner_candidate_quotes(conversation, evidence_quotes)
+    structured = conversation.structured
+    # `Conversation.source` is optional; a source-less record is measured
+    # under the already-supported `unknown` source instead of crashing.
+    source = getattr(conversation.source, 'value', conversation.source) or 'unknown'
+    return owner_state(
+        candidate=candidate_content,
+        quotes=quotes,
+        title=structured.title,
+        overview=structured.overview,
+        source=source,
+        user_name=user_name,
+    )
+
+
+def _shadow_owner_candidate(
+    uid: str,
+    conversation: Conversation,
+    candidate_content: str,
+    evidence_quotes: List[str],
+    user_name: str,
+    user_name_present: bool,
+    subject_kind: str,
+    *,
+    candidate_index: int,
+    eligible_count: int,
+    subject_entity_id: Optional[str],
+) -> None:
+    try:
+        quotes = _owner_candidate_quotes(conversation, evidence_quotes)
+        source = getattr(conversation.source, 'value', conversation.source) or 'unknown'
+        state = _owner_shadow_state(conversation, candidate_content, evidence_quotes, user_name)
+        submit_owner_shadow(
+            uid=uid,
+            conversation_id=conversation.id,
+            candidate_content=candidate_content,
+            state=state,
+            user_name=user_name,
+            pipeline_subject_kind=subject_kind,
+            pipeline_subject_entity_id=subject_entity_id,
+            source=source,
+            n_quotes=len(quotes),
+            user_name_present=user_name_present,
+            candidate_index=candidate_index,
+            eligible_count=eligible_count,
+        )
+    except Exception:
+        # Measurement cannot affect canonical capture, even before submission.
+        record_jev_shadow_outcome('owner', 'dropped')
 
 
 def _canonical_extraction_unavailable(
@@ -1589,7 +1732,7 @@ def _extract_memories_canonical(
         if _conversation_notes_v2_enabled() and conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
-            prompt_people = [Person(**record) for record in people_records]
+            prompt_people = Person.deserialize_many_safe(people_records)
             calendar_context = _stored_meeting_context(conversation)
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
@@ -1632,6 +1775,7 @@ def _extract_memories_canonical(
         ungrounded_candidates = 0
         seen_candidates = 0
         owner_checks = 0
+        owner_shadow_candidates: List[Tuple[int, str, List[str], str, Optional[str]]] = []
         owner_jev_enabled = memory_owner_jev_flip_enabled()
         for candidate in extracted_candidates:
             seen_candidates += 1
@@ -1655,12 +1799,14 @@ def _extract_memories_canonical(
                 segments=conversation.transcript_segments,
             )
             owner_flip: Optional[OwnerFlip] = None
+            owner_live_scored = False
             if owner_jev_enabled and subject_attribution == SubjectAttribution.third_party:
                 # Only third-party -> user, never the reverse (owner_jev.py).
                 if owner_checks >= MAX_OWNER_CHECKS_PER_CONVERSATION:
                     record_memory_owner_jev('skipped_budget')
                 else:
                     owner_checks += 1
+                    owner_live_scored = True
                     owner_flip = _jev_owner_flip_for_candidate(
                         conversation,
                         candidate_content=candidate.content,
@@ -1671,6 +1817,10 @@ def _extract_memories_canonical(
                     )
                 if owner_flip is not None:
                     subject_entity_id, subject_attribution, subject_kind = "user", SubjectAttribution.user, "user"
+            if subject_attribution == SubjectAttribution.third_party and not owner_live_scored:
+                owner_shadow_candidates.append(
+                    (seen_candidates - 1, candidate.content, evidence_quotes, subject_kind, subject_entity_id)
+                )
             memory = Memory(
                 content=candidate.content,
                 category=(
@@ -1751,6 +1901,37 @@ def _extract_memories_canonical(
                     True,
                 )
             )
+        # Selection sees the whole eligible population before burst submission.
+        # Measurement errors must never affect canonical capture.
+        try:
+            identities = [
+                owner_shadow_identity(
+                    candidate_content=content,
+                    state=_owner_shadow_state(conversation, content, quotes, user_name),
+                    user_name=user_name,
+                    pipeline_subject_kind=kind,
+                    pipeline_subject_entity_id=entity_id,
+                )
+                for _, content, quotes, kind, entity_id in owner_shadow_candidates
+            ]
+            selected, eligible_count = select_owner_shadow_indices(conversation.id, identities)
+            for index in selected:
+                candidate_index, content, quotes, kind, entity_id = owner_shadow_candidates[index]
+                _shadow_owner_candidate(
+                    uid,
+                    conversation,
+                    content,
+                    quotes,
+                    user_name,
+                    user_name.lower() != "the user",
+                    kind,
+                    candidate_index=candidate_index,
+                    eligible_count=eligible_count,
+                    subject_entity_id=entity_id,
+                )
+        except Exception:
+            for _ in owner_shadow_candidates:
+                record_jev_shadow_outcome('owner', 'dropped')
         if seen_candidates and not capture_candidates:
             # Every candidate failed grounding: the run itself is untrustworthy,
             # so it must not submit the empty replacement that would retract the
@@ -1983,11 +2164,8 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _write_action_items(uid: str, conversation: Conversation):
-    """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
-    if not conversation.structured.action_items:
-        return
-
+def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[ProcessingTrigger] = None):
+    """Preserve automatic-refresh tasks; use legacy replacement for all other processing."""
     now = datetime.now(timezone.utc)
     is_locked = conversation.is_locked
     action_items_data: List[Dict[str, Any]] = [
@@ -2005,19 +2183,23 @@ def _write_action_items(uid: str, conversation: Conversation):
         for action_item in conversation.structured.action_items
     ]
 
-    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    if preserve_refresh_tasks(uid, conversation, action_items_data, trigger, upsert_action_item_vectors_batch):
+        return
+    if not conversation.structured.action_items:
+        return
+
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
+    # A task that survives re-extraction keeps its id and export marker (no re-send).
+    identity = plan_replacement(conversation.id, action_items_data, old_items, trigger)
     old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
     action_items_db.delete_action_items_for_conversation(uid, conversation.id)
     try:
         for item in old_items:
-            # The replaced rows may own client-scheduled reminders, which the client
-            # only cancels on the deletion data message (#5085). Reprocessing re-creates
-            # the tasks under new ids and schedules their reminders below, so leaving
-            # these armed duplicates every surviving task and keeps reminders for
-            # dropped ones.
-            if item.get('due_at') and not item.get('completed'):
+            # Replaced rows may own client reminders, cancelled only by the deletion data
+            # message (#5085); a kept id is rescheduled in one message after the create.
+            if item.get('due_at') and not item.get('completed') and item['id'] not in identity.reused_ids:
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=item['id'],
@@ -2030,7 +2212,7 @@ def _write_action_items(uid: str, conversation: Conversation):
         # conversation its new extraction.
         logger.error(f"Error cancelling replaced task reminders for {conversation.id}: {e}")
 
-    action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    action_item_ids = action_items_db.create_action_items_batch(uid, identity.items, **identity.create_kwargs())
     logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
 
     emit_product_event(
@@ -2044,8 +2226,10 @@ def _write_action_items(uid: str, conversation: Conversation):
         },
     )
 
-    for idx, action_item in enumerate(conversation.structured.action_items):
-        if action_item.due_at and idx < len(action_item_ids):
+    for idx, action_item in enumerate(conversation.structured.action_items[: len(action_item_ids)]):
+        if identity.reconcile_kept_reminder(uid, action_item_ids[idx], action_item, sync_action_item_reminder):
+            continue
+        if action_item.due_at:
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=action_item_ids[idx],
@@ -2053,23 +2237,23 @@ def _write_action_items(uid: str, conversation: Conversation):
                 due_at=action_item.due_at.isoformat(),
             )
 
-    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, identity.items)]
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_items_batch(uid, created_items))
+        asyncio.run(auto_sync_action_items_batch(uid, identity.deliverable(created_items)))
 
-    submit_with_context(postprocess_executor, _run_auto_sync)
-
+    if not identity.deliver_after_persist:
+        submit_with_context(postprocess_executor, _run_auto_sync)
     upsert_action_item_vectors_batch(
-        uid,
-        [
-            {'action_item_id': aid, 'description': data['description']}
-            for aid, data in zip(action_item_ids, action_items_data)
-        ],
+        uid, [{'action_item_id': item['id'], 'description': item['description']} for item in created_items]
     )
+    if identity.deliver_after_persist:  # a failed attempt above queues nothing for its retry to repeat
+        submit_with_context(postprocess_executor, _run_auto_sync)
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+def _save_action_items(
+    uid: str, conversation: Conversation, people: Sequence[Person] = (), trigger: Optional[ProcessingTrigger] = None
+):
     """Persist a conversation's extracted action items.
 
     Desktop conversations propose Candidates for its Suggested surface. Everywhere
@@ -2081,7 +2265,7 @@ def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Pe
         return
 
     if not _proposes_task_candidates(conversation):
-        _write_action_items(uid, conversation)
+        _write_action_items(uid, conversation, trigger)
         return
 
     try:
@@ -2328,7 +2512,7 @@ def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
     payload = conversation.dict()
     payload['jit_first_open'] = None
     payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
-    return omit_null_processing_state(strip_client_processing(payload))
+    return clear_summary_retryable(omit_null_processing_state(strip_client_processing(payload)))
 
 
 def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
@@ -2362,7 +2546,7 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
         payload.pop('processing_state', None)
     else:
         payload['processing_state'] = None
-    return strip_client_processing(payload)
+    return clear_summary_retryable(strip_client_processing(payload))
 
 
 def _store_deterministic_minimum(
@@ -2425,6 +2609,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
+    conversation.summary_retryable = None  # a new processing pass answers the dead-letter retry
     apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
@@ -2576,7 +2761,10 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
         and external_data.get('conversation_role') == 'meeting'
     ):
         try:
-            duration_s = (finished_at - started_at).total_seconds() if has_window else 0.0
+            # Transcript span, not the capture-session window (#4056): `started_at` is the
+            # streaming origin, so a short call inside a long socket would otherwise pay
+            # for calendar/screen reads the final treatment verdict then discards.
+            duration_s = conversation_duration_seconds(conversation) or 0.0
         except TypeError:
             duration_s = 0.0
         speech_s = deduplicated_transcribed_speech_seconds(getattr(conversation, 'transcript_segments', None) or [])
@@ -2600,7 +2788,12 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             end_date=finished_at,
             limit=MAX_SCREEN_CONTEXT_ROWS,
         )
-        return context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
+        return context_from_screen_activity(
+            rows,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=conversation_duration_seconds(conversation),
+        )
 
     context = resolve_meeting_context(
         direct=_stored_meeting_context(conversation),
@@ -2631,6 +2824,9 @@ def process_conversation(
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    speaker_receipt_observer: Callable[[bool], None] | None = None,
+    smart_merge_refresh: tuple[int, str] | None = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2867,12 +3063,16 @@ def process_conversation(
         return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
+    # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
+    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    if speaker_receipt_observer is not None:
+        speaker_receipt_observer(speaker_receipt_applied)
 
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []
@@ -2885,16 +3085,35 @@ def process_conversation(
         trigger=trigger,
         user_kept=user_kept,
         relevance_observer=decisions.append,
+        recovery_transcript_decoded=recovery_transcript_decoded,
     )
-    conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
+    conversation = _get_conversation_obj(
+        uid,
+        structured,
+        conversation,
+        conversation_id=generated_conversation_id,
+        relevance_discarded=discarded,
+    )
     _attach_client_projection(conversation, client_projection)
-    if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    explicit_recovery_discard = verified_recovery_discard(
+        conversation.discarded, relevance.as_record() if relevance is not None else None
+    )
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and not structured_is_rich(structured)
+        and not explicit_recovery_discard
+    ):
         sys.stdout.write(
             json.dumps(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'refused',
                     'reason': 'empty_structured',
+                    'structure_reason': (
+                        'no_enriched_structure' if recovery_transcript_decoded else 'transcript_decode_failed'
+                    ),
+                    'relevance_verdict': relevance.verdict if relevance is not None else 'missing',
                     'uid': uid,
                     'conversation_id': conversation.id,
                 },
@@ -2904,7 +3123,15 @@ def process_conversation(
         )
         sys.stdout.flush()
         raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
-    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and explicit_recovery_discard
+        and not structured_is_rich(structured)
+    ):
+        sys.stdout.write(
+            json.dumps({'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}) + '\n'
+        )
+        sys.stdout.flush()
     if relevance is not None:
         record_decision(relevance)
 
@@ -2922,8 +3149,13 @@ def process_conversation(
         # minimum's local_pending); the object the caller returns must agree,
         # not answer the stale pending state back to the client.
         conversation.processing_state = None
+    conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    elif smart_merge_refresh is not None:
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid, payload, smart_merge_refresh=smart_merge_refresh
+        )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted, completed=conversation)
@@ -2966,38 +3198,6 @@ def process_conversation(
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
 
     def _emit_derived_effects() -> None:
-        # Calendar auto-linking calls and mutates a user's Google Calendar during generic
-        # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
-        # fan out provider traffic for every connected user.
-        if (
-            _calendar_auto_link_enabled()
-            and not discarded
-            and conversation.started_at
-            and conversation.finished_at
-            and conversation.calendar_event is None
-        ):
-            try:
-                calendar_event = asyncio.run(
-                    get_overlapping_calendar_event(
-                        uid,
-                        conversation.started_at,
-                        conversation.finished_at,
-                    )
-                )
-                if calendar_event:
-                    conversation.calendar_event = calendar_event
-                    asyncio.run(
-                        write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id)
-                    )
-                    conversations_db.update_conversation(
-                        uid,
-                        conversation.id,
-                        {'calendar_event': calendar_event.model_dump(mode='json')},
-                    )
-            except Exception as e:
-                logger.error(f"Error during calendar event linking: {e}")
-                pass
-
         # AI-based folder assignment
         assigned_folder_id = None
         if not jit_defer_expensive and not discarded and not is_reprocess and not conversation.folder_id:
@@ -3100,9 +3300,9 @@ def process_conversation(
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
-                _save_action_items(uid, conversation, people)
+                _save_action_items(uid, conversation, people, trigger)
             else:
-                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.

@@ -103,7 +103,7 @@ def test_entrypoint_enabled_without_allowlist_fails_before_firebase(monkeypatch)
     "workflow_name",
     ["gcp_daily_memory_sweep_job.yml", "gcp_daily_memory_sweep_job_auto_dev.yml"],
 )
-def test_admitted_deploy_lane_provisions_an_independent_job_and_scheduler(workflow_name):
+def test_admitted_deploy_lane_reconciles_an_independent_job_and_scheduler(workflow_name):
     root = Path(__file__).resolve().parents[3]
     workflow = (root / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
 
@@ -111,7 +111,8 @@ def test_admitted_deploy_lane_provisions_an_independent_job_and_scheduler(workfl
     assert "job: ${{ env.LEDGER_DRAIN_SERVICE }}" in workflow
     assert "knowledge_ledger_drain_job_env_vars" in workflow
     assert "knowledge-ledger-drain-hourly" in workflow
-    assert '--cloud-run-job "$LEDGER_DRAIN_SERVICE"' in workflow
+    assert "scheduler_reconcile.py" in workflow
+    assert '--apply --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"' in workflow
     assert 'gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE"' in workflow
     assert '--member="serviceAccount:${SCHEDULER_SERVICE_ACCOUNT}"' in workflow
     assert '--role="roles/run.invoker"' in workflow
@@ -119,7 +120,7 @@ def test_admitted_deploy_lane_provisions_an_independent_job_and_scheduler(workfl
         "Authorize ledger drain Scheduler invocations"
     )
     assert workflow.index("Authorize ledger drain Scheduler invocations") < workflow.index(
-        "Provision hourly Scheduler trigger from admitted source"
+        "Reconcile declared Scheduler triggers"
     )
 
 

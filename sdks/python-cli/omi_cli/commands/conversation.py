@@ -48,7 +48,7 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
-    server_page_size = 25 if include_transcript else 100
+    server_page_size = 200
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         if limit <= server_page_size:
@@ -161,7 +161,9 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    ctx.renderer.success(
+        f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold] (status={escape(str(result.get('status')))})"
+    )
     ctx.renderer.emit(result)
 
 
@@ -209,7 +211,7 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 

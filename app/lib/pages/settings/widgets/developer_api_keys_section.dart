@@ -19,7 +19,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   Widget _card(Widget child) {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: child,
     );
   }
@@ -69,7 +69,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 if (provider.error != null) {
                   return _card(
                     OmiErrorState(
-                      message: context.l10n.errorWithMessage(provider.error!),
+                      message: context.l10n.couldNotLoadApiKeys,
                       onRetry: () => provider.fetchKeys(force: true),
                     ),
                   );

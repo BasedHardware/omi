@@ -146,6 +146,9 @@ enum ChatConversationSwitch {
   }
 }
 
+/// Scroll anchor for the EXP-002 `memory_v1` postcard-first placement.
+private let chatPostcardAnchorID = "daily-summary-postcard"
+
 /// Lifecycle state for the one-shot launch placement. A pending placement may
 /// be retried if SwiftUI removes the chat surface during Home's launch
 /// transition; explicit reader input permanently wins for this view lifetime.
@@ -448,6 +451,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// shells — the recap is part of the thread's history there. Task chat opts out: that thread is
   /// about one task, not about the day.
   var showsDailySummary: Bool = true
+  /// EXP-002 `memory_v1`: the postcard is the landing object. When true and
+  /// the latest daily summary has not been landed on yet, the transcript
+  /// opens on the postcard (top of the document) instead of the live edge,
+  /// and the card is admitted without the scroll-follow precondition — an
+  /// arm-gated seed of INV-CHAT-2, not a global change. Every later open
+  /// follows the bottom unchanged.
+  var postcardFirstLanding: Bool = false
+
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   // MARK: - Scroll State
@@ -456,6 +467,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
   @State private var scrollMode: ChatScrollMode = .followingBottom
+  /// Whether the daily summary card is currently allowed above the thread.
+  /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
+  @State private var dailySummaryAdmitted = false
+
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Withdraws the recap row when the reader clears Chat. See `noteChatCleared`.
   @ObservedObject private var dailySummaryCoordinator: ChatDailySummaryCoordinator =
@@ -906,8 +921,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// On the first load of a saved conversation, follow the latest message.
   /// Chat surfaces should open at the live edge; if the reader wants older
   /// context, explicit scroll input switches the mode to free-scrolling.
+  ///
+  /// EXP-002 `memory_v1` exception: when the postcard is the landing object
+  /// and its summary has not been landed on yet, this open lands on the
+  /// postcard instead — the "night object" the arm exists to ship.
   private func handleInitialRestore(proxy: ScrollViewProxy) {
     guard initialRestoreState.canStart else { return }
+
+    if postcardFirstLanding, placeAtUnseenPostcard(proxy: proxy) {
+      return
+    }
 
     scrollMode = .followingBottom
     hasActivityBelow = false
@@ -930,6 +953,65 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         delay: delay,
         completesInitialRestore: index == delays.index(before: delays.endIndex)
       )
+    }
+  }
+
+  /// Attempts the postcard-first placement. Returns true when this open
+  /// landed on the postcard (the summary was unseen and is now consumed).
+  private func placeAtUnseenPostcard(proxy: ScrollViewProxy) -> Bool {
+    guard showsDailySummary, dailySummaryStore.latest != nil,
+      ChatDailySummaryCoordinator.shared.consumeUnseenSummaryForPostcardLanding()
+    else { return false }
+
+    // Arm-gated INV-CHAT-2 seed: the card enters now because this open is
+    // *for* it, and the placement below cannot move the reader — they start
+    // here. Free-scrolling keeps later arrivals below (activity pill) instead
+    // of yanking the reader off the postcard.
+    dailySummaryAdmitted = true
+    scrollMode = .freeScrolling
+    hasActivityBelow = !messages.isEmpty
+    initialRestoreState = .pending
+    proxy.scrollTo(chatPostcardAnchorID, anchor: .top)
+
+    // Same settling passes as the live-edge placement: the card's rich
+    // Markdown expands across later layout turns.
+    let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
+    guard !delays.isEmpty else {
+      initialRestoreState = .completed
+      return true
+    }
+    for (index, delay) in delays.enumerated() {
+      schedulePostcardScroll(
+        proxy: proxy,
+        delay: delay,
+        completesInitialRestore: index == delays.index(before: delays.endIndex)
+      )
+    }
+    return true
+  }
+
+  /// Schedules a delayed postcard scroll that is cancelable. Reader input
+  /// cancels it through the shared `cancelAllPendingScrolls`.
+  private func schedulePostcardScroll(
+    proxy: ScrollViewProxy,
+    delay: TimeInterval,
+    completesInitialRestore: Bool
+  ) {
+    var workItem: DispatchWorkItem?
+    workItem = DispatchWorkItem { [self] in
+      if scrollMode == .freeScrolling {
+        proxy.scrollTo(chatPostcardAnchorID, anchor: .top)
+        if completesInitialRestore, initialRestoreState == .pending {
+          initialRestoreState = .completed
+        }
+      }
+      if let workItem {
+        initialScrollWorkItems.removeAll { $0 === workItem }
+      }
+    }
+    if let workItem {
+      initialScrollWorkItems.append(workItem)
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
   }
 
@@ -1154,7 +1236,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         hasOlderMessagesAbove: hasHiddenOlderRows)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         if message.id == recapAnchorID {
-          dailyRecapRow
+          // EXP-002 postcard-first landing target: the recap row carries the
+          // anchor so an unseen-summary open can place the reader here.
+          dailyRecapRow.id(chatPostcardAnchorID)
         }
         ChatBubble(
           message: message,

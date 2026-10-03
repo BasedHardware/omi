@@ -21,6 +21,7 @@ import 'package:omi/pages/apps/app_detail/app_summary.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -504,8 +505,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         await _openSetupInstructions();
                         checkSetupCompleted();
                       },
-                      trailing: const Padding(
-                        padding: EdgeInsets.only(right: OmiSpacing.sm),
+                      trailing: Padding(
+                        padding: const EdgeInsets.only(right: OmiSpacing.sm),
                         child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: OmiColors.textTertiary),
                       ),
                       title: Text(l10n.integrationInstructions, style: OmiType.headline),
@@ -601,7 +602,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                      // The header already shows the average and count, so this card holds only reviews.
+                      return (app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
                               key: _reviewsSectionKey,
                               onTap: () {
@@ -622,13 +624,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: OmiSpacing.xxs),
-                                    RatingDistributionWidget(
-                                      ratingAvg: app.ratingAvg ?? 0,
-                                      ratingCount: app.ratingCount,
-                                      reviews: app.reviews,
-                                    ),
-                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
@@ -924,19 +919,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await routeToPage(context, const ChatPage(isPivotBottom: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }
   }
 
   Future<void> _shareApp(BuildContext buttonContext) async {
-    PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
-    PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
+    final sid = newShareId();
     // iPad needs the share button's position for the popover.
     final box = buttonContext.findRenderObject() as RenderBox?;
     final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-    await SharePlus.instance
-        .share(ShareParams(text: appShareUrl(app.id), subject: app.name, sharePositionOrigin: origin));
+    final outcome = await SharePlus.instance
+        .share(ShareParams(text: appShareUrl(app.id, sid: sid), subject: app.name, sharePositionOrigin: origin));
+    final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+    PlatformManager.instance.analytics.track('App Shared', properties: {
+      'appId': app.id,
+      'share_id': sid,
+      'share_status': outcome.status.name,
+      if (targetApp != null) 'target_app': targetApp
+    });
+    PlatformManager.instance.analytics.track('App Detail Shared', properties: {
+      'app_id': app.id,
+      'app_name': app.name,
+      'share_id': sid,
+      if (targetApp != null) 'target_app': targetApp,
+    });
   }
 }

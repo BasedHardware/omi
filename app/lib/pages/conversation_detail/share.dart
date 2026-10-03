@@ -4,18 +4,30 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Opens the system share sheet with the conversation's public link. Resolves with the platform's
 /// result: [ShareResultStatus.dismissed] means the reader closed the sheet without sharing
 /// (reported on iOS and Android 5.1+); [ShareResultStatus.unavailable] means the platform could
 /// not tell.
-Future<ShareResult> shareConversationLink(ServerConversation conversation, {Rect? sharePositionOrigin}) {
+Future<ShareResult> shareConversationLink(ServerConversation conversation, {Rect? sharePositionOrigin}) async {
   final subject = conversation.structured.title;
-  return SharePlus.instance.share(
+  final sid = newShareId();
+  final outcome = await SharePlus.instance.share(
     ShareParams(
-      text: conversationShareUrl(conversation.id),
+      text: conversationShareUrl(conversation.id, sid: sid),
       subject: subject.isEmpty ? null : subject,
       sharePositionOrigin: sharePositionOrigin,
     ),
   );
+  final analytics = PlatformManager.instance.analytics;
+  final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+  analytics.track('Conversation Shared', properties: {
+    ...analytics.getConversationEventProperties(conversation),
+    'share_method': 'url_share',
+    'share_id': sid,
+    'share_status': outcome.status.name,
+    if (targetApp != null) 'target_app': targetApp,
+  });
+  return outcome;
 }

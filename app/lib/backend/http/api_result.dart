@@ -46,9 +46,10 @@ sealed class ApiResult<T> {
 }
 
 final class ApiSuccess<T> extends ApiResult<T> {
-  const ApiSuccess(this.data, {this.rejectedRows = 0});
+  const ApiSuccess(this.data, {this.rejectedRows = 0, this.truncated = false});
   final T data;
   final int rejectedRows;
+  final bool truncated;
 }
 
 final class ApiFailure<T> extends ApiResult<T> {
@@ -108,9 +109,9 @@ Duration? _retryAfter(http.Response response, DateTime Function() now) {
   }
 }
 
-ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode) {
+ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode, {bool truncated = false}) {
   try {
-    return ApiSuccess(decode(body));
+    return ApiSuccess(decode(body), truncated: truncated);
   } on FormatException {
     return const ApiFailure(ApiProblem(ApiProblemKind.decode));
   }
@@ -118,7 +119,7 @@ ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode) {
 
 ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) decode, DateTime Function() now) {
   if (response.statusCode >= 200 && response.statusCode < 300) {
-    return _decodeSuccess(response.body, decode);
+    return _decodeSuccess(response.body, decode, truncated: isOmiListTruncated(response));
   }
   final kind = _kindForStatus(response.statusCode);
   return ApiFailure(

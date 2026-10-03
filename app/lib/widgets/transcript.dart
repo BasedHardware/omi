@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/widgets/speaker_label.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -24,6 +25,7 @@ typedef TranscriptSegmentBuilder = Widget Function(BuildContext context, Transcr
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
+  final bool unresolvedSpeakers;
   final bool horizontalMargin;
   final bool topMargin;
   final bool separator;
@@ -47,9 +49,19 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// "Yes" / "Not <name>" under the first line Omi named by voice. Both null hides the question
+  /// and leaves only the Likely badge.
+  final void Function(TranscriptSegment segment)? onConfirmSpeakerLabel;
+  final void Function(TranscriptSegment segment)? onRejectSpeakerLabel;
+
+  /// When the conversation started. A saved conversation's lines show their clock time
+  /// ("12:40 PM") from it; without it they show the offset into the recording.
+  final DateTime? startedAt;
+
   const TranscriptWidget({
     super.key,
     required this.segments,
+    this.unresolvedSpeakers = false,
     this.horizontalMargin = true,
     this.topMargin = true,
     this.separator = true,
@@ -72,6 +84,9 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.onConfirmSpeakerLabel,
+    this.onRejectSpeakerLabel,
+    this.startedAt,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -156,6 +171,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   int _previousSearchResultIndex = -1;
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
+    if (OmiColors.active == OmiPalette.light) {
+      if (isUser) return OmiColors.surface2;
+      // Keep anonymous speaker bubbles quiet on the light canvas. Known
+      // speakers use a pale tint of their speaker colour so their bubbles remain
+      // distinct without carrying the dark, saturated fill from dark mode.
+      if (person == null) return OmiColors.surface2;
+      final colorIndex = (person.colorIdx ?? speakerId) % _speakerColors.length;
+      return Color.alphaBlend(_speakerColors[colorIndex].withValues(alpha: 0.15), OmiColors.surface1);
+    }
     if (isUser) return OmiColors.surface3;
     final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.8);
@@ -202,8 +226,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Notify parent about scroll controller
     widget.onScrollControllerReady?.call(_scrollController);
 
-    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) &&
-        (widget.isConversationDetail || widget.followLatest)) {
+    // A live transcript opens at its latest line; a saved conversation reads from the top.
+    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) && widget.followLatest) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (widget.followLatest && _userHasScrolled) {
@@ -250,7 +274,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
-    final shouldFollow = !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled && !widget.isConversationDetail;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
@@ -808,7 +832,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget build(BuildContext context) {
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     // One resolver per build: every bubble is named with the conversation's dense numbering.
-    final names = SpeakerNames.forSegments(widget.segments, people: people, l10n: context.l10n);
+    final askSegmentIds = widget.onConfirmSpeakerLabel != null && widget.onRejectSpeakerLabel != null
+        ? firstAutoLabelSegmentIds(widget.segments)
+        : const <String>{};
+    final names = SpeakerNames.forSegments(
+      widget.segments,
+      people: people,
+      l10n: context.l10n,
+      unresolved: widget.unresolvedSpeakers,
+    );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
@@ -852,7 +884,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 final segment = widget.segments[segmentIndex];
                 final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
                 Widget child = customSegment == null
-                    ? _buildSegmentItem(segmentIndex, people, names)
+                    ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
                     : Container(key: _segmentKeys[segment.id], child: customSegment);
                 if (widget.separator && segmentIndex > 0) {
                   child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
@@ -939,11 +971,23 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
-  Widget _buildSegmentItem(int segmentIdx, List<Person> people, SpeakerNames names) {
+  Widget _buildSegmentItem(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
+    if (widget.isConversationDetail) return _buildDetailLine(segmentIdx, people, names, askSegmentIds);
     final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
+    // The badge marks the start of a speaker's turn, not every line of it.
+    final startsTurn = previous == null ||
+        previous.isUser ||
+        previous.speakerId != data.speakerId ||
+        previous.personId != data.personId ||
+        previous.speakerLabelSource != data.speakerLabelSource;
+    final confirm = widget.onConfirmSpeakerLabel;
+    final reject = widget.onRejectSpeakerLabel;
+    final asksToConfirm =
+        person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     return Container(
       key: _segmentKeys[data.id],
       child: Padding(
@@ -1005,6 +1049,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               ),
                             ),
                           ),
+                          if (startsTurn && person != null && !isTagging) ...[
+                            const SizedBox(width: 4),
+                            SpeakerLabelBadge(source: data.speakerLabelSource),
+                          ],
                           if (isTagging) ...[
                             const SizedBox(width: 6),
                             const OmiSpinner(size: OmiSpinnerSize.small),
@@ -1088,6 +1136,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ),
                     ],
                   ),
+                  // Under the line it asks about.
+                  if (asksToConfirm)
+                    Padding(
+                      padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                      child: SpeakerLikelyConfirm(
+                        name: person.name,
+                        onYes: () => confirm(data),
+                        onNot: () => reject(data),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1115,11 +1173,164 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
-  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser) {
+  /// One line of a saved conversation (Omi v8 `.tt`): who spoke and when, then what they said, with
+  /// no bubble or avatar. The name and time are 13/600 in the tertiary ink (the owner's in the
+  /// primary ink, a voice nobody has named underlined with dots); the words are 17 pt at a 1.5 line
+  /// in 80 % ink (the owner's in the primary ink). Tapping the name names the speaker; tapping the
+  /// line plays the recording from there; double-tapping the words edits them.
+  Widget _buildDetailLine(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
+    final data = widget.segments[segmentIdx];
+    final Person? person = personById(people, data.personId);
+    final isTagging = widget.taggingSegmentIds.contains(data.id);
+    final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
+    // The badge marks the start of a speaker's turn, not every line of it.
+    final startsTurn = previous == null ||
+        previous.isUser ||
+        previous.speakerId != data.speakerId ||
+        previous.personId != data.personId ||
+        previous.speakerLabelSource != data.speakerLabelSource;
+    final confirm = widget.onConfirmSpeakerLabel;
+    final reject = widget.onRejectSpeakerLabel;
+    final asksToConfirm =
+        person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
+    final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
+    final unnamed = !data.isUser && !isOmi && person == null;
+    final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
+    final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
+    final seek = widget.onSegmentTap;
+    void play() {
+      HapticFeedback.lightImpact();
+      seek!(data);
+    }
+
+    final startedAt = widget.startedAt;
+    final time = !widget.canDisplaySeconds
+        ? null
+        : startedAt == null
+            ? OmiDuration.offset(data.start)
+            : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
+
+    final who = Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Flexible(
+          child: _speakerTarget(
+            data,
+            Text(
+              names.forSegment(data, person: person),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: label.copyWith(
+                decoration: unnamed ? TextDecoration.underline : null,
+                decorationStyle: TextDecorationStyle.dotted,
+                decorationColor: labelColor,
+              ),
+            ),
+          ),
+        ),
+        if (startsTurn && person != null && !isTagging) ...[
+          const SizedBox(width: 4),
+          SpeakerLabelBadge(source: data.speakerLabelSource),
+        ],
+        if (time != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            time,
+            style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ],
+        if (isTagging) ...[
+          const SizedBox(width: 6),
+          const OmiSpinner(size: OmiSpinnerSize.small),
+        ],
+      ],
+    );
+
+    // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
+    // on the words over the line's. A long press still selects.
+    final words = SelectionArea(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: seek == null ? null : play,
+        onDoubleTap: widget.onEditSegmentText == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                widget.onEditSegmentText!(segmentIdx);
+              },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSegmentText(
+              data,
+              segmentIdx,
+              data.isUser,
+              style: OmiType.body.copyWith(
+                color: data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+                letterSpacing: 0.0,
+                height: 1.5,
+              ),
+            ),
+            if (data.translations.isNotEmpty) ...[
+              for (final translation in data.translations)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _getDecodedText(translation.text),
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              _buildTranslationNotice(),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    // 8 above and below, plus the list's 4 between segments: the design's 20 between lines.
+    Widget line = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          who,
+          const SizedBox(height: 3),
+          words,
+          if (asksToConfirm)
+            Padding(
+              padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+              child: SpeakerLikelyConfirm(name: person.name, onYes: () => confirm(data), onNot: () => reject(data)),
+            ),
+        ],
+      ),
+    );
+    if (seek != null) {
+      line = Semantics(
+        hint: context.l10n.playFromHere,
+        child: GestureDetector(
+          key: ValueKey('transcript_seek_${data.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: play,
+          child: line,
+        ),
+      );
+    }
+    return Container(
+      key: _segmentKeys[data.id],
+      padding: EdgeInsets.symmetric(horizontal: widget.horizontalMargin ? 16 : 0),
+      child: line,
+    );
+  }
+
+  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser, {TextStyle? style}) {
     final richText = RichText(
       textAlign: TextAlign.left,
       text: TextSpan(
-        style: OmiType.subhead.copyWith(letterSpacing: 0.0, height: 1.4),
+        style: style ?? OmiType.subhead.copyWith(letterSpacing: 0.0, height: 1.4),
         children: widget.searchQuery.isNotEmpty
             ? _highlightSearchMatchesWithKeys(_getDecodedText(data.text), widget.searchQuery, segmentIdx)
             : [TextSpan(text: _getDecodedText(data.text))],
@@ -1129,7 +1340,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Widget _buildSegmentFooter(TranscriptSegment data, bool isUser) {
-    final color = isUser ? OmiColors.textSecondary : OmiColors.textTertiary;
+    final color = isUser
+        ? OmiColors.textSecondary
+        : (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : OmiColors.textTertiary);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1159,7 +1372,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, size: 12, color: OmiColors.textTertiary),
+            Icon(Icons.check_circle, size: 12, color: OmiColors.textTertiary),
             const SizedBox(width: 4),
             Text(
               context.l10n.translatedByOmi,

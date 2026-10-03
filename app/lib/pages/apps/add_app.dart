@@ -338,7 +338,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               AppFormCard(
                                 child: Row(
                                   children: [
-                                    const Text('\$', style: OmiType.title3),
+                                    Text('\$', style: OmiType.title3),
                                     const SizedBox(width: OmiSpacing.xs),
                                     Expanded(
                                       child: TextField(

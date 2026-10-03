@@ -22,7 +22,7 @@ import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import httpx
 
@@ -88,11 +88,16 @@ def ask_jev(
     lane: str,
     timeout_seconds: float = JEV_CLIENT_TIMEOUT_SECONDS,
     max_attempts: int = JEV_CLIENT_MAX_ATTEMPTS,
+    outcome_observer: Callable[[str], None] | None = None,
+    record_decision_metrics: bool = True,
 ) -> Optional[JevAnswers]:
     """Ask Jev ``questions`` about ``state``. ``None`` on any failure.
 
     ``lane`` is the bounded product decision name used for metrics and gateway
     usage attribution (``conversation_relevance`` or ``memory_owner``).
+    ``record_decision_metrics=False`` suppresses ``omi_jev_decision_total`` and
+    its latency histogram: EXP-004 shadow calls must not inflate the live
+    decision lanes' failure and latency signals while they ramp.
     """
     started = time.monotonic()
     outcome = 'success'
@@ -122,9 +127,15 @@ def ask_jev(
         logger.warning('jev decision failed lane=%s reason=%s', lane, type(exc).__name__)
         return None
     finally:
+        if outcome_observer is not None:
+            try:
+                outcome_observer(outcome)
+            except Exception:
+                logger.warning('jev outcome observer failed lane=%s', lane)
         if outcome != 'success':
             logger.info('jev decision unavailable lane=%s outcome=%s', lane, outcome)
-        record_jev_decision(lane=lane, outcome=outcome, latency_seconds=time.monotonic() - started)
+        if record_decision_metrics:
+            record_jev_decision(lane=lane, outcome=outcome, latency_seconds=time.monotonic() - started)
 
 
 def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) -> object:
@@ -141,7 +152,7 @@ def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) ->
     except httpx.HTTPError as exc:
         raise _AttemptFailed('transport_error', retryable=True) from exc
     if response.status_code == 429:
-        raise _AttemptFailed('http_error', retryable=False)
+        raise _AttemptFailed('http_429', retryable=False)
     if response.status_code in _RETRYABLE_STATUS_CODES:
         raise _AttemptFailed('http_error', retryable=True)
     if response.status_code >= 400:

@@ -19,8 +19,8 @@ class SpeakerSummaryAction extends StatelessWidget {
                   onPressed: provider.loadingReprocessConversation ? null : () => provider.reprocessConversation(),
                   icon: provider.loadingReprocessConversation
                       ? const SizedBox(width: 16, height: 16, child: OmiSpinner(size: OmiSpinnerSize.small))
-                      : const Icon(Icons.refresh, color: Colors.white70),
-                  label: Text(context.l10n.updateSummaryWithNewNames, style: const TextStyle(color: Colors.white)),
+                      : Icon(Icons.refresh, color: OmiColors.textSecondary),
+                  label: Text(context.l10n.updateSummaryWithNewNames, style: TextStyle(color: OmiColors.textPrimary)),
                 )),
       );
 }

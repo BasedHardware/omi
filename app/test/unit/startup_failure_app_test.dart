@@ -17,6 +17,8 @@ void main() {
       await tester.pumpWidget(StartupFailureApp(error: error, stack: StackTrace.current));
 
       expect(find.text('Omi couldn’t start'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('startup_failure_details')));
+      await tester.pump();
       expect(
         find.textContaining('requires a loopback or private-network API endpoint', findRichText: true),
         findsOneWidget,
@@ -35,15 +37,31 @@ void main() {
     testWidgets('error text is selectable so it can be copied off-device', (tester) async {
       // There is no debugger attached in the situation this screen exists for.
       await tester.pumpWidget(StartupFailureApp(error: Exception('copy me'), stack: null));
+      await tester.tap(find.byKey(const Key('startup_failure_details')));
+      await tester.pump();
 
       expect(find.byType(SelectableText), findsOneWidget);
     });
 
     testWidgets('no stack trace prints only the error, never a literal "null"', (tester) async {
       await tester.pumpWidget(StartupFailureApp(error: Exception('no stack'), stack: null));
+      await tester.tap(find.byKey(const Key('startup_failure_details')));
+      await tester.pump();
 
       final text = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
       expect(text, 'Exception: no stack');
+    });
+
+    testWidgets('a runtime failure keeps the raw error behind a collapsed Details disclosure', (tester) async {
+      await tester.pumpWidget(StartupFailureApp(error: Exception('Could not reach the Omi backend'), stack: null));
+
+      expect(find.textContaining('Could not reach the Omi backend', findRichText: true), findsNothing);
+      await tester.tap(find.byKey(const Key('startup_failure_details')));
+      await tester.pump();
+      expect(find.text('Exception: Could not reach the Omi backend', findRichText: true), findsOneWidget);
+      await tester.tap(find.byKey(const Key('startup_failure_details')));
+      await tester.pump();
+      expect(find.byType(SelectableText), findsNothing);
     });
 
     testWidgets('a runtime failure offers Try Again, which re-runs start-up, and Contact Support', (tester) async {

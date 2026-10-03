@@ -47,5 +47,5 @@ Do **not** require naming `INV-UI-3` in routine UI PRs. The ratchet enforces the
 ## Related
 
 - [`app/docs/ux-contract.md`](../../app/docs/ux-contract.md) — the rules and the component for each
-- [`brand-ui.md`](./brand-ui.md) — INV-UI-1, no purple
+- [`brand-ui.md`](./brand-ui.md) — INV-UI-1, neutral white accent in dark mode and black accent in light mode; no purple
 - macOS twin: `INV-UI-2` (`desktop-ux-contract.md`, BasedHardware/omi#17286)

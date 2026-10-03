@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "scope_registry_revision": "google-read-v1",
+  "connectors": {
+    "google_calendar": {
+      "enabled": false,
+      "project_alias": "google_calendar_prod",
+      "client_alias": "google_calendar_prod",
+      "project_number_sha256": "",
+      "client_id_sha256": "",
+      "redirect_uri": "",
+      "scope_digest": "",
+      "verification": {
+        "approved": false,
+        "evidence_id": "",
+        "valid_through": ""
+      }
+    },
+    "gmail": {
+      "enabled": false,
+      "project_alias": "google_gmail_prod",
+      "client_alias": "google_gmail_prod",
+      "project_number_sha256": "",
+      "client_id_sha256": "",
+      "redirect_uri": "",
+      "scope_digest": "",
+      "verification": {
+        "approved": false,
+        "evidence_id": "",
+        "valid_through": ""
+      },
+      "casa": {
+        "approved": false,
+        "evidence_id": "",
+        "valid_through": ""
+      }
+    }
+  }
+}

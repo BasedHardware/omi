@@ -16,7 +16,17 @@ enum ContextBucketsFeature {
   /// silently dropped it. Capture kept running with the bucket pipeline disabled, which
   /// is indistinguishable from the feature simply never firing. Dev bundles exist to
   /// exercise this pipeline, so they default to on and the variable now only turns it off.
+  ///
+  /// EXP-002: the `memory_v1` arm starves the director through this same
+  /// gate — quiet capture, postcard at night, no proactive interruptions.
+  /// This is the existing kill surface, not a new director; every other
+  /// arm (and every un-armed user) keeps the decision below unchanged.
   @MainActor static var isEnabled: Bool {
+    if let assignment = DesktopExperimentCoordinator.shared.assignment,
+      assignment.variant == DesktopExperiment.memoryV1Variant
+    {
+      return false
+    }
     if AppBuild.isNonProduction {
       return ProcessInfo.processInfo.environment[localQAOverrideName] != "0"
     }
@@ -121,43 +131,10 @@ enum ContextBucketsFeature {
   static let departureEvaluationKillSwitchFlagName = "context_buckets_departure_eval_kill"
   private static let localDepartureEvaluationOverrideName = "OMI_FORCE_DEPARTURE_EVALUATION"
 
-  /// Quotes quality-gated validated facts from sibling buckets of the visit's
-  /// live workstream into the director's volatile prompt, and widens delivery
-  /// dedup to that workstream.
-  ///
-  /// Non-production dogfood defaults to on with the same inverted env override
-  /// as the flags above (`OMI_FORCE_BUCKET_WORKSTREAMS=0` turns it off).
-  /// Production and beta stay off until pooling is validated in dogfood — like
-  /// departure evaluation there is deliberately no remote stop yet, because
-  /// nothing ships dark to users this way.
-  @MainActor static var isWorkstreamPoolingEnabled: Bool {
-    guard isEnabled else { return false }
-    if AppBuild.isNonProduction {
-      return ProcessInfo.processInfo.environment[localWorkstreamPoolingOverrideName] != "0"
-    }
-    return false
-  }
-
-  private static let localWorkstreamPoolingOverrideName = "OMI_FORCE_BUCKET_WORKSTREAMS"
-
   /// Background workstream tagging plus pre-written notification candidates,
   /// with a small reasoning-lane gate on the delivery path instead of a full
-  /// director call when a candidate is armed.
-  ///
-  /// Non-production dogfood defaults to on with the same inverted env override
-  /// as the flags above (`OMI_FORCE_BUCKET_CANDIDATES=0` turns it off).
-  /// Production and beta stay off until the reconciler is validated in
-  /// dogfood — like workstream pooling there is deliberately no remote stop
-  /// yet, because nothing ships dark to users this way.
-  @MainActor static var isProactiveCandidatesEnabled: Bool {
-    guard isEnabled else { return false }
-    if AppBuild.isNonProduction {
-      return ProcessInfo.processInfo.environment[localProactiveCandidatesOverrideName] != "0"
-    }
-    return false
-  }
-
-  private static let localProactiveCandidatesOverrideName = "OMI_FORCE_BUCKET_CANDIDATES"
+  /// director call when a candidate is armed. Off on every bundle identity.
+  @MainActor static var isProactiveCandidatesEnabled: Bool { false }
 
   /// Deterministic write-time fact policy (`ContextFactWritePolicy`): drops
   /// extraction-machinery echoes, caps scenery statements to worthiness 0 so

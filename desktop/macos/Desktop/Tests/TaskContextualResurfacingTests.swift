@@ -248,16 +248,16 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
 
 final class TaskContextualResurfacingTests: XCTestCase {
   private let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
-  private var previousOwnerID: String?
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
   override func setUp() async throws {
     try await super.setUp()
-    previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-    await transitionContextTestOwner(to: "context-test-owner")
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture?.establish(authOwnerID: "context-test-owner")
   }
 
   override func tearDown() async throws {
-    await transitionContextTestOwner(to: previousOwnerID)
+    await ownerFixture?.restore()
     try await super.tearDown()
   }
 

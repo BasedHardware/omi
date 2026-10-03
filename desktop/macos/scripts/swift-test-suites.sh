@@ -86,6 +86,9 @@ SLOW_SUITES_FILE="${OMI_SWIFT_TEST_SLOW_SUITES_FILE:-$SCRIPT_DIR/swift-test-slow
 # `full` runs everything (the historical behavior, and the local default);
 # `pr` defers ratcheted slow suites unless this diff touches their own inputs.
 TEST_LANE="${OMI_SWIFT_TEST_LANE:-full}"
+SELECTION_MODE="${OMI_SWIFT_TEST_SELECTION_MODE:-shadow}"
+SELECTION_RECORD="${OMI_SWIFT_TEST_SELECTION_RECORD:-}"
+SELECTION_BASE="${OMI_SWIFT_TEST_SELECTION_BASE:-}"
 # Repo-relative changed paths (one per line) supplied by CI. A deferred suite
 # wakes when a file that declares it changed; runner or deferral-list changes
 # re-baseline the whole selection.
@@ -591,6 +594,10 @@ case "$TEST_LANE" in
   pr|full) ;;
   *) fail "OMI_SWIFT_TEST_LANE must be 'pr' or 'full', got '$TEST_LANE'" ;;
 esac
+case "$SELECTION_MODE" in
+  shadow|on) ;;
+  *) fail "OMI_SWIFT_TEST_SELECTION_MODE must be 'shadow' or 'on'" ;;
+esac
 [[ "$ISOLATION_PARALLEL" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_ISOLATION_PARALLEL must be a positive integer, got '$ISOLATION_PARALLEL'"
 if [ "$ISOLATION_PARALLEL" -lt 1 ]; then
@@ -612,6 +619,8 @@ esac
 # parallelism/skip wiring, and the real suite job already runs the ratchet.
 if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
   python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
+  # The call-app release catalog is generated into Swift; its data file must agree.
+  python3 "$SCRIPT_DIR/tests/test_call_app_catalog.py"
   python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
   python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
   "$SKIP_RATCHET" --slow-check --slow-file "$SLOW_SUITES_FILE"
@@ -669,7 +678,10 @@ done < <(cut -f1 "$suite_map" | sort -u)
 # Missing the first surface blocked a release cut in #11511. Missing the latter
 # two let MemoryAtlas change `auth_userId` while Kernel projection installed its
 # temporary reset owner in #12039, failing the owner-scoped clear.
-auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)'
+# LocalEmbeddingIndexer.indexFinalizedSession captures and revalidates the
+# effective owner, which reads the production-standard auth defaults domain.
+# Keep its caller suites out of parallel cfprefsd traffic on hosted macOS.
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession'
 declare -a auth_domain_files=()
 while IFS= read -r auth_domain_file; do
   auth_domain_files+=("$auth_domain_file")
@@ -826,6 +838,34 @@ else
       kept_suites+=("$suite")
     fi
   done
+fi
+# The candidate selector observes the exact post-deferral PR suite set. The
+# default shadow mode records the subset but runs the unchanged set. A later
+# evidence-backed workflow switch can opt in to the selection.
+if [ "$TEST_LANE" = "pr" ]; then
+  runnable_file="$suite_worker_dir/runnable-suites.txt"
+  changed_file="$suite_worker_dir/changed-files.txt"
+  selected_file="$suite_worker_dir/selected-suites.txt"
+  printf '%s\n' "${kept_suites[@]}" > "$runnable_file"
+  if [ -n "$SELECTION_BASE" ]; then
+    # Use the full PR diff, not the test-only subset supplied to the existing
+    # slow-suite deferral. A simultaneous production-source edit must fail
+    # closed to the full candidate set.
+    (cd "$MACOS_DIR/../.." && scripts/changed-files "$SELECTION_BASE"...HEAD) > "$changed_file"
+  else
+    printf '%s\n' "$CHANGED_FILES" > "$changed_file"
+  fi
+  record_file="${SELECTION_RECORD:-$suite_worker_dir/selection.json}"
+  python3 "$SCRIPT_DIR/select_swift_test_suites.py" \
+    --suite-map "$suite_map" --runnable "$runnable_file" \
+    --changed "$changed_file" --record "$record_file" --selected "$selected_file" \
+    --mode "$SELECTION_MODE"
+  if [ "$SELECTION_MODE" = "on" ]; then
+    kept_suites=()
+    while IFS= read -r suite; do
+      [ -n "$suite" ] && kept_suites+=("$suite")
+    done < "$selected_file"
+  fi
 fi
 suite_count="${#kept_suites[@]}"
 

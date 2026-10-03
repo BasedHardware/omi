@@ -207,6 +207,49 @@ class TestMemoriesToMarkdown(unittest.TestCase):
             self.assertEqual(first_run, second_run)
             self.assertEqual(len(list(output_dir.glob("*.md"))), 2)
 
+    def test_extract_memories_bare_array(self):
+        items = [{"id": "m1", "content": "note 1"}, "not-a-dict", {"id": "m2", "content": "note 2"}]
+        extracted = m2m.extract_memories(items)
+        self.assertEqual(len(extracted), 2)
+        self.assertEqual(extracted[0]["id"], "m1")
+        self.assertEqual(extracted[1]["id"], "m2")
+
+    def test_extract_memories_wrapped_envelopes(self):
+        self.assertEqual(len(m2m.extract_memories({"memories": [{"id": "m1"}]})), 1)
+        self.assertEqual(len(m2m.extract_memories({"items": [{"id": "m2"}]})), 1)
+        self.assertEqual(len(m2m.extract_memories({"data": [{"id": "m3"}]})), 1)
+
+    def test_extract_memories_empty_envelopes_return_empty(self):
+        self.assertEqual(m2m.extract_memories({"memories": []}), [])
+        self.assertEqual(m2m.extract_memories({"items": []}), [])
+        self.assertEqual(m2m.extract_memories({"data": []}), [])
+
+    def test_extract_memories_single_object(self):
+        single = {"id": "m_solo", "content": "Standalone thought", "category": "work"}
+        extracted = m2m.extract_memories(single)
+        self.assertEqual(len(extracted), 1)
+        self.assertEqual(extracted[0]["id"], "m_solo")
+
+    def test_extract_memories_unrelated_object_returns_empty(self):
+        self.assertEqual(m2m.extract_memories({"status": "error", "code": 500}), [])
+        self.assertEqual(m2m.extract_memories("invalid input"), [])
+
+    def test_empty_memories_render_clean_markdown(self):
+        extracted = m2m.extract_memories({"memories": []})
+        md = m2m.memories_to_markdown(extracted)
+        self.assertIn("total: 0", md)
+        self.assertIn("categories_count: 0", md)
+        self.assertIn("_No memories found matching criteria._", md)
+        self.assertNotIn("_Untitled memory_", md)
+
+    def test_empty_memories_grouped_directory_writes_zero_files(self):
+        extracted = m2m.extract_memories({"memories": []})
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir) / "vault"
+            written = m2m.write_grouped_directory(extracted, out_dir)
+            self.assertEqual(len(written), 0)
+            self.assertEqual(list(out_dir.glob("*.md")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

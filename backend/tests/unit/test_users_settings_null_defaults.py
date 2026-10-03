@@ -155,3 +155,19 @@ def test_settings_setters_use_merge_write(users):
 
         users.set_user_private_cloud_sync_enabled("uid", True)
         mock_ref.set.assert_called_with({"private_cloud_sync_enabled": True}, merge=True)
+
+
+def test_meeting_note_screenshots_enabled_respects_rpc_timeout(users):
+    mock_doc = MagicMock()
+    mock_snapshot = MagicMock(exists=True)
+    mock_snapshot.to_dict.return_value = {"meeting_note_screenshots_enabled": None}
+    mock_doc.get.return_value = mock_snapshot
+
+    mock_db = MagicMock()
+    mock_db.collection.return_value.document.return_value = mock_doc
+
+    with patch.object(users, "db", mock_db):
+        res = users.get_meeting_note_screenshots_enabled("uid", rpc_timeout=2.5)
+        assert res is True
+        mock_doc.get.assert_called_with(timeout=2.5, retry=None)
+

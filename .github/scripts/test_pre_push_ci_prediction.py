@@ -184,6 +184,23 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertTrue(plan.includes("app-journeys-hermetic"))
         self.assertEqual(github_outputs(plan)["has_app_journeys"], "true")
 
+    def test_generic_dart_keeps_fast_pr_lanes_off_but_full_main_selection_on(self) -> None:
+        plan = self.plan(["app/lib/utils/date_formats.dart"])
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_app_android_pr"], "false")
+        self.assertEqual(outputs["has_app_journeys_pr"], "false")
+        self.assertEqual(outputs["has_app_compile_smoke"], "true")
+        self.assertEqual(outputs["has_app_journeys"], "true")
+
+    def test_native_and_journey_owner_inputs_keep_pr_coverage(self) -> None:
+        for path in ("app/android/app/build.gradle", "app/lib/pigeon_interfaces.dart", "app/pubspec.lock"):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path]))["has_app_android_pr"], "true")
+        for path in ("app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
+                     "app/lib/services/capture/capture_service.dart"):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path]))["has_app_journeys_pr"], "true")
+
     def test_generated_dart_and_l10n_do_not_wake_journeys(self) -> None:
         plan = self.plan(["app/lib/models/task.g.dart", "app/lib/l10n/app_fr.arb"])
         self.assertFalse(plan.includes("app-journeys-hermetic"))
@@ -278,6 +295,26 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertEqual(outputs["has_app_codegen"], "true")
         self.assertEqual(outputs["has_app_l10n"], "true")
 
+    def test_unrelated_detect_changes_routing_does_not_wake_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_admin=$(echo $FILES | grep -q '^web/admin/' && echo true)\nhas_dart=$FILES\nhas_arb=$FILES\n"
+        current = base.replace("^web/admin/", "^web/admin/|^firestore.indexes.json$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+
+    def test_flutter_routing_definition_change_wakes_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_dart=$(echo $FILES | grep -q '\\.dart$')\nhas_arb=$FILES\n"
+        current = base.replace("\\.dart$", "\\.(dart|g.dart)$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+
     def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
         codegen = self.plan(["app/build.yaml"])
         self.assertTrue(codegen.includes("flutter-codegen"))
@@ -291,23 +328,22 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertEqual(github_outputs(l10n)["has_flutter_generated"], "true")
 
     def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
-        """Ordinary desktop PRs keep one hosted Mac; package edits and pushes compile release.
+        """Ordinary desktop PRs keep one hosted Mac; release inputs and pushes compile release.
 
         The release compile lane holds a second scarce macOS runner for ~25 min,
-        so the PR lane reserves it for package-manifest changes (the inputs most
-        likely to shift whole-module behavior), while every main push still
+        so the PR lane reserves it for release-specific changes, while every main push still
         produces exact-SHA release evidence for the release planner.
         """
         paths = ["desktop/macos/Resources/Info.plist"]
-        self.assertFalse(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))
         self.assertFalse(
-            self.plan(["desktop/macos/Desktop/Sources/OmiApp.swift"], event="pull_request").includes(
+            self.plan(["desktop/macos/Desktop/Sources/Chat/ChatProvider.swift"], event="pull_request").includes(
                 "desktop-swift-release-compile"
             )
         )
         self.assertTrue(
-            self.plan(["desktop/macos/Desktop/Sources/OmiApp.swift"], event="push").includes(
+            self.plan(["desktop/macos/Desktop/Sources/Chat/ChatProvider.swift"], event="push").includes(
                 "desktop-swift-release-compile"
             )
         )
@@ -325,14 +361,40 @@ class PrePushCiPredictionTests(unittest.TestCase):
             self.plan(["backend/routers/updates.py"], event="pull_request").includes("desktop-swift-release-compile")
         )
 
+    def test_release_specific_pr_inputs_select_release_compile(self) -> None:
+        for path in (
+            "desktop/macos/Desktop/Info.plist",
+            "desktop/macos/Desktop/Omi-Release.entitlements",
+            "desktop/macos/ci/xcode-pin.json",
+            "desktop/macos/scripts/notarize-desktop-artifacts.sh",
+            "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+            "codemagic.yaml",
+            ".github/workflows/desktop-swift-ci.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(self.plan([path], event="pull_request").includes("desktop-swift-release-compile"))
+
+    def test_ordinary_source_and_test_prs_defer_release_test_compile(self) -> None:
+        for path in (
+            "desktop/macos/Desktop/Sources/Chat/ChatProvider.swift",
+            "desktop/macos/Desktop/Tests/RealtimeTurnEvidenceTests.swift",
+            "desktop/macos/Desktop/CWebP/module.modulemap",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(self.plan([path], event="pull_request").includes("desktop-swift-release-compile"))
+                self.assertFalse(self.plan([path], event="pull_request").includes("desktop-swift-release-test-compile"))
+                self.assertTrue(self.plan([path], event="push").includes("desktop-swift-release-test-compile"))
+
     def test_notification_regression_still_wakes_release_lane_on_prs(self) -> None:
         """The release-mode UserNotifications regression keeps its PR trigger."""
         plan = self.plan(["desktop/macos/Desktop/Sources/NotificationProbe.swift"], event="pull_request")
         self.assertTrue(plan.includes("desktop-swift-notification-release-regression"))
+        self.assertTrue(plan.includes("desktop-swift-release-compile"))
+        self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
         self.assertEqual(github_outputs(plan)["should_notification_release_regression"], "true")
 
-    def test_release_tests_cover_entire_target_on_prs_and_pushes(self) -> None:
-        """#13123/#13467: non-Notification tests also consume DEBUG-only seams."""
+    def test_release_tests_cover_entire_target_on_pushes(self) -> None:
+        """#13123/#13467: main compiles non-Notification tests with release settings."""
         for path in (
             "desktop/macos/Desktop/Tests/RealtimeTurnEvidenceTests.swift",
             "desktop/macos/Desktop/Tests/ChatStreamingRenderBudgetTests.swift",
@@ -347,11 +409,10 @@ class PrePushCiPredictionTests(unittest.TestCase):
             "desktop/macos/scripts/run-swift-ci.sh",
             ".github/workflows/desktop-swift-ci.yml",
         ):
-            for event in ("pull_request", "push"):
-                with self.subTest(path=path, event=event):
-                    plan = self.plan([path], event=event)
-                    self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
-                    self.assertEqual(github_outputs(plan)["should_release_test_compile"], "true")
+            with self.subTest(path=path):
+                plan = self.plan([path], event="push")
+                self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
+                self.assertEqual(github_outputs(plan)["should_release_test_compile"], "true")
 
     def test_unrelated_inputs_do_not_compile_release_tests(self) -> None:
         for path in ("backend/database/users.py", "desktop/macos/AGENTS.md", "desktop/macos/Resources/Info.plist"):

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import redis
 import logging
 
+from database import api_key_cache
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
@@ -450,6 +451,12 @@ def get_cached_signed_url(blob_path: str) -> str:
     return signed_url.decode()
 
 
+def get_cached_signed_url_ttl(blob_path: str) -> int:
+    """Seconds the cached signed URL has left (0 when absent); the cache entry expires just before the signature."""
+    ttl = r.ttl(f'urls:{blob_path}')
+    return ttl if isinstance(ttl, int) and ttl > 0 else 0
+
+
 def delete_cached_signed_url(blob_path: str) -> None:
     """Evict a cached signed URL. Callers deleting the underlying blob must call
     this too — a delete that leaves a still-live cached signed URL handing out
@@ -747,23 +754,30 @@ async def get_async_redis_client() -> Any:
     return _async_redis_client
 
 
-@try_catch_decorator
-def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+def _daily_notification_key(uid: str, tz: Optional[Any] = None) -> str:
+    """Bucket the count by the user's own calendar day, not UTC's.
+
+    A UTC bucket rolls over mid-afternoon west of UTC, which hands the user a
+    second full allotment inside one of their days.
+    """
     from datetime import datetime, timezone
 
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    return f'{uid}:daily_noti_count:{datetime.now(tz or timezone.utc).strftime("%Y-%m-%d")}'
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+    key = _daily_notification_key(uid, tz)
     count = r.incr(key)
-    r.expire(key, 90000)  # 25 hours TTL
+    r.expire(key, 172800)  # 48 hours TTL: a local day can start up to 14 hours before the UTC one
     return count
 
 
 @try_catch_decorator
-def get_daily_notification_count(uid: str) -> int:
+def get_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
     """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
-    from datetime import datetime, timezone
-
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    key = _daily_notification_key(uid, tz)
     val = r.get(key)
     if not val:
         return 0
@@ -805,8 +819,7 @@ def get_user_data_protection_level(uid: str) -> Optional[str]:
 
 @try_catch_decorator
 def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600) -> None:
-    """Caches the user_id for a given hashed MCP API key."""
-    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+    api_key_cache.fill_if_active(r, "mcp", hashed_key, [(f'mcp_api_key:{hashed_key}', user_id)], ttl)
 
 
 @try_catch_decorator
@@ -829,9 +842,13 @@ def cache_mcp_api_key_auth_context(
         "memory_grant_seeded": memory_grant_seeded,
         "auth_context_version": auth_context_version,
     }
-    r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
-    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
-    return True
+    return api_key_cache.fill_if_active(
+        r,
+        "mcp",
+        hashed_key,
+        [(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data)), (f'mcp_api_key:{hashed_key}', user_id)],
+        ttl,
+    )
 
 
 @try_catch_decorator
@@ -842,32 +859,8 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
 
 
 def read_cached_mcp_api_key_auth_context(hashed_key: str) -> ApiKeyCacheReadResult:
-    """Read MCP auth context while distinguishing cache absence from failure."""
-    try:
-        cached = r.get(f'mcp_api_key_auth:{hashed_key}')
-        if cached:
-            decoded = cached.decode() if isinstance(cached, bytes) else cached
-            cache_data: object = json.loads(decoded)
-            if not isinstance(cache_data, dict):
-                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-            return ApiKeyCacheReadResult(
-                mode=ApiKeyCacheReadMode.HIT,
-                data=cast(Dict[str, Any], cache_data),
-            )
-
-        legacy_cached = r.get(f'mcp_api_key:{hashed_key}')
-        if not legacy_cached:
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
-        legacy_user_id = legacy_cached.decode() if isinstance(legacy_cached, bytes) else legacy_cached
-        if not isinstance(legacy_user_id, str):
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-        return ApiKeyCacheReadResult(
-            mode=ApiKeyCacheReadMode.HIT,
-            data={"user_id": legacy_user_id, "scopes": None, "key_id": None, "app_id": None},
-        )
-    except Exception as exc:
-        logger.error("Error reading MCP API key auth cache: %s", exc)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+    """Read auth context while distinguishing cache absence from failure."""
+    return api_key_cache.read_context(r, "mcp", hashed_key)
 
 
 def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -877,7 +870,8 @@ def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, A
 
 
 def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
-    """Atomically delete both MCP auth cache keys, raising on Redis failure."""
+    """Confirm the revocation fence, then purge both MCP positive cache keys."""
+    api_key_cache.mark_revoked(r, "mcp", hashed_key)
     r.delete(f'mcp_api_key:{hashed_key}', f'mcp_api_key_auth:{hashed_key}')
     return True
 
@@ -905,24 +899,14 @@ def cache_dev_api_key(
         "app_id": app_id,
         "auth_context_version": auth_context_version,
     }
-    r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
-    return True
+    return api_key_cache.fill_if_active(
+        r, "dev", hashed_key, [(f'dev_api_key:{hashed_key}', json.dumps(cache_data))], ttl
+    )
 
 
 def read_cached_dev_api_key_data(hashed_key: str) -> ApiKeyCacheReadResult:
-    """Read Developer auth context while distinguishing absence from failure."""
-    try:
-        cached = r.get(f'dev_api_key:{hashed_key}')
-        if not cached:
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
-        decoded = cached.decode() if isinstance(cached, bytes) else cached
-        loaded: object = json.loads(decoded)
-        if not isinstance(loaded, dict):
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=cast(Dict[str, Any], loaded))
-    except Exception as exc:
-        logger.error("Error reading Developer API key auth cache: %s", exc)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+    """Read auth context while distinguishing cache absence from failure."""
+    return api_key_cache.read_context(r, "dev", hashed_key)
 
 
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -932,7 +916,8 @@ def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
 
 
 def delete_cached_dev_api_key_strict(hashed_key: str) -> bool:
-    """Delete a Developer auth cache key, raising on Redis failure."""
+    """Confirm the revocation fence, then purge the Developer positive cache."""
+    api_key_cache.mark_revoked(r, "dev", hashed_key)
     r.delete(f'dev_api_key:{hashed_key}')
     return True
 

@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from models.transcript_segment import SpeakerIdentityStatus
+
 
 def _read_text(path):
     return Path(path).read_text(encoding='utf-8')
@@ -32,8 +34,7 @@ class TestProcessSegmentErrorHandling:
 
     @staticmethod
     def _read_pipeline_source():
-        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
-        return _read_text(pipeline_path)
+        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py'))
 
     def test_process_segment_has_try_except(self):
         """process_segment() must wrap its body in try/except to catch all errors."""
@@ -89,8 +90,7 @@ class TestSyncEndpointErrorReporting:
 
     @staticmethod
     def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
 
     def test_endpoint_creates_lock_and_errors(self):
         """Endpoint must create segment_lock and segment_errors."""
@@ -308,6 +308,7 @@ class TestDeepgramRetryBehavioral:
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
@@ -754,6 +755,7 @@ _STUB_MODULES = [
     'utils.stt.vad',
     'utils.speaker_assignment',
     'utils.speaker_identification',
+    'utils.speaker_learning_jobs',
     'utils.stt.speaker_embedding',
     'utils.fair_use',
     'utils.subscription',
@@ -812,7 +814,15 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        # The pipeline classifies persistence errors with these predicates; no
+        # test here raises a Firestore error, so the stub answers "not one".
+        sys.modules['database._client'].is_document_size_limit_error = lambda error: False
+        sys.modules['database._client'].is_expired_transaction_error = lambda error: False
+        sys.modules['database._client'].FIRESTORE_DOCUMENT_KINDS = frozenset({'none'})
+        sys.modules['database._client'].firestore_document_kind = lambda error: 'none'
+        sys.modules['database._client'].firestore_error_document_path = lambda error: None
         sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
+        sys.modules['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
         _mock_conv_db = sys.modules['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
         _mock_conv_db.update_conversation_segments = MagicMock()
@@ -827,7 +837,6 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
-        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
         sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
@@ -884,6 +893,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
+        sys.modules['utils.speaker_identification'].extract_speaker_samples = AsyncMock()
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
         sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
@@ -934,6 +944,7 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # The deterministic §1.7 minimum is pure and cheap: run the REAL module
         # against minimal enum/model stand-ins so intake exercises the true
@@ -1613,6 +1624,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.app'].App = MagicMock()
         sys.modules['models.app'].UsageHistoryType = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # STT stubs
         sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(

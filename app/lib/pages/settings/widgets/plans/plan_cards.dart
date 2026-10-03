@@ -167,10 +167,10 @@ class _CheckLine extends StatelessWidget {
 
 /// A small label on a plan card ("POPULAR", "2 months free", "Active").
 class PlanBadge extends StatelessWidget {
-  const PlanBadge({super.key, required this.label, this.color = OmiColors.surface3, this.inverted = false});
+  const PlanBadge({super.key, required this.label, this.color, this.inverted = false});
 
   final String label;
-  final Color color;
+  final Color? color;
 
   /// White fill with a black label.
   final bool inverted;
@@ -179,7 +179,8 @@ class PlanBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: inverted ? OmiColors.accent : color, borderRadius: OmiRadius.smAll),
+      decoration: BoxDecoration(
+          color: inverted ? OmiColors.accent : color ?? OmiColors.surface3, borderRadius: OmiRadius.smAll),
       child: Text(
         label,
         style: OmiType.caption.copyWith(
@@ -203,7 +204,7 @@ class PlanOptionShimmer extends StatelessWidget {
       child: Container(
         height: height,
         width: width,
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
       ),
     );
   }
@@ -379,11 +380,11 @@ class PlanStatusCard extends StatelessWidget {
 
 /// An icon and a sentence, used inside the plan-change dialogs.
 class PlanDialogLine extends StatelessWidget {
-  const PlanDialogLine({super.key, required this.icon, required this.text, this.color = OmiColors.textPrimary});
+  const PlanDialogLine({super.key, required this.icon, required this.text, this.color});
 
   final FaIconData icon;
   final String text;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -392,9 +393,11 @@ class PlanDialogLine extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ExcludeSemantics(child: FaIcon(icon, color: color, size: 16)),
+          ExcludeSemantics(child: FaIcon(icon, color: color ?? OmiColors.textPrimary, size: 16)),
           const SizedBox(width: OmiSpacing.xs),
-          Expanded(child: Text(text, textAlign: TextAlign.start, style: OmiType.subhead.copyWith(color: color))),
+          Expanded(
+              child: Text(text,
+                  textAlign: TextAlign.start, style: OmiType.subhead.copyWith(color: color ?? OmiColors.textPrimary))),
         ],
       ),
     );

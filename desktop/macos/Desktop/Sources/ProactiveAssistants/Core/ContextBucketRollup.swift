@@ -143,8 +143,6 @@ enum BucketFactValidator {
 /// prefix.
 enum ContextPromptCacheKey {
   static let director = "director:v1"
-  static let reconcilerTagging = "reconciler:v1"
-  static let reconcilerCandidates = "reconciler-candidates:v1"
 }
 
 enum ContextBucketPromptAssembler {

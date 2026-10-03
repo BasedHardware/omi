@@ -77,7 +77,7 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -113,6 +113,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may
     # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:list": (20, 3600),
     "speaker_tag_prompts:clip": (60, 3600),
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
@@ -127,6 +128,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # sync alone and 429 their conversation photo loads. Sized for several
     # devices plus reconnect bursts.
     "screen_activity:sync": (600, 3600),
+    "screen_task:gate": (30, 60),
+    "screen_task:gate_daily": (6000, 86400),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),
@@ -209,6 +212,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Dev API. Read limits are intentionally separate from write limits so a
     # polling client cannot consume the processing/write budget. Developer and
     # MCP API-key contexts are keyed by app/key identity when available.
+    "dev:key_read": (120, 3600),
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
     # Conversation reads are limited in two tiers. Every conversation read consumes
@@ -265,7 +269,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # quota gate, unlike its sibling generate_prompts. Same bound as that
     # sibling until a quota-gate policy decision is made (see #12781).
     "apps:twitter_initial_message": (30, 3600),
-    # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
+    # TTS read-aloud proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
     # Screen-frame egress adjudication — each call canonicalizes + judges up

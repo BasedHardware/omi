@@ -79,7 +79,7 @@ class CategorySection extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                          decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                           child: Text(
                             context.l10n.all,
                             style:
@@ -152,13 +152,13 @@ class SectionAppItemCard extends StatelessWidget {
               placeholder: (context, url) => Container(
                 width: 60,
                 height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
               ),
               errorWidget: (context, url, error) => Container(
                 width: 60,
                 height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: const Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
               ),
             ),
             const SizedBox(width: 12),

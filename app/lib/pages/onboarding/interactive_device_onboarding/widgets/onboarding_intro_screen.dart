@@ -94,7 +94,7 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const ExcludeSemantics(child: Icon(Icons.schedule, color: OmiColors.textSecondary, size: 16)),
+                  ExcludeSemantics(child: Icon(Icons.schedule, color: OmiColors.textSecondary, size: 16)),
                   const SizedBox(width: 6),
                   Text(
                     context.l10n.deviceOnboardingIntroDuration,

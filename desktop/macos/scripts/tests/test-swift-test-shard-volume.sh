@@ -123,7 +123,9 @@ mkdir -p "$ROOT/tests"
 cat >"$ROOT/tests/BetaTests.swift" <<'SWIFT'
 import XCTest
 final class BetaTests: XCTestCase {
-    func testOne() {}
+    func testOwnerScopedEmbeddingCapture() async {
+        await LocalEmbeddingIndexer.shared.indexFinalizedSession(sessionId: 1)
+    }
 }
 SWIFT
 export OMI_SWIFT_TEST_SERIAL_SUITES="AlphaTests"
@@ -136,6 +138,8 @@ if ! OMI_SWIFT_TEST_SHARD_DIR="$ROOT/same-shards" "$RUNNER" >"$ROOT/multi.out" 2
 fi
 marker_count="$(grep -cx 'marker' "$FAKE_XCRUN_LOG" || true)"
 [ "$marker_count" -ge 2 ] || fail "expected worker and serial clones, saw $marker_count"
+grep -Eq -- '--scratch-path .*/serial-1\.build .*--filter BetaTests/' "$FAKE_XCRUN_LOG" \
+  || fail "owner-scoped embedding suite was not assigned its derived serial shard"
 find "$ROOT/same-shards" -mindepth 1 -maxdepth 1 | grep -q . && fail "multi-shard run directory was left behind"
 
 echo "swift test shard volume tests passed"

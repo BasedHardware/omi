@@ -156,8 +156,8 @@ class DeveloperMcpSection extends StatelessWidget {
             text: text,
             style: switch (kind) {
               McpJsonToken.plain => null,
-              McpJsonToken.key => const TextStyle(color: OmiColors.textSecondary),
-              McpJsonToken.string => const TextStyle(color: OmiColors.warning),
+              McpJsonToken.key => TextStyle(color: OmiColors.textSecondary),
+              McpJsonToken.string => TextStyle(color: OmiColors.warning),
             },
           ),
       ],
@@ -178,7 +178,7 @@ class _McpKeysList extends StatelessWidget {
         }
         if (provider.error != null) {
           return OmiErrorState(
-            message: l10n.errorWithMessage(provider.error!),
+            message: l10n.couldNotLoadApiKeys,
             onRetry: () => provider.fetchKeys(),
           );
         }
@@ -255,7 +255,7 @@ class _CopyableValue extends StatelessWidget {
             children: [
               Expanded(child: Text(value, style: OmiType.footnote.copyWith(fontFamily: _mono))),
               const SizedBox(width: OmiSpacing.xs),
-              const FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
+              FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
             ],
           ),
         ),

@@ -15,6 +15,7 @@ from database.redis_db import (
     has_silent_user_notification_been_sent,
 )
 from database.auth import get_user_from_uid
+from utils.integration_telemetry import emit_posthog_event
 from utils.notification_text import to_plain_text
 from .llm.notifications import (
     generate_notification_message,
@@ -227,6 +228,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _emit_tokens_invalidated(user_id: str, count: int) -> None:
+    """Analytics-only signal that permanent-failure tokens were just removed.
+
+    Feeds churn/re-engagement analysis: an `invalidated` event without a later
+    `registered` means the uid has no deliverable push token. Bulk sends carry
+    no uid, so this intentionally fires only on per-user send paths.
+    """
+    try:
+        emit_posthog_event(user_id, 'Push Token Status', {'status': 'invalidated', 'invalidated_count': count})
+    except Exception as exc:  # noqa: BLE001 — analytics must never break a send
+        logger.warning(f'push token invalidated emit failed: {type(exc).__name__}')
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -270,6 +284,7 @@ def _send_to_user(
         # Remove invalid tokens in bulk
         if invalid_tokens:
             notification_db.remove_bulk_tokens(invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -320,6 +335,7 @@ async def _send_to_user_async(
 
         if invalid_tokens:
             await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count

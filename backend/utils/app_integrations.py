@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import List
 import os
 import time
@@ -492,13 +493,23 @@ def _is_developer(uid: str) -> bool:
     return result
 
 
+def _user_day_zone(uid: str):
+    """The zone whose calendar day the proactive budget is counted in."""
+    from database.notifications import resolve_user_timezone
+
+    try:
+        return ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        return timezone.utc
+
+
 def _proactive_daily_cap_reached(uid: str) -> bool:
     """True when the user has already received the day's allotment of proactive
     notifications. Counts every proactive source together (mentor + third-party
     apps) against one per-user daily budget, and exempts developers (#3346)."""
     if _is_developer(uid):
         return False
-    return (get_daily_notification_count(uid) or 0) >= MAX_DAILY_NOTIFICATIONS
+    return (get_daily_notification_count(uid, _user_day_zone(uid)) or 0) >= MAX_DAILY_NOTIFICATIONS
 
 
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
@@ -925,7 +936,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     ts = int(time.time())
     mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
     redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    incr_daily_notification_count(uid)
+    incr_daily_notification_count(uid, _user_day_zone(uid))
 
     return notification_text
 
@@ -1033,7 +1044,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     _set_proactive_noti_sent_at(uid, app)
     # Count this against the user's daily proactive budget so mentor + app
     # notifications share one ceiling rather than each having their own.
-    incr_daily_notification_count(uid)
+    incr_daily_notification_count(uid, _user_day_zone(uid))
     return message
 
 

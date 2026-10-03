@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import logging
 import uuid
@@ -12,7 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from models.audio_file import AudioFile
+from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -23,14 +24,20 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
+from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
+    LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
+    LiveTranscriptReplayReceipt,
     apply_manual_assignments,
+    donor_selected_ids,
     manual_assignment,
     merge_live_segments,
+    normalize_rejection,
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -40,7 +47,14 @@ from .firestore_index_registry import (
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
+from .read_boundary import parse_payload_strict
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.portability_read import (
+    check_portability_read,
+    current_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -55,6 +69,10 @@ from .first_open_obligations import (
     first_open_effect_is_authorized,
     initialize_first_open_work,
 )
+
+from config.translation import resolve_ondemand_config
+from config.sync_lineage import sync_lineage_resolve_active_for
+from database.translation_admission import TranslationReservation, reservation_is_current
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +132,16 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         _reveal_manual_speaker_assignments_for_read(data, uid)
         return data
 
+    if current_portability_read() is not None:
+        data['transcript_segments'] = _decode_transcript_segments_strict(
+            uid,
+            data['transcript_segments'],
+            bool(data.get('transcript_segments_compressed')),
+            require_decryption=True,
+        )
+        _reveal_manual_speaker_assignments_for_read(data, uid)
+        return data
+
     if isinstance(data['transcript_segments'], str):
         try:
             decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
@@ -154,7 +182,7 @@ def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
     if isinstance(raw, (dict, list)):
         return raw
     if isinstance(raw, str):
-        payload = encryption.decrypt(raw, uid)
+        payload = verified_encrypted_read(raw, encryption.decrypt(raw, uid))
         if compressed:
             return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         return json.loads(payload)
@@ -167,7 +195,11 @@ def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> d
     if raw is None:
         return {}
     parsed = _reveal_json_value(raw, uid, compressed)
-    return parsed if isinstance(parsed, dict) else {}
+    if not isinstance(parsed, dict):
+        if current_portability_read() is not None:
+            raise ValueError(f'undecodable manual_speaker_assignments: parsed {type(parsed).__name__}')
+        return {}
+    return parsed
 
 
 def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) -> None:
@@ -178,8 +210,12 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
             uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
         )
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
+        if current_portability_read() is not None:
+            raise
         logger.error(f"{error} {uid}")
         data['manual_speaker_assignments'] = {}
+    if data['manual_speaker_assignments'] and isinstance(segments := data.get('transcript_segments'), list):
+        data['transcript_segments'] = apply_manual_assignments(segments, data['manual_speaker_assignments'])
 
 
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
@@ -219,7 +255,17 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     return parsed
 
 
-def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
+    # Imported lazily: several unit harnesses load this module with a stubbed
+    # ``utils`` package that has no ``utils.conversations`` subpackage.
+    from utils.conversations.recovery import verified_recovery_discard
+
+    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
+
+
+def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 
     The read path swallows decode failures into an empty list, which is safe for
@@ -231,6 +277,10 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
         return raw_segments
     if isinstance(raw_segments, str):
         payload = encryption.decrypt(raw_segments, uid)
+        if require_decryption and payload == raw_segments:
+            # decrypt's display fallback returns the input on authentication
+            # failure. Even parseable plaintext is not a successful decode.
+            raise ValueError('undecodable transcript_segments: decryption failed')
         if compressed:
             parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         else:
@@ -239,6 +289,11 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
     if isinstance(raw_segments, bytes) and compressed:
         return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Strict decode for callers outside this module: raises unless the blob decodes and decrypts."""
+    return _decode_transcript_segments_strict(uid, raw_segments, compressed, require_decryption=True)
 
 
 def _decode_public_transcript_segments_bounded(
@@ -347,15 +402,28 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     return bool(segments)
 
 
+def effective_user_title(user_title: Any) -> Optional[str]:
+    """The user's title override, or ``None`` when there is none.
+
+    A blank string is no override: applying it would erase the generated (or
+    deterministic) title and render the row "Untitled". Readers and the
+    processing persists that re-apply the override resolve ``user_title``
+    through this one rule, so the stored ``structured.title`` shows. The
+    user-facing title writes (PATCH, ``set_title``) are unchanged.
+    """
+    return user_title if isinstance(user_title, str) and user_title.strip() else None
+
+
 def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
 
     data = copy.deepcopy(conversation_data)
+    data.pop('live_transcript_replay_receipt', None)
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
-    user_title = data.get('user_title')
-    if isinstance(user_title, str):
+    user_title = effective_user_title(data.get('user_title'))
+    if user_title is not None:
         structured = data.get('structured')
         if not isinstance(structured, dict):
             structured = {}
@@ -399,7 +467,7 @@ def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     return data
 
 
-def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not photo_data:
         return None
     data = copy.deepcopy(photo_data)
@@ -411,10 +479,11 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
             # If decryption fails, it might be already decrypted or not encrypted.
             # We can log this, but for now, we'll just pass.
             pass
+        data['base64'] = verified_encrypted_read(photo_data['base64'], data['base64'])
     return data
 
 
-@prepare_for_read(decrypt_func=_prepare_photo_for_read)
+@prepare_for_read(decrypt_func=prepare_photo_for_read)
 def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -431,12 +500,13 @@ def iter_all_conversation_photos(uid: str):
         .where(filter=FieldFilter('__name__', '>=', start_key))
         .where(filter=FieldFilter('__name__', '<=', end_key))
     )
-    for doc in query.stream():
+    for doc in iter_portability_guarded(query.stream()):
+        check_portability_read()
         # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
         parts = doc.reference.path.split('/')
         if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
             conversation_id = parts[-3]
-            yield conversation_id, doc.to_dict()
+            yield conversation_id, prepare_photo_for_read(doc.to_dict(), uid) or doc.to_dict()
 
 
 def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
@@ -694,8 +764,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('folder_user_set'):
                 write_data['folder_id'] = existing.get('folder_id')
 
-            user_title = existing.get('user_title')
-            if isinstance(user_title, str):
+            user_title = effective_user_title(existing.get('user_title'))
+            if user_title is not None:
                 structured = write_data.get('structured')
                 if not isinstance(structured, dict):
                     structured = {}
@@ -724,6 +794,7 @@ def persist_processing_result_with_lifecycle(
     conversation_data: dict,
     *,
     on_first_completion: Callable[[], None] | None = None,
+    smart_merge_refresh: tuple[int, str] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
@@ -770,6 +841,18 @@ def persist_processing_result_with_lifecycle(
         existing = existing_snapshot.to_dict() or {}
         if existing.get('deleted'):
             return False
+        if smart_merge_refresh is not None:
+            expected_revision, expected_owner = smart_merge_refresh
+            merge_state = existing.get('smart_merge') or {}
+            lease = merge_state.get('refresh_lease') or {}
+            until = lease.get('until')
+            if (
+                merge_state.get('revision') != expected_revision
+                or lease.get('owner') != expected_owner
+                or not isinstance(until, datetime)
+                or until <= datetime.now(timezone.utc)
+            ):
+                return False
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
@@ -777,6 +860,41 @@ def persist_processing_result_with_lifecycle(
         ):
             stale_sync_revision = True
             return False
+
+        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+            from utils.conversations.recovery import (
+                RecoveryStructureUnavailableError,
+                structured_has_protected_content,
+            )
+
+            try:
+                _decode_transcript_segments_strict(
+                    uid,
+                    existing.get('transcript_segments', []),
+                    bool(existing.get('transcript_segments_compressed')),
+                    require_decryption=True,
+                )
+            except (TypeError, ValueError, zlib.error) as error:
+                raise RecoveryStructureUnavailableError(
+                    'server recovery discard requires a decoded transcript'
+                ) from error
+            # Admission and processing snapshots can precede a title edit or
+            # restore. Refuse before writing any verdict/content: the existing
+            # typed-minimum terminal path preserves a visible row and selfheal
+            # reports dead_letter rather than a contradictory completed discard.
+            if existing.get('sync_relevance_user_kept') or structured_has_protected_content(
+                existing.get('structured'), existing.get('user_title')
+            ):
+                raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
+            # Recovery never owns the stored transcript. Omit both fields even
+            # though the write decorators encoded the processing snapshot; this
+            # also prevents manual-assignment reapplication from re-encoding it.
+            write_data.pop('transcript_segments', None)
+            write_data.pop('transcript_segments_compressed', None)
+            write_data.pop('data_protection_level', None)
+            # Speaker resolution ran on the processing snapshot; its ids only
+            # describe a transcript this write no longer persists.
+            write_data.pop('speaker_resolution', None)
 
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old
@@ -803,8 +921,8 @@ def persist_processing_result_with_lifecycle(
         if existing.get('folder_user_set'):
             write_data['folder_id'] = existing.get('folder_id')
 
-        user_title = existing.get('user_title')
-        if isinstance(user_title, str):
+        user_title = effective_user_title(existing.get('user_title'))
+        if user_title is not None:
             structured = write_data.get('structured')
             if not isinstance(structured, dict):
                 structured = {}
@@ -866,13 +984,34 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
+def get_conversation(
+    uid,
+    conversation_id,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
+):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = document_data_with_revision(conversation_ref.get())
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
+    if conversation_data is not None and include_transcript_decode_status:
+        # Recovery needs evidence from the raw field, before the tolerant read
+        # decoder turns corruption into an empty transcript. Other readers keep
+        # their existing behavior and never receive this server-only marker.
+        try:
+            _decode_transcript_segments_strict(
+                uid,
+                conversation_data.get('transcript_segments', []),
+                bool(conversation_data.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+            conversation_data['_recovery_transcript_decoded'] = True
+        except (TypeError, ValueError, zlib.error):
+            conversation_data['_recovery_transcript_decoded'] = False
+            conversation_data['transcript_segments'] = []
     return conversation_data
 
 
@@ -892,6 +1031,48 @@ def get_conversation_raw_snapshot(
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()
+
+
+def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
+    """Resolve a server-authored sync bridge for an owner read.
+
+    User deletion is terminal, including deletion of the survivor. Do not
+    follow arbitrary deleted rows or expose another account's conversation.
+    """
+    seen: set[str] = set()
+    current_id = conversation_id
+    for _ in range(max_hops):
+        if current_id in seen:
+            return None
+        seen.add(current_id)
+        row = get_conversation_raw_snapshot(uid, current_id)
+        if not row:
+            return None
+        if not row.get('deleted'):
+            return current_id
+        successor = row.get('sync_merged_into')
+        if not isinstance(successor, str) or not successor:
+            return None
+        current_id = successor
+    return None
+
+
+def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
+    """The conversation's manual speaker receipt alone, without reading its transcript."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .get(field_paths=['manual_speaker_assignments', 'manual_speaker_assignments_compressed'])
+    )
+    data = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    if not data:
+        return {}
+    return decode_manual_speaker_assignments(
+        uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+    )
 
 
 def get_public_shared_conversation_bounded(
@@ -1032,6 +1213,8 @@ def get_conversations_count(
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    if start_date or end_date:
+        conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     result = conversations_ref.count().get()
     matching = int(result[0][0].value)
     matching -= _count_matching_tombstones(
@@ -1046,6 +1229,22 @@ def get_conversations_count(
         starred=starred,
     )
     return matching
+
+
+def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = None) -> int:
+    """Approximate count of the user's conversations that carry a geolocation.
+
+    Single-field ``geolocation.latitude != null`` aggregation, served by
+    Firestore's automatic single-field index. Adding ``discarded == False``
+    would combine an inequality with an equality and need a composite index
+    that is not declared, so discarded conversations (including redirect
+    tombstones, which are stamped ``discarded=True``) are included in this count.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    query = conversations_ref.where(filter=FieldFilter('geolocation.latitude', '!=', None))
+    result = query.count().get()
+    return int(result[0][0].value or 0)
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -1167,8 +1366,9 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             conv = doc.to_dict()
             conv = prepare_conversation_for_read(conv, uid) or conv
             if not is_visible_conversation(conv, include_discarded=include_discarded):
@@ -1264,30 +1464,11 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s
+    # chunk durations). v2 listings split at actual uncovered ends or overlaps.
     audio_files = []
-    current_group = []
-    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
-
-    for i, chunk in enumerate(chunks):
-        if not current_group:
-            current_group.append(chunk)
-        else:
-            # Check if there's a gap between chunks exceeding the threshold
-            prev_chunk = current_group[-1]
-            time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > gap_threshold:
-                # Gap detected, finalize current group
-                audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
-                if audio_file:
-                    audio_files.append(audio_file)
-                current_group = [chunk]
-            else:
-                current_group.append(chunk)
-
-    # Finalize last group
-    if current_group:
-        audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+    for chunk_group in group_chunks_by_coverage(chunks, gap_threshold=90):
+        audio_file = _finalize_audio_file_group(uid, conversation_id, chunk_group, audio_files)
         if audio_file:
             audio_files.append(audio_file)
 
@@ -1318,13 +1499,47 @@ def _finalize_audio_file_group(
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
+    # v2 groups carry validated contiguous coverage spans from blob metadata;
+    # duration is the authoritative span extent, never an encoded-size guess.
+    spans: List[Tuple[float, float]] = []
+    for chunk in chunk_group:
+        span = chunk.get('span')
+        if not isinstance(span, dict):
+            spans = []
+            break
+        try:
+            start = float(span['start'])
+            samples = float(span['samples'])
+            rate = float(span['sample_rate'])
+        except (KeyError, TypeError, ValueError):
+            spans = []
+            break
+        if samples <= 0 or rate <= 0:
+            spans = []
+            break
+        spans.append((start, start + samples / rate))
+
+    if spans:
+        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
+        duration = spans[-1][1] - spans[0][0]
+        return AudioFile(
+            id=file_id,
+            uid=uid,
+            conversation_id=conversation_id,
+            chunk_timestamps=timestamps,
+            provider='gcp',
+            started_at=started_at,
+            duration=duration,
+            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+        )
+
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
     # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
     # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
     # decoded PCM) is the display source of truth.
-    last_chunk_size = chunk_group[-1].get('size', 0)
+    last_chunk_size = chunk_group[-1].get('size') or 0
     last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
     duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
@@ -1538,6 +1753,12 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    # A shadow metric writer can have read the parent just before deletion and
+    # committed a child after our first enumeration. Its transaction prevents
+    # writes once the parent is gone; this second sweep catches that narrow
+    # pre-delete commit without leaving an orphan under a missing parent.
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     _delete_conversation_search_index(uid, conversation_id)
 
 
@@ -1692,7 +1913,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 continue
 
             # Decrypt first to get a clean state
-            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+            plain_photo_data = prepare_photo_for_read(photo_data, uid)
 
             # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}
@@ -2378,22 +2599,54 @@ def assign_conversation_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    evidence_source=SOURCE_MANUAL,
     firestore_client=None,
+    rejection=None,
+    owner_segment_ids=None,
 ):
-    """Commit the manual edit, provenance and invalidation in one transaction."""
+    """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
+    from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
+    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+
+    rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
-    ref = user_ref.collection(conversations_collection).document(conversation_id)
+    collection = user_ref.collection(conversations_collection)
 
-    @firestore.transactional
-    def assign(transaction):
-        raw = ref.get(transaction=transaction).to_dict()
-        if not raw or raw.get('deleted'):
+    def assign(transaction, bookkeeping):
+        if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
+        source_segments = None
+        selected_segment_ids, selected_speaker_id, selected_segment_index = segment_ids, speaker_id, segment_index
+        current_id, raw, seen = conversation_id, source, set()
+        while raw.get('deleted') and raw.get('sync_merged_into'):
+            if current_id in seen or len(seen) >= 16:
+                raise LookupError('Conversation not found')
+            seen.add(current_id)
+            if source_segments is None:
+                source_segments = _decode_transcript_segments_strict(
+                    uid, source.get('transcript_segments', []), bool(source.get('transcript_segments_compressed'))
+                )
+            current_id = raw['sync_merged_into']
+            if not (raw := collection.document(current_id).get(transaction=transaction).to_dict()):
+                raise LookupError('Conversation not found')
+        if raw.get('deleted'):
+            raise LookupError('Conversation not found')
+        ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
+        # Bridge donors use stable segment IDs, never reassigned speaker numbers.
+        if source_segments is not None:
+            selected_segment_ids = donor_selected_ids(
+                source_segments,
+                segment_ids=segment_ids,
+                speaker_id=speaker_id,
+                segment_index=segment_index,
+                strict_speaker=rejection is not None,
+            )
+            selected_speaker_id = selected_segment_index = None
         current = copy.deepcopy(raw)
-        current['id'] = conversation_id
+        current['id'] = current_id
         current['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
@@ -2401,51 +2654,53 @@ def assign_conversation_speaker(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         before = copy.deepcopy(current['transcript_segments'])
+        if source_segments is not None:
+            before_ids = {s.get('id') for s in before}
+            if not selected_segment_ids or any(sid not in before_ids for sid in selected_segment_ids):
+                raise ValueError('Selected speaker is no longer in the merged conversation')
         segments, receipt, resolved, previous = manual_assignment(
             current,
             person_id=person_id,
             is_user=is_user,
-            segment_ids=segment_ids,
-            speaker_id=speaker_id,
-            segment_index=segment_index,
+            segment_ids=selected_segment_ids,
+            speaker_id=selected_speaker_id,
+            segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection=rejection,
         )
-        # Read every person before any write; corrections fence in-flight profiles
-        # in the same transaction as the label, not in a later background task.
-        people = {}
-        for pid in previous | ({person_id} if person_id else set()):
-            person_ref = user_ref.collection('people').document(pid)
-            people[pid] = (person_ref, person_ref.get(transaction=transaction).to_dict())
-        if person_id and not people[person_id][1]:
-            raise LookupError('Person not found')
-        removed = []
-        for pid in previous:
-            person_ref, person = people[pid]
-            if not person:
-                continue
-            update = {'updated_at': datetime.now(timezone.utc)}
-            source = person.get('speech_sample_source') or {}
-            if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(resolved):
-                removed.extend(person.get('speech_samples', []))
-                update.update(
-                    speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
-                )
-            transaction.update(person_ref, update)
-        payload = _prepare_conversation_for_write(
-            {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
+        removed, relabeled = persist_assignment_effects(
+            transaction,
+            user_ref,
             uid,
-            raw.get('data_protection_level', 'standard'),
+            current_id,
+            before,
+            segments,
+            receipt,
+            resolved,
+            previous,
+            person_id=person_id,
+            is_user=is_user,
+            use_for_speech_training=use_for_speech_training,
+            evidence_source=evidence_source,
+            rejection=rejection,
+            donor_ids=(current_id, *seen),
+            bookkeeping=bookkeeping,
+            owner_segment_ids=owner_segment_ids,
         )
+        extract_learning_receipt_markers(receipt, current)
+        written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+        payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         _invalidate_client_processing(payload)
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
         for field in PROJECTION_FAMILY_FIELDS:
             current.pop(field, None)
-        return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
+        return current, resolved, removed, relabeled
 
-    result = run_transactional(client, assign)
+    result = run_assignment_transaction(client, assign)
     current, _, _, before = result
-    record_speaker_review(uid, conversation_id, before, current['transcript_segments'])
+    record_speaker_review(uid, current['id'], before, current['transcript_segments'])
+    record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
     return result
 
 
@@ -2457,6 +2712,8 @@ def update_conversation_segments(
     data_protection_level: str = None,
     *,
     started_at: datetime = None,
+    audio_timeline: Optional[dict] = None,
+    capture_evidence: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2484,6 +2741,12 @@ def update_conversation_segments(
     live-capture write loop). The transaction still clears a projection that
     is actually present on the document, so a finalize overlapping capture cannot
     leave a hash-bound summary of text that then changed.
+
+    Audio-timeline v2: ``audio_timeline`` is the fenced provenance pin. The
+    marker and the projected first-audio ``started_at`` apply atomically only
+    while the document has no marker yet, so a late receiver can never reset an
+    origin already emitted to clients. Once the marker exists, a ``started_at``
+    argument is ignored — the origin is pinned for the recording's life.
     """
     if live_segments is not None and segment_update_fields is not None:
         raise ValueError('Live merge and field-only segment updates are mutually exclusive')
@@ -2492,6 +2755,7 @@ def update_conversation_segments(
         'person_id',
         'is_user',
         'speaker_identity_status',
+        'speaker_match_source',
     }:
         raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -2508,11 +2772,23 @@ def update_conversation_segments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
         planned = None
+        prior_commits: list[list[str]] = []
         if live_segments is not None:
             persisted = _decode_transcript_segments_strict(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
             )
-            planned = merge_live_segments(persisted, live_segments, receipt)
+            if 'live_transcript_replay_receipt' in current:
+                prior_commits = parse_payload_strict(
+                    LiveTranscriptReplayReceipt,
+                    _reveal_json_value(current['live_transcript_replay_receipt'], uid, True),
+                    document_path=doc_ref.path,
+                ).commits
+            planned = merge_live_segments(
+                persisted,
+                live_segments,
+                receipt,
+                absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
+            )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
             receipt = remap_absorbed_receipt(receipt, remap)
@@ -2526,7 +2802,7 @@ def update_conversation_segments(
                         s,
                         **{
                             k: identities[s.get('id')][k]
-                            for k in ('person_id', 'is_user', 'speaker_identity_status')
+                            for k in ('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source')
                             if k in identities[s.get('id')]
                         },
                     )
@@ -2565,12 +2841,40 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if (
+            live_segments is not None
+            and sync_lineage_resolve_active_for(uid)
+            and current.get('sync_live_target')
+            and current.get('sync_content_revision') is not None
+            and accepted != persisted
+        ):
+            # Sync and live now share this transcript. A processor that read
+            # before fresh live speech must lose the same revision fence as
+            # one that read before a sync append. Retries with no change do
+            # not invalidate a current processor.
+            update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
+        if capture_evidence is not None:
+            update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
+            update_payload['live_transcript_replay_receipt'] = _protect_json_value(
+                {'commits': [*prior_commits, list(remap)][-LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT:]},
+                uid,
+                'enhanced',
+            )
         if finished_at:
             update_payload['finished_at'] = finished_at
-        if started_at:
+        pinned_timeline = isinstance(current.get('audio_timeline'), dict) and current.get('audio_timeline')
+        if audio_timeline is not None and not pinned_timeline:
+            # Fenced compare-and-set: the marker and the projected first-audio
+            # origin land in the same transaction, exactly once per row.
+            update_payload['audio_timeline'] = audio_timeline
+            if started_at:
+                update_payload['started_at'] = started_at
+        elif started_at and not pinned_timeline:
             update_payload['started_at'] = started_at
+        # With the marker already present, a stale started_at is ignored: the
+        # origin was pinned with the marker and must not move.
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         if invalidate_client_processing:
             _invalidate_client_processing(prepared_payload)
@@ -2585,6 +2889,136 @@ def update_conversation_segments(
         return accepted if return_segments else True
 
     return run_transactional(client, _write_segments)
+
+
+def translation_materialization_is_current(
+    uid: str,
+    conversation: Dict[str, Any],
+    segment: Dict[str, Any],
+    target: str,
+    policy_version: str,
+    source_hint: str = '',
+) -> bool:
+    """Treat missing or mismatched private provenance as a cache miss."""
+    raw = conversation.get('translation_materializations')
+    try:
+        metadata = _reveal_json_value(raw, uid, True) if raw is not None else {}
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        return False
+    if not isinstance(metadata, dict):
+        return False
+    segment_records = metadata.get(segment.get('id'))
+    record = segment_records.get(target) if isinstance(segment_records, dict) else None
+    stored_translations = segment.get('translations')
+    translation = (
+        next((item for item in stored_translations if isinstance(item, dict) and item.get('lang') == target), None)
+        if isinstance(stored_translations, list)
+        else None
+    )
+    source_text = segment.get('text')
+    translated_text = translation.get('text') if isinstance(translation, dict) else None
+    return bool(
+        isinstance(record, dict)
+        and isinstance(source_text, str)
+        and isinstance(translated_text, str)
+        and record.get('source') == hashlib.sha256(source_text.encode('utf-8')).hexdigest()
+        and record.get('translation') == hashlib.sha256(translated_text.encode('utf-8')).hexdigest()
+        and record.get('policy') == policy_version
+        and record.get('source_hint') == (source_hint.strip().lower() or 'detect-v1')
+    )
+
+
+def materialize_translation(
+    uid: str,
+    conversation_id: str,
+    segment_id: str,
+    source_text: str,
+    target: str,
+    translated_text: str,
+    *,
+    source_hint: str = '',
+    policy_version: str = 'legacy',
+    admission_kind: str = 'live',
+    reservation: TranslationReservation | None = None,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Fence a display translation against the current source and merge one target."""
+    if not segment_id or not source_text or not target or not translated_text:
+        return None
+    config = resolve_ondemand_config()
+    if policy_version != 'legacy' and not (config.gate_enabled if admission_kind == 'live' else config.onopen_enabled):
+        return None
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    source_digest = hashlib.sha256(source_text.encode('utf-8')).hexdigest()
+    value_digest = hashlib.sha256(translated_text.encode('utf-8')).hexdigest()
+
+    @firestore.transactional
+    def _write(transaction):
+        # Kill-switch recheck at COMMIT time (Luna R3-4): a transaction retry
+        # must not land a viewed result after the gate flipped off mid-flight.
+        commit_config = resolve_ondemand_config()
+        if policy_version != 'legacy' and not (
+            commit_config.gate_enabled if admission_kind == 'live' else commit_config.onopen_enabled
+        ):
+            return None
+        snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return None
+        current = snapshot.to_dict() or {}
+        if is_soft_deleted(current) or current.get('is_locked'):
+            return None
+        segments = _decode_transcript_segments_strict(
+            uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+        )
+        selected = next((segment for segment in segments if segment.get('id') == segment_id), None)
+        if selected is None or selected.get('text') != source_text:
+            return None
+        raw_metadata = current.get('translation_materializations')
+        try:
+            metadata = _reveal_json_value(raw_metadata, uid, True) if raw_metadata is not None else {}
+        except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+            metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        by_target = metadata.get(segment_id)
+        if not isinstance(by_target, dict):
+            by_target = {}
+        prior = by_target.get(target)
+        existing = next(
+            (value for value in selected.get('translations', []) or [] if value.get('lang') == target), None
+        )
+        if (
+            policy_version == 'legacy'
+            and isinstance(prior, dict)
+            and prior.get('policy') == 'viewed_v1'
+            and prior.get('source') == source_digest
+            and isinstance(existing, dict)
+            and prior.get('translation') == hashlib.sha256(existing.get('text', '').encode('utf-8')).hexdigest()
+        ):
+            return selected
+        selected['translations'] = [
+            value for value in selected.get('translations', []) or [] if value.get('lang') != target
+        ] + [{'lang': target, 'text': translated_text}]
+        by_target[target] = {
+            'source': source_digest,
+            'translation': value_digest,
+            'source_hint': source_hint.strip().lower() or 'detect-v1',
+            'policy': policy_version,
+            'model': 'gemini-2.5-flash-lite' if policy_version == 'viewed_v1' else 'legacy-configured',
+            'prompt': 'v1' if policy_version == 'viewed_v1' else 'legacy',
+        }
+        metadata[segment_id] = by_target
+        level = current.get('data_protection_level', 'standard')
+        payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, level)
+        payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
+        payload['translation_materializations_compressed'] = True
+        if reservation is not None and not reservation_is_current(reservation):
+            return None
+        transaction.update(doc_ref, payload)
+        return selected
+
+    return run_transactional(client, _write)
 
 
 # ***********************************
@@ -2812,14 +3246,18 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
-    for i, segment in enumerate(segments):
+    count = 0
+    for segment in segments:
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.model_dump())
-        if i >= 400:
+        count += 1
+        if count >= 400:
             batch.commit()
             batch = db.batch()
-    batch.commit()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def store_model_emotion_predictions_result(
@@ -2848,7 +3286,8 @@ def store_model_emotion_predictions_result(
             batch.commit()
             batch = db.batch()
             count = 0
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
@@ -2919,7 +3358,7 @@ def store_conversation_photos(
 @set_data_protection_level(data_arg_name='incoming')
 def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
     """Atomically choose, create or append a sync conversation across workers."""
-    from utils.sync.assignment import assign_in_transaction
+    from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -2938,12 +3377,14 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             result.pop('manual_speaker_assignments', None)
         return result
 
+    attempted: dict[str, str] = {}
+
     @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, full_ids=frozenset()):
         def encode(payload):
             return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
-        return assign_in_transaction(
+        planned = assign_in_transaction(
             transaction,
             user_ref,
             incoming,
@@ -2952,9 +3393,15 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
+            full_ids=full_ids,
         )
+        # The commit runs after this returns; remember which row it would grow.
+        attempted['canonical'] = planned[0]['id']
+        return planned
 
-    result = run_transactional(client, assign)
+    result = run_with_size_limit_backstop(
+        lambda full_ids: run_transactional(client, assign, full_ids=full_ids), lambda: attempted.get('canonical')
+    )
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
         _delete_conversation_search_index(uid, str(donor_id))

@@ -281,12 +281,8 @@ def new_memories_extractor(
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
-    # TODO: make it more strict?
-
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_memories_prompt | get_llm('memories') | parser
@@ -417,9 +413,8 @@ def extract_memories_from_text(
     if not text or len(text) == 0:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         with track_usage(uid, Features.MEMORIES):
             prompt_input = {
@@ -481,9 +476,8 @@ def new_learnings_extractor(
     if not content or len(content) < 100:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=Learnings)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_learnings_prompt | get_llm('learnings') | parser

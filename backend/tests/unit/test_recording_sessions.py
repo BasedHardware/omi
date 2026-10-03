@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
 
 import copy
 import threading
@@ -15,6 +16,7 @@ import pytest
 from database import conversations as conversations_db
 from database import recording_sessions
 from routers.listen.conversations import LiveConversationController
+from routers.listen.receiver import ListenReceiver
 from utils.conversations import lifecycle as lifecycle_service
 
 
@@ -119,6 +121,115 @@ def test_retry_keeps_one_canonical_recording_session_binding(recording_store):
     assert first == retry
     assert first['mapping_conflict'] is False
     assert len(recording_store.documents) == 1
+
+
+def test_session_open_atomically_marks_the_conversation_before_a_recovery_sweep(recording_store):
+    """Session creation and its recovery fence are one transaction boundary."""
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = {
+        'id': 'conversation',
+        'status': 'in_progress',
+        'external_data': {'existing_marker': 'preserved'},
+    }
+
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+
+    assert recording_store.documents[conversation_path]['external_data'] == {
+        'existing_marker': 'preserved',
+        'recording_session_id': 'session',
+    }
+    assert ('users', 'uid', 'recording_sessions', 'session') in recording_store.documents
+
+
+class _MinuteFramesWebSocket:
+    def __init__(self, clock: list[datetime]) -> None:
+        self.clock = clock
+        self.frame = 0
+
+    async def receive(self):
+        if self.frame > 10:
+            return {'type': 'websocket.disconnect', 'code': 1000}
+        self.clock[0] += timedelta(minutes=1) if self.frame else timedelta()
+        self.frame += 1
+        await asyncio.sleep(0)
+        return {'bytes': b'pcm-frame'}
+
+
+async def test_ten_minute_audio_session_keeps_renewing_its_recovery_lease(recording_store, monkeypatch):
+    started_at = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+    clock = [started_at]
+    monkeypatch.setattr(recording_sessions, '_now', lambda: clock[0])
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+
+    renewals: list[tuple[str, str, str]] = []
+    tasks: list[asyncio.Task] = []
+
+    async def persistence_call(fn, *args, **kwargs):
+        if fn.__name__ == 'renew_live_recording_session_lease':
+            renewals.append(args)
+            kwargs['firestore_client'] = recording_store
+        return fn(*args, **kwargs)
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(
+            uid='uid',
+            source='phone',
+            websocket=_MinuteFramesWebSocket(clock),
+            codec='pcm',
+            sample_rate=16000,
+        ),
+        state=SimpleNamespace(
+            active=True,
+            close_code=1001,
+            current_conversation_id='conversation',
+            last_audio_received_time=None,
+            last_activity_time=None,
+            first_audio_byte_timestamp=None,
+            last_usage_record_timestamp=None,
+            audio_ring_buffer=None,
+        ),
+        limits=SimpleNamespace(ws_receive_timeout=1.0),
+        recording_session_id='session',
+        is_multi_channel=False,
+        use_custom_stt=True,
+        audio_bytes_send=None,
+        transcripts=SimpleNamespace(enqueue=lambda _segments: None),
+        start_live_transcription=lambda: None,
+        persistence=SimpleNamespace(call=persistence_call),
+    )
+    host.spawn = lambda coroutine, *, name: tasks.append(asyncio.create_task(coroutine, name=name))
+    host.conversations = LiveConversationController(host, clock=lambda: clock[0])
+
+    await ListenReceiver(host, [], {}).receive_data()
+    await asyncio.gather(*tasks)
+
+    session_path = ('users', 'uid', 'recording_sessions', 'session')
+    assert len(renewals) == 11
+    assert recording_store.documents[session_path]['lease_expires_at'] > clock[0]
+
+
+def test_audio_activity_renews_only_the_matching_in_progress_session(recording_store):
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+    path = ('users', 'uid', 'recording_sessions', 'session')
+    before = recording_store.documents[path]['lease_expires_at']
+    recording_store.documents[path]['lease_expires_at'] = before - timedelta(minutes=10)
+
+    renewed = recording_sessions.renew_recording_session_lease(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+    mismatched = recording_sessions.renew_recording_session_lease(
+        'uid', 'session', 'other-conversation', firestore_client=recording_store
+    )
+
+    assert renewed is True
+    assert mismatched is False
+    assert recording_store.documents[path]['lease_expires_at'] > before - timedelta(minutes=10)
 
 
 def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store):
@@ -439,10 +550,9 @@ def test_shadow_mode_emits_legacy_envelope_when_durable_event_write_fails(monkey
 
 # ── Reuse the lifecycle-owner's conversation read instead of re-reading it ──
 #
-# open_live_recording_session already reads the bound conversation once while
-# resolving a reconnect. Before this fix, create_new_in_progress_conversation
-# read the identical document again by id, doubling a billed Firestore read on
-# every resumed live session. See conversation-existence-read.
+# Session opening already reads the bound conversation inside its marker-write
+# transaction. create_new_in_progress_conversation must reuse that snapshot
+# instead of issuing another get by id on every resumed live session.
 
 
 class _ResumeSessionHost:
@@ -504,6 +614,7 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
 
     # A prior message on this recording session already created and bound
     # 'conversation-old'; this call is the reconnect that resumes it.
+    recording_store.documents[('users', 'uid', 'conversations', 'conversation-old')] = copy.deepcopy(conversation)
     lifecycle_service.open_recording_session('uid', 'recording-1', 'conversation-old', firestore_client=recording_store)
 
     host = _ResumeSessionHost(firestore_client=recording_store)
@@ -511,9 +622,9 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
 
     await controller.create_new_in_progress_conversation()
 
-    assert get_conversation_calls == [
-        'conversation-old'
-    ], f'expected exactly one get_conversation call, got {get_conversation_calls}'
+    assert (
+        get_conversation_calls == []
+    ), f'transactional snapshot should avoid a second read, got {get_conversation_calls}'
     assert host.state.current_conversation_id == 'conversation-old'
 
 

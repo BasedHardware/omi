@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -24,12 +28,15 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 import '../../support/capture/virtual_capture_time.dart';
 import '../../spine/c1_async_boundaries_test.dart' show HeldLocation;
 import '../../spine/c1_location_completion_test.dart' show PhoneSpy, WalSpy;
 
 CaptureDependencies _deps({
   CaptureReplayWorld? world,
+  CaptureBleListeners? ble,
+  RecordingLifecycleTelemetry? telemetry,
   CaptureConversationSocketOpen? open,
   Future<BleAudioCodec> Function(String)? codec,
   ConversationLocationCapture? location,
@@ -40,7 +47,7 @@ CaptureDependencies _deps({
 }) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
-    ensureDeviceConnection: (_) async => null,
+    ensureDeviceConnection: (_) async => world?.deviceConnection,
     wal: world?.wal ?? _InertWal(),
     phoneMic: world?.mic ?? _InertMic(),
     batchSupported: false,
@@ -53,7 +60,7 @@ CaptureDependencies _deps({
     now: clock.now,
     scheduling: world?.scheduler ?? ManualScheduler(clock: clock),
     preferences: SharedPreferencesUtil(),
-    ble: _NoopBle(),
+    ble: ble ?? _NoopBle(),
     openSocket: ({
       required codec,
       required sampleRate,
@@ -90,7 +97,8 @@ CaptureDependencies _deps({
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
     refreshConversation: () async {},
-    telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
+    telemetry:
+        telemetry ?? RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
 }
 
@@ -105,6 +113,25 @@ class _InertMic implements IMicRecorderService {
 }
 
 class _NoopBle implements CaptureBleListeners {
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) {}
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
+}
+
+class _IngressBle extends ChangeNotifier implements CaptureBleListeners, CaptureIngressPort {
+  CaptureIngressHealth? health;
+  final authorizations = <bool>[];
+  @override
+  bool get supportsIngressHealth => true;
+  @override
+  CaptureIngressHealth? ingressHealth(String deviceId) => health;
+  @override
+  void addIngressListener(VoidCallback listener) => addListener(listener);
+  @override
+  void removeIngressListener(VoidCallback listener) => removeListener(listener);
+  @override
+  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async => authorizations.add(authorized);
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) {}
   @override
@@ -144,6 +171,164 @@ class HeldStore implements LocalSegmentStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('Android CCCD recovery preserves intent, hides listening and only exhaustion shows a banner', () async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final dir = await Directory.systemTemp.createTemp('capture-cccd-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final bridge = BleBridge.instance;
+    var retries = 0;
+    final previousMonitor = CaptureWedgeMonitor.instance;
+    final monitor = CaptureWedgeMonitor(
+      now: world.clock.now,
+      featureGate: () async => true,
+      track: (_, __) {},
+      bleRetry: (_) async => retries++,
+      appBuild: () => 'test',
+      platform: () => 'android',
+    );
+    CaptureWedgeMonitor.instance = monitor;
+    const id = 'synthetic-device';
+    void report(bool exhausted) => bridge.onCaptureHealth(
+        id,
+        jsonEncode({
+          'phase': exhausted ? 'actionRequired' : 'recovering',
+          'generation': 'android-gatt',
+          'reason': CaptureIngressHealth.cccdRecoveryReason,
+          'valid_until_ms': 0,
+          'subscription_confirmed': false,
+          'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
+          'recovery_outcome': exhausted ? 'failed' : 'none',
+          'recovery_spent': exhausted,
+          'reconnect_spent': exhausted,
+        }));
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      report(true); // A background service may report exhaustion before capture binds its listeners.
+      final p = composeCaptureProvider(_deps(world: world, ble: const BleBridgeCaptureListeners()));
+      try {
+        final device = BtDevice(id: id, name: 'Omi', type: DeviceType.omi, rssi: -50);
+        await p.streamDeviceRecording(device: device);
+        expect(monitor.visiblePrompt, isNotNull, reason: 'binding replays the stored terminal failure');
+        expect(p.pendantCaptureVerified, isFalse);
+        bridge.onCaptureHealth(id, 'null');
+        expect(p.pendantCaptureVerified, isTrue, reason: 'healthy Android keeps its existing policy');
+        expect(p.liveCaptureStartedAt, isNotNull);
+        report(false);
+        bridge.onPeripheralDisconnected(id, 'cccd_timeout');
+        expect(bridge.preservesCaptureIntent(id), isTrue);
+        expect(p.liveCaptureSource, 'omi');
+        expect(p.pendantCaptureVerified, isFalse);
+        expect(p.liveCaptureStartedAt, isNull);
+        expect(monitor.visiblePrompt, isNull);
+        bridge.onDeviceReady(id, []);
+        expect(p.pendantCaptureVerified, isFalse, reason: 'ready alone cannot acknowledge a CCCD');
+        report(true);
+        bridge.onPeripheralDisconnected(id, 'cccd_timeout_exhausted');
+        expect(bridge.preservesCaptureIntent(id), isTrue);
+        expect(p.liveCaptureSource, 'omi');
+        expect(p.pendantCaptureVerified, isFalse);
+        expect(p.liveCaptureStartedAt, isNull);
+        expect(monitor.visiblePrompt!.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+        monitor.retryVisibleEpisode();
+        await pumpEventQueue();
+        expect(retries, 0, reason: 'shared recovery must not bypass the native budget');
+        bridge.onDeviceReady(id, []);
+        expect(monitor.visiblePrompt, isNotNull, reason: 'a fresh link still needs an ACK');
+        bridge.onCaptureHealth(id, 'null'); // Native publishes this only after a current, successful ACK.
+        expect(monitor.visiblePrompt, isNull);
+        expect(p.pendantCaptureVerified, isTrue);
+        expect(p.liveCaptureStartedAt, isNotNull);
+        report(true);
+        await p.pauseCapture();
+        expect(monitor.visiblePrompt, isNull, reason: 'pause releases recovery presentation');
+        report(true);
+        expect(monitor.visiblePrompt, isNull, reason: 'a late native result cannot re-open a paused capture');
+      } finally {
+        p.dispose();
+      }
+    } finally {
+      bridge.onCaptureHealth(id, 'null');
+      bridge.onPeripheralDisconnected(id, 'unmanaged');
+      CaptureWedgeMonitor.instance = previousMonitor;
+      monitor.dispose();
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('real provider authorizes ingress but waits for audio before Recording Started and timer', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-ingress-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    final events = <String>[];
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        ble: ble,
+        telemetry: RecordingLifecycleTelemetry(
+          emitter: (event, _) => events.add(event),
+          clock: world.clock.now,
+          idFactory: () => 'ingress',
+        ),
+      ));
+      addTearDown(p.dispose);
+      final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      await p.streamDeviceRecording(device: device);
+      expect(ble.authorizations, contains(true));
+      expect(p.pendantCaptureVerified, isFalse);
+      world.deviceConnection!.emitSubscriptionFailure();
+      expect(events, contains('Recording Subscription Failed'));
+      expect(p.liveCaptureStartedAt, isNull);
+      expect(events, isNot(contains(RecordingLifecycleTelemetry.startedEvent)));
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      final verifiedAt = world.clock.now();
+      expect(p.liveCaptureStartedAt, verifiedAt);
+      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+
+      // A lease expiry is a verification lapse, not a new recording: the first
+      // verified time must survive so the timer continues instead of
+      // restarting at zero when audio returns.
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(p.liveCaptureStartedAt, isNull, reason: 'unverified is still hidden');
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(p.liveCaptureStartedAt, verifiedAt, reason: 'audio returning must not restart the timer');
+      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+
+      ble.health = null; // ready replay invalidates proof
+      ble.notifyListeners();
+      expect(p.liveCaptureStartedAt, isNull);
+      await p.pauseCapture();
+      expect(ble.authorizations.last, isFalse);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
 
   test('real provider coalesces concurrent reconnects into one socket open', () async {
     final dir = await Directory.systemTemp.createTemp('c1-join-');
@@ -245,11 +430,13 @@ void main() {
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
       final gate = Completer<BleAudioCodec>();
       var opens = 0;
+      var holdCodec = false;
       final deps = _deps(
         world: world,
-        codec: (_) => gate.future,
+        codec: (_) => holdCodec ? gate.future : Future.value(BleAudioCodec.pcm16),
         open: ({
           required codec,
           required sampleRate,
@@ -266,20 +453,24 @@ void main() {
       );
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
-      p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
+      await p.streamDeviceRecording(device: device);
+      expect(p.liveCaptureSource, 'omi');
+      final initialOpens = opens;
+      holdCodec = true;
       final before = deps.owner.token;
       final pending = p.reconnectActiveCaptureForTesting();
       await pumpEventQueue();
       p.updateRecordingDevice(null);
       p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
-      expect(deps.owner.isCurrent(before), isFalse);
+      expect(deps.owner.isCurrent(before), isTrue);
       gate.complete(BleAudioCodec.pcm16);
       await pending;
-      expect(opens, 0);
-      await p.reconnectActiveCaptureForTesting();
-      expect(opens, 1);
+      await p.pendingSourceSwitch;
+      expect(opens, initialOpens);
+      expect(deps.owner.isCurrent(before), isFalse);
+      holdCodec = false;
+      await p.streamDeviceRecording(device: device);
+      expect(opens, initialOpens + 1);
       p.dispose();
     } finally {
       await world.dispose();
@@ -633,16 +824,17 @@ void main() {
       final world = await CaptureReplayWorld.boot(tempDir: dir);
       try {
         world.disposeController();
+        world.deviceConnection = ScriptedDeviceConnection();
         final detected = <Map<String, Object>>[];
         final monitor = installMonitor(detected);
         final transports = <ScriptedPureSocket>[];
         final p = composeCaptureProvider(wedgeDeps(world, transports));
         final device = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -50);
-        p.updateRecordingDevice(device);
-        p.updateRecordingState(RecordingState.deviceRecord);
+        await p.streamDeviceRecording(device: device);
+        expect(p.liveCaptureSource, 'omi');
 
         for (var i = 0; i < 3; i++) {
-          await p.reconnectActiveCaptureForTesting();
+          if (i != 0) await p.reconnectActiveCaptureForTesting();
           expect(transports, hasLength(i + 1));
           transports.last.emitClose();
           await pumpEventQueue();

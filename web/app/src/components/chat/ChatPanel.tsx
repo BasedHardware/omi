@@ -10,7 +10,7 @@ import { InlineVoiceRecorder } from './VoiceRecorder';
 import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -193,7 +193,7 @@ export function ChatPanel() {
       .filter((item) => item.uploadedId)
       .map((item) => item.uploadedId as string);
 
-    MixpanelManager.track('Chat Message Sent', {
+    PostHogManager.track('Chat Message Sent', {
       message_length: text.length,
       has_files: fileIds.length > 0,
       file_count: fileIds.length,

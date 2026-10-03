@@ -37,7 +37,7 @@ class DevApiKeyListItem extends StatelessWidget {
   Widget _buildChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
       child: Text(
         label,
         style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
@@ -56,8 +56,8 @@ class DevApiKeyListItem extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(OmiSpacing.xs),
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: const Icon(Icons.key, color: OmiColors.textTertiary, size: 18),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: Icon(Icons.key, color: OmiColors.textTertiary, size: 18),
               ),
               const SizedBox(width: OmiSpacing.sm),
               Expanded(

@@ -1,3 +1,4 @@
+from database import action_items as action_items_db
 from database import chat as chat_db
 from database import conversations as conversations_db
 
@@ -5,9 +6,10 @@ from database import conversations as conversations_db
 class _Doc:
     def __init__(self, doc_id):
         self.id = doc_id
+        self.fields = {}
 
     def to_dict(self):
-        return {'id': self.id}
+        return {'id': self.id, **self.fields}
 
 
 class _Query:
@@ -83,4 +85,22 @@ def test_iter_all_messages_uses_snapshot_cursor_pages(monkeypatch):
         'limits': [2, 2, 2],
         'cursors': ['doc-1', 'doc-3'],
         'page_sizes': [2, 2, 1],
+    }
+
+
+def test_iter_all_action_items_uses_snapshot_cursor_pages():
+    client = _Firestore(2001)
+    provenance = [{'kind': 'conversation', 'id': 'conv-1', 'scope': 'canonical'}]
+    client.query.docs[0].fields['provenance'] = provenance
+    client.query.docs[1].fields['deleted'] = True
+
+    rows = list(action_items_db.iter_all_action_items('uid', firestore_client=client))
+
+    assert [row['id'] for row in rows] == ['doc-0'] + [f'doc-{index}' for index in range(2, 2001)]
+    assert rows[0]['provenance'] == provenance
+    assert rows[0]['status'] == 'active'
+    assert client.tracker == {
+        'limits': [500, 500, 500, 500, 500],
+        'cursors': ['doc-499', 'doc-999', 'doc-1499', 'doc-1999'],
+        'page_sizes': [500, 500, 500, 500, 1],
     }

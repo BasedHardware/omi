@@ -23,11 +23,19 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 
+@visibleForTesting
+Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
+
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
 
-  const FoundDevices({super.key, required this.goNext, required this.isFromOnboarding, this.onRescan});
+  const FoundDevices(
+      {super.key, required this.goNext, required this.isFromOnboarding, this.onRescan, this.showStatus = true});
+
+  /// Draws the "Searching for devices" / "N devices found" line. Off once a scan has ended with
+  /// nothing found, where the page shows its own empty state instead.
+  final bool showStatus;
 
   /// Scans again; offered on an offline saved device's "Try Again".
   final Future<void> Function()? onRescan;
@@ -232,7 +240,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => OmiAlertDialog(
+        builder: (dialogContext, setDialogState) => OmiDialogCard(
           title: device.getFirmwareWarningTitle(),
           message: warningMessage,
           content: OmiCheckboxRow(
@@ -291,17 +299,20 @@ class _FoundDevicesState extends State<FoundDevices> {
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              !provider.isConnected
-                  ? Text(
-                      provider.nearbyDeviceCount == 0
-                          ? context.l10n.searchingForDevices
-                          : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    )
-                  : Text(
-                      context.l10n.pairingSuccessful,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                    ),
+              if (!widget.showStatus && !provider.isConnected)
+                const SizedBox.shrink()
+              else if (!provider.isConnected)
+                Text(
+                  provider.nearbyDeviceCount == 0
+                      ? context.l10n.searchingForDevices
+                      : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                )
+              else
+                Text(
+                  context.l10n.pairingSuccessful,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
               if (provider.isConnected)
@@ -442,7 +453,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                           Padding(
                             padding: const EdgeInsets.only(right: 16.0),
                             child: isConnecting
-                                ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
+                                ? OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
                                 : const SizedBox.shrink(),
                           ),
                         ],

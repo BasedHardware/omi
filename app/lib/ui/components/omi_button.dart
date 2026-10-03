@@ -7,7 +7,7 @@ import 'package:omi/ui/omi_tokens.dart';
 
 /// What a button does, which decides how loud it is.
 enum OmiButtonVariant {
-  /// The one main action on a screen or sheet: white fill, black label.
+  /// The one main action on a screen or sheet: neutral accent fill and inverse label.
   primary,
 
   /// Other actions next to a primary, or the only action on a quiet surface (empty/error states).

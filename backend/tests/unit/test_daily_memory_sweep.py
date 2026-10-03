@@ -1675,7 +1675,7 @@ def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypat
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export, "get_people", lambda _uid: ())
-    monkeypatch.setattr(data_export, "get_standalone_action_items", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(data_export, "iter_all_action_items", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", lambda *_args, **_kwargs: ())
 
     def user_rows(_uid, collection):

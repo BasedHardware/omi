@@ -186,6 +186,14 @@ _load_module_from_file(
     "utils.llm.meeting_notes_validation",
     BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
 )
+_load_module_from_file(
+    "utils.llm.meeting_notes_presentation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_presentation.py",
+)
+_load_module_from_file(
+    "utils.llm.action_item_normalization",
+    BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
+)
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",

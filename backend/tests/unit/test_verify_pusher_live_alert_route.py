@@ -255,6 +255,107 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
     assert set(gated) <= set(committed)
 
 
+def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    assert set(rules) == set(verifier.LIVE_STT_IMPORT_UIDS)
+    assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
+    assert set(rules) | set(verifier.LIVE_STT_PENDING_UIDS) == {
+        rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
+    }
+    gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
+    assert set(verifier.LIVE_STT_IMPORT_UIDS) <= set(gated)
+
+
+def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_route(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    existing_uid = verifier.LIVE_STT_IMPORT_UIDS[0]
+    calls: list[tuple[str, bool]] = []
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return [{"uid": existing_uid}]
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    def fake_write(_url: str, uid: str, _rule: dict[str, Any], _token: str, *, exists: bool) -> None:
+        calls.append((uid, exists))
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_write_rule", fake_write)
+    assert verifier._run_live_stt_import("https://monitor.omi.me", "secret") == []
+    assert {uid for uid, _exists in calls} == set(verifier.LIVE_STT_IMPORT_UIDS)
+    assert (existing_uid, True) in calls
+    assert all(exists for uid, exists in calls if uid == existing_uid)
+    assert not any(uid in verifier.LIVE_STT_PENDING_UIDS for uid, _exists in calls)
+
+
+def test_import_rejects_missing_verified_telegram_receiver(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_request_json",
+        lambda _url, path, _token, **_kwargs: (
+            [{"uid": uid} for uid in rules] if path == verifier.ALERT_RULE_LIST_PATH else []
+        ),
+    )
+    failures = verifier._run_live_stt_import("https://monitor.omi.me", "secret")
+    assert failures == ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+
+
+def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    committed = verifier.load_live_stt_import_rules()
+    monkeypatch.setitem(
+        verifier._run_fleet_coverage.__globals__,
+        "_request_json",
+        lambda *_args, **_kwargs: list(committed.values()),
+    )
+    failures, report = verifier._run_fleet_coverage(
+        "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
+    )
+    assert failures == []
+    assert report[0] == "FLEET committed=15 live=15 gated=15 matching=15 gated_matching=15"
+    assert "COMMITTED_BUT_ABSENT (0): -" in report
+    assert "LIVE_BUT_UNCOMMITTED (0): -" in report
+
+
+@pytest.mark.parametrize(("exists", "method"), [(False, "POST"), (True, "PUT")])
+def test_import_request_uses_post_for_missing_and_put_for_existing_uid(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, exists: bool, method: str
+) -> None:
+    captured: list[urllib.request.Request] = []
+
+    class _Response(io.BytesIO):
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        verifier.urllib.request, "urlopen", lambda request, timeout=15: (captured.append(request), _Response())[1]
+    )
+    uid = verifier.LIVE_STT_IMPORT_UIDS[0]
+    verifier._write_rule("https://monitor.omi.me", uid, {"uid": uid}, "secret", exists=exists)
+    assert len(captured) == 1
+    assert captured[0].get_method() == method
+    assert captured[0].full_url.endswith(verifier.ALERT_RULE_LIST_PATH + (f"/{uid}" if exists else ""))
+
+
 def test_committed_split_exports_are_the_fleet_inventory(verifier: SimpleNamespace) -> None:
     committed = verifier.load_all_committed_rules()
     combined_path = verifier.ROOT / "backend/charts/monitoring/alert-rules.json"

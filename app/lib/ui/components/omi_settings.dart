@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
 
-/// The on/off control for a setting. Neutral colours (INV-UI-1): on is a white track.
+/// The on/off control for a setting. Neutral colours (INV-UI-1): on uses the palette accent.
 ///
-/// Adaptive: a [CupertinoSwitch] on Apple platforms (black thumb on the white track), a Material
+/// Adaptive: a [CupertinoSwitch] on Apple platforms (inverse accent thumb), a Material
 /// [Switch] elsewhere (styled by the app theme). Checkboxes are only for picking items out of a
 /// list, never for a setting. Platform switches give their own haptic feedback.
 ///
@@ -99,7 +99,7 @@ class OmiSettingsGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <Widget>[];
     for (var i = 0; i < children.length; i++) {
-      if (i > 0) rows.add(const Divider(height: 1, thickness: 1, color: OmiColors.border));
+      if (i > 0) rows.add(Divider(height: 1, thickness: 1, color: OmiColors.border));
       rows.add(children[i]);
     }
     return Column(
@@ -252,7 +252,7 @@ class OmiSettingsRow extends StatelessWidget {
                 ],
                 if (chevron) ...[
                   const SizedBox(width: OmiSpacing.xxs),
-                  const ExcludeSemantics(child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary)),
+                  ExcludeSemantics(child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary)),
                 ],
               ],
             );

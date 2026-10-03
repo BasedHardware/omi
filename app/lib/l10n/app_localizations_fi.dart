@@ -281,7 +281,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reportMessage => 'Raportoi viesti';
 
   @override
-  String get reportMessageConfirm => 'Haluatko varmasti ilmoittaa tästä viestistä?';
+  String get reportMessageConfirm => 'Ilmoitetaanko tästä viestistä?';
 
   @override
   String get messageReported => 'Viesti ilmoitettu onnistuneesti.';
@@ -293,7 +293,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearChat => 'Tyhjennä keskustelu';
 
   @override
-  String get clearChatConfirm => 'Haluatko varmasti tyhjentää keskustelun? Tätä toimintoa ei voi perua.';
+  String get clearChatConfirm => 'Kaikki tämän keskustelun viestit poistetaan. Tätä ei voi perua.';
 
   @override
   String get maxFilesLimit => 'Voit ladata vain 4 tiedostoa kerrallaan';
@@ -356,10 +356,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get cannotBeUndone => 'Tätä ei voi perua.';
 
   @override
-  String get allDataErased => 'Kaikki muistosi ja keskustelusi poistetaan pysyvästi.';
+  String get allDataErased => 'Muistosi ja keskustelusi poistetaan.';
 
   @override
-  String get appsDisconnected => 'Sovelluksesi ja integraatiot katkaistaan välittömästi.';
+  String get appsDisconnected => 'Sovelluksesi ja integraatiosi irrotetaan.';
 
   @override
   String get exportBeforeDelete =>
@@ -1036,7 +1036,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Haluatko varmasti katkaista yhteyden palveluun $appName? Voit yhdistää uudelleen milloin tahansa.';
+    return 'Voit yhdistää palvelun $appName uudelleen milloin tahansa.';
   }
 
   @override
@@ -1978,14 +1978,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItemTitle => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemMessage => 'Haluatko varmasti poistaa tämän tehtävän?';
+  String get deleteActionItemMessage => 'Poistetaanko tämä tehtävä?';
 
   @override
   String get deleteSelectedItemsTitle => 'Poista valitut kohteet';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Haluatko varmasti poistaa $count valittua tehtävää$s?';
+    return 'Poistetaanko $count valittua tehtävää$s?';
   }
 
   @override
@@ -2054,7 +2054,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get undo => 'Kumoa';
 
   @override
-  String get noMemoriesYet => '🧠 Ei vielä muistoja';
+  String get noMemoriesYet => 'Ei vielä muistoja';
 
   @override
   String get noAutoMemories => 'Ei vielä automaattisesti poimittuja muistoja';
@@ -2066,7 +2066,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noMemoriesInCategories => 'Ei muistoja näissä kategorioissa';
 
   @override
-  String get noMemoriesFound => '🔍 Muistoja ei löytynyt';
+  String get noMemoriesFound => 'Muistoja ei löytynyt';
 
   @override
   String get addFirstMemory => 'Lisää ensimmäinen muistosi';
@@ -2075,7 +2075,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearMemoryTitle => 'Tyhjennä Omin muisti';
 
   @override
-  String get clearMemoryMessage => 'Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua.';
+  String get clearMemoryMessage => 'Kaikki muistosi poistetaan. Tätä ei voi perua.';
 
   @override
   String get clearMemoryButton => 'Tyhjennä muisti';
@@ -2221,20 +2221,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Haluatko varmasti poistaa tämän tehtävän?';
+  String get deleteActionItemConfirmMessage => 'Poistetaanko tämä tehtävä?';
 
   @override
   String get appLanguage => 'Sovelluksen kieli';
 
   @override
-  String get appInterfaceSectionTitle => 'SOVELLUKSEN KÄYTTÖLIITTYMÄ';
+  String get appInterfaceSectionTitle => 'Sovelluksen käyttöliittymä';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PUHE JA LITTEROINTI';
+  String get speechTranscriptionSectionTitle => 'Puhe ja litterointi';
 
   @override
   String get languageSettingsHelperText =>
-      'Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan.';
+      'Sovelluksen kieli muuttaa valikkoja ja painikkeita. Ensisijainen kieli vaikuttaa siihen, miten tallenteet litteroidaan.';
 
   @override
   String get translationNotice => 'Käännösilmoitus';
@@ -2324,7 +2324,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteMemory => 'Poista muisti';
 
   @override
-  String get thisActionCannotBeUndone => 'Tätä toimintoa ei voi peruuttaa.';
+  String get thisActionCannotBeUndone => 'Tätä ei voi perua.';
 
   @override
   String memoriesCount(int count) {
@@ -2486,12 +2486,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Yksityiskohtaiset diagnostiikkaviestit';
-
-  @override
-  String get autoCreateSpeakers => 'Luo puhujat automaattisesti';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Luo automaattisesti kun nimi havaitaan';
 
   @override
   String get followUpQuestions => 'Jatkokysymykset';
@@ -2764,7 +2758,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItem => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemConfirmation => 'Haluatko varmasti poistaa tämän tehtävän? Tätä toimintoa ei voi perua.';
+  String get deleteActionItemConfirmation => 'Poistetaanko tämä tehtävä? Tätä ei voi perua.';
 
   @override
   String get enterActionItemDescription => 'Anna tehtävän kuvaus';
@@ -3105,7 +3099,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Viesti raportoitu onnistuneesti';
 
   @override
-  String get confirmReportMessage => 'Haluatko varmasti raportoida tämän viestin?';
+  String get confirmReportMessage => 'Ilmoitetaanko tästä viestistä?';
 
   @override
   String get selectChatAssistant => 'Valitse chat-assistentti';
@@ -3120,7 +3114,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearChatTitle => 'Tyhjennä chat?';
 
   @override
-  String get confirmClearChat => 'Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa.';
+  String get confirmClearChat => 'Tyhjennetäänkö tämä keskustelu? Tätä ei voi perua.';
 
   @override
   String get copy => 'Kopioi';
@@ -3292,7 +3286,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get createMemory => 'Luo muisti';
 
   @override
-  String get deleteMemoryConfirmation => 'Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua.';
+  String get deleteMemoryConfirmation => 'Poistetaanko tämä muisto? Tätä ei voi perua.';
 
   @override
   String get makePrivate => 'Tee yksityiseksi';
@@ -3329,7 +3323,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua ja se poistaa pysyvästi kaikki $count muistoa.';
+    return 'Kaikki muistot ($count) poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -3623,8 +3617,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Anna Omin valita paras sovellus automaattisesti';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi kumota.';
+  String get deleteConversationConfirmation => 'Poistetaanko tämä keskustelu? Tätä ei voi perua.';
 
   @override
   String get conversationDeleted => 'Keskustelu poistettu';
@@ -3950,8 +3943,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get updateAppQuestion => 'Päivitä sovellus?';
 
   @override
-  String get updateAppConfirmation =>
-      'Haluatko varmasti päivittää sovelluksesi? Muutokset näkyvät tiimimme tarkistuksen jälkeen.';
+  String get updateAppConfirmation => 'Muutokset näkyvät tiimimme tarkistuksen jälkeen.';
 
   @override
   String get updateApp => 'Päivitä sovellus';
@@ -3973,9 +3965,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Julkiset sovellukset ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'Uusi versio saatavilla';
 
   @override
   String get no => 'Ei';
@@ -4018,8 +4007,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Peruuta tilaus?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Haluatko varmasti peruuttaa tilauksesi? Sinulla on edelleen pääsy nykyisen laskutuskauden loppuun.';
+  String get cancelSubscriptionConfirmation => 'Sinulla on edelleen pääsy nykyisen laskutuskauden loppuun.';
 
   @override
   String get cancelSubscriptionButton => 'Peruuta tilaus';
@@ -4205,7 +4193,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tätä toimintoa ei voi kumota. Tätä avainta käyttävät sovellukset eivät enää pääse API:in.';
+      'Tätä avainta käyttävät sovellukset menettävät API-käyttöoikeuden. Tätä ei voi perua.';
 
   @override
   String get revoke => 'Peruuta';
@@ -4262,7 +4250,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Haluatko varmasti poistaa tämän $item? Tätä toimintoa ei voi kumota.';
+    return '$item poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -4270,7 +4258,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Haluatko varmasti peruuttaa avaimen \"$keyName\"? Tätä toimintoa ei voi kumota.';
+    return 'Kaikki avainta \"$keyName\" käyttävät menettävät pääsyn. Tätä ei voi perua.';
   }
 
   @override
@@ -4447,7 +4435,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Tilauksesi pysyy aktiivisena $date asti. Sen jälkeen menetät pääsyn rajoittamattomiin ominaisuuksiin. Oletko varma?';
+    return 'Tilauksesi pysyy aktiivisena $date asti. Sen jälkeen menetät pääsyn rajoittamattomiin ominaisuuksiin.';
   }
 
   @override
@@ -4539,7 +4527,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get askOmiAnything => 'Kysy Omilta mitä tahansa elämästäsi';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Avaa Omin rajaton muisti';
+  String get unlockOmiInfiniteMemory => 'Rajattomasti muistoja';
 
   @override
   String get youreOnAnnualPlan => 'Sinulla on vuositilaus';
@@ -4551,7 +4539,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get unableToLoadPlans => 'Suunnitelmia ei voitu ladata';
 
   @override
-  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen';
+  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen.';
 
   @override
   String get useFreePlan => 'Käytä ilmaista tilausta';
@@ -4732,8 +4720,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Poista kaikki Limitless-keskustelut?';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'Tämä poistaa pysyvästi kaikki Limitlessistä tuodut keskustelut. Tätä toimintoa ei voi kumota.';
+  String get deleteAllLimitlessWarning => 'Kaikki Limitlessistä tuodut keskustelut poistetaan. Tätä ei voi perua.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4774,7 +4761,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Haluatko varmasti poistaa käyttäjän $name näytteen?';
+    return 'Henkilön $name ääninäyte poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -4782,7 +4769,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Haluatko varmasti poistaa käyttäjän $name? Tämä poistaa myös kaikki liittyvät puhenäytteet.';
+    return 'Tämä poistaa henkilön $name ääninäytteet, eikä sitä voi perua. Hänen repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.';
   }
 
   @override
@@ -5060,8 +5047,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.';
+  String get tasksEmptyStateMessage => 'Aloita keskustelu luodaksesi tehtävän.';
 
   @override
   String get clearChatAction => 'Tyhjennä keskustelu';
@@ -5139,8 +5125,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finishedConversation => 'Keskustelu päättynyt?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Haluatko varmasti lopettaa nauhoituksen ja tehdä yhteenvedon keskustelusta nyt?';
+  String get stopRecordingConfirmation => 'Lopetetaanko tallennus ja tiivistetäänkö keskustelu nyt?';
 
   @override
   String get conversationEndsManually => 'Keskustelu päättyy vain manuaalisesti.';
@@ -5983,7 +5968,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '300 premium-minuuttia kuukaudessa. Valitse ”Laitteella” rajattomaan ilmaiseen litterointiin.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6065,7 +6050,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '300 premium-minuuttia kuukaudessa. Valitse ”Laitteella” rajattomaan ilmaiseen litterointiin. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6119,7 +6104,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omin sisäänrakennettu live-transkriptio on optimoitu reaaliaikaisiin keskusteluihin automaattisella puhujan tunnistuksella ja diarisaatiolla.';
+      'Omin reaaliaikainen litterointi on tehty reaaliaikaisiin keskusteluihin ja merkitsee, kuka sanoi mitäkin.';
 
   @override
   String get reset => 'Nollaa';
@@ -6654,8 +6639,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get shareRecording => 'Jaa nauhoitus';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Haluatko varmasti poistaa tämän nauhoituksen pysyvästi? Tätä ei voi perua.';
+  String get deleteRecordingConfirmation => 'Tätä ei voi perua.';
 
   @override
   String get recordingIdLabel => 'Nauhoituksen tunnus';
@@ -7026,7 +7010,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Olet vaihtamassa Rajoittamaton-pakettisi pakettiin $title. Haluatko varmasti jatkaa?';
+    return 'Olet vaihtamassa Rajoittamaton-pakettisi pakettiin $title.';
   }
 
   @override
@@ -8484,7 +8468,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tipAutoSync => 'Nauhoitukset synkronoidaan automaattisesti';
 
   @override
-  String get storageSection => 'TALLENNUSTILA';
+  String get storageSection => 'Tallennustila';
 
   @override
   String get permissions => 'Käyttöoikeudet';
@@ -8911,10 +8895,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Tämä on lopullista';
+  String get deleteFlowConfirmTitle => 'Poistetaanko tilisi?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Kun poistat tilisi, sitä ei voi enää palauttaa.';
+  String get deleteFlowConfirmSubtitle => 'Tätä ei voi perua, ei edes tuen avulla.';
 
   @override
   String get deleteConsequenceSubscription => 'Mahdolliset aktiiviset tilaukset peruutetaan.';
@@ -9357,7 +9341,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.';
+      'Nauhoita nyt ja litteroi, kun haluat. Siihen asti ääni pysyy puhelimessasi.';
 
   @override
   String get transcribeLaterNote =>
@@ -9638,7 +9622,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteOnDeviceModel => 'Poista malli';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Haluatko varmasti poistaa tämän mallin?';
+  String get deleteOnDeviceModelConfirm => 'Poistetaanko tämä malli?';
 
   @override
   String get onDeviceModelDownloaded => 'Ladattu';
@@ -9795,7 +9779,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
 
   @override
-  String get planSheetChooseYourPlan => 'Valitse tilauksesi ja avaa rajaton Omi.';
+  String get planSheetChooseYourPlan => 'Valitse sinulle sopiva tilaus.';
 
   @override
   String get availableOnMacMobileWeb => 'Saatavilla Macilla, mobiilissa ja verkossa';
@@ -10043,24 +10027,23 @@ class AppLocalizationsFi extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10073,13 +10056,13 @@ class AppLocalizationsFi extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10109,12 +10092,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
-
-  @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
 
   @override
   String chatStarterPrompt(String kind) {
@@ -10465,8 +10442,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Unohdetaanko laite?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi lopettaa yhteyden muodostamisen tähän laitteeseen. Jotta voit käyttää sitä uudelleen, sinun on muodostettava pari uudelleen.';
+  String get forgetDeviceConfirmMessage => 'Omi lopettaa yhteyden muodostamisen tähän laitteeseen.';
 
   @override
   String get deviceForgottenMessage => 'Laite unohdettu';
@@ -11175,9 +11151,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Jonossa olevat transkriptiot $pending/$total';
   }
@@ -11235,5 +11208,1094 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openCall => 'Avaa puhelu';
 
   @override
-  String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
+  String get captureRecoveryBanner => 'Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.';
+
+  @override
+  String get captureNotTranscribing => 'Ei litterointia';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
+
+  @override
+  String get captureStillRecording => 'Tallennus jatkuu';
+
+  @override
+  String get captureMicInUseElsewhere => 'Toinen sovellus käyttää mikrofonia';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Puhelu tai toinen sovellus otti mikrofonin, joten Omi ei kuule juuri nyt. Omi jatkaa itsestään, kun mikrofoni vapautuu. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä.';
+
+  @override
+  String get captureStarting => 'Käynnistetään…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puhelimen tallennustila täynnä';
+
+  @override
+  String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja muut';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Kuuntele Omin vastaukset';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Kaikki on valmista';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tarkista tai muuta riviä napauttamalla sitä.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kun kysyt painikkeella, Omi voi lukea vastauksensa ääneen.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Kuuntele viimeinen vastauksesi';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Toistetaan viimeistä vastaustasi...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device kautta';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Puhelimen kaiuttimen kautta';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Nykyisen äänilähdön kautta';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Vastaukset pysyvät näytöllä. Mitään ei puhuta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Yksityinen. Puhuu vain numeroiden AirPods, Bluetooth tai langallisten kuulokkeiden kautta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Käyttää puhelimen kaiutinta, kun kuulokkeita ei ole kytketty.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi pysyy hiljaa. Vastaukset näkyvät edelleen sovelluksessa.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device yhdistetty. Omi puhuu täällä.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kuulokkeita ei ole kytketty. Omi pysyy äänettömänä, kunnes yhdistät osan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Toistaa numeron $device kautta.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Toistaa ääneen puhelimen kaiuttimesta.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Voit muuttaa tätä milloin tahansa numerossa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Toista tämä kiertue milloin tahansa numerossa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kuulokkeet';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuuttia';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tehtävät';
+
+  @override
+  String get usageMonth => 'Tässä kuussa';
+
+  @override
+  String get usageYear => 'Tänä vuonna';
+
+  @override
+  String get usageAll => 'Kaikki aika';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Ulkoasu';
+
+  @override
+  String get appearanceSystem => 'Järjestelmä';
+
+  @override
+  String get appearanceLight => 'Vaalea';
+
+  @override
+  String get appearanceDark => 'Tumma';
+
+  @override
+  String get chatDiscardRecording => 'Hylkää';
+
+  @override
+  String get voiceQuestionNoSpeech => 'En saanut selvää — yritä uudelleen';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Etsi ihmisiä';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisää \"$query\" uutena henkilönä';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Näytä kaikki ($count) henkilöä';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hei $name, kysy mitä vain';
+  }
+
+  @override
+  String get activity => 'Toiminta';
+
+  @override
+  String get places => 'Paikat';
+
+  @override
+  String get recaps => 'Yhteenvedot';
+
+  @override
+  String get recent => 'Viimeisimmät';
+
+  @override
+  String get searchPartialFailure => 'Joitakin tuloksia ei voitu ladata';
+
+  @override
+  String get peopleSearchPlaceholder => 'Etsi henkilöitä';
+
+  @override
+  String get peopleNotHeardYet => 'Ei vielä kuultu';
+
+  @override
+  String get peopleRecent => 'Viimeaikaiset';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tämä poistaa heidän ääninäytteensä, eikä sitä voi perua. Heidän repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.';
+
+  @override
+  String get personTalkTime => 'Puheaika';
+
+  @override
+  String get personLastHeard => 'Viimeksi kuultu';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistetaanko $count henkilöä?',
+      one: 'Poistetaanko 1 henkilö?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ääni puuttuu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä',
+      one: '1 henkilö',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ei vastaavia henkilöitä';
+
+  @override
+  String get deselectAll => 'Poista valinnat';
+
+  @override
+  String get voiceRecognitionSettings => 'Äänentunnistus';
+
+  @override
+  String get greetingMorning => 'Hyvää huomenta';
+
+  @override
+  String get greetingAfternoon => 'Hyvää iltapäivää';
+
+  @override
+  String get greetingEvening => 'Hyvää iltaa';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mitä haluat tietää?';
+
+  @override
+  String get askSuggestDecide => 'Mitä päätin tänään?';
+
+  @override
+  String get askSuggestOwe => 'Mitä olen vielä velkaa muille?';
+
+  @override
+  String get askSuggestNotice => 'Mitä Omi huomasi?';
+
+  @override
+  String get pastChats => 'Aiemmat keskustelut';
+
+  @override
+  String get newChat => 'Uusi keskustelu';
+
+  @override
+  String get startFresh => 'Aloita alusta';
+
+  @override
+  String get noPastChats => 'Keskustelusi Omin kanssa näkyvät täällä.';
+
+  @override
+  String get deleteChatQuestion => 'Poistetaanko tämä keskustelu?';
+
+  @override
+  String get deleteChatMessage => 'Se poistuu aiemmista keskusteluista pysyvästi.';
+
+  @override
+  String get deleteChat => 'Poista keskustelu';
+
+  @override
+  String get appsAskWith => 'Kysy Omilta käyttäen';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua tänään.',
+      one: '1 keskustelu tänään.',
+      zero: 'Ei keskusteluja tänään.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mitä näytöllä oli';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Kuvakaappaus tästä kokouksesta';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Poistetaanko kuvakaappaus?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
+
+  @override
+  String get conversationSummaryFailed => 'Yhteenveto epäonnistui';
+
+  @override
+  String get reconnectionsRecent => 'Uudelleenyhdistykset (viimeiset 7 päivää)';
+
+  @override
+  String get failedConnections => 'Epäonnistuneet yhteydet';
+
+  @override
+  String get failedConnectionsRecent => 'Epäonnistuneet yhteydet (viimeiset 7 päivää)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count parituksen jälkeen';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Matala varmuus';
+
+  @override
+  String get peopleFilterPinned => 'Kiinnitetyt';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kiinnitettyä',
+      one: '1 kiinnitetty',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Vahvistettu';
+
+  @override
+  String get confidenceLikely => 'Todennäköinen';
+
+  @override
+  String get confidenceUnverified => 'Vahvistamaton';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Varmuus: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimesit $count kertaa',
+      one: 'Nimesit kerran',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valittu $count ehdotuksessa',
+      one: 'Valittu 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vahvistit $count vastaavuutta',
+      one: 'Vahvistit 1 vastaavuuden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Vain automaattinen tunnistus, ei koskaan vahvistettu';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Ei koskaan vahvistettu';
+
+  @override
+  String get confidenceReasonCorrected => 'Korjasit sen vastaavuuden';
+
+  @override
+  String get confidenceReasonVoiceReady => 'ääni valmis';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'tarvitsee äänen';
+
+  @override
+  String get confidenceReasonNotHeard => 'ei vielä kuultu';
+
+  @override
+  String get confidenceSheetTitle => 'Varmuus';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi tunnistaa henkilön $name äänen, ja olet vahvistanut sen.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi tunnistaa yleensä henkilön $name äänen, mutta olet vahvistanut sen vasta muutaman kerran.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Mikään tekemäsi ei vielä tue henkilöä $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Perusteet';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimesit $count keskustelussa',
+      one: 'Nimesit 1 keskustelussa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kyllä $count ehdotuksessa',
+      one: 'Kyllä 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valittu $count ehdotuksessa',
+      one: 'Valittu 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vahvistettu $count automaattista vastaavuutta',
+      one: 'Vahvistettu 1 automaattinen vastaavuus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vastaavuutta siirretty toiselle',
+      one: '1 vastaavuus siirretty toiselle',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automaattista vastaavuutta ei vahvistettu',
+      one: '1 automaattista vastaavuutta ei vahvistettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Ääninäyte valmis';
+
+  @override
+  String get evidenceNoVoice => 'Ei vielä ääninäytettä';
+
+  @override
+  String get evidenceNotHeard => 'Ei vielä kuultu keskustelussa';
+
+  @override
+  String get evidenceNothing => 'Et ole vielä nimennyt tai vahvistanut häntä';
+
+  @override
+  String get effectCountsALot => 'Auttaa paljon';
+
+  @override
+  String get effectCounts => 'Auttaa';
+
+  @override
+  String get effectCountsALittle => 'Auttaa vähän';
+
+  @override
+  String get effectBarelyCounts => 'Tuskin auttaa';
+
+  @override
+  String get effectCountsAgainst => 'Haittaa';
+
+  @override
+  String get effectNeeded => 'Tarvitaan tilaan Vahvistettu';
+
+  @override
+  String get confidenceToReachConfirmed => 'Vahvistetuksi pääsemiseksi';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi tarvitsee myös henkilön $name ääninäytteen. Nimeä hänet, kun Muista äänet on päällä.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Henkilö $name on vahvistettu. Omi oppii jokaisesta nimeämisestä.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Vain sinun vastauksesi vaikuttavat varmuuteen merkittävästi. Automaattiset tunnistukset yksinään tuskin auttavat.';
+
+  @override
+  String get personWhyConfidence => 'Miksi?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Kiinnitä $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Pidä $name listan kärjessä ja odota häntä keskusteluihisi';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi kysyy ennen samankaltaisten äänten yhdistämistä.';
+
+  @override
+  String get pinAction => 'Kiinnitä';
+
+  @override
+  String get unpinAction => 'Irrota';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name kiinnitetty';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name irrotettu';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Miksi $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Poistetaanko $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name on kiinnitetty. Hänen ääninäytteensä poistetaan, Omi ei enää tunnista häntä ja aiemmissa litteroinneissa hän näkyy nimettömänä puhujana. Tätä ei voi perua.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Poista $name';
+  }
+
+  @override
+  String get selectPeople => 'Valitse ihmisiä';
+
+  @override
+  String get cleanUpEllipsis => 'Siivoa…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä, joista Omi ei ole varma',
+      one: '1 henkilö, josta Omi ei ole varma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Enimmäkseen väärin kuultuja nimiä. Käy ne läpi ja poista ne, jotka eivät ole oikeita.';
+
+  @override
+  String get reviewAction => 'Tarkista';
+
+  @override
+  String get cleanUpTitle => 'Siivous';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi ei ole varma näistä $count henkilöstä. Useimmat ovat litteroinneista väärin kuultuja nimiä. Poista valinta niiltä, jotka haluat pitää.',
+      one: 'Omi ei ole varma tästä henkilöstä. Poista valinta, jos haluat pitää hänet.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Kiinnitettyjä ihmisiä ei koskaan oteta mukaan siivoukseen.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poista $count henkilöä',
+      one: 'Poista 1 henkilö',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä poistettu',
+      one: '1 henkilö poistettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Ei siivottavaa';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi ei ole tällä hetkellä epävarma kenestäkään.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Valitse kaikki ohittaa kiinnitetyt ihmiset. Poista heidät yksitellen heidän sivultaan.';
+
+  @override
+  String get pinnedNotSelectable => 'Kiinnitetty, ei valittavissa';
+
+  @override
+  String get ignoredVoicesTitle => 'Ohitetut äänet';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcastit ja muut äänet, jotka merkitsit kohtaan Ei ihminen';
+
+  @override
+  String get ignoredVoicesEmpty => 'Ei ohitettuja ääniä';
+
+  @override
+  String get restoreAction => 'Palauta';
+
+  @override
+  String get voiceRestoredToast => 'Omi saattaa kysyä tästä äänestä uudelleen';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Joku muu…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Ei ihminen';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'En ole varma';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Se olen minä';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Lähimmät äänet';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Ihmiset, joiden kanssa puhuit äskettäin';
+
+  @override
+  String get voiceMatchClose => 'Läheinen osuma';
+
+  @override
+  String get voiceMatchPossible => 'Mahdollinen osuma';
+
+  @override
+  String get voiceMatchWeak => 'Heikko osuma';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Äänen osuma: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Jokainen vastaus opettaa Omille äänen ja nostaa henkilön varmuutta.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Kyllä nostaa henkilön $name varmuutta.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pitää oman ääniprofiilisi tarkkana, jotta Omi ei koskaan nimeä sinua joksikin toiseksi.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Tallennettu nimellä $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Tallennettu sinuksi';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi ei kysy tästä äänestä enää';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Nimetty: $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Nimetty sinuksi';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Merkitty: ei ihminen';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Nimi poistettu';
+
+  @override
+  String get whoIsItTitle => 'Kuka se on?';
+
+  @override
+  String get newPersonEllipsis => 'Uusi henkilö…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Lisää “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Kaikki';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Koskee kaikkia tämän puhujan rivejä';
+
+  @override
+  String get collapseAction => 'Tiivistä';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'En ole minä';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimeä heidät vielä $count keskustelussa.',
+      one: 'Nimeä heidät vielä 1 keskustelussa.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ota Omi käyttöön Pikakomennot → Siri -kohdasta. Sano “$askPhrase” tai “$questionPhrase” ja esitä sitten kysymyksesi.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Voit myös sanoa “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Päivitys saatavilla';
+
+  @override
+  String get updateAvailableMessage => 'Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.';
+
+  @override
+  String get updateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.';
+
+  @override
+  String get exportingAllData => 'Tietojasi viedään… Pidä Omi auki; suuret tilit voivat viedä useita minuutteja.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puhujaa',
+      one: '1 puhuja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Poista synkronoidut kopiot automaattisesti';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkronoidut kopiot poistetaan $days päivän jälkeen';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Poistaa paikalliset kopiot $days päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.';
+  }
+
+  @override
+  String get localCopiesSection => 'Paikalliset kopiot';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetty $count riviä',
+      one: 'Nimetty 1 rivi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Ääni opittu',
+        'pending': 'Opitaan ääntä…',
+        'disabled': 'Äänen tallennus on pois päältä',
+        'other': 'Ääntä ei ole vielä opittu',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi tunnistaa henkilön $name ensi kerralla.',
+        'pending': 'Tämä kestää muutaman sekunnin.',
+        'disabled': 'Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön $name.',
+        'other': 'Omi tarvitsee lisää selkeää puhetta henkilöltä $name ja yrittää edelleen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Löytyi $count aiemmasta keskustelusta',
+      one: 'Löytyi 1 aiemmasta keskustelusta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Todennäköinen',
+        'soundsLike': 'Kuulostaa henkilöltä $name',
+        'notPerson': 'Ei $name',
+        'carried': 'Edelleen $name. Siirretty edellisestä keskustelustasi.',
+        'change': 'Vaihda',
+        'alsoTitle': 'Onko tämä myös $name?',
+        'alsoBody': 'Omi löysi saman äänen aiemmista keskusteluista.',
+        'confirmed': 'Vahvistit tämän nimen',
+        'other': 'Tarkista',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tästä äänestä';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Omia ei löytynyt';
+
+  @override
+  String get findDeviceNoneMessage => 'Kytke se päälle ja pidä sitä puhelimesi lähellä.';
+
+  @override
+  String get startupFailedDetails => 'Tiedot';
+
+  @override
+  String get couldNotLoadApiKeys => 'API-avaimia ei voitu ladata.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ei…';
+
+  @override
+  String get diagnosticsRightNow => 'Juuri nyt';
+
+  @override
+  String get diagnosticsLast7Days => 'Viimeiset 7 päivää';
+
+  @override
+  String get diagnosticsConnectedFor => 'Yhdistettynä';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Yhdistää itse uudelleen';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Lyhyitä katkoksia, palaa joka kerta noin $duration kuluttua';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Ei katkoksia tällä viikolla';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Yhdistämisessä on ongelmia';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Epäonnistuneet yhteydet viimeisten 24 tunnin aikana: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Katkokset';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'noin $count tunnissa';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Pisin katko';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Viimeiset $duration';
+  }
+
+  @override
+  String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
 }

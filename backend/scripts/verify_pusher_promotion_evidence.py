@@ -103,8 +103,21 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         "consumer_readback",
         "live_segment_window",
     }
-    if set(probe) != expected_fields:
+    if not expected_fields <= set(probe) or set(probe) - expected_fields - {"word_counts"}:
         errors.append("semantic probe evidence has an unexpected schema")
+    if "word_counts" in probe:
+        word_counts = probe["word_counts"]
+        if (
+            not isinstance(word_counts, dict)
+            or set(word_counts) != {"live", "expected"}
+            or any(
+                not isinstance(word_counts.get(key), int)
+                or isinstance(word_counts.get(key), bool)
+                or word_counts[key] < 1
+                for key in ("live", "expected")
+            )
+        ):
+            errors.append("semantic probe word_counts must contain positive live and expected integers")
     if probe.get("schema_version") != 1:
         errors.append("semantic probe evidence must use schema_version=1")
     if probe.get("synthetic_uid_class") != "firebase_release_probe":

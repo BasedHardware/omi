@@ -397,6 +397,8 @@ def test_accepts_writer_emitted_live_segment_window(
         failure_stage=None,
         live_window_matched=True,
         live_window_transcript=LIVE_WINDOW_TRANSCRIPT,
+        live_word_count=136,
+        expected_word_count=136,
     )
     probe["window"] = {
         "started_at": "2026-08-30T12:06:00Z",
@@ -408,6 +410,21 @@ def test_accepts_writer_emitted_live_segment_window(
 
     assert probe["live_segment_window"] == writer_live_segment_window()
     assert validate(verifier, evidence, deployment_receipt, run) == []
+
+
+def test_accepts_old_and_new_semantic_probe_word_count_receipts(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    probe = evidence['semantic_probe']
+    assert isinstance(probe, dict)
+    assert validate(verifier, evidence, deployment_receipt, run) == []
+    probe['word_counts'] = {'live': 17, 'expected': 136}
+    assert validate(verifier, evidence, deployment_receipt, run) == []
+    probe['word_counts'] = {'live': 'secret transcript', 'expected': 136}
+    assert any('word_counts' in error for error in validate(verifier, evidence, deployment_receipt, run))
 
 
 def test_rejects_semantic_probe_missing_live_segment_window(

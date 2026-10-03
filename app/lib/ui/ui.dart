@@ -15,7 +15,9 @@
 /// | Empty / failed / first-load page body | `OmiEmptyState`, `OmiErrorState`, `OmiLoadingState` |
 /// | Settings | `OmiSettingsGroup` of `OmiSettingsRow` / `OmiSettingsRow.toggle`, `OmiSectionHeader`, `OmiSwitch` |
 /// | Search | `OmiSearchField(placeholder:)` |
-/// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert` |
+/// | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:)` |
+/// | A level (confidence, voice match) | `OmiLevelMeter(level:, semanticsLabel:)` — three neutral steps, never a percentage |
+/// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert`; `OmiDialogCard` holds a control; from a tapped control (a swiped row's delete), `showOmiConfirmMenu(anchor:)` |
 /// | Toasts, undo, copy | `OmiFeedback.confirm/info/error/undo`, `OmiClipboard.copy` |
 /// | Dates, durations, speaker names | `OmiDateFormat.of(context)`, `OmiDuration`, `SpeakerNames` |
 /// | Startup / background prompts | `PromptQueue.instance.enqueue` |
@@ -23,11 +25,15 @@
 /// | A `Route` object | `omiPageRoute(builder:)`; to push a page use `routeToPage` |
 ///
 /// Page backgrounds are `OmiColors.surface0` (also the scaffold default); never read
-/// `Theme.of(context).colorScheme.primary` as a background — `primary` is the white accent.
+/// `Theme.of(context).colorScheme.primary` as a background — `primary` is the neutral accent
+/// (white in dark mode, black in light mode).
 library;
 
 export 'components/omi_button.dart';
 export 'components/omi_edit_sheet.dart';
+export 'components/omi_filter_chip.dart';
+export 'components/omi_level_meter.dart';
+export 'components/omi_locked_preview.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';

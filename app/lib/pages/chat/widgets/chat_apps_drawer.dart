@@ -62,21 +62,16 @@ class ChatAppsDrawer extends StatelessWidget {
                       Expanded(
                         child: Semantics(header: true, child: Text(l10n.chatAppsTitle, style: OmiType.title3)),
                       ),
-                      const OmiCloseButton(color: OmiColors.textSecondary),
+                      OmiCloseButton(color: OmiColors.textSecondary),
                     ],
                   ),
                 ),
-                const Divider(color: OmiColors.border, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
-                  child: Text(
-                    l10n.selectApp,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-                  ),
-                ),
+                Divider(color: OmiColors.border, height: 1),
                 Expanded(
+                  // The rows say what they are: no "Select App" label above them, and no empty-state
+                  // sentence that explains the Enable Apps row below it.
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
                     children: [
                       _AppRow(
                         avatar: const ChatOmiAvatar(),
@@ -92,22 +87,13 @@ class ChatAppsDrawer extends StatelessWidget {
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
                         ),
-                      if (chatApps.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(OmiSpacing.lg),
-                          child: Text(
-                            l10n.noChatAppsEnabled,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
                       ListTile(
-                        leading: const Padding(
-                          padding: EdgeInsets.only(left: 2),
+                        leading: Padding(
+                          padding: const EdgeInsets.only(left: 2),
                           child: FaIcon(FontAwesomeIcons.circlePlus, color: OmiColors.textPrimary, size: 20),
                         ),
                         title: Text(l10n.enableApps, style: OmiType.callout),
-                        trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+                        trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
                         onTap: () {
                           Navigator.of(context).pop();
                           onEnableApps();
@@ -116,10 +102,10 @@ class ChatAppsDrawer extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Divider(color: OmiColors.border, height: 1),
+                Divider(color: OmiColors.border, height: 1),
                 ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2),
+                  leading: Padding(
+                    padding: const EdgeInsets.only(left: 2),
                     child: FaIcon(FontAwesomeIcons.solidTrashCan, color: OmiColors.danger, size: 20),
                   ),
                   title: Text(l10n.clearChat, style: OmiType.callout.copyWith(color: OmiColors.danger)),
@@ -160,8 +146,7 @@ class _AppRow extends StatelessWidget {
       leading: avatar,
       title: Text(name, style: OmiType.callout, overflow: TextOverflow.ellipsis),
       trailing: isSelected
-          ? const ExcludeSemantics(
-              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
+          ? ExcludeSemantics(child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
               ? null
               : OmiIconButton(
@@ -189,12 +174,12 @@ class ChatAppAvatar extends StatelessWidget {
       imageUrl: app.getImageUrl(),
       imageBuilder: (context, imageProvider) =>
           CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider),
-      errorWidget: (context, url, error) => const CircleAvatar(
+      errorWidget: (context, url, error) => CircleAvatar(
         backgroundColor: OmiColors.surface3,
         radius: 12,
         child: Icon(Icons.apps, size: 14, color: OmiColors.textSecondary),
       ),
-      placeholder: (context, url) => const CircleAvatar(backgroundColor: OmiColors.surface3, radius: 12),
+      placeholder: (context, url) => CircleAvatar(backgroundColor: OmiColors.surface3, radius: 12),
     );
   }
 }

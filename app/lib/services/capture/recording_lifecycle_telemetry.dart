@@ -21,6 +21,7 @@ class RecordingLifecycleTelemetry {
         _clock = clock ?? DateTime.now,
         _identityEpoch = identityEpoch ?? (() => AnalyticsManager.identityEpoch);
 
+  static const String requestedEvent = 'Recording Requested';
   static const String startedEvent = 'Recording Started';
   static const String completedEvent = 'Recording Completed';
   static const String startFailedEvent = 'Recording Start Failed';
@@ -96,14 +97,21 @@ class RecordingLifecycleTelemetry {
     _ownerEpoch = _identityEpoch();
     _preparedAt = _clock();
     _source = source;
+    _emit(requestedEvent, {'recording_id': _recordingId, 'recording_source': _source});
     return _recordingId!;
   }
 
-  void markStarted() {
+  void subscriptionFailed() => _emit('Recording Subscription Failed', {
+        'recording_id': _recordingId,
+        'recording_source': _source,
+      });
+
+  void markStarted({String? evidence}) {
     if (_recordingId == null || _source == null || _startedEmitted) return;
     _startedAt = _clock();
     _startedEmitted = true;
     _emit(startedEvent, {
+      if (evidence != null) 'capture_evidence': evidence,
       'recording_id': _recordingId,
       'recording_source': _source,
     });

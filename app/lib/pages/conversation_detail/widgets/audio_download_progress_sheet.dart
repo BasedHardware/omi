@@ -98,16 +98,16 @@ class AudioDownloadProgressSheet extends StatelessWidget {
       return Container(
         width: 64,
         height: 64,
-        decoration: const BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
-        child: const Icon(Icons.check, size: 36, color: OmiColors.success),
+        decoration: BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
+        child: Icon(Icons.check, size: 36, color: OmiColors.success),
       );
     }
     if (state == AudioDownloadState.error) {
       return Container(
         width: 64,
         height: 64,
-        decoration: const BoxDecoration(color: OmiColors.dangerSurface, shape: BoxShape.circle),
-        child: const Icon(Icons.error_outline, size: 36, color: OmiColors.danger),
+        decoration: BoxDecoration(color: OmiColors.dangerSurface, shape: BoxShape.circle),
+        child: Icon(Icons.error_outline, size: 36, color: OmiColors.danger),
       );
     }
     final determinate = state == AudioDownloadState.downloading;

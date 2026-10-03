@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +10,8 @@ import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<Map<String, dynamic>> _emptyGraph() async => {'nodes': [], 'edges': []};
+
+Future<Map<String, dynamic>> _neverLoads() => Completer<Map<String, dynamic>>().future;
 
 Widget _app(Widget home) {
   return MaterialApp(
@@ -75,5 +79,43 @@ void main() {
 
     expect(card.contains(messageRect.topLeft) && card.contains(messageRect.bottomRight), isTrue);
     expect(tester.getSize(message).height, greaterThan(tester.getSize(find.text(l10n.noKnowledgeGraphYet)).height));
+  });
+
+  testWidgets('preview shows a compact skeleton while loading', (tester) async {
+    await tester.pumpWidget(_app(const Scaffold(
+      body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: _neverLoads),
+    )));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('memories_mind_map_loading')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const ValueKey('memories_mind_map_preview'))).height, lessThan(170));
+    final l10n = AppLocalizations.of(tester.element(find.byType(MemoryGraphPage)));
+    expect(find.text(l10n.loadingKnowledgeGraph), findsNothing);
+  });
+
+  testWidgets('preview failure collapses to one row whose Try Again reloads', (tester) async {
+    var calls = 0;
+    Future<Map<String, dynamic>> load() async {
+      calls++;
+      if (calls == 1) throw Exception('offline');
+      return {'nodes': [], 'edges': []};
+    }
+
+    await tester.pumpWidget(_app(Scaffold(
+      body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: load),
+    )));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(MemoryGraphPage)));
+    final row = find.byKey(const ValueKey('memories_mind_map_error'));
+    expect(row, findsOneWidget);
+    expect(find.text(l10n.couldNotLoadKnowledgeGraph), findsOneWidget);
+    expect(tester.getSize(row).height, lessThan(80));
+
+    await tester.tap(find.byKey(const ValueKey('memories_mind_map_retry')));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(row, findsNothing);
+    expect(find.byKey(const ValueKey('memories_mind_map_preview')), findsOneWidget);
   });
 }

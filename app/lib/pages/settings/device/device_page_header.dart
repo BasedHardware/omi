@@ -24,7 +24,7 @@ class DevicePageHeader extends StatelessWidget {
         Semantics(
           header: true,
           child: Text(
-            pairedDevice?.name ?? l10n.unknownDevice,
+            _displayName(pairedDevice?.name, l10n.omiAppName),
             style: OmiType.title1,
             textAlign: TextAlign.center,
           ),
@@ -100,7 +100,7 @@ class DeviceBatteryGroup extends StatelessWidget {
       children: [
         OmiSettingsRow(
           leading: isCharging
-              ? const FaIcon(FontAwesomeIcons.chargingStation, color: OmiColors.success)
+              ? FaIcon(FontAwesomeIcons.chargingStation, color: OmiColors.success)
               : FaIcon(_icon, color: _color),
           title: isCharging ? context.l10n.charging : context.l10n.batteryLevel,
           value: '$batteryLevel%',
@@ -119,15 +119,15 @@ class DeviceDisconnectedCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(OmiSpacing.xxl),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 64,
             height: 64,
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-            child: const Center(
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+            child: Center(
               child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24),
             ),
           ),
@@ -158,14 +158,19 @@ class DeviceStreamingMetrics extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const FaIcon(FontAwesomeIcons.bluetooth, color: OmiColors.textTertiary, size: 14),
+        FaIcon(FontAwesomeIcons.bluetooth, color: OmiColors.textTertiary, size: 14),
         const SizedBox(width: 6),
         Text(context.l10n.dataRateKbps(bleReceiveKbps.toStringAsFixed(1)), style: style),
         const SizedBox(width: OmiSpacing.xl),
-        const FaIcon(FontAwesomeIcons.signal, color: OmiColors.textTertiary, size: 14),
+        FaIcon(FontAwesomeIcons.signal, color: OmiColors.textTertiary, size: 14),
         const SizedBox(width: 6),
         Text(context.l10n.dataRateKbps(wsSendKbps.toStringAsFixed(1)), style: style),
       ],
     );
   }
 }
+
+/// The device's own name, or "Omi" while none is cached (BtDevice reports a missing name as the
+/// English word 'Unknown').
+String _displayName(String? name, String fallback) =>
+    name == null || name.trim().isEmpty || name == 'Unknown' ? fallback : name;

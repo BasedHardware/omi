@@ -89,6 +89,14 @@ final class Probe {
       [weak self] _, _ in self?.refreshProcessList()
     }
     refreshProcessList()
+    // Property listeners alone missed every mic change of already-listed processes on macOS 27
+    // (Zoom and Telegram calls produced no events), so also poll every 0.5 s. Edges are
+    // deduplicated in sample(), so a listener firing as well does not double-report.
+    Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+      guard let self else { return }
+      self.refreshProcessList()
+      for object in self.watched { self.sample(object) }
+    }
     Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.sampleWindows() }
     sampleWindows()
     emit(["event": "probe_started", "os": ProcessInfo.processInfo.operatingSystemVersionString])
@@ -116,7 +124,10 @@ final class Probe {
       listeners[object] = block
       for selector in [kAudioProcessPropertyIsRunningInput, kAudioProcessPropertyIsRunningOutput] {
         var addr = address(selector)
-        AudioObjectAddPropertyListenerBlock(object, &addr, queue, block)
+        let status = AudioObjectAddPropertyListenerBlock(object, &addr, queue, block)
+        if status != noErr {
+          emit(["event": "listener_failed", "pid": Int(identities[object]?.pid ?? -1), "status": Int(status)])
+        }
       }
       sample(object)
     }

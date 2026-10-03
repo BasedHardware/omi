@@ -21,12 +21,18 @@ Future<bool> deleteTaskWithUndo(BuildContext context, ActionItemsProvider provid
   final hostContext = Navigator.maybeOf(context)?.context ?? context;
   final l10n = context.l10n;
   provider.stageDeleteActionItem(item);
+  Future<bool>? undoIndexRestore;
   final undone = await OmiFeedback.undo(
     context,
     l10n.actionItemDeleted,
-    onUndo: () => provider.undoStagedDelete(item.id),
+    onUndo: () {
+      undoIndexRestore = provider.undoStagedDelete(item.id);
+    },
   );
-  if (undone) return false;
+  if (undone) {
+    await undoIndexRestore;
+    return false;
+  }
   final deleted = await provider.commitStagedDelete(item.id);
   if (!deleted && hostContext.mounted) {
     OmiFeedback.error(hostContext, l10n.failedToDeleteActionItem);

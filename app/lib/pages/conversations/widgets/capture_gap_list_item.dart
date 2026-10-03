@@ -1,3 +1,4 @@
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -18,7 +19,8 @@ class CaptureGapHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 8, 16, 4),
       child: Text(
         context.l10n.conversationsNotCapturedCount(count),
-        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+        style:
+            TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), fontSize: 13, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -42,7 +44,7 @@ class CaptureGapListItem extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Container(
         width: double.maxFinite,
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+        decoration: BoxDecoration(color: OmiColors.conversationCard, borderRadius: BorderRadius.circular(24.0)),
         child: Padding(
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -50,8 +52,8 @@ class CaptureGapListItem extends StatelessWidget {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
-                child: Icon(Icons.event_busy, color: Colors.grey.shade500, size: 20),
+                decoration: BoxDecoration(color: OmiColors.categorySurface, borderRadius: BorderRadius.circular(12)),
+                child: Icon(Icons.event_busy, color: OmiColors.textTertiary, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -62,14 +64,14 @@ class CaptureGapListItem extends StatelessWidget {
                       gap.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       timeStr,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      style: TextStyle(color: OmiColors.textTertiary, fontSize: 12),
                     ),
                   ],
                 ),

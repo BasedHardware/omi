@@ -32,7 +32,7 @@ class DevApiKeyCreatedSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Success header
-          const Icon(Icons.check_circle, color: OmiColors.success, size: 40),
+          Icon(Icons.check_circle, color: OmiColors.success, size: 40),
           const SizedBox(height: OmiSpacing.md),
           Text(l10n.apiKeyCreated, textAlign: TextAlign.center, style: OmiType.title3),
           const SizedBox(height: 6),
@@ -52,7 +52,7 @@ class DevApiKeyCreatedSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 20),
+                Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 20),
                 const SizedBox(width: OmiSpacing.sm),
                 Expanded(
                   child: Text(
@@ -88,7 +88,7 @@ class DevApiKeyCreatedSheet extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const Icon(Icons.copy, size: 14, color: OmiColors.textTertiary),
+                        Icon(Icons.copy, size: 14, color: OmiColors.textTertiary),
                         const SizedBox(width: OmiSpacing.xxs),
                         Text(l10n.tapToCopy, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                       ],

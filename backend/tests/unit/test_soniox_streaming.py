@@ -67,6 +67,40 @@ def test_only_final_tokens_reach_the_transcript():
     assert texts == ['Hello']
 
 
+def test_final_token_language_is_forwarded_as_ephemeral_metadata():
+    captured, _ = _drive(
+        [
+            {
+                'tokens': [
+                    {'text': 'Olá ', 'language': 'pt', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 400},
+                ]
+            }
+        ]
+    )
+    assert captured[0][0]['_provider_language'] == 'pt'
+
+
+def test_mixed_token_languages_use_text_detection_instead_of_one_token_tag():
+    captured, _ = _drive(
+        [
+            {
+                'tokens': [
+                    {'text': 'Olá', 'language': 'pt', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 400},
+                    {
+                        'text': 'hello ',
+                        'language': 'en',
+                        'is_final': True,
+                        'speaker': 1,
+                        'start_ms': 400,
+                        'end_ms': 800,
+                    },
+                ]
+            }
+        ]
+    )
+    assert '_provider_language' not in captured[0][0]
+
+
 def test_consecutive_tokens_from_one_speaker_coalesce():
     captured, _ = _drive(
         [

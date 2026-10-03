@@ -75,10 +75,9 @@ class ProductTelemetry {
   final DateTime Function() _now;
   final int Function() _identityEpoch;
 
-  void _send(RegisteredEvent event, [Map<String, Object>? attribution]) {
+  void _send(RegisteredEvent event) {
     try {
-      AnalyticsManager.withExperimentContext(
-          attribution ?? AnalyticsManager.captureExperimentContext(), () => _emit(event));
+      _emit(event);
     } catch (_) {/* Observation never changes product behavior. */}
   }
 
@@ -107,7 +106,6 @@ class ProductTelemetry {
 class ProductAttempt {
   ProductAttempt._(
       this._owner, this.journey, this.surface, this._objectId, this._correlation, this._startedAt, this._epoch);
-  final Map<String, Object> _attribution = AnalyticsManager.captureExperimentContext();
   final ProductTelemetry _owner;
   final ProductJourney journey;
   final ProductSurface surface;
@@ -148,17 +146,15 @@ class ProductAttempt {
     final normalizedFailure = outcome == ProductOutcome.failure || outcome == ProductOutcome.unobserved
         ? (failure == ProductFailure.none ? ProductFailure.unknown : failure)
         : ProductFailure.none;
-    _owner._send(
-        ProductJourneyOutcome(
-          correlationId: _correlation,
-          journey: ProductJourneyOutcomeJourney.values.byName(journey.name),
-          surface: ProductJourneyOutcomeSurface.values.byName(surface.name),
-          objectId: _objectId,
-          outcome: ProductJourneyOutcomeOutcome.values.byName(outcome.name),
-          failure: ProductJourneyOutcomeFailure.values.byName(normalizedFailure.name),
-          durationMs: _elapsed,
-          resultCount: resultCount == null ? -1 : math.max(0, resultCount),
-        ),
-        _attribution);
+    _owner._send(ProductJourneyOutcome(
+      correlationId: _correlation,
+      journey: ProductJourneyOutcomeJourney.values.byName(journey.name),
+      surface: ProductJourneyOutcomeSurface.values.byName(surface.name),
+      objectId: _objectId,
+      outcome: ProductJourneyOutcomeOutcome.values.byName(outcome.name),
+      failure: ProductJourneyOutcomeFailure.values.byName(normalizedFailure.name),
+      durationMs: _elapsed,
+      resultCount: resultCount == null ? -1 : math.max(0, resultCount),
+    ));
   }
 }

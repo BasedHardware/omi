@@ -81,13 +81,10 @@ export function sortParticipants(participants) {
 }
 
 export function participantDisplayName(participant) {
-  const name =
-    typeof participant?.name === 'string' ? participant.name.trim() : '';
+  const name = typeof participant?.name === 'string' ? participant.name.trim() : '';
   if (name) return name;
   const organization =
-    typeof participant?.organization === 'string'
-      ? participant.organization.trim()
-      : '';
+    typeof participant?.organization === 'string' ? participant.organization.trim() : '';
   return organization || 'Guest';
 }
 
@@ -115,8 +112,7 @@ export function isSideNotes(section) {
 }
 
 export function sectionHasContent(section) {
-  const heading =
-    typeof section?.heading === 'string' ? section.heading.trim() : '';
+  const heading = typeof section?.heading === 'string' ? section.heading.trim() : '';
   const body =
     typeof section?.body_markdown === 'string' ? section.body_markdown.trim() : '';
   return Boolean(heading || body);
@@ -178,13 +174,44 @@ export function firstSectionBulletPlainText(sections) {
   if (!Array.isArray(sections)) return '';
   for (const section of sections) {
     if (!section || typeof section !== 'object' || isSideNotes(section)) continue;
-    if (
-      typeof section.body_markdown !== 'string' ||
-      !section.body_markdown.trim()
-    ) {
+    if (typeof section.body_markdown !== 'string' || !section.body_markdown.trim()) {
       continue;
     }
     return markdownToPlainText(firstBulletLine(section.body_markdown));
   }
   return '';
+}
+
+function bulletLines(markdown) {
+  if (typeof markdown !== 'string' || !markdown.trim()) return [];
+  const lines = [];
+  let inFence = false;
+  for (const rawLine of markdown.split('\n')) {
+    if (FENCE_RE.test(rawLine)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const match = BULLET_RE.exec(rawLine);
+    // Top-level bullets only: nested ones repeat their parent's point.
+    if (match && !/^\s{2,}/.test(rawLine)) lines.push(match[1]);
+  }
+  return lines;
+}
+
+/**
+ * Up to `max` short plain-text points for the link-preview image: the first
+ * main section's bullets, else the overview's. Older notes have no sections
+ * and keep everything in the overview markdown.
+ */
+export function previewBullets(structured, max = 3, maxLength = 64) {
+  const { mains } = splitSections(structured?.sections);
+  const sources = [...mains.map((s) => s.body_markdown), structured?.overview];
+  for (const markdown of sources) {
+    const points = bulletLines(markdown)
+      .map((line) => markdownToPlainText(line, maxLength))
+      .filter(Boolean);
+    if (points.length > 0) return points.slice(0, max);
+  }
+  return [];
 }

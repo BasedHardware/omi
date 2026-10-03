@@ -10,13 +10,17 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
-| `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `false` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `100` | `0` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `1` |
+| `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
+| `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
+| `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
 | `PARAKEET_WINDOW_MAX_CONTEXT_SECONDS` | `24` | `24` | `24` |
+| `PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS` | `12` | code default | `12` |
+| `PARAKEET_WINDOW_MAX_EMPTY_STREAK` | `4` | code default | `4` |
 | `STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS` | `1800` | `1800` | `1800` |
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
@@ -25,9 +29,16 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Production retains
-`modulate-velma-2,soniox,dg-nova-3,parakeet`. Only bounded telemetry vocabulary is
-corrected unconditionally. Dev explicitly sets `STT_SERVICE_MODELS=parakeet-window,soniox`.
+circuit env lookup remain unchanged. Production's configured order is
+`parakeet-window,modulate-velma-2,soniox,dg-nova-3`. Soniox-first was tried on
+2026-10-02 and rolled back within the hour: a Parakeet failover replays its
+capture ring into Soniox's bounded send queue, which overflowed (`capacity_full`)
+and ended the session. Dev retains its separately
+configured order; never use dev to mutate health state (it shares production
+Redis). The first token uses windowed TDT only for the allocated UID bucket;
+everyone else retains the configured vendor tail. Streaming RNNT is outside
+this chain. The cost-router evidence and independent on ramp are documented in
+[live STT routing](../runbooks/live-stt-routing.md).
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical
@@ -47,6 +58,120 @@ excluded listen shapes drop only the `parakeet-window` token from the configured
 list; they keep the rest of `STT_SERVICE_MODELS` (they are not rewritten onto
 code-default Modulate).
 
+## Production ramp: 1% → 5% → 25% → 50% → 100%
+
+Deploy the Parakeet server revision and its 3–6 replica HPA first. Wait until
+at least three ready replicas all expose `live_pending_requests` and
+`live_oldest_pending_seconds` from `/batch/metrics`. Then deploy listen with
+`PARAKEET_WINDOW_MAX_SESSIONS=8` and the pressure gate. During a mixed-revision
+server rollout, replicas without valid live fields count as unknown unless they
+still have a fresh cached sample. The quorum and conservative unknown-pod
+accounting below decide whether listen admits the window leg. Unmarked HTTP requests
+remain in the backfill lane; only the window client's explicit
+`X-Omi-STT-Surface: live-window` header enters the live lane. Soniox stays on
+the fallback chain. Keep the merged 5% allocation for this code release; a later
+configuration rollout advances it only after the gates below pass.
+
+The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
+polls each replica every five seconds with its own one-second HTTP and wall-clock
+deadline. A failed fetch does not discard the other responses: each replica
+keeps its last valid sample and original timestamp for **at most 15 seconds**.
+Departed replicas are removed. DNS failure immediately stands down; admission
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
+well above the seven-pod HPA maximum; fleets above that bound still stand down.
+
+Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
+strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
+measured as `(busy replicas + unknown replicas) / ready replicas`: by default,
+**50% or more refuses admission**. Thus a six-pod pool needs at least four
+replicas known healthy; one isolated hot pod or intermittent failed fetch does
+not void healthy fleet capacity. Unknown replicas cannot supply headroom.
+The existing per-pod thresholds still define busy; backfill pending alone does
+not. Small two-pod pools retain the conservative one-hot-pod stand-down.
+
+| Environment setting | Default | Meaning |
+| --- | ---: | --- |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
+| `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
+
+Invalid configuration stands down. Invalid, negative, non-finite or old-revision
+responses leave that replica's timestamp unchanged; it becomes unknown after
+its cached sample expires. Refusal labels stay `unconfigured`, `missing`,
+`stale`, `pressure`. Refresh outcomes add `partial` for a usable quorum with
+failed fetches, including when the remaining pressure decision stands down;
+quorum loss is `unavailable`. The bounded gauge
+`omi_stt_window_batch_pressure_replicas{state="fresh"|"ready"}` exposes coverage.
+A stalled poller still stands down after 15 seconds.
+
+Using a pool share follows the scheduler: live requests have priority at each
+dispatch, with one aged backfill turn after four live batches. An isolated wait
+can be one non-preemptible backfill inference; it is not proof of fleet-wide
+saturation. The majority-of-healthy-pods rule retains conservative headroom,
+while the existing per-session deadlines and replay handle a slow individual
+POST. Queue-wait, POST latency and actual refusals still gate traffic ramps;
+this change does not guarantee the production refusal target without a bake.
+
+`/batch/metrics` is already an async event-loop snapshot of bounded queue state;
+it does not wait for GPU inference or take the batch lock. Inference runs on the
+GPU worker thread. A real-engine ASGI test holds inference and the batch lock
+while the endpoint reports the queued live request. Offloading this snapshot
+would not remove Python GIL contention and would complicate its event-loop
+ownership. The admission fix needs **only a listen image**, with no Parakeet
+runtime change or separate Parakeet deploy.
+
+The batch engine selects live requests before backfill at each GPU dispatch.
+An aged backfill item (5 s) receives one turn after four live batches; this
+prevents indefinite starvation without forming a long mixed batch. Prod GPU
+dispatch is limited to one in-flight batch so backfill cannot queue ahead of
+live work inside the GPU worker. An inference already running cannot be
+preempted, so a long historical recording can still affect a live POST; the
+live queue-wait and POST p95 gates must catch this before a ramp step.
+
+At each bake, compare `omi_stt_window_canary_transcript_outcome_total`
+`arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
+no_transcript)` must not drop for the allocated arm. The 95% fleet SLO is shown
+on the Backend-listen dashboard; a separate page fires below 90% with its
+volume guard. Inspect `omi_stt_window_session_outcome_total{outcome="no_text"}`
+over sessions with VAD speech, and the `capacity_full` ratio from
+`omi_stt_window_admissions_total{outcome="overflow"}`. Require no sustained
+capacity overflow or no-text increase relative to the control SLI. First-text
+p50 and p95 come from `omi_stt_window_first_text_seconds_bucket`; p95 must
+remain below 30 seconds and p50 must not drift upward through the bake. This
+histogram measures from the session's first VAD speech, so sparse quiet gaps
+can push elapsed first-VAD-to-text beyond 12 seconds without indicating a
+stall; the p95 threshold remains the bake gate.
+Compare `omi_stt_window_sessions_active` with the summed process caps, TDT
+POST p50/p95 from `omi_stt_window_post_seconds_bucket`, and
+`DCGM_FI_DEV_GPU_UTIL`/free GPU memory on the Parakeet pool. The same GPUs
+serve sync backfill, so require visible headroom and no sync-batch queue or
+latency regression before ramping. Use the Parakeet GPU dashboard for the
+batch queue and memory panels. Read each metric by time and load, not a single
+snapshot.
+
+The Telegram batch pages fire at four pending requests for two minutes, batch
+queue p95 at one second with five observations for two minutes, and prerecorded
+Parakeet error rate at 2% with ten requests for two minutes. Prerecorded traffic
+includes sync backfill and excludes live-window POSTs by their request header,
+so read these alongside the sync job queue before ramping. All three batch
+rules treat missing telemetry as Alerting and use the existing Telegram route.
+The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
+in the prod chart and runtime overlay, then recompose the runtime environment.
+
+After the merged 5% bake, advance allocation to **25%, 50%, then 100%** of
+eligible sessions within roughly 24 hours, with an observation gate between
+each step. Require live POST p95 below ~2 s, no first-text p50 regression from
+the measured 7.5 s, stable transcript-success and no-text ratios against the
+control arm, no sustained admission overflow, and acceptable GPU utilization,
+OOM/error rates, and backfill queue age. At each step, compare the summed
+window active sessions against eight times the ready listen pod count, the
+per-lane GPU queue waits, and the per-replica live pending/oldest metrics.
+Do not advance on missing telemetry. Change allocation in both the prod listen
+chart and prod runtime overlay, then recompose the runtime environment.
+Rollback sets allocation to `0` in those sources; that removes the window
+leg while leaving Soniox available. This PR does not deploy or change the
+existing 5% allocation.
+
 ## Why windows are sentence-anchored
 
 `nvidia/parakeet-tdt-0.6b-v3` returns HTTP 200 with empty text when a clip starts
@@ -62,7 +187,11 @@ sentence so the next POST starts on a sentence boundary.
 The last sentence is held on a paced POST unless it ended ≥1.2 s ago with
 terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
 is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
-and the single in-flight slot allow. On that pause POST the last segment is
+and the single in-flight slot allow. Managed windows enable this pause and
+the normal idle paths once unresolved VAD-admitted speech reaches one second.
+Sub-second fragments retain the five-second capture-silence flush and the
+three-second cumulative answered-empty startup budget documented in the
+listen pipeline. On that pause POST the last segment is
 emitted only if it already ends with `.?!` — there is no 1.2 s gap, because
 the gate has already stripped silence from the timeline. Treating every
 `finalize()` as a forced cut re-anchors at a breath and the next POST starts
@@ -71,7 +200,9 @@ mid-sentence, which is the empty-clip failure mode.
 Forced flush (emit everything, re-anchor at `now`) happens only on close /
 `drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
 callers), or **wall-clock idle**: no audio accepted by `send()` for ≥2.0 s
-while unemitted speech remains after the anchor. Idle fires once per idle
+while ordinary unemitted speech remains after the anchor. An empty managed
+idle answer retains its anchor, PCM and replay; only the long-silence path
+settles empty-answered accounting. Idle fires once per idle
 period, but only after a forced job that reached `received`; a capped idle
 POST leaves `_idle_flushed` false so the pump takes another paced forced job
 for the remainder. Under the gate no audio arrives during silence, so the
@@ -97,24 +228,68 @@ posted context.
 
 ## Capacity, audio and latency
 
-One slot per one-process listen pod means at most 12 sessions at 12 replicas or
-60 sessions at 60 replicas. Each session has one in-flight POST. The PCM buffer
-holds two max-context windows plus two pace intervals of cushion: default
-`2×24 + 2×6 = 60` s of mono PCM16, **≤ ~1.9 MB at 16 kHz**. That cushion absorbs a
-catch-up burst while one POST is in flight without killing a healthy session.
-The at-cap job already drains backlog 24 s per paced POST. Growing
-windows re-post overlapping context as `now` advances, so GPU audio per session
-is about **2.0×** fixed 6 s slicing. A minimum `PARAKEET_WINDOW_PACE_SECONDS`
-(default 6) interval between POST starts still bounds sustained traffic; delivery
-lag in simulation was p50 4–5 s, p90 7–11 s at 6 s pacing. Reconnects and initial
-flushes can burst up to the session cap; this is **not** a fleet-wide global rate
-limiter. Replicas and worker processes multiply these bounds. Default allocation
-zero is the production safety boundary; a cap of one is the smallest nonzero
-process cap for the first measured ramp, not proof that any 2–3 GPU fleet can
-sustain 60 synchronized requests alongside batch jobs. Server overload rejection
-remains authoritative. Do not increase the cap without measuring batch queueing,
-p95 latency and error rate under the actual pod count. Do not add a second
-in-flight POST per session — that doubles GPU load exactly when it is slow.
+Eight slots per one-process listen pod allow 216–320 concurrent window
+sessions at the measured 27–40 listen pods. Each session has one in-flight
+POST. With the production 24 s max context and 6 s pace, the PCM buffer cap
+is `2×24 + 2×6 = 60` s of 16 kHz mono PCM16: **1,920,000 bytes**. The
+reproducible local probe (`scripts/benchmark_parakeet_window_capacity.py`)
+created eight sockets, eight real Silero VAD states, and eight idle pump tasks:
+~11 KiB objects and task per session, ~1.92 MB buffer per session, and ~17.4
+MB process traced peak for all eight filled buffers (RSS high-water growth
+~14.1 MB after warming the shared model). One simultaneous 24 s
+AGC POST raised that peak to ~20.8 MB. Conservatively allowing that ~3.5 MB
+POST transient for every session gives **~45 MB**, about **1.3% of the
+3.5 GiB prod listen pod memory limit** (requests: 1.5 GiB). The same local
+probe measured ~73–78 ms of CPU per session per 10 s of audio for real Silero
+inference plus ingest AGC on 512-sample chunks, or ~5.8–6.2% of one core for eight
+continuously active sessions. This excludes HTTP/serialization and other
+listen work and is a local CPU result, not a pod RSS or production p95 measure.
+
+The 60 s cushion absorbs a catch-up burst while one POST is in flight. Before
+its first emitted text, a window leg has a 12-second rescue deadline. The
+deadline is retired after an answered-empty short episode: less than 1 s of
+admitted provider audio followed by at least 5 s of silence. Retirements share
+a cumulative 3.0 s budget of answered-empty admitted audio; only emitted text
+resets it. Once that budget is exhausted, the deadline remains armed. The
+timer also fires during a slow POST or after four consecutive speech-containing
+empty POSTs, whichever comes first. The existing listen death monitor selects
+the next vendor and replays the untranscribed capture from the 90-second ring;
+failover happens at most once per session, and the failed Parakeet leg is
+excluded for the rest of that session. Once text has been emitted, these
+startup bounds are disarmed. No sentence anchor or emitted text is changed.
+`omi_stt_window_session_outcome_total` retains
+`outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
+the matching recovered failover uses the same reason on `omi_fallback_total`.
+The 90-second replay ring follows the window's last emitted sentence anchor.
+The accepted-send map translates that provider anchor to a capture sample, so
+VAD-gated gaps cannot shift the cut. Audio before the anchor is already text;
+speech from the anchor onward stays available even while a POST is in flight.
+The ring never evicts that pending span solely because capture time passed.
+Speech-free capture can still roll off, and the current chunk must fit. The
+`omi_stt_window_replay_safe_trims_total` counter records actual anchor and
+speech-free trims. If pending audio itself exceeds the ring, the leg fails
+with `capacity_full` and replays from the anchor onto the next vendor.
+The window socket separately retains PCM from its POST anchor. Its VAD speech
+spans are pruned on each POST-anchor advance; rapid speech/silence toggles
+coalesce the closest adjacent spans at the 1,024-entry bound rather than
+ending an otherwise healthy session. Coalescing retains every speech sample
+and may conservatively include the short silence between two spans. The PCM
+buffer's 60-second bound still fails over when un-emitted audio outgrows it.
+Near the 60-second PCM buffer limit, a 24-second context with a short emitted
+prefix followed by a long unfinished TDT segment is forced out if the prefix
+would advance the anchor by less than one 6-second pace. Earlier windows keep
+their sentence boundary, and windows with enough progress still hold the last
+segment. This extends the forced cut already used for one unfinished segment.
+Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
+`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
+fallback metric gains no new label.
+Growing windows re-post overlapping context. A minimum 6 s interval between
+POST starts bounds sustained requests to eight per listen pod per 6 s, with
+up to 216–320 synchronized sessions fleet-wide at the current pod count.
+The allocation bucket, per-pod cap, live pressure gate, and provider circuit
+remain in series; allocation 0 sends no window traffic. Monitor real traffic
+before every increase because local memory headroom does not prove GPU
+throughput or transcript quality.
 
 A 503 or a timeout on an *acquired* POST kills the window leg, releases
 admission, and opens the Parakeet serve-error circuit (existing default 180
@@ -209,7 +384,10 @@ failover for existing fair-use/usage flushes; periodic metering does not double-
 
 ## Chain and alerts
 
-Each configured provider is attempted once per session, including failed connects.
+Each configured provider is attempted once per session, including failed connects,
+except for one bounded Soniox re-entry after a known transient transport loss
+when its circuit is closed and no untried Deepgram rescue remains. Managed
+rebuild attempts are independently bounded to three, including that re-entry.
 Account failures (Deepgram 401/402/403; typed Soniox account errors) use the longer
 cooldown and a single recovery probe even when other circuits allow N probes.
 `force=True` never bypasses an account-state cooldown. Last-resort never re-dials
@@ -221,6 +399,15 @@ non-account bench. The flag-enabled preflight therefore leaves admission to the
 chain. The old path retains its two-failover limit; the managed chain allows three
 hops across four providers.
 
+Full local window admission is checked before constructing the window socket,
+including static/shadow serving. Capacity refusals also engage the existing
+five-second target cooldown in shadow. A refused window does not consume a
+remaining non-account rescue provider's attempt. That rescue may relax its
+selection bench while retaining the half-open probe limit and all account
+protections; an occupied probe has a twelve-second bounded wait. Exhaustion
+is latched per receiver, and ring-pressure exhaustion closes through the
+ordinary terminal send path rather than repeating rebuilds per packet.
+
 Metrics: `omi_stt_chain_exhausted_total` increments once per terminal chain;
 `omi_stt_leg_attempts_total{to_mode,outcome}` counts successful and failed actual
 connections; shared `omi_stt_stream_close_total{provider,reason}` counts typed
@@ -229,7 +416,12 @@ budget/quota and authentication refusals at the provider boundary;
 `omi_stt_window_admissions_total{outcome}`, `omi_stt_window_posts_total{outcome}`
 (success/empty/error/cancelled/queue_timeout), `omi_stt_window_post_seconds`,
 `omi_stt_window_context_seconds` (posted context duration), and
-`omi_stt_window_forced_cuts_total` expose TDT load. `empty` means the posted
+`omi_stt_window_forced_cuts_total` expose TDT load. The forced-cut counter includes
+held tails cut at max context or when un-emitted capture reaches two thirds of
+the 90-second replay ring. The latter is measured on capture time: VAD can admit
+less audio to the provider while the replay ring still protects the full capture.
+If a POST stalls or returns no usable text, the ring remains strict and fails
+over before un-emitted audio is evicted. `empty` means the posted
 context contained VAD speech and the model returned no text — not "we held the
 last sentence". No UID, transcript, URL or exception text is a metric label.
 Non-terminal configured-chain skips and failed legs emit
@@ -241,10 +433,50 @@ only when the whole chain cannot serve. That is what #15189's
 accepted sockets, 35% warn / 60% page). Per-leg degraded events do not move
 those ratios.
 
-Grafana split `alerts/live-stt.json` and the combined export cover terminal chain
-exhaustion, per-leg error ratios, authentication deaths, overflow ratio,
-sustained cap occupancy and batch POST error ratio. Traffic floors suppress
-ratio noise; saturation uses a dwell gauge. Existing #15189 fallback alerts and
+Grafana split `alerts/live-stt.json` and the combined export cover per-leg
+error ratios, authentication deaths, overflow ratio, sustained cap occupancy
+and batch POST error ratio. Traffic floors suppress ratio noise; saturation
+uses a dwell gauge. The former `omi-stt-chain-terminal` rule was deleted
+(2026-09-26): it read `omi_stt_chain_exhausted_total`, which the legacy
+connect path never emits, so it sat unfirable through the whole 2026-09-26
+prod incident; chain exhaustion is covered by #15189's
+`omi-stt-chain-exhausted-warn` / `-page` on `omi_fallback_total` plus the
+headline session-outcome page below.
+
+2026-09-26 additions (live-transcription health):
+
+- `omi_live_session_transcript_outcome_total{outcome}` — the headline SLI,
+  emitted exactly once per backend-STT listen session at teardown
+  (`routers/listen/runtime.py::_record_session_transcript_outcome`).
+  `transcribed` = at least one nonempty transcript batch was delivered;
+  `no_transcript` = session ended without one (including STT-terminal
+  failures, which never get the short-session excuse); `too_short` = under
+  ~10 s of audio or zero VAD speech on a clean teardown — excluded from the
+  success ratio so quiet sessions cannot page. Custom-STT sessions are not
+  counted. Unit = one accepted WebSocket: a client reconnect counts once per
+  socket (the runtime cannot see the prior socket's transcripts without
+  cross-connection state).
+- `omi-live-transcription-success-low` — **PAGE**.
+  `transcribed / (transcribed + no_transcript) < 0.90` for 5 m with a
+  `>= 50 counted sessions / 5 m` volume guard. This is the alert the
+  2026-09-26 incident did not have.
+- `omi_stt_provider_connect_total{provider,outcome,error_class}` — recorded
+  on every connect path (legacy order and configured chain) with bounded
+  error classes `budget|auth|server_error|timeout|capability|other`.
+  `omi-stt-leg-error-rate` now reads it instead of the configured-chain-only
+  `omi_stt_leg_attempts_total`.
+- `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
+  mirror of the process-local breakers; sum across the listen job for "pods
+  with this provider benched".
+- `omi_stt_provider_retired{provider}` — deployment config
+  (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
+  hosted Deepgram is intentionally unfunded). The per-provider budget page
+  and the leg-error rule subtract retired providers so an unfunded leg
+  cannot fire forever.
+
+The Backend-listen dashboard has a "Live transcription health" row: headline
+%, sessions by outcome, per-provider sessions served and connect success %,
+breaker-open pods, and connect failures by error class. Existing #15189 fallback alerts and
 #15218 budget/quota page remain; the auth rule excludes budget refusals to avoid
 duplicate pages. An initialization-terminal rule on
 `omi_live_stt_terminal_failures_total{phase="initialization"}` is **not**

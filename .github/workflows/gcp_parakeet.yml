@@ -77,11 +77,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE }}/Dockerfile .
+          docker build -t "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" -f backend/${{ env.SERVICE }}/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/parakeet/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}"
+          docker push "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -96,11 +96,33 @@ jobs:
 
       - name: Verify rollout
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout=600s; then
+          rollout_timeout=600s
+          kubectl_context=()
+          if [[ "${{ github.event.inputs.environment }}" == "development" ]]; then
+            rollout_timeout=2100s
+            kubectl_context=(--context gke_based-hardware-dev_us-central1_dev-omi-gke)
+          fi
+          if ! kubectl "${kubectl_context[@]}" -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout="$rollout_timeout"; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }} || true
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }}
+
+      - name: Canary deployed dev Parakeet batch transcription
+        if: github.event.inputs.environment == 'development'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ vars.GCP_PROJECT_ID }}" != "based-hardware-dev" || "${{ vars.ENV }}" != "dev" || "${{ vars.GKE_CLUSTER }}" != "dev-omi-gke" ]]; then
+            echo "::error::Refusing Parakeet canary outside the dev project and cluster"
+            exit 1
+          fi
+          kubectl --context gke_based-hardware-dev_us-central1_dev-omi-gke \
+            -n dev-omi-backend port-forward svc/dev-omi-parakeet 18080:8080 \
+            > /tmp/parakeet-canary-port-forward.log 2>&1 &
+          forward_pid=$!
+          trap 'kill "$forward_pid" 2>/dev/null || true' EXIT
+          python3 backend/scripts/parakeet_dev_canary.py
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

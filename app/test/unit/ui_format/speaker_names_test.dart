@@ -63,6 +63,17 @@ void main() {
     expect(names.forSegment(segments[0], person: person('x', 'Grace')), 'Grace');
   });
 
+  test('unresolved chunk ids do not appear as dozens of people', () {
+    final segments = [seg(0, isUser: true), seg(27), seg(28, personId: 'p1'), seg(30)];
+    final names = SpeakerNames.forSegments(
+      segments,
+      people: [person('p1', 'Ada')],
+      unresolved: true,
+      l10n: en,
+    );
+    expect(segments.map(names.forSegment), ['You', 'Speaker ?', 'Ada', 'Speaker ?']);
+  });
+
   test('owner name replaces "You" only when given', () {
     final segments = [seg(0, isUser: true)];
     expect(SpeakerNames.forSegments(segments, l10n: en).forSegment(segments[0]), 'You');

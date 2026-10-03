@@ -11,7 +11,10 @@ import logging
 import os
 import threading
 import time
+import weakref
 from typing import Any, Callable, Final
+
+from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,7 @@ class ProviderCircuitBreaker:
         serve_error_cooldown_seconds: float | None = None,
         serve_error_successes_to_close: int = 3,
         account_cooldown_seconds: float | None = None,
+        provider_label: str | None = None,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError('failure_threshold must be >= 1')
@@ -119,6 +123,45 @@ class ProviderCircuitBreaker:
         self._account_cooldown: float | None = None
         self._generation = 0
         self._lock = threading.RLock()
+        # Observability only: publishes omi_stt_provider_circuit_open on every
+        # state transition. None (tests, untagged constructions) disables it;
+        # publishing must never influence or fail the breaker itself.
+        self._provider_label = provider_label
+        self._publish_state()
+        if provider_label is not None:
+            _register_published_breaker(self)
+
+    def _publish_state(self) -> None:
+        """Mirror the current bench state onto the per-pod gauge. Never raises.
+
+        kind=account: the 402/balance bench is actively holding the provider
+        out (cooldown not yet elapsed). kind=selection: the connect/serve bench
+        has the circuit fully open. An open bench whose cooldown has already
+        elapsed publishes 0 for both kinds: the next ``allow_request`` would
+        flip it half-open and admit a probe, so it is not refusing traffic.
+        half_open means a probe is in flight — that is admitting traffic, not
+        refusing it, so neither gauge is set.
+        """
+
+        if self._provider_label is None:
+            return
+        try:
+            with self._lock:
+                elapsed = self._clock() - self._opened_at
+                account_open = (
+                    self._account_cooldown is not None and self._state == 'open' and elapsed < self._account_cooldown
+                )
+                selection_open = (
+                    self._account_cooldown is None and self._state == 'open' and elapsed < self._active_cooldown()
+                )
+            OMI_STT_PROVIDER_CIRCUIT_OPEN.labels(provider=self._provider_label, kind='account').set(
+                1 if account_open else 0
+            )
+            OMI_STT_PROVIDER_CIRCUIT_OPEN.labels(provider=self._provider_label, kind='selection').set(
+                1 if selection_open else 0
+            )
+        except Exception:
+            pass
 
     def _active_cooldown(self) -> float:
         if self._account_cooldown is not None:
@@ -184,6 +227,7 @@ class ProviderCircuitBreaker:
                     return False
                 self._state = 'half_open'
                 self._probes_in_flight = 0
+                self._publish_state()
             limit = 1 if self._account_cooldown is not None else max(1, max_probes)
             if self._probes_in_flight >= limit:
                 return False
@@ -224,6 +268,7 @@ class ProviderCircuitBreaker:
             # previous ladder had climbed.
             self._serve_error_events = 0
             self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._publish_state()
 
     def record_failure(self) -> None:
         with self._lock:
@@ -234,6 +279,7 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 if self._opened_by_serve_error:
                     self._remaining_successes_to_close = self._serve_error_successes_to_close
+                self._publish_state()
                 return
             self._failures += 1
             if self._failures >= self._failure_threshold:
@@ -242,6 +288,7 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 self._opened_by_serve_error = False
                 self._remaining_successes_to_close = 1
+                self._publish_state()
 
     def record_serve_failure(self) -> None:
         """Open the circuit after a provider died while serving a session.
@@ -274,6 +321,7 @@ class ProviderCircuitBreaker:
                 self._serve_error_cooldown_seconds, self._serve_error_events - 1
             )
             self._remaining_successes_to_close = self._serve_error_successes_to_close
+            self._publish_state()
 
     def record_rejection(self, reason: str) -> None:
         if reason in EXPECTED_REJECTIONS:
@@ -332,6 +380,7 @@ class ProviderCircuitBreaker:
             self._account_cooldown = max(1, cooldown_seconds)
             self._opened_by_serve_error = False
             self._remaining_successes_to_close = 1
+            self._publish_state()
 
     def observe_serving(self) -> None:
         """Record that the session admitted against this provider actually served.
@@ -371,6 +420,88 @@ class ProviderCircuitBreaker:
 
         return settle, settle
 
+    def refresh_gauge_if_account_bench_elapsed(self) -> None:
+        """Publish the gauges when this breaker's account bench has elapsed.
+
+        Read-only observation of the clock: only an open, account-armed bench
+        whose cooldown has expired republishes (as 0 for both kinds — the next
+        ``allow_request`` would admit a probe). Breaker state is never mutated,
+        so the periodic refresh below cannot change admit/reject behavior.
+        """
+
+        with self._lock:
+            if self._account_cooldown is None or self._state != 'open':
+                return
+            if self._clock() - self._opened_at < self._account_cooldown:
+                return
+        self._publish_state()
+
+
+# Periodic refresh of the published breaker gauges. The account bench holds a
+# 402'd provider for up to 30 minutes and, while it stands, no dial happens —
+# so no transition can clear the gauge. Without a clock-driven refresh the
+# budget alert that reads kind=account would keep paging after a top-up until
+# some unrelated dial landed on the provider (2026-09-26 review).
+_CIRCUIT_GAUGE_REFRESH_SECONDS: Final[float] = float(os.getenv('STT_CIRCUIT_GAUGE_REFRESH_SECONDS', '15'))
+_published_breakers: 'weakref.WeakSet[ProviderCircuitBreaker]' = weakref.WeakSet()
+_gauge_refresh_thread_started = False
+# Rate limit for refresh-failure logs: one warning per window, debug between,
+# so a persistently failing refresh cannot emit a line every 15 seconds.
+_GAUGE_REFRESH_FAILURE_LOG_SECONDS: Final[float] = 600.0
+_last_gauge_refresh_failure_log = 0.0
+
+
+def _register_published_breaker(breaker: 'ProviderCircuitBreaker') -> None:
+    global _gauge_refresh_thread_started
+    _published_breakers.add(breaker)
+    if _gauge_refresh_thread_started:
+        return
+    _gauge_refresh_thread_started = True
+    threading.Thread(target=_circuit_gauge_refresh_loop, name='stt-circuit-gauge-refresh', daemon=True).start()
+
+
+def _circuit_gauge_refresh_loop() -> None:
+    while True:
+        time.sleep(_CIRCUIT_GAUGE_REFRESH_SECONDS)
+        _gauge_refresh_iteration()
+
+
+def _gauge_refresh_iteration() -> None:
+    """One loop turn; never raises.
+
+    The loop thread is started once (_gauge_refresh_thread_started stays true),
+    so an iteration that escapes kills the refresh for the life of the process
+    and kind=account sticks at 1. list(_published_breakers) itself can raise —
+    a WeakSet mutated mid-iteration surfaces as RuntimeError — so the guard
+    wraps the whole iteration, not just the per-breaker publishes.
+    """
+    global _last_gauge_refresh_failure_log
+    try:
+        refresh_published_circuit_gauges()
+    except Exception:
+        now = time.monotonic()
+        if now - _last_gauge_refresh_failure_log >= _GAUGE_REFRESH_FAILURE_LOG_SECONDS:
+            _last_gauge_refresh_failure_log = now
+            logger.warning('Published circuit gauge refresh failed; retrying next interval', exc_info=True)
+        else:
+            logger.debug('Published circuit gauge refresh failed; retrying next interval', exc_info=True)
+
+
+def refresh_published_circuit_gauges() -> None:
+    """Re-publish gauges whose account bench has elapsed on the clock alone.
+
+    Only elapsed account benches are refreshed: every other state already
+    published the same value at its transition, so re-publishing it cannot
+    change anything. Never raises, and never mutates breaker state — this is
+    the read side observing the clock, not a dial.
+    """
+
+    for breaker in list(_published_breakers):
+        try:
+            breaker.refresh_gauge_if_account_bench_elapsed()
+        except Exception:
+            continue
+
 
 def soniox_circuit_from_env() -> ProviderCircuitBreaker:
     """Keep the historical env lookup until the configured live chain is enabled."""
@@ -382,4 +513,8 @@ def soniox_circuit_from_env() -> ProviderCircuitBreaker:
     else:
         threshold = os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')
         cooldown = os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')
-    return ProviderCircuitBreaker(failure_threshold=int(threshold), cooldown_seconds=float(cooldown))
+    return ProviderCircuitBreaker(
+        failure_threshold=int(threshold),
+        cooldown_seconds=float(cooldown),
+        provider_label='soniox',
+    )

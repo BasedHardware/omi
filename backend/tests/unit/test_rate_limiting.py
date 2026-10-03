@@ -666,6 +666,9 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "test:prompt",
             "apps:generate_prompts",
             "apps:twitter_initial_message",
+            "speaker_tag_prompts:list",
+            "speaker_tag_prompts:clip",
+            "speaker_tag_prompts:answer",
         ]
         for policy in used_policies:
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")
@@ -848,7 +851,7 @@ class TestRouterWiring(unittest.TestCase):
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
         mcp_source = open("routers/mcp.py", encoding='utf-8').read()
-        self.assertIn("min(limit, 25 if include_transcript else 100)", developer_source)
+        self.assertIn("limit = max(1, min(limit, 200))", developer_source)
         self.assertIn("min(limit, 200)", mcp_source)
 
     def test_integration_router_has_rate_limits(self):

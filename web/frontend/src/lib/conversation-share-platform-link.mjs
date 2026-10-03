@@ -5,8 +5,7 @@
 
 import { shareHost } from './share-base-url.mjs';
 
-const PLAY_STORE =
-  'https://play.google.com/store/apps/details?id=com.friend.ios';
+const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.friend.ios';
 
 /**
  * @param {string} userAgent
@@ -33,8 +32,8 @@ export function getOmiPlatformDeepLink(userAgent, path, options = {}) {
         PLAY_STORE,
       )};end`
     : isIOS
-      ? `omi://${host}/${normalized}`
-      : 'https://omi.me';
+    ? `omi://${host}/${normalized}`
+    : 'https://omi.me';
 }
 
 /**
@@ -43,6 +42,26 @@ export function getOmiPlatformDeepLink(userAgent, path, options = {}) {
  * @param {{ shareHost?: string }} [options]
  * @returns {string}
  */
-export function getConversationSharePlatformLink(userAgent, conversationId, options = {}) {
+export function getConversationSharePlatformLink(
+  userAgent,
+  conversationId,
+  options = {},
+) {
   return getOmiPlatformDeepLink(userAgent, `conversations/${conversationId}`, options);
+}
+
+const APP_STORE = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+
+/**
+ * Where "Get Omi" sends someone who may not have the app yet: the store for
+ * their phone, otherwise the website. Unlike the deep link above, this never
+ * uses the omi:// scheme, which does nothing on an iPhone without Omi.
+ *
+ * @param {string} userAgent
+ * @returns {string}
+ */
+export function getOmiInstallLink(userAgent) {
+  if (/android/i.test(userAgent)) return PLAY_STORE;
+  if (/iphone|ipad|ipod/i.test(userAgent)) return APP_STORE;
+  return 'https://omi.me';
 }

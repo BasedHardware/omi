@@ -15,7 +15,7 @@ def _conversation(cid='c1', hours_ago=2, segments=None, **extra):
         'id': cid,
         'started_at': NOW - timedelta(hours=hours_ago),
         'status': 'completed',
-        'audio_files': [{'chunk_timestamps': [1.0]}],
+        'audio_files': [{'chunk_timestamps': [(NOW - timedelta(hours=hours_ago)).timestamp()], 'duration': 300.0}],
         'structured': {'title': 'Coffee chat'},
         'transcript_segments': segments or [],
         **extra,
@@ -97,6 +97,24 @@ def test_other_voice_between_segments_splits_the_clip():
         ]
     )
     assert _select([conversation]) == []
+
+
+def test_unplaced_text_breaks_speaker_clip_run():
+    segments = [
+        _segment('a', 0, 0, 3),
+        _segment('unknown', 0, 3, 3, audio_alignment='unplaced'),
+        _segment('b', 0, 3, 6),
+    ]
+    runs = selection._runs(segments, set())
+    assert [run.segment_ids for run in runs] == [('a',), ('b',)]
+
+
+def test_vad_capture_run_boundary_splits_speaker_clip_run():
+    segments = [
+        _segment('a', 0, 0, 3, audio_capture_run=0),
+        _segment('b', 0, 4, 7, audio_capture_run=5 * 16000),
+    ]
+    assert [run.segment_ids for run in selection._runs(segments, set())] == [('a',), ('b',)]
 
 
 def test_clip_overlapping_another_diarized_voice_is_not_asked():
@@ -244,3 +262,175 @@ def test_prompt_id_is_stable():
     assert selection.prompt_id('c', 1, SpeakerTagPromptKind.identify) != selection.prompt_id(
         'c', 1, SpeakerTagPromptKind.owner_check
     )
+
+
+def test_drifted_legacy_window_before_first_chunk_is_not_offered():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 45.61, 55.61)],
+        audio_files=[{'chunk_timestamps': [started.timestamp() + 2692], 'duration': 60.0}],
+    )
+    assert _select([conversation]) == []
+
+
+def test_legacy_window_after_file_end_is_not_offered():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 95.0, 105.0)],
+        audio_files=[{'chunk_timestamps': [started.timestamp()], 'duration': 92.3}],
+    )
+    assert _select([conversation]) == []
+
+
+def test_v2_window_requires_validated_span_coverage():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10, 20)],
+        audio_timeline={'version': 2},
+        audio_files=[
+            {
+                'chunk_timestamps': [started.timestamp()],
+                'chunk_spans': [{'start': started.timestamp(), 'end': started.timestamp() + 8}],
+                'duration': 30.0,
+            }
+        ],
+    )
+    assert _select([conversation]) == []
+    conversation['audio_files'][0]['chunk_spans'][0]['end'] = started.timestamp() + 25
+    assert len(_select([conversation])) == 1
+
+
+def test_legacy_playback_span_and_missing_duration_do_not_claim_coverage():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10, 20)],
+        audio_files=[{'chunk_timestamps': [started.timestamp()]}],
+        conversation_audio={'spans': [{'wall_offset': 0, 'len': 149.4}]},
+    )
+    assert _select([conversation]) == []
+
+
+def test_misaligned_merged_sync_candidate_requires_content_verification():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10.28, 20.28)],
+        audio_files=[{'chunk_timestamps': [started.timestamp(), started.timestamp() + 88.2], 'duration': 92.3}],
+        conversation_audio={'spans': [{'wall_offset': 0, 'len': 149.4}]},
+        sync_merged_from=['donor'],
+        sync_live_target=True,
+    )
+    attempts = []
+    prompts = selection.select_prompts(
+        [conversation],
+        now=NOW,
+        owner_has_voice=False,
+        named_allowed=True,
+        answered=set(),
+        people={},
+        verify=lambda row, prompt, text: attempts.append((prompt.clip_start, prompt.clip_end, text)) or False,
+    )
+    assert prompts == []
+    assert attempts and attempts[0][:2] == (10.28, 20.28)
+
+
+def test_verification_attempts_are_bounded():
+    conversations = [_conversation(f'c{i}', segments=[_segment('speech', 0, 10, 20)]) for i in range(8)]
+    attempts = []
+    prompts = selection.select_prompts(
+        conversations,
+        now=NOW,
+        owner_has_voice=False,
+        named_allowed=True,
+        answered=set(),
+        people={},
+        verify=lambda row, prompt, text: attempts.append(row['id']) or False,
+        max_verifications=4,
+    )
+    assert prompts == [] and len(attempts) == 4
+
+
+def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projection():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 8, is_user=True, speaker_identity_status='ambiguous'),
+            _segment('b', 1, 8, 16, is_user=False, speaker_identity_status='ambiguous'),
+        ]
+    )
+    prompts = _select([conversation], named_allowed=False)
+    assert len(prompts) == 1
+    assert prompts[0].kind == SpeakerTagPromptKind.owner_check
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert prompts[0].suggested_person_id is None
+
+
+def _select_with(conversations, **extra):
+    return selection.select_prompts(
+        conversations,
+        now=NOW,
+        owner_has_voice=True,
+        named_allowed=True,
+        answered=set(),
+        prior_enabled=extra.pop('prior_enabled', True),
+        **extra,
+    )
+
+
+def test_ignored_voice_is_never_asked_again():
+    conversation = _conversation(segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11)])
+    assert _select_with([conversation], people={})
+    assert _select_with([conversation], people={}, ignored={'c1:1'}) == []
+
+
+def test_pinned_near_miss_on_unnamed_voice_asks_about_that_person():
+    candidates = [{'person_id': 'p2', 'level': 2, 'suggest': True}, {'person_id': 'p1', 'level': 1}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=candidates)]
+    )
+    prompts = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned={'p2'})
+    assert prompts[0].kind == SpeakerTagPromptKind.confirm_person
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert prompts[0].suggested_person_id == 'p2' and prompts[0].suggested_person_name == 'Maya'
+    # A suggestion for someone no longer pinned falls back to "Who is this?".
+    fallback = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned=set())
+    assert fallback[0].kind == SpeakerTagPromptKind.identify
+
+
+def test_identify_candidates_rank_by_voice_match_pinned_first_then_recency():
+    recent = _conversation('c0', hours_ago=5, segments=[_segment('z', 0, 0, 2, person_id='p4')])
+    voice = [{'person_id': 'p1', 'level': 2}, {'person_id': 'p2', 'level': 2}, {'person_id': 'p3', 'level': 3}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=voice)]
+    )
+    people = {'p1': 'Sam', 'p2': 'Jordan', 'p3': 'Alex', 'p4': 'Priya'}
+    prompts = _select_with([conversation, recent], people=people, pinned={'p2'})
+    identify = next(p for p in prompts if p.kind == SpeakerTagPromptKind.identify)
+    assert [c.person_id for c in identify.candidates] == ['p3', 'p2', 'p1', 'p4']
+    assert [c.match_level for c in identify.candidates] == [3, 2, 2, None]
+    assert [c.pinned for c in identify.candidates] == [False, True, False, False]
+    assert identify.suggested_person_ids == ['p3', 'p2', 'p1', 'p4']
+
+
+def test_malformed_voice_candidates_are_ignored():
+    merged = selection.run_voice_candidates(
+        [
+            {'id': 'a', 'voice_candidates': [{'person_id': 'p1', 'level': 1}, 'junk', {'person_id': 'p2', 'level': 9}]},
+            {'id': 'b', 'voice_candidates': [{'person_id': 'p1', 'level': 2, 'suggest': True}, {'level': 2}]},
+            {'id': 'c', 'voice_candidates': 'nope'},
+            {'id': 'x', 'voice_candidates': [{'person_id': 'p9', 'level': 3}]},
+        ],
+        ['a', 'b', 'c'],
+    )
+    assert merged == {'p1': {'level': 2, 'suggest': True}}
+
+
+def test_flag_off_ignores_persisted_pinned_candidates(monkeypatch):
+    monkeypatch.setenv('PINNED_SPEAKER_PRIOR_ENABLED', 'false')
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 3, is_user=True),
+            _segment('b', 1, 3, 11, voice_candidates=[{'person_id': 'p2', 'level': 2, 'suggest': True}]),
+        ]
+    )
+    prompt = _select_with([conversation], people={'p2': 'Maya'}, pinned={'p2'}, prior_enabled=False)[0]
+    assert prompt.kind == SpeakerTagPromptKind.identify
+    assert prompt.suggested_person_id is None
