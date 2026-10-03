@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import struct
+import time
 
 import pytest
 
@@ -744,17 +745,25 @@ async def test_spans_session_negotiates_the_timeline_handshake():
 @pytest.mark.anyio
 async def test_spans_session_without_ack_keeps_legacy_byte_semantics(monkeypatch):
     """An unacknowledged spans session must not let projected starts reach the wire."""
-    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
     connect_calls = []
-    ws = FakePusherWebSocket()
+    uncertain = FakePusherWebSocket()
+    replacement = FakePusherWebSocket()
+    sockets = [uncertain, replacement]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        connect_calls.append((uid, sample_rate, retries, is_active, audio_timeline))
+        return sockets.pop(0)
+
     session = make_session(
-        ws=ws,
         config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 1_000_000},
-        connect_calls=connect_calls,
+        deps_overrides={'connect_to_pusher': connector, 'monotonic': time.monotonic},
     )
     await session.connect()
 
     assert connect_calls[0][4] == AUDIO_TIMELINE_PROTOCOL
+    assert connect_calls[1][4] is None
+    assert session.pusher_ws is replacement
     assert not session.audio_timeline_active
     assert not session.audio_timeline_suspended
 
@@ -765,7 +774,8 @@ async def test_spans_session_without_ack_keeps_legacy_byte_semantics(monkeypatch
     session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=101.5)
     await session._audio_bytes_flush()
 
-    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert [frame for frame in uncertain.sent if frame_type(frame) == 101] == []
+    audio_frames = [frame for frame in replacement.sent if frame_type(frame) == 101]
     assert len(audio_frames) == 1
     timestamp = struct.unpack('d', audio_frames[0][4:12])[0]
     assert timestamp == 101.5 - (2 * rate * 2) / (rate * 2)
@@ -796,7 +806,7 @@ async def test_spans_session_ack_enables_projected_runs_and_gap_splits():
 
 @pytest.mark.anyio
 async def test_spans_capability_loss_mid_recording_withholds_audio_then_resumes(monkeypatch):
-    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
     capable = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
     capable_again = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
     incapable = FakePusherWebSocket()
@@ -875,3 +885,130 @@ async def test_replacement_socket_reannounces_conversation_before_audio():
     assert [frame_type(frame) for frame in second.sent] == [103, 101]
     assert second.sent[0][4:].decode('utf-8') == 'conv-1'
     assert second.sent[1][12:] == b'ijkl'
+
+
+@pytest.mark.anyio
+async def test_late_ack_replaces_uncertain_socket_with_legacy_replacement(monkeypatch, caplog):
+    """A timeline-negotiated socket that never ACKs is unverifiable: it must be
+    closed and replaced by a socket connected without the timeline query.
+    Legacy grouping/stamping may only ever reach the replacement."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
+    uncertain = FakePusherWebSocket()
+    replacement = FakePusherWebSocket()
+    connect_queries = []
+    sockets = [uncertain, replacement]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        connect_queries.append(audio_timeline)
+        return sockets.pop(0)
+
+    session = make_session(
+        config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 1_000_000},
+        deps_overrides={'monotonic': time.monotonic},
+    )
+    session.deps.connect_to_pusher = connector
+    await session.connect()
+
+    assert connect_queries == [AUDIO_TIMELINE_PROTOCOL, None]
+    assert uncertain.closed_codes, 'the uncertain socket must be closed before fallback'
+    assert session.pusher_connected
+    assert session.pusher_ws is replacement
+    assert not session.audio_timeline_active
+    assert not session.audio_timeline_suspended
+    assert 'component=pusher from=audio_timeline to=legacy_audio' in caplog.text
+
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1', start_wall=99.9)
+    session.audio_bytes_send(b'efgh', received_at=101.0, conversation_id='conv-1', start_wall=101.0)
+    await session._audio_bytes_flush()
+
+    assert [frame_type(frame) for frame in uncertain.sent] == [], 'no 101 or 103 may reach the uncertain socket'
+    assert [frame_type(frame) for frame in replacement.sent] == [103, 101]
+    assert replacement.sent[0][4:].decode('utf-8') == 'conv-1'
+    assert replacement.sent[1][12:] == b'abcdefgh'
+    assert struct.unpack('d', replacement.sent[1][4:12])[0] == 101.0 - (8 / (8000 * 2))
+
+
+@pytest.mark.anyio
+async def test_late_ack_failed_replacement_leaves_buffered_runs_disconnected(monkeypatch):
+    """A failed replacement connect must leave the session disconnected and the
+    buffered audio intact for a later attempt — never flushed on the old socket."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
+    uncertain = FakePusherWebSocket()
+    sockets = [uncertain, None]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        return sockets.pop(0)
+
+    session = make_session(
+        config_overrides={'audio_timeline_spans': True},
+        deps_overrides={'monotonic': time.monotonic},
+    )
+    session.deps.connect_to_pusher = connector
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1', start_wall=99.9)
+    await session.connect()
+
+    assert not session.pusher_connected
+    assert session.pusher_ws is None
+    assert uncertain.closed_codes
+    assert [frame_type(frame) for frame in uncertain.sent] == []
+    assert b''.join(run.data for run in session.audio_runs) == b'abcd'
+    assert session.audio_total_size == 4
+
+
+@pytest.mark.anyio
+async def test_late_ack_close_failure_does_not_fall_back_on_uncertain_socket(monkeypatch):
+    """If closing the uncertain socket fails, the session must not mark it
+    connected nor silently fall back to legacy on it."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
+
+    class FailingCloseWebSocket(FakePusherWebSocket):
+        async def close(self, code=1000):
+            raise RuntimeError('close failed')
+
+    uncertain = FailingCloseWebSocket()
+    replacement = FakePusherWebSocket()
+    sockets = [uncertain, replacement]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        return sockets.pop(0)
+
+    session = make_session(
+        config_overrides={'audio_timeline_spans': True},
+        deps_overrides={'monotonic': time.monotonic},
+    )
+    session.deps.connect_to_pusher = connector
+    await session.connect()
+
+    assert not session.pusher_connected
+    assert session.pusher_ws is uncertain, 'a failed close keeps the socket for a later drain attempt'
+    assert sockets == [replacement], 'a failed close must not spend the replacement connection'
+    assert [frame_type(frame) for frame in uncertain.sent] == []
+
+
+@pytest.mark.anyio
+async def test_ack_wait_cancellation_does_not_fall_back():
+    """Cancelling the session while the ACK is pending must re-raise, not
+    swallow the cancellation into a legacy downgrade."""
+    uncertain = FakePusherWebSocket()
+    replacement = FakePusherWebSocket()
+    connect_queries = []
+    sockets = [uncertain, replacement]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        connect_queries.append(audio_timeline)
+        return sockets.pop(0)
+
+    session = make_session(
+        config_overrides={'audio_timeline_spans': True},
+        deps_overrides={'monotonic': time.monotonic},
+    )
+    session.deps.connect_to_pusher = connector
+    task = asyncio.create_task(session.connect())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert connect_queries == [AUDIO_TIMELINE_PROTOCOL]
+    assert uncertain.closed_codes == []
+    assert not session.pusher_connected

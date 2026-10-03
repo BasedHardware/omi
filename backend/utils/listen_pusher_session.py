@@ -17,6 +17,7 @@ else:
     WebSocketClientProtocol = Any
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
+from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
     AUDIO_TIMELINE_PROTOCOL,
@@ -683,7 +684,7 @@ class ListenPusherSession:
                 return False
             try:
                 message = await asyncio.wait_for(pusher_ws.recv(), timeout=remaining)
-            except (asyncio.TimeoutError, ConnectionClosed, asyncio.CancelledError):
+            except (asyncio.TimeoutError, ConnectionClosed):
                 return False
             except Exception as e:
                 logger.warning(f"Audio timeline ack read failed: {e} {self.uid} {self.session_id}")
@@ -742,8 +743,34 @@ class ListenPusherSession:
                         f"audio withheld as coverage gap {self.uid} {self.session_id}"
                     )
                 else:
+                    uncertain = self.pusher_ws
+                    try:
+                        await uncertain.close()
+                    except Exception as e:
+                        logger.error(
+                            f"Uncertain pusher socket close failed; staying disconnected {e} {self.uid} {self.session_id}"
+                        )
+                        return
+                    self.pusher_ws = None
+                    connect_kwargs.pop('audio_timeline', None)
+                    self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
+                    if self.pusher_ws is None:
+                        logger.warning(
+                            f"Pusher did not acknowledge audio timeline v2 and replacement connect failed; "
+                            f"audio stays buffered {self.uid} {self.session_id}"
+                        )
+                        return
+                    self.last_synced_conversation_id = None
+                    record_fallback(
+                        component='pusher',
+                        from_mode='audio_timeline',
+                        to_mode='legacy_audio',
+                        reason='other',
+                        outcome='degraded',
+                        log=logger,
+                    )
                     logger.info(
-                        f"Pusher did not acknowledge audio timeline v2; using v1 audio {self.uid} {self.session_id}"
+                        f"Pusher did not acknowledge audio timeline v2; replaced socket with v1 audio {self.uid} {self.session_id}"
                     )
             self.pusher_connected = True
             self.reconnect_state = PusherReconnectState.CONNECTED
