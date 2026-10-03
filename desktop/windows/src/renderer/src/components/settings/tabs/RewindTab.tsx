@@ -354,20 +354,7 @@ export function RewindTab(): React.JSX.Element {
             <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
               Send a test notification
             </button>
-            <textarea
-              rows={2}
-              placeholder="Denylist — one app/site keyword per line (e.g. therapy, salary)"
-              defaultValue={insight.denylist.join('\n')}
-              onBlur={(e) =>
-                void patchInsight({
-                  denylist: e.target.value
-                    .split('\n')
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                })
-              }
-              className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
-            />
+
           </div>
         )}
       </SettingRow>

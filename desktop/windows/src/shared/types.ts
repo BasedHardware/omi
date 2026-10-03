@@ -2581,7 +2581,7 @@ export type GoalGenerateResult =
 /** Shared toast presentation and screen privacy preferences. */
 export type InsightSettings = {
   notificationStyle: InsightNotificationStyle
-  denylist: string[]
+
 }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────

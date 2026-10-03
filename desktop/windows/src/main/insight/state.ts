@@ -5,8 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import type { InsightSettings } from '../../shared/types'
 
 const DEFAULTS: InsightSettings = {
-  notificationStyle: 'omi',
-  denylist: []
+  notificationStyle: 'omi'
 }
 
 function statePath(): string {
@@ -21,8 +20,7 @@ export function getInsightSettings(): InsightSettings {
     if (existsSync(statePath())) {
       const raw = JSON.parse(readFileSync(statePath(), 'utf8')) as Partial<InsightSettings>
       cache = {
-        notificationStyle: raw.notificationStyle === 'native' ? 'native' : 'omi',
-        denylist: Array.isArray(raw.denylist) ? raw.denylist.filter((item) => typeof item === 'string') : []
+        notificationStyle: raw.notificationStyle === 'native' ? 'native' : 'omi'
       }
       return cache
     }
