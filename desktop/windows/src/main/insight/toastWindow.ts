@@ -252,14 +252,14 @@ export function isInsightToastSender(senderID: number): boolean {
 
 export function openProactivityToast(itemID: string): void {
   const delivery = activeDelivery
-  if (!delivery || delivery.itemID !== itemID || !delivery.hooks.isCurrent()) return
+  if (!delivery || delivery.itemID !== itemID || !delivery.rendered || !delivery.hooks.isCurrent()) return
   delivery.hooks.onOpened()
   hideInsightToast()
 }
 
 export function dismissInsightToast(reason: 'dismissed' | 'timeout'): void {
   const delivery = activeDelivery
-  if (delivery?.hooks.isCurrent()) delivery.hooks.onDismissed(reason)
+  if (delivery?.rendered && delivery.hooks.isCurrent()) delivery.hooks.onDismissed(reason)
   hideInsightToast()
 }
 

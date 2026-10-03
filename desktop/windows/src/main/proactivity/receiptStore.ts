@@ -41,6 +41,7 @@ export class ProactivityReceiptStore {
   purge(): void {
     this.state = { ownerID: this.state.ownerID, shown: [], outbox: [] }
     rmSync(this.path, { force: true })
+    rmSync(`${this.path}.tmp`, { force: true })
   }
   private commit(next: State): void {
     this.save(next)

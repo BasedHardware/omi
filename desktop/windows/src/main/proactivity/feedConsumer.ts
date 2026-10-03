@@ -34,7 +34,10 @@ export class ProactivityFeedConsumer {
     const owner = session ? tokenUid(session.token) : null
     if (owner !== this.owner || !owner) {
       this.store?.purge()
-      if (!owner) rmSync(this.path, { force: true })
+      if (!owner) {
+        rmSync(this.path, { force: true })
+        rmSync(`${this.path}.tmp`, { force: true })
+      }
       this.store = null
       this.owner = owner
       this.lastAttempt = 0
@@ -54,7 +57,10 @@ export class ProactivityFeedConsumer {
 
   async refresh(outcomesOnly = false): Promise<void> {
     const epoch = getSessionEpoch()
-    if (this.busy !== null) { if (outcomesOnly) this.scheduleOutboxRetry(); return }
+    if (this.busy !== null) {
+      if (outcomesOnly) this.scheduleOutboxRetry()
+      return
+    }
     if (!outcomesOnly && Date.now() - this.lastAttempt < 30_000) return
     const original = getBackendSession()
     const owner = original && tokenUid(original.token)
@@ -120,7 +126,8 @@ export class ProactivityFeedConsumer {
     } catch (error) {
       if (error instanceof OmiApiError) {
         const seconds = Number(error.response?.headers.get('Retry-After'))
-        if (Number.isFinite(seconds) && seconds > 0) this.retryDelay = Math.max(30_000, seconds * 1000)
+        if (Number.isFinite(seconds) && seconds > 0)
+          this.retryDelay = Math.max(30_000, seconds * 1000)
         if (error.status === 401 && current()) await pullFreshSession()
       }
       console.warn('[proactivity] request deferred for retry')

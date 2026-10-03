@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ProactivityReceiptStore, notificationDeadline } from './receiptStore'
@@ -45,8 +45,10 @@ describe('durable proactivity receipts', () => {
     const b = new ProactivityReceiptStore(file, 'b')
     expect(b.pending).toEqual([])
     expect(b.hasShown('item')).toBe(false)
+    writeFileSync(`${file}.tmp`, 'synthetic interrupted atomic write')
     b.purge()
     expect(existsSync(file)).toBe(false)
+    expect(existsSync(`${file}.tmp`)).toBe(false)
   })
   it('does not count timeout as shown or as an outcome', () => {
     const store = new ProactivityReceiptStore(path(), 'a')

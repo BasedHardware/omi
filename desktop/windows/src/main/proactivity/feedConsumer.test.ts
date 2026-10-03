@@ -77,7 +77,12 @@ describe('feed consumer transport and owner boundary', () => {
   it('retries pending outcomes in the background without polling another feed', async () => {
     const consumer = new ProactivityFeedConsumer(file, async () => true)
     await consumer.refresh()
-    state.present.mock.calls[0][1].onOutcome('item', { action: 'shown', channel: 'feed', surface: 'windows', event_id: 'timer-event' })
+    state.present.mock.calls[0][1].onOutcome('item', {
+      action: 'shown',
+      channel: 'feed',
+      surface: 'windows',
+      event_id: 'timer-event'
+    })
     now += 30_000
     await vi.advanceTimersByTimeAsync(30_000)
     expect(state.outcome).toHaveBeenCalledOnce()
