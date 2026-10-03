@@ -12260,4 +12260,22 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Głos';
+
+  @override
+  String get assistantVoice => 'Głos asystenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Wybrany głos jest wspólny dla wersji mobilnej i desktopowej.';
+
+  @override
+  String get readChatRepliesAloud => 'Czytaj odpowiedzi czatu na głos';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Mówi tylko wtedy, gdy pozwala na to Odpowiedź głosowa.';
+
+  @override
+  String get voicePreviewSample => 'Cześć, jestem Omi. To jest mój głos.';
 }

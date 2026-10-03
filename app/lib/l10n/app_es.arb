@@ -3782,5 +3782,11 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconocerá a {name} la próxima vez.} pending{Esto tarda unos segundos.} disabled{Activa el guardado de voces en Ajustes para que Omi pueda reconocer a {name}.} other{Omi necesita más habla clara de {name} y seguirá intentándolo.}}",
     "speakerLabelEarlierMatches": "Conversaciones anteriores con esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} de esta voz"
+    "speakerLabelTalkTime": "{duration} de esta voz",
+    "assistantVoiceSettingsTitle": "Voz",
+    "assistantVoice": "Voz del asistente",
+    "voiceSharedAcrossDevices": "Tu elección de voz se comparte entre el móvil y el escritorio.",
+    "readChatRepliesAloud": "Leer las respuestas del chat en voz alta",
+    "readChatRepliesAloudDescription": "Solo habla cuando la respuesta de voz lo permite.",
+    "voicePreviewSample": "Hola, soy Omi. Esta es mi voz."
 }

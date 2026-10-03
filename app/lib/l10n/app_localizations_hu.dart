@@ -12269,4 +12269,22 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hang';
+
+  @override
+  String get assistantVoice => 'Asszisztens hangja';
+
+  @override
+  String get voiceSharedAcrossDevices => 'A választott hang megosztott a mobil és az asztali verzió között.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatválaszok felolvasása hangosan';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Csak akkor szólal meg, ha a Hangválasz engedi.';
+
+  @override
+  String get voicePreviewSample => 'Szia, Omi vagyok. Ez az én hangom.';
 }

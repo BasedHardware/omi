@@ -12287,4 +12287,22 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистентот';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Вашиот избор на глас се споделува меѓу мобилен и десктоп.';
+
+  @override
+  String get readChatRepliesAloud => 'Читај ги одговорите од разговорот наглас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Зборува само кога \"Гласовен одговор\" дозволува.';
+
+  @override
+  String get voicePreviewSample => 'Здраво, јас сум Omi. Ова е мојот глас.';
 }

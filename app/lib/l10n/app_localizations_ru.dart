@@ -12263,4 +12263,23 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос ассистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбранный голос используется и на мобильном, и на компьютере.';
+
+  @override
+  String get readChatRepliesAloud => 'Озвучивать ответы в чате';
+
+  @override
+  String get readChatRepliesAloudDescription =>
+      'Озвучивает только тогда, когда это разрешено настройкой «Голосовой ответ».';
+
+  @override
+  String get voicePreviewSample => 'Привет, я Omi. Это мой голос.';
 }

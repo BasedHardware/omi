@@ -12262,4 +12262,22 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stem';
+
+  @override
+  String get assistantVoice => 'Stem van assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Je stemkeuze wordt gedeeld tussen mobiel en desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatantwoorden hardop voorlezen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spreekt alleen als Spraakantwoord dit toestaat.';
+
+  @override
+  String get voicePreviewSample => 'Hoi, ik ben Omi. Dit is mijn stem.';
 }

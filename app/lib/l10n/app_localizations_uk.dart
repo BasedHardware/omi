@@ -12248,4 +12248,22 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ваш вибір голосу спільний для мобільної та комп\'ютерної версій.';
+
+  @override
+  String get readChatRepliesAloud => 'Читати відповіді в чаті вголос';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".';
+
+  @override
+  String get voicePreviewSample => 'Привіт, я Omi. Це мій голос.';
 }

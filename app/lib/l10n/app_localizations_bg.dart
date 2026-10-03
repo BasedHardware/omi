@@ -12268,4 +12268,22 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Избраният от вас глас се споделя между мобилната и десктоп версията.';
+
+  @override
+  String get readChatRepliesAloud => 'Четене на отговорите в чата на глас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Говори само когато „Гласов отговор\" го позволява.';
+
+  @override
+  String get voicePreviewSample => 'Здравей, аз съм Omi. Това е моят глас.';
 }

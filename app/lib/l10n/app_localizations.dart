@@ -21884,6 +21884,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Settings section title for assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get assistantVoiceSettingsTitle;
+
+  /// Row label for the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant Voice'**
+  String get assistantVoice;
+
+  /// Support line under the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice choice is shared across mobile and desktop.'**
+  String get voiceSharedAcrossDevices;
+
+  /// Toggle label for reading chat replies aloud
+  ///
+  /// In en, this message translates to:
+  /// **'Read chat replies aloud'**
+  String get readChatRepliesAloud;
+
+  /// Toggle helper text explaining replies are only spoken when Voice response mode allows it
+  ///
+  /// In en, this message translates to:
+  /// **'Only speaks when Voice response allows it.'**
+  String get readChatRepliesAloudDescription;
+
+  /// Sample text synthesized when previewing an assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Hi, I\'m Omi. This is my voice.'**
+  String get voicePreviewSample;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

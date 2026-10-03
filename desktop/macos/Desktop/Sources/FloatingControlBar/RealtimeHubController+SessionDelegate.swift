@@ -548,7 +548,8 @@ extension RealtimeHubController {
       prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
       FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
         acknowledgement,
-        provider: acknowledgementProvider)
+        provider: acknowledgementProvider,
+        voiceName: session?.assistantVoiceID)
     }
     switch tool {
     case .getTasks:

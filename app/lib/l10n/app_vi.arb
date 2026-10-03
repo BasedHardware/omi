@@ -3782,5 +3782,11 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
     "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
     "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
-    "speakerLabelTalkTime": "{duration} từ giọng nói này"
+    "speakerLabelTalkTime": "{duration} từ giọng nói này",
+    "assistantVoiceSettingsTitle": "Giọng nói",
+    "assistantVoice": "Giọng trợ lý",
+    "voiceSharedAcrossDevices": "Giọng nói bạn chọn được dùng chung trên di động và máy tính.",
+    "readChatRepliesAloud": "Đọc to câu trả lời trong chat",
+    "readChatRepliesAloudDescription": "Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.",
+    "voicePreviewSample": "Chào bạn, mình là Omi. Đây là giọng của mình."
 }

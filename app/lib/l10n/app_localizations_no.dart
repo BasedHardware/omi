@@ -12223,4 +12223,22 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stemme';
+
+  @override
+  String get assistantVoice => 'Assistentstemme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Stemmevalget ditt deles på tvers av mobil og desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Les chatsvar høyt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Snakker bare når Stemmesvar tillater det.';
+
+  @override
+  String get voicePreviewSample => 'Hei, jeg er Omi. Dette er stemmen min.';
 }

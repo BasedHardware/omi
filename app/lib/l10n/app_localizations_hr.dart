@@ -12260,4 +12260,22 @@ class AppLocalizationsHr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaš odabir glasa dijeli se između mobilne i desktop aplikacije.';
+
+  @override
+  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori samo kada to dopusti \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
 }

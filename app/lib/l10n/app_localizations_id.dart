@@ -12235,4 +12235,22 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Asisten';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Bacakan balasan chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
 }

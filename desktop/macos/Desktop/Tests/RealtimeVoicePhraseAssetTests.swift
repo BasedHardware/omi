@@ -134,6 +134,38 @@ final class RealtimeVoicePhraseAssetTests: XCTestCase {
       .fallback)
   }
 
+  func testMismatchedSessionVoiceRefusesTheBundledClip() throws {
+    let phrase = "Let me think that through."
+    let asset = RealtimeVoicePhraseAsset(
+      profile: .geminiCharon, kind: .deeperThinking, phrase: phrase)
+    let url = scratch.appendingPathComponent(asset.fileName)
+    let wav = Self.validWAVFixture()
+    try wav.write(to: url)
+    var loadCount = 0
+
+    XCTAssertEqual(
+      RealtimeVoicePhraseAudioSelection.select(
+        provider: .gemini,
+        kind: .deeperThinking,
+        phrase: phrase,
+        voiceName: "Kore",
+        locator: RealtimeVoicePhraseAssetLocator(roots: [scratch]),
+        load: { _ in
+          loadCount += 1
+          return Data()
+        }),
+      .fallback)
+    XCTAssertEqual(loadCount, 0)
+    let selection = RealtimeVoicePhraseAudioSelection.select(
+      provider: .gemini,
+      kind: .deeperThinking,
+      phrase: phrase,
+      voiceName: "Charon",
+      locator: RealtimeVoicePhraseAssetLocator(roots: [scratch]),
+      load: { try Data(contentsOf: $0) })
+    XCTAssertEqual(selection, .bundled(wav))
+  }
+
   func testBundledPackContainsEveryProviderKindAndPhrase() throws {
     let sourceResourceRoot = Self.sourceResourceRoot
     let sourceLocator = RealtimeVoicePhraseAssetLocator(roots: [sourceResourceRoot])

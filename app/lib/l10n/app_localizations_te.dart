@@ -12274,4 +12274,22 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'వాయిస్';
+
+  @override
+  String get assistantVoice => 'అసిస్టెంట్ వాయిస్';
+
+  @override
+  String get voiceSharedAcrossDevices => 'మీ వాయిస్ ఎంపిక మొబైల్ మరియు డెస్క్‌టాప్‌లో షేర్ చేయబడుతుంది.';
+
+  @override
+  String get readChatRepliesAloud => 'చాట్ సమాధానాలను గట్టిగా చదవండి';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"వాయిస్ రెస్పాన్స్\" అనుమతించినప్పుడు మాత్రమే మాట్లాడుతుంది.';
+
+  @override
+  String get voicePreviewSample => 'హాయ్, నేను Omiని. ఇది నా వాయిస్.';
 }

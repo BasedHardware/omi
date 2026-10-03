@@ -12249,4 +12249,22 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Balss';
+
+  @override
+  String get assistantVoice => 'Asistenta balss';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Jūsu izvēlētā balss tiek koplietota mobilajā un datora lietotnē.';
+
+  @override
+  String get readChatRepliesAloud => 'Izlasīt tērzēšanas atbildes skaļi';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Runā tikai tad, kad to atļauj \"Balss atbilde\".';
+
+  @override
+  String get voicePreviewSample => 'Sveiki, esmu Omi. Šī ir mana balss.';
 }

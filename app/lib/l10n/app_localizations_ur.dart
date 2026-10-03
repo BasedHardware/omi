@@ -12234,4 +12234,22 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'آواز';
+
+  @override
+  String get assistantVoice => 'اسسٹنٹ کی آواز';
+
+  @override
+  String get voiceSharedAcrossDevices => 'آپ کی منتخب آواز موبائل اور ڈیسک ٹاپ دونوں میں مشترک ہے۔';
+
+  @override
+  String get readChatRepliesAloud => 'چیٹ جوابات بلند آواز میں پڑھیں';
+
+  @override
+  String get readChatRepliesAloudDescription => 'صرف تب بولتا ہے جب وائس رسپانس اجازت دے۔';
+
+  @override
+  String get voicePreviewSample => 'ہیلو، میں Omi ہوں۔ یہ میری آواز ہے۔';
 }

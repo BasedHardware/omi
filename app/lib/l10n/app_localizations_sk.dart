@@ -12216,4 +12216,22 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výber hlasu je zdieľaný medzi mobilnou a desktopovou aplikáciou.';
+
+  @override
+  String get readChatRepliesAloud => 'Čítať odpovede četu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hovorí iba vtedy, keď to povolí \"Hlasová odpoveď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, som Omi. Toto je môj hlas.';
 }

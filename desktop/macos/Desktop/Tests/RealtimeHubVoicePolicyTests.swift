@@ -16,6 +16,12 @@ final class RealtimeHubVoicePolicyTests: XCTestCase {
   func testFailoverAlternateResolvesToCedar() {
     XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: RealtimeHubProvider.gemini.alternate), "cedar")
   }
+
+  func testGeminiSpeaksTheSharedAssistantVoice() {
+    XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: .gemini, assistantVoiceID: "Kore"), "Kore")
+    XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: .gemini), "Charon")
+    XCTAssertEqual(RealtimeHubVoicePolicy.voiceName(for: .openai, assistantVoiceID: "Kore"), "cedar")
+  }
 }
 
 /// Through the production payload seams the session builders embed — not the
@@ -32,5 +38,12 @@ final class RealtimeHubSessionVoicePayloadTests: XCTestCase {
     let voiceConfig = speech["voiceConfig"] as? [String: Any]
     let prebuilt = voiceConfig?["prebuiltVoiceConfig"] as? [String: Any]
     XCTAssertEqual(prebuilt?["voiceName"] as? String, "Charon")
+  }
+
+  func testGeminiSetupPayloadSpeaksTheChosenVoice() {
+    let speech = RealtimeHubSession.geminiSpeechConfig(voiceID: "Kore")
+    let voiceConfig = speech["voiceConfig"] as? [String: Any]
+    let prebuilt = voiceConfig?["prebuiltVoiceConfig"] as? [String: Any]
+    XCTAssertEqual(prebuilt?["voiceName"] as? String, "Kore")
   }
 }

@@ -12216,4 +12216,22 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Giọng nói';
+
+  @override
+  String get assistantVoice => 'Giọng trợ lý';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Giọng nói bạn chọn được dùng chung trên di động và máy tính.';
+
+  @override
+  String get readChatRepliesAloud => 'Đọc to câu trả lời trong chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.';
+
+  @override
+  String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
 }

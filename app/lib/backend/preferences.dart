@@ -731,6 +731,18 @@ class SharedPreferencesUtil {
 
   int get voiceResponseMode => getInt('voiceResponseMode', defaultValue: 1);
 
+  set readChatRepliesAloud(bool value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveBool(_userScopedKey('readChatRepliesAloud', ownerUid), value);
+  }
+
+  bool get readChatRepliesAloud {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return false;
+    return getBool(_userScopedKey('readChatRepliesAloud', ownerUid));
+  }
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 

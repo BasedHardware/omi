@@ -12243,4 +12243,22 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Balsas';
+
+  @override
+  String get assistantVoice => 'Asistento balsas';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pasirinktas balsas bendras mobiliesiems ir kompiuteriui.';
+
+  @override
+  String get readChatRepliesAloud => 'Skaityti pokalbio atsakymus garsiai';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Kalba tik tada, kai leidžia \"Balso atsakas\".';
+
+  @override
+  String get voicePreviewSample => 'Sveiki, aš Omi. Tai mano balsas.';
 }

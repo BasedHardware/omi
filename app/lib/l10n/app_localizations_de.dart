@@ -12320,4 +12320,22 @@ class AppLocalizationsDe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stimme';
+
+  @override
+  String get assistantVoice => 'Assistentenstimme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Deine Stimmauswahl wird auf Mobilgerät und Desktop geteilt.';
+
+  @override
+  String get readChatRepliesAloud => 'Chat-Antworten laut vorlesen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spricht nur, wenn die Sprachantwort es zulässt.';
+
+  @override
+  String get voicePreviewSample => 'Hallo, ich bin Omi. Das ist meine Stimme.';
 }

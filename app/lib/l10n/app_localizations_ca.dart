@@ -12292,4 +12292,22 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Veu';
+
+  @override
+  String get assistantVoice => 'Veu de l\'assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La veu que tries es comparteix entre el mòbil i l\'escriptori.';
+
+  @override
+  String get readChatRepliesAloud => 'Llegeix les respostes del xat en veu alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Només parla quan la \"Resposta de veu\" ho permet.';
+
+  @override
+  String get voicePreviewSample => 'Hola, soc l\'Omi. Aquesta és la meva veu.';
 }

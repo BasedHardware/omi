@@ -3782,5 +3782,11 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi впізнає {name} наступного разу.} pending{Це займе кілька секунд.} disabled{Увімкніть збереження голосів у налаштуваннях, щоб Omi міг впізнавати {name}.} other{Omi потрібно більше чіткого мовлення від {name}, і він продовжить спроби.}}",
     "speakerLabelEarlierMatches": "Попередні розмови з цим голосом: {count}",
     "speakerLabelText": "{part, select, likely{Імовірно} soundsLike{Схоже на {name}} notPerson{Не {name}} carried{Досі {name}. Перенесено з вашої останньої розмови.} change{Змінити} alsoTitle{Це теж {name}?} alsoBody{Omi знайшов такий самий голос у попередніх розмовах.} confirmed{Ви підтвердили цю мітку} other{Переглянути}}",
-    "speakerLabelTalkTime": "{duration} цього голосу"
+    "speakerLabelTalkTime": "{duration} цього голосу",
+    "assistantVoiceSettingsTitle": "Голос",
+    "assistantVoice": "Голос асистента",
+    "voiceSharedAcrossDevices": "Ваш вибір голосу спільний для мобільної та комп'ютерної версій.",
+    "readChatRepliesAloud": "Читати відповіді в чаті вголос",
+    "readChatRepliesAloudDescription": "Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".",
+    "voicePreviewSample": "Привіт, я Omi. Це мій голос."
 }
