@@ -2,26 +2,18 @@ import datetime
 import hashlib
 import io
 import json
-import math
 import os
-import struct
 import threading
 import time
 import wave
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
 from utils.executors import postprocess_executor, storage_executor
-
-try:
-    import opuslib
-except Exception as e:
-    opuslib = None
-    _opus_import_error: Optional[Exception] = e
-else:
-    _opus_import_error = None
+from utils.other import audio_opus
+from utils.other.audio_opus import decode_opus_to_pcm, encode_pcm_to_opus
 from google.api_core.exceptions import PreconditionFailed
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
@@ -34,8 +26,16 @@ from database.redis_db import (
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
-from database.audio_timeline import chunk_span, chunk_span_bounds, parse_span_blob_metadata, span_blob_metadata
+from database.audio_timeline import (
+    chunk_span,
+    chunk_span_bounds,
+    get_extension_for_path as _get_extension_for_path,
+    parse_span_blob_metadata,
+    span_blob_metadata,
+    strip_extension as _strip_extension,
+)
 from utils.observability.fallback import record_fallback
+from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db
@@ -57,11 +57,11 @@ _recent_merges: dict[str, tuple[float, str]] = {}
 _RECENT_MERGE_WINDOW = 300
 _MERGE_TRACKER_MAX = 2000
 
-# Opus encoding constants
-OPUS_SAMPLE_RATE = 16000
-OPUS_CHANNELS = 1
-OPUS_FRAME_DURATION_MS = 20  # 20ms frames (standard for voice)
-OPUS_FRAME_SIZE = OPUS_SAMPLE_RATE * OPUS_FRAME_DURATION_MS // 1000  # 320 samples per frame
+OPUS_SAMPLE_RATE = audio_opus.OPUS_SAMPLE_RATE
+OPUS_CHANNELS = audio_opus.OPUS_CHANNELS
+OPUS_FRAME_DURATION_MS = audio_opus.OPUS_FRAME_DURATION_MS
+OPUS_FRAME_SIZE = audio_opus.OPUS_FRAME_SIZE
+opuslib = audio_opus.opuslib
 
 # Valid private cloud sync extensions (longest first for correct matching)
 PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
@@ -224,15 +224,6 @@ def delete_all_user_storage_objects(uid: str) -> int:
                             deleted += 1
             deleted += _delete_owner_bucket_prefix(bucket, prefix)
     return deleted
-
-
-def _get_opuslib() -> Any:
-    if opuslib is None:
-        raise RuntimeError(
-            'Opus support requires opuslib and the native libopus library. '
-            'Install the OS-level Opus package before encoding or decoding .opus audio.'
-        ) from _opus_import_error
-    return opuslib
 
 
 def _get_speech_profiles_bucket(required: bool = False) -> Optional[Any]:
@@ -603,134 +594,6 @@ def download_syncing_temporal_file(file_path: str) -> bool:
 # ************************************************
 
 
-def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
-    """
-    Encode PCM16 audio to Opus.
-
-    Format: 4-byte little-endian packet count, then for each packet:
-    2-byte little-endian length prefix followed by the Opus packet bytes.
-    This allows exact reconstruction on decode.
-
-    Args:
-        pcm_data: Raw PCM16 audio bytes
-        sample_rate: Sample rate in Hz (default 16000)
-        channels: Number of audio channels (default 1)
-
-    Returns:
-        Length-prefixed Opus packets as bytes
-    """
-    opus = _get_opuslib()
-    encoder = opus.Encoder(sample_rate, channels, opus.APPLICATION_VOIP)
-    frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
-    bytes_per_frame = frame_size * channels * 2  # 16-bit = 2 bytes per sample
-
-    packets: List[bytes] = []
-    offset = 0
-    while offset + bytes_per_frame <= len(pcm_data):
-        frame = pcm_data[offset : offset + bytes_per_frame]
-        encoded = encoder.encode(frame, frame_size)
-        packets.append(encoded)
-        offset += bytes_per_frame
-
-    # Encode remaining samples (pad with silence)
-    if offset < len(pcm_data):
-        remaining = pcm_data[offset:]
-        padded = remaining + b'\x00' * (bytes_per_frame - len(remaining))
-        encoded = encoder.encode(padded, frame_size)
-        packets.append(encoded)
-
-    # Pack: [packet_count (4 bytes)] + [original_pcm_len (4 bytes)] + [len (2 bytes) + data] per packet
-    output: bytes = struct.pack('<I', len(packets))
-    output += struct.pack('<I', len(pcm_data))
-    for pkt in packets:
-        output += struct.pack('<H', len(pkt)) + pkt
-
-    return output
-
-
-def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
-    """
-    Decode length-prefixed Opus packets back to PCM16.
-
-    Args:
-        opus_data: Length-prefixed Opus packets (from encode_pcm_to_opus)
-        sample_rate: Sample rate in Hz (default 16000)
-        channels: Number of audio channels (default 1)
-
-    Returns:
-        Raw PCM16 audio bytes
-
-    Raises:
-        ValueError: If opus_data is too short or has invalid header/packet structure
-    """
-    if len(opus_data) < 8:
-        raise ValueError(f"Opus data too short: {len(opus_data)} bytes (need at least 8 for header)")
-
-    frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
-
-    offset = 0
-    packet_count = struct.unpack_from('<I', opus_data, offset)[0]
-    offset += 4
-    original_pcm_len = struct.unpack_from('<I', opus_data, offset)[0]
-    offset += 4
-
-    packets: List[bytes] = []
-    for i in range(packet_count):
-        if offset + 2 > len(opus_data):
-            raise ValueError(f"Truncated Opus data: expected packet {i}/{packet_count} length at offset {offset}")
-        pkt_len = struct.unpack_from('<H', opus_data, offset)[0]
-        offset += 2
-        if offset + pkt_len > len(opus_data):
-            raise ValueError(
-                f"Truncated Opus data: packet {i} needs {pkt_len} bytes at offset {offset}, only {len(opus_data) - offset} available"
-            )
-        packets.append(opus_data[offset : offset + pkt_len])
-        offset += pkt_len
-
-    opus = _get_opuslib()
-    decoder = opus.Decoder(sample_rate, channels)
-
-    pcm_parts: List[bytes] = []
-    for pkt_data in packets:
-        decoded = decoder.decode(pkt_data, frame_size)
-        pcm_parts.append(decoded)
-
-    result = b''.join(pcm_parts)
-    # Trim to original PCM length to remove padding from partial final frame
-    if original_pcm_len > 0 and original_pcm_len < len(result):
-        result = result[:original_pcm_len]
-    return result
-
-
-def _get_extension_for_path(path: str) -> str:
-    """Extract the private cloud sync extension from a GCS path."""
-    if path.endswith('.batch.enc'):
-        return 'batch.enc'
-    elif path.endswith('.batch.bin'):
-        return 'batch.bin'
-    elif path.endswith('.opus.enc'):
-        return 'opus.enc'
-    elif path.endswith('.opus'):
-        return 'opus'
-    elif path.endswith('.enc'):
-        return 'enc'
-    elif path.endswith('.bin'):
-        return 'bin'
-    return 'bin'
-
-
-def _strip_extension(filename: str) -> str:
-    """Strip private cloud sync extension to get the timestamp string.
-
-    Handles both single-chunk filenames (e.g. '1000.000.opus') and
-    batch filenames (e.g. '1000.000-1010.000.batch.bin').
-    """
-    for ext in ('.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin'):
-        if filename.endswith(ext):
-            return filename[: -len(ext)]
-    return filename.rsplit('.', 1)[0]
-
-
 def upload_audio_chunk(
     chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: Optional[str] = None
 ) -> str:
@@ -773,86 +636,6 @@ def upload_audio_chunk(
     return path
 
 
-RECONCILE_MAX_OBJECTS = 64
-RECONCILE_MAX_BYTES = 64 * 1024 * 1024
-RECONCILE_MAX_SECONDS = 10.0
-RECONCILE_MAX_ATTEMPTS = 3
-
-
-def _listed_generation(chunk: Mapping[str, Any]) -> Optional[int]:
-    generation = chunk.get('generation')
-    if not isinstance(generation, int) or isinstance(generation, bool) or generation <= 0:
-        return None
-    return generation
-
-
-def _raw_chunk_object_pcm(
-    bucket: Any, chunk: Mapping[str, Any], uid: str, deadline: float, max_bytes: int
-) -> Tuple[Optional[bytes], int]:
-    """Decode one listed object to raw PCM under the reconciliation budget.
-
-    ``max_bytes`` is the remaining reconciliation byte budget: a listed object
-    whose declared size exceeds it is rejected before any download so the
-    bounded budget can never be overshot. Returns ``(pcm, charged_bytes)``;
-    ``pcm`` is None whenever the evidence is missing, unreadable, unpinned,
-    oversized, or not provably raw PCM.
-    """
-    path = chunk.get('path')
-    if not isinstance(path, str):
-        return None, 0
-    ext = _get_extension_for_path(path)
-    if ext not in ('batch.bin', 'batch.enc', 'bin', 'enc'):
-        return None, 0
-    size = chunk.get('size')
-    if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > max_bytes:
-        return None, 0
-    generation = _listed_generation(chunk)
-    if generation is None:
-        return None, 0
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        return None, 0
-    try:
-        blob_bytes = bucket.blob(path).download_as_bytes(
-            timeout=max(0.001, remaining),
-            retry=None,
-            end=size - 1,
-            if_generation_match=generation,
-        )
-    except Exception:
-        return None, size
-    if len(blob_bytes) != size:
-        return None, size
-    try:
-        pcm = encryption.decrypt_audio_file(blob_bytes, uid) if ext in ('batch.enc', 'enc') else blob_bytes
-    except Exception:
-        return None, size
-    if len(pcm) % 2:
-        return None, size
-    return pcm, size
-
-
-def _span_candidate_offset(chunk: Mapping[str, Any], position: float, sample_rate: int) -> Optional[int]:
-    span = chunk.get('span')
-    if not isinstance(span, Mapping):
-        return None
-    rate = span.get('sample_rate')
-    start = span.get('start')
-    samples = span.get('samples')
-    if not (isinstance(rate, int) and not isinstance(rate, bool) and rate > 0 and rate == sample_rate):
-        return None
-    if not (isinstance(start, (int, float)) and not isinstance(start, bool) and math.isfinite(start)):
-        return None
-    if not (isinstance(samples, int) and not isinstance(samples, bool) and samples > 0):
-        return None
-    offset = round((position - float(start)) * sample_rate)
-    if offset < 0 or offset >= samples:
-        return None
-    if abs((float(start) + offset / sample_rate) - position) > 0.5 / sample_rate:
-        return None
-    return offset
-
-
 def reconcile_audio_chunk_prefix(
     uid: str,
     conversation_id: str,
@@ -862,102 +645,17 @@ def reconcile_audio_chunk_prefix(
     *,
     require_spans: bool = False,
 ) -> Tuple[int, List[str]]:
-    """Count how many leading bytes of ``data`` are provably committed already.
-
-    ``timestamp`` is the sender's original wire timestamp for ``data[0]``.
-    Returns ``(verified_prefix_bytes, committed_paths)``. A verified prefix is
-    bounded identity — the same anchor plus a byte-equal payload — not a
-    global producer id: zero proof is never permission to discard, and it
-    says nothing about bytes beyond what was compared.
-
-    With ``require_spans`` the proof chain uses each object's authoritative
-    span (start + samples + rate) on the half-open sample grid: adjacent
-    committed spans are reconciled across rebatching while every overlapping
-    PCM byte is compared. Legacy proof is deliberately narrower: only the
-    single raw object at the same rounded timestamp anchor may prove a
-    prefix, so placement is never inferred inside arbitrary historical blobs.
-
-    Bounds: the listing is a single bounded full inventory (SDK timeout plus
-    caller deadline, at most 10,000 entries — a larger inventory raises and
-    proves nothing). At most 64 objects totaling 64 MiB of declared object
-    bytes are downloaded within 10 seconds; any oversize candidate rejects
-    before download so the byte cap is never exceeded. Transient listing or
-    download failure also proves nothing — zero proof keeps the retained
-    envelope for a verbatim resend. Reconciliation is not a commit ACK:
-    unavailable proof can still cause a collision or a legacy duplicate.
-    """
-    if not data or sample_rate <= 0:
-        return 0, []
-    try:
-        position = float(timestamp)
-    except (TypeError, ValueError):
-        return 0, []
-    if not math.isfinite(position):
-        return 0, []
-    deadline = time.monotonic() + RECONCILE_MAX_SECONDS
-    bucket = get_private_cloud_sync_bucket()
-    try:
-        remaining = deadline - time.monotonic()
-        chunks = list_audio_chunks(
-            uid,
-            conversation_id,
-            timeout=min(5.0, max(0.001, remaining)),
-            deadline=deadline,
-            max_count=10000,
-        )
-    except Exception:
-        return 0, []
-
-    verified = 0
-    paths: List[str] = []
-    downloads = 0
-    bytes_seen = 0
-    while verified < len(data):
-        if time.monotonic() >= deadline or downloads >= RECONCILE_MAX_OBJECTS or bytes_seen >= RECONCILE_MAX_BYTES:
-            break
-        if require_spans:
-            candidates = []
-            for c in chunks:
-                offset = _span_candidate_offset(c, position, sample_rate)
-                if offset is not None:
-                    candidates.append((c, offset))
-        else:
-            if verified or paths:
-                break
-            anchor = f'{position:.3f}'
-            candidates = []
-            for c in chunks:
-                ts_value = c.get('timestamp')
-                if not isinstance(ts_value, (int, float)) or isinstance(ts_value, bool):
-                    continue
-                if f'{ts_value:.3f}' == anchor and _get_extension_for_path(str(c.get('path'))) in (
-                    'batch.bin',
-                    'batch.enc',
-                    'bin',
-                    'enc',
-                ):
-                    candidates.append((c, 0))
-        if len(candidates) != 1:
-            break
-        chunk, offset_samples = candidates[0]
-        pcm, charged = _raw_chunk_object_pcm(bucket, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
-        downloads += 1
-        bytes_seen += charged
-        if pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
-            break
-        if require_spans:
-            if len(pcm) != chunk['span']['samples'] * 2:
-                break
-            comparable = pcm[offset_samples * 2 :]
-        else:
-            comparable = pcm
-        available = min(len(comparable), len(data) - verified)
-        if available <= 0 or comparable[:available] != data[verified : verified + available]:
-            break
-        verified += available
-        paths.append(chunk['path'])
-        position += available / (sample_rate * 2)
-    return verified, paths
+    """Compose the live storage I/O seams for ``reconcile_committed_prefix``."""
+    return reconcile_committed_prefix(
+        uid,
+        conversation_id,
+        timestamp,
+        data,
+        sample_rate,
+        require_spans=require_spans,
+        bucket=get_private_cloud_sync_bucket(),
+        list_chunks=list_audio_chunks,
+    )
 
 
 def upload_audio_chunks_batch(
