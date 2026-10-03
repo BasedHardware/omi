@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -53,10 +55,25 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
   int _offset = 0;
   int _generation = 0;
 
+  late final ConversationApi _api = ConversationApi(baseUrl: Env.apiBaseUrl ?? '');
+
   DayConversationsFetcher get _fetch =>
       widget.fetchConversations ??
-      ({required endDate, limit = 50, offset = 0, required startDate}) => getConversationsResult(
-          limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
+      ({required endDate, limit = 50, offset = 0, required startDate}) async {
+        // Row-by-row decode: one malformed conversation must not hide every
+        // other valid row for the day behind an error. Rejected rows surface
+        // as partial data instead.
+        final result = await _api.list(
+            limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
+        return switch (result) {
+          ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
+              items: data,
+              ok: true,
+              truncated: truncated || rejectedRows > 0,
+            ),
+          ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false),
+        };
+      };
 
   @override
   void initState() {

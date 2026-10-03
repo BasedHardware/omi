@@ -139,6 +139,30 @@ void main() {
     expect(fetch.calls, hasLength(1), reason: 'a truncated page must not keep paging');
   });
 
+  testWidgets('rejected rows keep pagination alive: later valid tasks stay reachable', (tester) async {
+    final firstPage = List.generate(50, (i) => _task('p1-$i', 'Task $i'));
+    final secondPage = [_task('p2-0', 'Page Two Task')];
+    final fetch = _Fetch(hasMore: true);
+    fetch.pages = (offset) => offset == 0 ? firstPage : secondPage;
+    fetch.rejectedRows = 3;
+    await _pumpPage(tester, day, fetch.call);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // The partial-data notice is visible, but pagination continues.
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('search_partial_retry')), 200);
+    expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget);
+    expect(find.byKey(const ValueKey('day_tasks_load_more')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('day_tasks_load_more')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // The offset skipped the rejected rows; the second page's task is reachable.
+    expect(fetch.calls.last.offset, 53, reason: 'offset includes the rejected wire rows');
+    expect(find.text('Page Two Task'), findsOneWidget);
+  });
+
   testWidgets('an empty truncated page is an error, not an empty day', (tester) async {
     final fetch = _Fetch()..truncated = true;
     await _pumpPage(tester, day, fetch.call);

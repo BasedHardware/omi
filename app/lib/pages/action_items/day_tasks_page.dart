@@ -43,8 +43,9 @@ class _DayTasksPageState extends State<DayTasksPage> {
   bool _failed = false;
   bool _refreshFailed = false;
   bool _loadMoreFailed = false;
-  bool _hasMore = false;
   bool _truncated = false;
+  bool _partial = false;
+  bool _hasMore = false;
   int _offset = 0;
   int _generation = 0;
 
@@ -85,6 +86,7 @@ class _DayTasksPageState extends State<DayTasksPage> {
       _loadMoreFailed = false;
       _hasMore = false;
       _truncated = false;
+      _partial = false;
       _offset = 0;
       if (clearRows) _tasks = [];
     });
@@ -96,7 +98,11 @@ class _DayTasksPageState extends State<DayTasksPage> {
         case ApiSuccess(:final data, :final truncated, :final rejectedRows):
           _tasks = data.actionItems;
           _offset = data.actionItems.length + rejectedRows;
-          _truncated = truncated || data.truncated || rejectedRows > 0;
+          // A rejected wire row is independent: the offset already counts it,
+          // so later valid tasks stay reachable by paging on. Keep the honest
+          // partial notice, but only a server truncation ends pagination.
+          _partial = rejectedRows > 0;
+          _truncated = truncated || data.truncated;
           _hasMore = !_truncated && data.hasMore;
         case ApiFailure():
           if (_tasks.isEmpty) {
@@ -126,7 +132,10 @@ class _DayTasksPageState extends State<DayTasksPage> {
           _offset += data.actionItems.length + rejectedRows;
           final seen = _tasks.map((t) => t.id).toSet();
           _tasks = [..._tasks, ...data.actionItems.where((t) => seen.add(t.id))];
-          _truncated = truncated || data.truncated || rejectedRows > 0 || (data.actionItems.isEmpty && data.hasMore);
+          // Same rule as the first page: rejected rows count toward the
+          // offset but never end pagination on their own.
+          _partial = _partial || rejectedRows > 0;
+          _truncated = truncated || data.truncated || (data.actionItems.isEmpty && data.hasMore);
           _hasMore = !_truncated && data.hasMore;
         case ApiFailure():
           _loadMoreFailed = true;
@@ -270,16 +279,34 @@ class _DayTasksPageState extends State<DayTasksPage> {
       );
     }
     if (_hasMore) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
-        child: Center(
-          child: OmiButton.secondary(
-            key: const ValueKey('day_tasks_load_more'),
-            label: l10n.showMore,
-            size: OmiButtonSize.compact,
-            onPressed: _loadMore,
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Some wire rows were rejected, but paging continues: the offset
+          // already skips them, so later valid tasks remain reachable.
+          if (_partial)
+            Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+              child: OmiPartialNotice(onRetry: () => _loadDay()),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+            child: Center(
+              child: OmiButton.secondary(
+                key: const ValueKey('day_tasks_load_more'),
+                label: l10n.showMore,
+                size: OmiButtonSize.compact,
+                onPressed: _loadMore,
+              ),
+            ),
           ),
-        ),
+        ],
+      );
+    }
+    if (_partial) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+        child: OmiPartialNotice(onRetry: () => _loadDay()),
       );
     }
     return const SizedBox.shrink();

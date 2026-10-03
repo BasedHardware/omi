@@ -97,6 +97,7 @@ class MemoriesProvider extends ChangeNotifier {
   // Connectivity handling for offline sync
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
+  int _syncGeneration = 0;
   int _sessionGeneration = 0;
   int _loadSequence = 0;
   int _ledgerProjectionRevision = 0;
@@ -193,6 +194,10 @@ class MemoriesProvider extends ChangeNotifier {
   bool get showHistory => _collectionView == MemoryCollectionView.history;
   bool get showAll => _collectionView == MemoryCollectionView.all;
   bool get loadFailed => _loadFailed;
+
+  /// A partial load: some pages landed, a later one failed, and the retained
+  /// rows are visible. The page shows a retry notice beside them.
+  bool get showPartialLoadError => _loadFailed && _memories.isNotEmpty;
 
   /// Whether a load attempt has already completed in this session (success or
   /// failure). `_loading` starts `true` before anything was ever fetched, so
@@ -599,6 +604,7 @@ class MemoriesProvider extends ChangeNotifier {
     if (pendingMemories.isEmpty) return;
 
     _isSyncing = true;
+    final syncGeneration = ++_syncGeneration;
     // Release the latch on every exit: a bare guard-return after a session
     // invalidation (delete-all, clear) would otherwise leave _isSyncing stuck
     // true and block every later sync for the provider's lifetime.
@@ -645,7 +651,13 @@ class MemoriesProvider extends ChangeNotifier {
         notifyListeners();
       }
     } finally {
-      _isSyncing = false;
+      // The latch belongs to whichever sync invocation started last. An old
+      // invocation whose session was invalidated (delete-all, account clear)
+      // must not clear the latch a newer invocation already owns: that would
+      // let the next callback double-submit the new account's pending rows.
+      if (syncGeneration == _syncGeneration) {
+        _isSyncing = false;
+      }
     }
   }
 

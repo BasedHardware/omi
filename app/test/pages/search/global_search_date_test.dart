@@ -28,6 +28,7 @@ class _CapturingSource extends GlobalSearchSource {
   final conversationCapture = _Capture();
   int otherKindCalls = 0;
   int dateRecapCalls = 0;
+  DateTime? recapRangeEnd;
   List<ServerConversation> rows = const [];
 
   @override
@@ -58,9 +59,10 @@ class _CapturingSource extends GlobalSearchSource {
   DateTime? recapDate;
 
   @override
-  Future<ApiResult<List<DailySummary>>> recapsOnDate(String query, DateTime date) async {
+  Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) async {
     dateRecapCalls++;
-    recapDate = date;
+    recapDate = start;
+    recapRangeEnd = end;
     return recaps(query);
   }
 
@@ -121,6 +123,7 @@ void main() {
     expect(source.otherKindCalls, 3, reason: 'date filtering must not hide recaps, tasks, or memories');
     expect(source.dateRecapCalls, 1, reason: 'the recap API is queried for the selected local day');
     expect(source.recapDate, expectedStart);
+    expect(source.recapRangeEnd, expectedEnd, reason: 'recaps cover the whole selected range, not just its first day');
     expect(find.text('Bluetooth Talk'), findsOneWidget);
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
   });

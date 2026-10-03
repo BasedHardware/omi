@@ -141,10 +141,13 @@ abstract class GlobalSearchSource {
       {String? speakerId, DateTime? startDate, DateTime? endDate});
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false});
   Future<ApiResult<List<DailySummary>>> recaps(String query);
-  Future<ApiResult<List<DailySummary>>> recapsOnDate(String query, DateTime date) => recaps(query);
+  Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) => recaps(query);
   Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query);
   Future<ApiResult<List<MemorySearchHit>>> memories(String query);
 }
+
+String _dayKey(DateTime day) =>
+    '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
 
 class ApiGlobalSearchSource extends GlobalSearchSource {
   const ApiGlobalSearchSource();
@@ -166,22 +169,34 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
   Future<ApiResult<List<DailySummary>>> recaps(String query) => searchDailySummaries(query);
 
   @override
-  Future<ApiResult<List<DailySummary>>> recapsOnDate(String query, DateTime date) async {
-    final targetDay = DateTime(date.year, date.month, date.day).toIso8601String().substring(0, 10);
+  Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) async {
+    final firstDay = DateTime(start.year, start.month, start.day);
+    final lastDay = DateTime(end.year, end.month, end.day);
+    if (lastDay.isBefore(firstDay)) return const ApiSuccess(<DailySummary>[]);
+    final firstKey = _dayKey(firstDay);
+    final lastKey = _dayKey(lastDay);
     // The list API has no date parameters, so page its reverse-chronological
-    // results until this date is found or we have passed it. Five pages cover
-    // the same 365-day history window as recap search with room for sparse days.
+    // results once, collecting every recap whose day falls inside the range.
+    // Five pages cover the same 365-day history window as recap search with
+    // room for sparse days. The listing is newest-first, so a range is one
+    // contiguous block: keep paging until a page's oldest row predates the
+    // range (or the listing ends) so a block straddling a page boundary is
+    // still collected whole.
+    final byDay = <String, DailySummary>{};
     for (var offset = 0; offset < 500; offset += 100) {
       final result = await getDailySummaries(limit: 100, offset: offset);
       if (!result.ok) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
       for (final recap in result.items) {
-        if (recap.date == targetDay) return ApiSuccess([recap]);
+        final day = recap.date;
+        if (day.compareTo(lastKey) <= 0 && day.compareTo(firstKey) >= 0) byDay[day] = recap;
       }
-      if (result.items.length < 100 || result.items.isEmpty || result.items.last.date.compareTo(targetDay) < 0) {
-        return const ApiSuccess(<DailySummary>[]);
+      if (result.items.length < 100 || result.items.isEmpty || result.items.last.date.compareTo(firstKey) < 0) {
+        break;
       }
     }
-    return const ApiSuccess(<DailySummary>[]);
+    if (byDay.isEmpty) return const ApiSuccess(<DailySummary>[]);
+    final collected = byDay.values.toList()..sort((a, b) => a.date.compareTo(b.date));
+    return ApiSuccess(collected);
   }
 
   @override
@@ -259,6 +274,11 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
 
   DateTime? get _activeStart => _dateQuery.startDate ?? _pickedStart;
   DateTime? get _activeEnd => _dateQuery.endDate ?? _pickedEnd;
+
+  /// The query actually searched: the typed text with any date phrase
+  /// stripped. Rows match this text, so navigation that filters by query
+  /// (memories) must reuse it, not the raw field content.
+  String get _searchedQuery => _activeStart != null || _activeEnd != null ? _dateQuery.query : _query.text.trim();
 
   @override
   void initState() {
@@ -367,7 +387,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
         }).catchError((_) {
           if (!settled) partial = true;
         }),
-        Future.sync(() => hasDate ? source.recapsOnDate(query, start) : source.recaps(query)).then((r) {
+        Future.sync(() => hasDate ? source.recapsInRange(query, start, end ?? start) : source.recaps(query)).then((r) {
           if (settled) return;
           recaps = rows(r);
         }).catchError((_) {
@@ -782,8 +802,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               title: memory.content,
               maxTitleLines: 2,
               onTap: () {
-                _remember(_query.text);
-                context.read<MemoriesProvider>().setSearchQuery(_query.text.trim());
+                _remember(_searchedQuery);
+                context.read<MemoriesProvider>().setSearchQuery(_searchedQuery);
                 routeToPage(context, const MemoriesPage());
               },
             ),

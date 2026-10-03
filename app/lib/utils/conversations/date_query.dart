@@ -61,6 +61,8 @@ const _monthToken =
     '(?:january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec)';
 const _weekdayToken = '(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)';
 const _maxDaysAgo = 3660;
+// "on"/"in" immediately before a date phrase, e.g. "meetings in march".
+final _qualifierRe = RegExp(r'(?:^|\s)(on|in)\s+$', caseSensitive: false);
 
 DateTime? _validDay(int year, int month, int day) {
   if (year <= 0) return null;
@@ -146,10 +148,20 @@ ConversationDateQuery parseConversationDateQuery(String input, {DateTime? now}) 
     if (year <= 0) return null;
     return _monthRange(year, month);
   });
-  scan(RegExp('(?<!\\w)($_monthToken)(?!\\w)', caseSensitive: false), (m) {
-    final month = _months[m.group(1)!.toLowerCase()]!;
-    return _monthRange(today.year, month);
-  });
+  // A bare month word is ambiguous: "may I change my address" and "march
+  // planning notes" are ordinary searches, not May/March filters. Only treat a
+  // bare month as a date when it is the whole query or carries an explicit
+  // on/in qualifier. Month/day and month/year forms above stay unconditional.
+  final bareMonth = RegExp('(?<!\\w)($_monthToken)(?!\\w)', caseSensitive: false);
+  for (final m in bareMonth.allMatches(input)) {
+    final month = _months[m.group(0)!.toLowerCase()];
+    if (month == null) continue;
+    final isEntireQuery = _normalize(input).toLowerCase() == m.group(0)!.toLowerCase();
+    final hasQualifier = _qualifierRe.hasMatch(input.substring(0, m.start));
+    if (!isEntireQuery && !hasQualifier) continue;
+    final range = _monthRange(today.year, month);
+    candidates.add(_Match(m.start, m.end, range.start, range.end));
+  }
   scan(RegExp(r'(?<![\w/])(\d{1,2})/(\d{1,2})(?:/(\d{4}))?(?![\w/])', caseSensitive: false), (m) {
     final month = int.parse(m.group(1)!);
     final day = int.parse(m.group(2)!);
@@ -165,7 +177,7 @@ ConversationDateQuery parseConversationDateQuery(String input, {DateTime? now}) 
   final match = candidates.first;
   var cutStart = match.start;
   final prefix = input.substring(0, match.start);
-  final qualifier = RegExp(r'(?:^|\s)(on|in)\s+$', caseSensitive: false).firstMatch(prefix);
+  final qualifier = _qualifierRe.firstMatch(prefix);
   if (qualifier != null) cutStart = qualifier.start;
   final stripped = _normalize(input.substring(0, cutStart) + input.substring(match.end));
   return ConversationDateQuery(
