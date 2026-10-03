@@ -148,7 +148,7 @@ def test_preferences_are_scoped_per_user():
 
 def _voice_client(monkeypatch, uid='test-uid'):
     db = _FakeDb()
-    monkeypatch.setattr(voice_preferences, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(voice_preferences, 'get_data_plane_firestore_client', lambda: db)
     app = FastAPI()
     app.include_router(tts_router.router)
     app.dependency_overrides[tts_router.auth.get_current_user_uid] = lambda: uid
@@ -180,9 +180,22 @@ def test_user_voice_patch_normalizes_unknown_to_default(monkeypatch):
     assert db.docs['users/test-uid']['assistant_voice_id'] == 'Charon'
 
 
+def test_default_resolver_uses_data_plane_not_compute_client(monkeypatch):
+    data_plane = _FakeDb({'users/u1': {'assistant_voice_id': 'Kore'}})
+    monkeypatch.setattr(voice_preferences, 'get_data_plane_firestore_client', lambda: data_plane)
+
+    def compute_client():
+        raise AssertionError('compute-plane get_firestore_client must not resolve user voice preferences')
+
+    monkeypatch.setattr(voice_preferences, 'get_firestore_client', compute_client, raising=False)
+    assert voice_preferences.get_assistant_voice('u1') == 'Kore'
+    assert voice_preferences.set_assistant_voice('u1', 'Puck') == 'Puck'
+    assert data_plane.docs['users/u1']['assistant_voice_id'] == 'Puck'
+
+
 def test_user_voice_routes_do_not_leak_between_users(monkeypatch):
     db = _FakeDb()
-    monkeypatch.setattr(voice_preferences, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(voice_preferences, 'get_data_plane_firestore_client', lambda: db)
     app = FastAPI()
     app.include_router(tts_router.router)
     current_uid = {'value': 'u1'}
