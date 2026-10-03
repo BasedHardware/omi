@@ -123,6 +123,7 @@ def main():
                 passed = (
                     device("shell", "cat", "/proc/sys/kernel/random/boot_id") == boot_id
                     and active_verified
+                    and "Foreground promotion accepted" in log
                     and (mode == "orphan-stop" or "ACCEPTED" in log)
                     and (mode != "background-stop" or "BACKGROUND_STOP" in log)
                     and f"SURVIVED mode={mode}" in log

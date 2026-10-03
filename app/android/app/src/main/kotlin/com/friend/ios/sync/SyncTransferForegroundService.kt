@@ -103,6 +103,7 @@ class SyncTransferForegroundService : Service() {
             } else {
                 startForeground(SyncTransferKeepAlivePolicy.NOTIFICATION_ID, notification)
             }
+            Log.d(TAG, "Foreground promotion accepted")
         } catch (e: Exception) {
             Log.e(TAG, "Cold-start startForeground failed", e)
         }
