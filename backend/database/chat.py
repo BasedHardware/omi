@@ -811,8 +811,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     writes whatever dict it is handed, so a session with no `created_at` is
     representable — and ordering in the query would make those sessions
     invisible here, stranding a user's existing history behind a brand new
-    session. A session with no timestamp sorts oldest, and its id breaks ties so
-    the answer is stable across calls.
+    session. Untimestamped sessions sort oldest, ids break ties, and the winner is normalized (legacy docs).
     """
     collection = db.collection('users').document(uid).collection('chat_sessions')
     ordered_sessions = (
@@ -826,9 +825,9 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .limit(1)
         .stream()
     )
-    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    ordered_docs = [{**_typed_doc(session), 'id': session.id} for session in ordered_sessions]
     if ordered_docs:
-        return max(
+        newest_ordered = max(
             ordered_docs,
             key=lambda data: (
                 data.get('created_at') is not None,
@@ -836,6 +835,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
                 str(data.get('id') or ''),
             ),
         )
+        return _normalize_chat_session(newest_ordered)
 
     legacy_session = (
         CURRENT_CHAT_SESSION_QUERY.build(
@@ -848,7 +848,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .stream()
     )
 
-    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    legacy_docs = [{**_typed_doc(session), 'id': session.id} for session in legacy_session]
     if len(legacy_docs) > 1:
         legacy_docs = legacy_docs[:1]
 
@@ -862,7 +862,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         if newest_key is None or key > newest_key:
             newest, newest_key = data, key
 
-    return newest
+    return _normalize_chat_session(newest)
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
