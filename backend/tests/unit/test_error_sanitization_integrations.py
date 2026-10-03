@@ -15,111 +15,83 @@ from unittest.mock import AsyncMock, MagicMock
 # Set required environment variables before any imports
 os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
 
-class FlexibleModule(ModuleType):
-    def __getattr__(self, name):
-        val = MagicMock()
-        setattr(self, name, val)
-        return val
-
-# Hermetic module stubs to avoid loading GCP / LangChain / external dependencies
-google_mod = FlexibleModule("google")
-google_mod.__path__ = []
-google_cloud = FlexibleModule("google.cloud")
-google_cloud.__path__ = []
-google_cloud_exceptions = FlexibleModule("google.cloud.exceptions")
-google_cloud_exceptions.__getattr__ = lambda name: type(name, (Exception,), {})
-google_cloud_firestore = FlexibleModule("google.cloud.firestore")
-google_cloud_firestore.transactional = lambda fn: fn
-google_cloud_firestore.Client = MagicMock()
-google_cloud_firestore_v1 = FlexibleModule("google.cloud.firestore_v1")
-google_cloud_firestore_v1.__path__ = []
-google_cloud_firestore_v1.FieldFilter = MagicMock()
-google_cloud_firestore_v1.transactional = lambda fn: fn
-base_query_mod = FlexibleModule("google.cloud.firestore_v1.base_query")
-base_query_mod.FieldFilter = MagicMock()
-google_cloud_firestore_v1.base_query = base_query_mod
-sys.modules["google.cloud.firestore_v1.base_query"] = base_query_mod
-google_cloud_storage = FlexibleModule("google.cloud.storage")
-google_cloud_tasks_v2 = FlexibleModule("google.cloud.tasks_v2")
-google_cloud_tasks_v2.CloudTasksClient = MagicMock()
-
-google_cloud.exceptions = google_cloud_exceptions
-google_cloud.firestore = google_cloud_firestore
-google_cloud.firestore_v1 = google_cloud_firestore_v1
-google_cloud.storage = google_cloud_storage
-google_cloud.tasks_v2 = google_cloud_tasks_v2
-
-google_oauth2 = sys.modules.get("google.oauth2") or ModuleType("google.oauth2")
-google_oauth2.id_token = MagicMock()
-google_oauth2.service_account = MagicMock()
-google_oauth2.credentials = MagicMock()
-setattr(google_mod, "oauth2", google_oauth2)
-
-google_api_core = sys.modules.get("google.api_core") or ModuleType("google.api_core")
-google_api_core.__path__ = []
-google_api_core_exceptions = sys.modules.get("google.api_core.exceptions") or ModuleType("google.api_core.exceptions")
-google_api_core_exceptions.__getattr__ = lambda name: type(name, (Exception,), {})
-google_api_core.exceptions = google_api_core_exceptions
-
-google_auth = sys.modules.get("google.auth") or ModuleType("google.auth")
-google_auth_transport = sys.modules.get("google.auth.transport") or ModuleType("google.auth.transport")
-google_auth_transport_requests = sys.modules.get("google.auth.transport.requests") or ModuleType("google.auth.transport.requests")
-google_auth_transport_requests.Request = MagicMock()
-
-firebase_admin = sys.modules.get("firebase_admin") or ModuleType("firebase_admin")
-firebase_admin.__path__ = []
-firebase_admin_auth = sys.modules.get("firebase_admin.auth") or ModuleType("firebase_admin.auth")
-firebase_admin_auth.__getattr__ = lambda name: type(name, (Exception,), {})
-firebase_admin.auth = firebase_admin_auth
-
-for name, mod in [
-    ("google", google_mod),
-    ("google.cloud", google_cloud),
-    ("google.cloud.exceptions", google_cloud_exceptions),
-    ("google.cloud.firestore", google_cloud_firestore),
-    ("google.cloud.firestore_v1", google_cloud_firestore_v1),
-    ("google.cloud.storage", google_cloud_storage),
-    ("google.cloud.tasks_v2", google_cloud_tasks_v2),
-    ("google.oauth2", google_oauth2),
-    ("google.api_core", google_api_core),
-    ("google.api_core.exceptions", google_api_core_exceptions),
-    ("google.auth", google_auth),
-    ("google.auth.transport", google_auth_transport),
-    ("google.auth.transport.requests", google_auth_transport_requests),
-    ("firebase_admin", firebase_admin),
-    ("firebase_admin.auth", firebase_admin_auth),
-]:
-    sys.modules[name] = mod
-
-# Stub langchain, stripe, numpy, pinecone, dotenv
-for p in ["langchain_core", "langchain_core.tools", "langchain_core.runnables", "stripe", "numpy", "pinecone", "dotenv"]:
-    if p not in sys.modules:
-        m = FlexibleModule(p)
-        if "." not in p:
-            m.__path__ = []
-        sys.modules[p] = m
-sys.modules["dotenv"].load_dotenv = lambda *args, **kwargs: None
-sys.modules["langchain_core.tools"].tool = lambda fn: fn
-sys.modules["langchain_core.runnables"].RunnableConfig = object
-
-# Stub utils.retrieval.tools to avoid heavy database and LLM chains
-google_utils_mod = FlexibleModule("utils.retrieval.tools.google_utils")
-google_utils_mod.GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-google_utils_mod.GOOGLE_INTEGRATION_KEY = "google"
-google_utils_mod.google_integration_has_scope = MagicMock()
-sys.modules["utils.retrieval.tools.google_utils"] = google_utils_mod
-
-tools_mod = FlexibleModule("utils.retrieval.tools")
-tools_mod.__path__ = []
-tools_mod.google_utils = google_utils_mod
-sys.modules["utils.retrieval.tools"] = tools_mod
-
 from fastapi import HTTPException, UploadFile
 import pytest
 
-from routers import integrations as integrations_router
-from routers import updates as updates_router
-from routers import imports as imports_router
+from testing.import_isolation import AutoMockModule, stub_modules
+
+_STUB_MODULES = [
+    "pinecone",
+    "typesense",
+    "stripe",
+    "redis",
+    "redis.asyncio",
+    "numpy",
+    "dotenv",
+    "pytz",
+    "langchain_core",
+    "langchain_core.tools",
+    "langchain_core.runnables",
+    "firebase_admin",
+    "firebase_admin.auth",
+    "firebase_admin.firestore",
+    "google",
+    "google.oauth2",
+    "google.api_core",
+    "google.api_core.exceptions",
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.transport.requests",
+    "google.cloud",
+    "google.cloud.exceptions",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.firestore_v1.base_query",
+    "google.cloud.storage",
+    "google.cloud.tasks_v2",
+    "database._client",
+    "database.redis_db",
+    "database.import_jobs",
+    "database.apps",
+    "database.user_usage",
+    "services.integrations",
+    "services.updates",
+    "utils.apps",
+    "utils.subscription",
+    "utils.other.storage",
+    "utils.imports.limitless",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools.google_utils",
+]
+
+integrations_router = None
+updates_router = None
+imports_router = None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _isolate_dependencies():
+    fakes = {name: AutoMockModule(name) for name in _STUB_MODULES}
+    for name in ["google", "google.cloud", "google.cloud.firestore_v1", "firebase_admin", "redis"]:
+        if name in fakes:
+            fakes[name].__path__ = []
+
+    fakes["dotenv"].load_dotenv = lambda *args, **kwargs: None
+    fakes["langchain_core.tools"].tool = lambda fn: fn
+    fakes["langchain_core.runnables"].RunnableConfig = object
+    fakes["utils.retrieval.tools.google_utils"].GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+    fakes["utils.retrieval.tools.google_utils"].GOOGLE_INTEGRATION_KEY = "google"
+
+    with stub_modules(fakes):
+        from routers import integrations as _integrations_router
+        from routers import updates as _updates_router
+        from routers import imports as _imports_router
+
+        mod = sys.modules[__name__]
+        mod.integrations_router = _integrations_router
+        mod.updates_router = _updates_router
+        mod.imports_router = _imports_router
+        yield
 
 
 def test_oauth_redis_failure_masks_internal_error(monkeypatch):
