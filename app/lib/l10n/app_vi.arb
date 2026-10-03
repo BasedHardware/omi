@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "khoảng {count} lần mỗi giờ",
     "diagnosticsLongestGap": "Lần gián đoạn lâu nhất",
     "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần ngắt, {failed} kết nối thất bại.",
-    "diagnosticsLastDuration": "{duration} gần nhất"
+    "diagnosticsLastDuration": "{duration} gần nhất",
+    "peopleStatsIncomplete": "Số đếm có thể chưa đầy đủ."
 }

@@ -12303,4 +12303,7 @@ class AppLocalizationsId extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration terakhir';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
 }

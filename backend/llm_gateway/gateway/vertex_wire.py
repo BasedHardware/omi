@@ -33,6 +33,7 @@ __all__ = [
     '_vertex_headers',
     '_vertex_predict_to_openai_embeddings',
     '_vertex_request',
+    '_vertex_rejection_reason',
     '_vertex_to_openai_response',
     '_vertex_to_openai_stream_chunk',
 ]
@@ -332,7 +333,13 @@ def _vertex_model_tool_call_content(
             arguments = dict(cast(Mapping[str, Any], decoded))
         else:
             arguments = {}
-        parts.append({'functionCall': {'name': function['name'], 'args': arguments}})
+        part: dict[str, Any] = {'functionCall': {'name': function['name'], 'args': arguments}}
+        extra = call.get('extra_content')
+        google = extra.get('google') if isinstance(extra, Mapping) else None
+        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
+        if isinstance(signature, str) and signature:
+            part['thoughtSignature'] = signature
+        parts.append(part)
         call_id = call.get('id')
         if isinstance(call_id, str) and call_id:
             names[call_id] = function['name']
@@ -375,6 +382,28 @@ def _nonnegative_int_or_zero(value: object) -> int:
 
 def _bounded_error_text(preview: bytes) -> str:
     return preview.decode('utf-8', errors='replace')
+
+
+def _vertex_rejection_reason(preview: bytes) -> str:
+    """Reduce provider errors to fixed labels; never log echoed content or names."""
+    try:
+        body = json.loads(preview)
+    except (ValueError, UnicodeDecodeError):
+        return 'unknown'
+    error = body.get('error') if isinstance(body, Mapping) else None
+    message = error.get('message') if isinstance(error, Mapping) else None
+    if not isinstance(message, str):
+        return 'unknown'
+    message = message.lower()
+    if 'missing a thought_signature' in message or 'missing a thought signature' in message:
+        return 'missing_thought_signature'
+    if 'thought_signature' in message or 'thought signature' in message:
+        return 'invalid_thought_signature'
+    if 'thinking' in message:
+        return 'thinking_config'
+    if 'schema' in message:
+        return 'schema'
+    return 'unknown'
 
 
 def _vertex_embedding_predict_request(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -486,10 +515,7 @@ def _vertex_to_openai_stream_chunk(
     if text:
         delta['content'] = text
     if tool_calls:
-        delta['tool_calls'] = [
-            {'index': index, 'id': call['id'], 'type': 'function', 'function': call['function']}
-            for index, call in enumerate(tool_calls)
-        ]
+        delta['tool_calls'] = [{'index': index, **call} for index, call in enumerate(tool_calls)]
     body: dict[str, Any] = {
         'id': str(response.get('responseId') or 'vertex_gateway'),
         'object': 'chat.completion.chunk',
@@ -551,6 +577,9 @@ def _vertex_tool_calls(candidate: Mapping[str, Any] | None) -> list[dict[str, An
                 'function': {'name': name, 'arguments': json.dumps(arguments, separators=(',', ':'))},
             }
         )
+        signature = part.get('thoughtSignature') or part.get('thought_signature')
+        if isinstance(signature, str) and signature:
+            tool_calls[-1]['extra_content'] = {'google': {'thought_signature': signature}}
     return tool_calls
 
 

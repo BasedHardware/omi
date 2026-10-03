@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
-    "diagnosticsLastDuration": "آخر {duration}"
+    "diagnosticsLastDuration": "آخر {duration}",
+    "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة."
 }

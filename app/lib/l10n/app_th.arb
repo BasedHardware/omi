@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "ประมาณ {count} ครั้งต่อชั่วโมง",
     "diagnosticsLongestGap": "ช่วงหลุดนานที่สุด",
     "diagnosticsSincePairingSummary": "ตั้งแต่จับคู่: หลุด {drops} ครั้ง เชื่อมต่อล้มเหลว {failed} ครั้ง",
-    "diagnosticsLastDuration": "{duration} ล่าสุด"
+    "diagnosticsLastDuration": "{duration} ล่าสุด",
+    "peopleStatsIncomplete": "จำนวนอาจไม่ครบถ้วน"
 }

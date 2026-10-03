@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "1時間に約{count}回",
     "diagnosticsLongestGap": "最長の途切れ",
     "diagnosticsSincePairingSummary": "ペアリング以降: 切断 {drops} 回、接続の失敗 {failed} 回。",
-    "diagnosticsLastDuration": "直近{duration}"
+    "diagnosticsLastDuration": "直近{duration}",
+    "peopleStatsIncomplete": "集計が不完全な場合があります。"
 }

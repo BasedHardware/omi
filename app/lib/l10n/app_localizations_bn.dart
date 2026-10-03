@@ -12291,4 +12291,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'শেষ $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
 }

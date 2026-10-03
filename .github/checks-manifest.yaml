@@ -311,6 +311,11 @@ checks:
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
+  - id: backend-route-5xx-alert-contract
+    command: ["python3", ".github/scripts/test_ensure_backend_route_5xx_alert.py"]
+    triggers: [".github/scripts/ensure_backend_route_5xx_alert.py", ".github/scripts/test_ensure_backend_route_5xx_alert.py", ".github/monitoring/backend_route_5xx_metric.json", ".github/monitoring/backend_route_5xx_policy.json", ".github/workflows/gcp_backend.yml", ".github/scripts/ensure_monitoring_metric_alert_policy.py", ".github/scripts/ensure_firestore_missing_index_alert.py", "backend/docs/runbooks/backend-route-5xx.md"]
+    lanes: ["local", "ci"]
+    reason: "the 2026-10-02 /v1/users/people 5xx regression returned platform 504s for four hours unpaged; the per-route metric and alert contract, and the non-blocking deploy provisioning step, must stay covered"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
@@ -629,6 +634,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
+  - id: ios-capture-transaction
+    command: ["ruby", "app/ios/test/omi_capture_transaction_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_transaction_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant capture recovery must preserve its transaction trace across health, session, manager, and connection policy changes"
+  - id: ios-capture-health
+    command: ["ruby", "app/ios/test/omi_capture_health_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_health_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant audio health must remain bounded across quiet, repair, reconnect, and relaunch transitions"
   - id: ios-dev-build-configuration
     command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
     triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]

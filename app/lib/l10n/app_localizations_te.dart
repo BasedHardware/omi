@@ -12342,4 +12342,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'గత $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
 }
