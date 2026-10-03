@@ -257,7 +257,9 @@ def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_fill
     assert result['sync_relevance_user_kept'] is True
 
 
-def test_real_process_segment_two_independent_job_responses(monkeypatch):
+@pytest.fixture
+def independent_job_pipeline():
+    """Load the isolated coordinator in setup; the CPU gate measures behavior only."""
     from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
     from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
     from models import conversation, conversation_enums, transcript_segment
@@ -281,77 +283,80 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
-        store = StrictFirestore()
-        barrier = threading.Barrier(2)
-        pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-        pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
-        pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
-        pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
-        pipeline.postprocess_words = lambda *a: [
-            transcript_segment.TranscriptSegment(
-                text='This narrated chapter describes our history.',
-                start=0,
-                end=9.5,
-                speaker='SPEAKER_00',
-                is_user=False,
-            )
+        yield pipeline, transcript_segment, lifecycle
+
+
+def test_real_process_segment_two_independent_job_responses(independent_job_pipeline):
+    pipeline, transcript_segment, lifecycle = independent_job_pipeline
+    store = StrictFirestore()
+    barrier = threading.Barrier(2)
+    pipeline.get_syncing_file_temporal_signed_url = lambda path: path
+    pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
+    pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
+    pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
+    pipeline.postprocess_words = lambda *a: [
+        transcript_segment.TranscriptSegment(
+            text='This narrated chapter describes our history.',
+            start=0,
+            end=9.5,
+            speaker='SPEAKER_00',
+            is_user=False,
+        )
+    ]
+    pipeline.identify_speakers_for_segments = lambda *a, **kw: None
+    pipeline.get_timestamp_from_path = float
+    pipeline.get_wav_duration = lambda path: 60
+
+    def expose_failure(error, **kwargs):
+        raise error
+
+    pipeline.failure_from_exception = expose_failure
+
+    def stale_lookup(*args):
+        barrier.wait(timeout=5)
+        return None
+
+    pipeline.get_closest_conversation_to_timestamps = stale_lookup
+    lifecycle.ingest_sync_conversation = lambda uid, incoming, **kw: intake(store, incoming, **kw)
+    responses = [{'new_memories': set(), 'updated_memories': set()} for _ in range(2)]
+    errors = [[], []]
+    with ThreadPoolExecutor(2) as pool:
+        jobs = [
+            pool.submit(pipeline.process_segment, str(1000 + i * 60), 'u', responses[i], threading.Lock(), errors[i])
+            for i in range(2)
         ]
-        pipeline.identify_speakers_for_segments = lambda *a, **kw: None
-        pipeline.get_timestamp_from_path = float
-        pipeline.get_wav_duration = lambda path: 60
+        assert all(job.result(timeout=5) for job in jobs), errors
+    assert errors == [[], []]
+    assert len(conversations(store)) == 1
+    assert len(conversations(store)[0]['transcript_segments']) == 2
+    # Responses can name pre-bridge IDs; durable redirects converge to one row.
+    assert len(conversations(store)) == 1
 
-        def expose_failure(error, **kwargs):
-            raise error
+    pipeline.conversations_db.get_conversation = lambda *a: {
+        'sync_relevance': 'review',
+        'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
+    }
+    pipeline.process_conversation = MagicMock()
+    pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+    pipeline.process_conversation.assert_not_called()
 
-        pipeline.failure_from_exception = expose_failure
+    # Everything the rules cannot settle is assessed as a sync update, with
+    # the stored restore marker the wire model does not carry.
+    pipeline.conversations_db.get_conversation = lambda *a: {
+        'sync_relevance': 'keep',
+        'sync_relevance_user_kept': True,
+        'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],
+    }
+    pipeline.deserialize_conversation = MagicMock()
+    pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+    kwargs = pipeline.process_conversation.call_args.kwargs
+    assert kwargs['trigger'] is pipeline.ProcessingTrigger.SYNC_UPDATE
+    assert kwargs['user_kept'] is True
 
-        def stale_lookup(*args):
-            barrier.wait(timeout=5)
-            return None
-
-        pipeline.get_closest_conversation_to_timestamps = stale_lookup
-        lifecycle.ingest_sync_conversation = lambda uid, incoming, **kw: intake(store, incoming, **kw)
-        responses = [{'new_memories': set(), 'updated_memories': set()} for _ in range(2)]
-        errors = [[], []]
-        with ThreadPoolExecutor(2) as pool:
-            jobs = [
-                pool.submit(
-                    pipeline.process_segment, str(1000 + i * 60), 'u', responses[i], threading.Lock(), errors[i]
-                )
-                for i in range(2)
-            ]
-            assert all(job.result(timeout=5) for job in jobs), errors
-        assert errors == [[], []]
-        assert len(conversations(store)) == 1
-        assert len(conversations(store)[0]['transcript_segments']) == 2
-        # Responses can name pre-bridge IDs; durable redirects converge to one row.
-        assert len(conversations(store)) == 1
-
-        pipeline.conversations_db.get_conversation = lambda *a: {
-            'sync_relevance': 'review',
-            'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
-        }
-        pipeline.process_conversation = MagicMock()
-        pipeline._reprocess_conversation_after_update('u', 'a', 'en')
-        pipeline.process_conversation.assert_not_called()
-
-        # Everything the rules cannot settle is assessed as a sync update, with
-        # the stored restore marker the wire model does not carry.
-        pipeline.conversations_db.get_conversation = lambda *a: {
-            'sync_relevance': 'keep',
-            'sync_relevance_user_kept': True,
-            'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],
-        }
-        pipeline.deserialize_conversation = MagicMock()
-        pipeline._reprocess_conversation_after_update('u', 'a', 'en')
-        kwargs = pipeline.process_conversation.call_args.kwargs
-        assert kwargs['trigger'] is pipeline.ProcessingTrigger.SYNC_UPDATE
-        assert kwargs['user_kept'] is True
-
-        pipeline._reprocess_conversation_after_update = MagicMock()
-        pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
-        calls = pipeline._reprocess_conversation_after_update.call_args_list
-        assert [tuple(call.args) for call in calls] == [('u', 'new', 'en'), ('u', 'old', 'en')]
+    pipeline._reprocess_conversation_after_update = MagicMock()
+    pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
+    calls = pipeline._reprocess_conversation_after_update.call_args_list
+    assert [tuple(call.args) for call in calls] == [('u', 'new', 'en'), ('u', 'old', 'en')]
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -526,5 +531,6 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'

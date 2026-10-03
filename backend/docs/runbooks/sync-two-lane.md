@@ -123,13 +123,19 @@ speech-free jobs log `none`.
 
 ### Repeated content failures
 
-The 45-day content ledger counts only whole-job, same-content deterministic
-failures: `sync_invalid_audio` after decode finds no usable audio, or a
-persistence data-shape exception with the same bounded phase and subtype on
-each attempt (for example, `persistence:ValueError`). Unknown exceptions,
-provider invalid-input verdicts, assignment conflicts, and mixed segment
-failures do not count. Three consecutive matching failures within 24 hours
-pause that content for 24 hours. A different or unclassified failure resets
+The 45-day content ledger counts only same-content classified failures:
+`sync_invalid_audio` after decode finds no usable audio (whole job), or a
+classified persistence failure with the same bounded fingerprint on each
+attempt. Classified persistence failures are the data-shape exception classes
+(for example, `persistence:ValueError`), the `provenance_mismatch` and
+`redirect_cycle` assignment conflicts, and the recognized Firestore
+document-size marker. One classified segment failure is enough for the batch to
+earn the strike, even beside successful siblings; differing fingerprints in one
+batch share `persistence:mixed`. Unknown exceptions, provider invalid-input
+verdicts, other assignment conflicts, and unknown Firestore `InvalidArgument`
+do not count. Three consecutive matching failures within 24 hours
+pause that content for 24 hours, then it is admitted again automatically;
+there is no permanent pause. A different or unclassified failure resets
 the streak; an expired window starts at one.
 Firestore `Aborted` (including exhausted contention wrappers), timeouts,
 service outages, provider 5xx, and superseded/fenced jobs remain retryable.
@@ -156,8 +162,23 @@ content ID, file names, or exception text. Also monitor
 `failure_class`, and `sync_transcription_job outcome=invalid_input` with
 `reason_code=sync_invalid_audio`. A rising cap rate means clients still have
 retained audio requiring investigation; it is not a success count.
-`event=sync_persistence_exception` exposes a bounded exception subtype when
-the closed telemetry class is `OtherException`, without exception text.
+`event=sync_persistence_exception` exposes a bounded exception subtype, a
+bounded `firestore_error` class and a bounded `firestore_doc_kind` for every
+persistence failure, without exception text, paths or ids.
+
+A canonical conversation near Firestore's 1 MiB limit rolls new speech over to
+another conversation instead of failing after paid transcription:
+`sync_assignment_target outcome=size_rollover` (with `trigger=estimate` or
+`trigger=commit_limit`) and `omi_fallback_event component=sync_dispatch
+to=size_rollover` count it, `outcome=size_limit_retry` counts the one commit
+backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
+safe home, so the original write was attempted unchanged. `firestore_error=document_size_limit`
+should then be rare; when it still occurs it names `sync_day_index`, `sync_recent`,
+a `donor`, or a `conversation` rejected a second time after the backstop retry.
+`excluded` on the rollover event counts the full conversations the committed plan
+stepped past. When the only id the chunk can create a conversation under is its own
+existing or redirected anchor, there is no safe home: fences hold, but the write
+can fail again after the backstop, so `size_rollover_unavailable` is not a recovery.
 
 ## Run ownership and recovery
 

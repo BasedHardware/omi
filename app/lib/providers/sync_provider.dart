@@ -360,6 +360,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // Flash page (Limitless) sync state
   bool get isFlashPageSyncing => _walService.getSyncs().isFlashPageSyncing;
 
+  /// Applies the auto-remove synced-copies retention preference immediately
+  /// (called when the user enables the toggle). Best-effort; failures are
+  /// swallowed — the sweep re-runs on the next sync pass regardless.
+  Future<void> applySyncedCopyRetention() async {
+    try {
+      await _walService.getSyncs().phone.applySyncedCopyRetention();
+    } catch (_) {}
+  }
+
   /// Get a WAL by ID from the current list
   Wal? getWalById(String walId) {
     try {

@@ -15,6 +15,7 @@ on:
       - '.github/actions/ci-tier/**'
       - '.github/actions/deploy-backend-stack/**'
       - '.github/actions/sync-backfill-lifecycle/**'
+      - '.github/actions/firestore-readiness/**'
       - '.github/actions/release-eligibility/action.yml'
       - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
@@ -45,6 +46,7 @@ on:
       - '.github/scripts/verify_backend_release_admission.py'
       - '.github/scripts/verify_release_eligibility.py'
       - '.github/workflows/sync_ledger_fence_cutover.yml'
+      - '.github/workflows/**'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
@@ -63,6 +65,7 @@ on:
       - '.github/actions/ci-tier/**'
       - '.github/actions/deploy-backend-stack/**'
       - '.github/actions/sync-backfill-lifecycle/**'
+      - '.github/actions/firestore-readiness/**'
       - '.github/actions/release-eligibility/action.yml'
       - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
@@ -93,6 +96,7 @@ on:
       - '.github/scripts/verify_backend_release_admission.py'
       - '.github/scripts/verify_release_eligibility.py'
       - '.github/workflows/sync_ledger_fence_cutover.yml'
+      - '.github/workflows/**'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
@@ -131,7 +135,8 @@ jobs:
   # on this public repository are free — each executing an interleaved slice
   # of the sorted file list with the same per-file isolation. Union of the
   # shards is exactly the full selection; ~5m of tests per shard replaces
-  # ~20m on one runner.
+  # ~20m on one runner (the selection has since grown to 1,522 files, +35%
+  # over the measured 1,126).
   backend-unit-shard:
     name: Backend unit shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
@@ -175,11 +180,13 @@ jobs:
         working-directory: backend
         env:
           # Regression budget: a shard carries ~1/4 of the selection
-          # (measured ~5m of per-file sessions + ~1m preflight/typecheck
-          # + ~1.5m setup). 600s holds every legitimate shard shape with
-          # headroom and sits far below the unsharded 20m class this
-          # workflow existed at. Raise only with measured evidence.
-          BACKEND_UNIT_STEP_BUDGET_SECONDS: "600"
+          # and includes preflight/typecheck plus per-file sessions.
+          # Setup is outside this timer. Main shard walls run 420-540s and
+          # one fully green shard took 602s against the old 600s line, so
+          # 720s holds that worst observed wall with 118s (19.6%) headroom
+          # without assuming exactly which files grew. Raise only with
+          # measured evidence.
+          BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"
         run: |
           step_started=$SECONDS
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then

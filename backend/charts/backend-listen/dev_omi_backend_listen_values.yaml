@@ -106,6 +106,14 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
   # Keep these aligned with the development GitHub environment variables used
   # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -375,8 +383,12 @@ env:
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
-  - name: STT_ROUTING_PROBE_PERCENT
-    value: "2"
+  - name: STT_ROUTING_ON_PERCENT
+    value: "0"
+  - name: STT_ROUTING_TARGETS_JSON
+    value: ""
+  - name: STT_ROUTING_DISRUPTION_GATE
+    value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
   - name: SONIOX_MONTHLY_CEILING_USD

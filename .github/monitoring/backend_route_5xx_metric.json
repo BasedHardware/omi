@@ -1,0 +1,17 @@
+{
+  "description": "Backend Cloud Run platform request-log 5xx counter grouped by HTTP method and a generic path family: optional version plus at most three complete lowercase path segments. Invalid segments end the family; hosts and query parameters are not labels.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=\"backend\" AND logName=\"projects/based-hardware/logs/run.googleapis.com%2Frequests\" AND httpRequest.status >= 500 AND httpRequest.status < 600",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [
+      {"key": "method", "valueType": "STRING", "description": "Bounded HTTP method; combined with route for route-family identity."},
+      {"key": "route", "valueType": "STRING", "description": "Optional version plus up to three complete lowercase path segments; stops before digits, uppercase or other invalid characters. Lowercase slugs can remain labels."}
+    ]
+  },
+  "labelExtractors": {
+    "method": "REGEXP_EXTRACT(httpRequest.requestMethod, \"^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$\")",
+    "route": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+((?:/v[0-9]+)?(?:/[a-z][a-z_-]*){1,3})(?:/|[?#]|$)\")"
+  }
+}

@@ -61,6 +61,10 @@ def _build_fakes() -> dict[str, ModuleType]:
         return mod
 
     # --- database package + submodules -------------------------------------
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    refresh.preserve = lambda *a, **k: False
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType("database")
     database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
     add("database", database_pkg)

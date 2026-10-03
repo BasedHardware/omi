@@ -77,6 +77,10 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     def put(mod: ModuleType, attr: str, value: Any) -> None:
         setattr(mod, attr, value)
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    put(refresh, 'preserve', lambda *a, **k: False)
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     put(database_pkg, '__path__', [str(_BACKEND / 'database')])
     add('database', database_pkg)

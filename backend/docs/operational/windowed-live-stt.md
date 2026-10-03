@@ -11,8 +11,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
@@ -29,12 +29,16 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Dev and prod declare the same
-`parakeet-window,modulate-velma-2,soniox,dg-nova-3` order. The first token uses
-windowed TDT only for the allocated UID bucket; everyone else retains the
-Modulate → Soniox → Deepgram order. Streaming RNNT is outside this chain. Dev configuration parity
-is a prerequisite, but a live dev read must confirm the running order before
-any prod rollout.
+circuit env lookup remain unchanged. Production's configured order is
+`parakeet-window,modulate-velma-2,soniox,dg-nova-3`. Soniox-first was tried on
+2026-10-02 and rolled back within the hour: a Parakeet failover replays its
+capture ring into Soniox's bounded send queue, which overflowed (`capacity_full`)
+and ended the session. Dev retains its separately
+configured order; never use dev to mutate health state (it shares production
+Redis). The first token uses windowed TDT only for the allocated UID bucket;
+everyone else retains the configured vendor tail. Streaming RNNT is outside
+this chain. The cost-router evidence and independent on ramp are documented in
+[live STT routing](../runbooks/live-stt-routing.md).
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical
@@ -60,25 +64,61 @@ Deploy the Parakeet server revision and its 3–6 replica HPA first. Wait until
 at least three ready replicas all expose `live_pending_requests` and
 `live_oldest_pending_seconds` from `/batch/metrics`. Then deploy listen with
 `PARAKEET_WINDOW_MAX_SESSIONS=8` and the pressure gate. During a mixed-revision
-server rollout, a replica missing either field invalidates the fleet sample, so
-listen sends allocated sessions to the vendor chain. Unmarked HTTP requests
+server rollout, replicas without valid live fields count as unknown unless they
+still have a fresh cached sample. The quorum and conservative unknown-pod
+accounting below decide whether listen admits the window leg. Unmarked HTTP requests
 remain in the backfill lane; only the window client's explicit
 `X-Omi-STT-Surface: live-window` header enters the live lane. Soniox stays on
 the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
-The headless Service selects ready Parakeet pods. Each listen process polls
-all ready replica `/batch/metrics` responses every five seconds with a
-one-second deadline, then caches the sample for at most 15 seconds. The
-per-replica live pending limit is **4** and the maximum oldest live wait is
-**0.75 s**. Backfill pending does not trip this gate. The count is per replica,
-so capacity scales with 3–6 pods, while a hot replica still causes a fleet
-stand-down. At the measured 0.87 s POST p95, a 0.75 s queued wait leaves
-about 0.38 s before the ~2 s live POST budget; four waiting on one replica is
-an earlier load signal. These are conservative starting thresholds, not an
-observed 100% guarantee: refine them from live queue-wait and POST p95 data.
-Missing, stale, non-finite, negative, or mixed-revision metrics stand down.
-Admission reads only the cache; it never waits on DNS or HTTP.
+The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
+polls each replica every five seconds with its own one-second HTTP and wall-clock
+deadline. A failed fetch does not discard the other responses: each replica
+keeps its last valid sample and original timestamp for **at most 15 seconds**.
+Departed replicas are removed. DNS failure immediately stands down; admission
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
+well above the seven-pod HPA maximum; fleets above that bound still stand down.
+
+Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
+strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
+measured as `(busy replicas + unknown replicas) / ready replicas`: by default,
+**50% or more refuses admission**. Thus a six-pod pool needs at least four
+replicas known healthy; one isolated hot pod or intermittent failed fetch does
+not void healthy fleet capacity. Unknown replicas cannot supply headroom.
+The existing per-pod thresholds still define busy; backfill pending alone does
+not. Small two-pod pools retain the conservative one-hot-pod stand-down.
+
+| Environment setting | Default | Meaning |
+| --- | ---: | --- |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
+| `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
+
+Invalid configuration stands down. Invalid, negative, non-finite or old-revision
+responses leave that replica's timestamp unchanged; it becomes unknown after
+its cached sample expires. Refusal labels stay `unconfigured`, `missing`,
+`stale`, `pressure`. Refresh outcomes add `partial` for a usable quorum with
+failed fetches, including when the remaining pressure decision stands down;
+quorum loss is `unavailable`. The bounded gauge
+`omi_stt_window_batch_pressure_replicas{state="fresh"|"ready"}` exposes coverage.
+A stalled poller still stands down after 15 seconds.
+
+Using a pool share follows the scheduler: live requests have priority at each
+dispatch, with one aged backfill turn after four live batches. An isolated wait
+can be one non-preemptible backfill inference; it is not proof of fleet-wide
+saturation. The majority-of-healthy-pods rule retains conservative headroom,
+while the existing per-session deadlines and replay handle a slow individual
+POST. Queue-wait, POST latency and actual refusals still gate traffic ramps;
+this change does not guarantee the production refusal target without a bake.
+
+`/batch/metrics` is already an async event-loop snapshot of bounded queue state;
+it does not wait for GPU inference or take the batch lock. Inference runs on the
+GPU worker thread. A real-engine ASGI test holds inference and the batch lock
+while the endpoint reports the queued live request. Offloading this snapshot
+would not remove Python GIL contention and would complicate its event-loop
+ownership. The admission fix needs **only a listen image**, with no Parakeet
+runtime change or separate Parakeet deploy.
 
 The batch engine selects live requests before backfill at each GPU dispatch.
 An aged backfill item (5 s) receives one turn after four live batches; this
@@ -344,7 +384,10 @@ failover for existing fair-use/usage flushes; periodic metering does not double-
 
 ## Chain and alerts
 
-Each configured provider is attempted once per session, including failed connects.
+Each configured provider is attempted once per session, including failed connects,
+except for one bounded Soniox re-entry after a known transient transport loss
+when its circuit is closed and no untried Deepgram rescue remains. Managed
+rebuild attempts are independently bounded to three, including that re-entry.
 Account failures (Deepgram 401/402/403; typed Soniox account errors) use the longer
 cooldown and a single recovery probe even when other circuits allow N probes.
 `force=True` never bypasses an account-state cooldown. Last-resort never re-dials
@@ -355,6 +398,15 @@ If every other non-TDT leg is absent/open, one bounded primary probe can bypass 
 non-account bench. The flag-enabled preflight therefore leaves admission to the
 chain. The old path retains its two-failover limit; the managed chain allows three
 hops across four providers.
+
+Full local window admission is checked before constructing the window socket,
+including static/shadow serving. Capacity refusals also engage the existing
+five-second target cooldown in shadow. A refused window does not consume a
+remaining non-account rescue provider's attempt. That rescue may relax its
+selection bench while retaining the half-open probe limit and all account
+protections; an occupied probe has a twelve-second bounded wait. Exhaustion
+is latched per receiver, and ring-pressure exhaustion closes through the
+ordinary terminal send path rather than repeating rebuilds per packet.
 
 Metrics: `omi_stt_chain_exhausted_total` increments once per terminal chain;
 `omi_stt_leg_attempts_total{to_mode,outcome}` counts successful and failed actual

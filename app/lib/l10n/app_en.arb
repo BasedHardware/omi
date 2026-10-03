@@ -375,7 +375,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Are you sure you want to report this message?",
+    "reportMessageConfirm": "Report this message?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -391,7 +391,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Are you sure you want to clear the chat? This action cannot be undone.",
+    "clearChatConfirm": "All messages in this chat are deleted. This can't be undone.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -475,11 +475,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "All of your memories and conversations will be permanently erased.",
+    "allDataErased": "Your memories and conversations will be erased.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Your Apps and Integrations will be disconnected effectively immediately.",
+    "appsDisconnected": "Your apps and integrations will be disconnected.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1213,7 +1213,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Are you sure you want to disconnect from {appName}? You can reconnect anytime.",
+    "disconnectAppMessage": "You can reconnect {appName} anytime.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1969,7 +1969,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Are you sure you want to delete this task?",
+    "deleteActionItemMessage": "Delete this task?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1977,7 +1977,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Are you sure you want to delete {count} selected task{s}?",
+    "deleteSelectedItemsMessage": "Delete {count} selected task{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2084,7 +2084,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 No memories yet",
+    "noMemoriesYet": "No Memories Yet",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2100,11 +2100,11 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 No memories found",
+    "noMemoriesFound": "No Memories Found",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
-    "addFirstMemory": "Add your first memory",
+    "addFirstMemory": "Add Your First Memory",
     "@addFirstMemory": {
         "description": "Button to add first memory"
     },
@@ -2112,7 +2112,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Are you sure you want to clear Omi's memory? This action cannot be undone.",
+    "clearMemoryMessage": "All your memories are deleted. This can't be undone.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2309,7 +2309,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Are you sure you want to delete this task?",
+    "deleteActionItemConfirmMessage": "Delete this task?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2317,15 +2317,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App Interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & Transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.",
+    "languageSettingsHelperText": "App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2446,7 +2446,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "This action cannot be undone.",
+    "thisActionCannotBeUndone": "This can't be undone.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3133,7 +3133,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Are you sure you want to delete this task? This action cannot be undone.",
+    "deleteActionItemConfirmation": "Delete this task? This can't be undone.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3582,7 +3582,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Are you sure you want to report this message?",
+    "confirmReportMessage": "Report this message?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3602,7 +3602,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Are you sure you want to clear the chat? This action cannot be undone.",
+    "confirmClearChat": "Clear this chat? This can't be undone.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3852,7 +3852,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Are you sure you want to delete this memory? This action cannot be undone.",
+    "deleteMemoryConfirmation": "Delete this memory? This can't be undone.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3903,7 +3903,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Are you sure you want to clear Omi's memory? This action cannot be undone and will permanently delete all {count} memories.",
+    "clearMemoryConfirmation": "All {count} memories are deleted. This can't be undone.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4073,7 +4073,7 @@
         }
     },
     "letOmiChooseAutomatically": "Let Omi choose the best app automatically",
-    "deleteConversationConfirmation": "Are you sure you want to delete this conversation? This action cannot be undone.",
+    "deleteConversationConfirmation": "Delete this conversation? This can't be undone.",
     "conversationDeleted": "Conversation deleted",
     "generatingLink": "Generating link…",
     "editConversation": "Edit conversation",
@@ -4433,7 +4433,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Are you sure you want to update your app? The changes will reflect once reviewed by our team.",
+    "updateAppConfirmation": "Your changes go live after our team reviews them.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4471,10 +4471,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "New Version Available",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "No",
     "@no": {
@@ -4528,7 +4524,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.",
+    "cancelSubscriptionConfirmation": "You keep access until the end of your current billing period.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4788,7 +4784,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "This action cannot be undone. Any applications using this key will no longer be able to access the API.",
+    "revokeApiKeyWarning": "Apps using this key lose API access. This can't be undone.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4879,7 +4875,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Are you sure you want to delete this {item}? This action cannot be undone.",
+    "deleteItemConfirmation": "Deleting this {item} can't be undone.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4892,7 +4888,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.",
+    "revokeKeyConfirmation": "Anything using \"{keyName}\" loses access. This can't be undone.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5139,7 +5135,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?",
+    "planRemainsActiveUntil": "Your plan stays active until {date}. After that, you lose your unlimited features.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5275,7 +5271,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Unlock Omi's infinite memory",
+    "unlockOmiInfiniteMemory": "Unlimited memories",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5291,7 +5287,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Please check your connection and try again",
+    "checkConnectionTryAgain": "Check your connection and try again.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5545,7 +5541,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "This will permanently delete all conversations imported from Limitless. This action cannot be undone.",
+    "deleteAllLimitlessWarning": "All conversations imported from Limitless are deleted. This can't be undone.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5603,7 +5599,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Are you sure you want to delete {name}'s sample?",
+    "deleteSampleConfirmation": "{name}'s voice sample is removed. This can't be undone.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5616,7 +5612,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Are you sure you want to delete {name}? This will also remove all associated speech samples.",
+    "deletePersonConfirmation": "This removes {name}'s voice samples and can't be undone. Their lines in past conversations become unnamed speakers.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5978,9 +5974,9 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
+    "tasksEmptyStateMessage": "Start a conversation to create a task.",
     "@tasksEmptyStateMessage": {
-        "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
+        "description": "Guidance on the empty Tasks tab: start a conversation to create a task."
     },
     "clearChatAction": "Clear Chat",
     "@clearChatAction": {
@@ -6080,7 +6076,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Are you sure you want to stop recording and summarize the conversation now?",
+    "stopRecordingConfirmation": "Stop recording and summarize the conversation now?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7263,7 +7259,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium minutes/month. On-Device tab offers unlimited free transcription.",
+    "premiumMinutesInfo": "300 premium minutes a month. Choose On Device for unlimited free transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7374,7 +7370,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+    "premiumMinutesMonth": "300 premium minutes a month. Choose On Device for unlimited free transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7462,7 +7458,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
+    "omiTranscriptionOptimized": "Omi's live transcription is built for real-time conversations and labels who said what.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8144,7 +8140,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Are you sure you want to permanently delete this recording? This can't be undone.",
+    "deleteRecordingConfirmation": "This can't be undone.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8658,7 +8654,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}. Are you sure you want to proceed?",
+    "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -9512,7 +9508,7 @@
     "highestRating": "Highest Rating",
     "lowestRating": "Lowest Rating",
     "resetFilters": "Reset Filters",
-    "applyFilters": "Apply filters",
+    "applyFilters": "Apply Filters",
     "mostInstalls": "Most Installs",
     "couldNotOpenUrl": "Could not open URL. Please try again.",
     "newTask": "New Task",
@@ -9930,7 +9926,7 @@
     "@deleteSyncedFiles": {
         "description": "Dialog title for deleting synced files"
     },
-    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This cannot be undone.",
+    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This can't be undone.",
     "@deleteSyncedFilesMessage": {
         "description": "Confirmation message for deleting synced files"
     },
@@ -9946,7 +9942,7 @@
     "@deletePendingFiles": {
         "description": "Dialog title for deleting pending files"
     },
-    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.",
+    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This can't be undone.",
     "@deletePendingFilesWarning": {
         "description": "Warning message for deleting pending files"
     },
@@ -9962,7 +9958,7 @@
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
     },
-    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.",
+    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can't be undone.",
     "@deleteAllFilesWarning": {
         "description": "Warning message for deleting all files"
     },
@@ -10144,7 +10140,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10569,11 +10565,11 @@
     "@deleteFlowFeedbackHint": {
         "description": "TextField hint on delete feedback step"
     },
-    "deleteFlowConfirmTitle": "This is permanent",
+    "deleteFlowConfirmTitle": "Delete Your Account?",
     "@deleteFlowConfirmTitle": {
         "description": "Title on final delete confirmation step"
     },
-    "deleteFlowConfirmSubtitle": "Once you delete your account, there is no way to recover it.",
+    "deleteFlowConfirmSubtitle": "This can't be undone, even by support.",
     "@deleteFlowConfirmSubtitle": {
         "description": "Subtitle on final delete confirmation step"
     },
@@ -11060,7 +11056,7 @@
     "@transcribeLaterTitle": {
         "description": "Title for the 'transcribe later' capture-mode toggle in device settings"
     },
-    "transcribeLaterDescription": "Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.",
+    "transcribeLaterDescription": "Record now, transcribe when you choose. Audio stays on your phone until then.",
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
@@ -11375,7 +11371,7 @@
     "@deleteOnDeviceModel": {
         "description": "Action label to delete a downloaded on-device transcription model"
     },
-    "deleteOnDeviceModelConfirm": "Are you sure you want to delete this model?",
+    "deleteOnDeviceModelConfirm": "Delete this model?",
     "@deleteOnDeviceModelConfirm": {
         "description": "Confirmation prompt shown before deleting a downloaded model"
     },
@@ -11577,7 +11573,7 @@
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
     },
     "syncStatusTooOld": "Too old to sync — Omi can't accept it",
-    "planSheetChooseYourPlan": "Choose your plan to unlock unlimited Omi.",
+    "planSheetChooseYourPlan": "Choose the plan that fits you.",
     "@planSheetChooseYourPlan": {
         "description": "Plans sheet subtitle prompting a free user to pick a paid plan"
     },
@@ -11889,7 +11885,7 @@
     "@memoryGraph": {
         "description": "Accessible name for the memories graph button"
     },
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "@voiceIntroduction": {
         "description": "Guided voice introduction copy. English source fallback pending translation review.",
         "placeholders": {
@@ -12295,7 +12291,7 @@
     "@forgetDeviceConfirmTitle": {
         "description": "Title of the confirmation before forgetting a paired device"
     },
-    "forgetDeviceConfirmMessage": "Omi will stop connecting to this device. To use it again, you'll have to pair it again.",
+    "forgetDeviceConfirmMessage": "Omi will stop connecting to this device.",
     "@forgetDeviceConfirmMessage": {
         "description": "Consequence of forgetting a paired device"
     },
@@ -14057,23 +14053,23 @@
     "@evidenceNothing": {
         "description": "Evidence row when there is no evidence from the user at all."
     },
-    "effectCountsALot": "Counts a lot",
+    "effectCountsALot": "Helps a lot",
     "@effectCountsALot": {
         "description": "How much one kind of evidence raises confidence: strongly."
     },
-    "effectCounts": "Counts",
+    "effectCounts": "Helps",
     "@effectCounts": {
         "description": "How much one kind of evidence raises confidence: moderately."
     },
-    "effectCountsALittle": "Counts a little",
+    "effectCountsALittle": "Helps a little",
     "@effectCountsALittle": {
         "description": "How much one kind of evidence raises confidence: slightly."
     },
-    "effectBarelyCounts": "Barely counts",
+    "effectBarelyCounts": "Barely helps",
     "@effectBarelyCounts": {
         "description": "How much one kind of evidence raises confidence: almost not at all."
     },
-    "effectCountsAgainst": "Counts against",
+    "effectCountsAgainst": "Hurts",
     "@effectCountsAgainst": {
         "description": "This kind of evidence lowers confidence."
     },
@@ -14103,7 +14099,7 @@
             }
         }
     },
-    "confidenceFootnote": "Only your answers move confidence much. Automatic matches on their own barely count.",
+    "confidenceFootnote": "Only your answers move confidence much. Automatic matches on their own barely help.",
     "@confidenceFootnote": {
         "description": "Footnote at the bottom of the confidence sheet."
     },
@@ -14129,7 +14125,7 @@
             }
         }
     },
-    "pinPersonHonestLine": "Omi will ask you to confirm close matches instead of guessing.",
+    "pinPersonHonestLine": "Omi asks before matching close voices.",
     "@pinPersonHonestLine": {
         "description": "Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them."
     },
@@ -14441,5 +14437,312 @@
                 "type": "int"
             }
         }
+    },
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "@siriShortcutsSetupHint": {
+        "description": "Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases",
+        "placeholders": {
+            "askPhrase": {
+                "type": "String"
+            },
+            "questionPhrase": {
+                "type": "String"
+            }
+        }
+    },
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”",
+    "@siriShortcutsSearchHint": {
+        "description": "Optional iOS 27 search phrase guidance appended to the Shortcuts setup hint; searchPhrase is a literal English Siri phrase",
+        "placeholders": {
+            "searchPhrase": {
+                "type": "String"
+            }
+        }
+    },
+    "updateAvailableTitle": "Update available",
+    "@updateAvailableTitle": {
+        "description": "Title of the pop-up that offers a newer version of the app"
+    },
+    "updateAvailableMessage": "A new version of Omi is ready, with fixes and improvements.",
+    "@updateAvailableMessage": {
+        "description": "Message of the pop-up that offers a newer version of the app"
+    },
+    "updateRequiredTitle": "Update required",
+    "@updateRequiredTitle": {
+        "description": "Title of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "updateRequiredMessage": "This version of Omi is no longer supported. Update to keep recording and syncing.",
+    "@updateRequiredMessage": {
+        "description": "Message of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "exportingAllData": "Exporting your data… Keep Omi open; large accounts can take several minutes.",
+    "@exportingAllData": {
+        "description": "Data export progress sheet - status text while the account export downloads"
+    },
+    "transcriptSpeakerCount": "{count, plural, =1{1 speaker} other{{count} speakers}}",
+    "@transcriptSpeakerCount": {
+        "description": "How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
+    "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",
+    "autoRemoveSyncedCopiesDescription": "Deletes local copies {days} days after sync. Cloud copies are kept.",
+    "localCopiesSection": "Local Copies",
+    "@autoRemoveSyncedCopiesTitle": {
+        "description": "Settings row title: automatically remove synced phone-local recording copies"
+    },
+    "@autoRemoveSyncedCopiesDays": {
+        "description": "Subtitle for the auto-remove toggle showing the retention window",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@autoRemoveSyncedCopiesDescription": {
+        "description": "Footer description for the auto-remove synced copies setting",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@localCopiesSection": {
+        "description": "Section header above the auto-remove synced copies setting"
+    },
+    "speakerLabelLinesLabeled": "{count, plural, =1{Labeled 1 line} other{Labeled {count} lines}}",
+    "@speakerLabelLinesLabeled": {
+        "description": "After tagging a speaker: how many transcript lines received the name",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerLabelVoiceStatus": "{state, select, learned{Voice learned} pending{Learning voice…} disabled{Voice saving is off} other{Voice not learned yet}}",
+    "@speakerLabelVoiceStatus": {
+        "description": "After tagging a person: whether Omi has learned to recognize their voice (server voice_learning_state)",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi will recognize {name} next time.} pending{This takes a few seconds.} disabled{Turn on saving voices in Settings so Omi can recognize {name}.} other{Omi needs more clear speech from {name} and will keep trying.}}",
+    "@speakerLabelVoiceDetail": {
+        "description": "One sentence under speakerLabelVoiceStatus; name is the tagged person",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelEarlierMatches": "{count, plural, =1{Found in 1 earlier conversation} other{Found in {count} earlier conversations}}",
+    "@speakerLabelEarlierMatches": {
+        "description": "The tagged person's voice was found, unnamed, in this many earlier conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
+    "@speakerLabelText": {
+        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
+        "placeholders": {
+            "part": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelTalkTime": "{duration} of this voice",
+    "@speakerLabelTalkTime": {
+        "description": "How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "findDeviceNoneTitle": "No Omi Found",
+    "@findDeviceNoneTitle": {
+        "description": "Title of the find-device screen after a scan ended with nothing found (Title Case)."
+    },
+    "findDeviceNoneMessage": "Turn it on and hold it near your phone.",
+    "@findDeviceNoneMessage": {
+        "description": "One-line hint under 'No Omi Found' on the find-device screen."
+    },
+    "startupFailedDetails": "Details",
+    "@startupFailedDetails": {
+        "description": "Disclosure on the start-up failure screen that reveals the raw technical error for support."
+    },
+    "couldNotLoadApiKeys": "Couldn't load API keys.",
+    "@couldNotLoadApiKeys": {
+        "description": "Developer Settings: the API key or MCP key list failed to load"
+    },
+    "speakerTagPromptNoAction": "No…",
+    "@speakerTagPromptNoAction": {
+        "description": "Voice card answer to 'Is this <name>?': no, and opens the picker to say who it is (or That's Me / Not a Person)."
+    },
+    "diagnosticsRightNow": "Right Now",
+    "@diagnosticsRightNow": {
+        "description": "Device Diagnostics section title for the live connection rows"
+    },
+    "diagnosticsLast7Days": "Last 7 Days",
+    "@diagnosticsLast7Days": {
+        "description": "Device Diagnostics section title for the 7-day connection summary"
+    },
+    "diagnosticsConnectedFor": "Connected for",
+    "@diagnosticsConnectedFor": {
+        "description": "Device Diagnostics row title; the value is how long the device has been connected"
+    },
+    "diagnosticsVerdictReconnects": "Reconnects on its own",
+    "@diagnosticsVerdictReconnects": {
+        "description": "Device Diagnostics weekly verdict when every drop recovered automatically"
+    },
+    "diagnosticsVerdictReconnectsDetail": "Brief drops, back in about {duration} each time",
+    "@diagnosticsVerdictReconnectsDetail": {
+        "description": "Device Diagnostics verdict detail; duration is the median reconnect time, e.g. 2s",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "diagnosticsVerdictNoDrops": "No drops this week",
+    "@diagnosticsVerdictNoDrops": {
+        "description": "Device Diagnostics verdict detail when nothing disconnected in the window"
+    },
+    "diagnosticsVerdictTrouble": "Having trouble connecting",
+    "@diagnosticsVerdictTrouble": {
+        "description": "Device Diagnostics verdict when a connection attempt failed in the last 24 hours"
+    },
+    "diagnosticsVerdictTroubleDetail": "Failed connections in the last 24 hours: {count}",
+    "@diagnosticsVerdictTroubleDetail": {
+        "description": "Device Diagnostics verdict detail under 'Having trouble connecting'",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsDrops": "Drops",
+    "@diagnosticsDrops": {
+        "description": "Device Diagnostics row title: how many times the connection dropped and recovered"
+    },
+    "diagnosticsDropsPerHour": "about {count} an hour",
+    "@diagnosticsDropsPerHour": {
+        "description": "Device Diagnostics secondary text under the drop count: average drops per hour",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsLongestGap": "Longest gap",
+    "@diagnosticsLongestGap": {
+        "description": "Device Diagnostics row title: the longest time the device took to reconnect"
+    },
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "@diagnosticsSincePairingSummary": {
+        "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
+        "placeholders": {
+            "drops": {
+                "type": "int"
+            },
+            "failed": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsLastDuration": "Last {duration}",
+    "@diagnosticsLastDuration": {
+        "description": "Caption beside the live signal chart title; duration is the chart window, e.g. 60s",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "peopleStatsIncomplete": "Counts may be incomplete.",
+    "reprocessingConversationProgress": "Reprocessing conversation…",
+    "@reprocessingConversationProgress": {
+        "description": "Shown with a progress bar while the open conversation is reprocessed."
+    },
+    "conversationReprocessed": "Conversation updated",
+    "@conversationReprocessed": {
+        "description": "Toast after a reprocess finished and replaced the conversation."
+    },
+    "loadingTranscript": "Loading transcript…",
+    "@loadingTranscript": {
+        "description": "Transcript tab while the conversation's lines are being fetched."
+    },
+    "transcriptLoadFailed": "Couldn't load the transcript.",
+    "@transcriptLoadFailed": {
+        "description": "Transcript tab when fetching the conversation's lines failed; shown above Try Again."
+    },
+    "processingConversationProgress": "Processing conversation…",
+    "@processingConversationProgress": {
+        "description": "Shown while the server is still processing the conversation (transcript, summary)."
+    },
+    "conversationProcessingFailedMessage": "This conversation couldn't be processed.",
+    "@conversationProcessingFailedMessage": {
+        "description": "Transcript tab when the server marked the conversation as failed; shown above Try Again."
+    },
+    "waitForReprocessing": "Wait for reprocessing to finish.",
+    "@waitForReprocessing": {
+        "description": "Toast when the reader tries to edit the transcript or a speaker while the conversation is being reprocessed."
+    },
+    "unnamedSpeakerLabel": "Speaker",
+    "@unnamedSpeakerLabel": {
+        "description": "Neutral label for an unnamed voice when cross-recording speaker resolution is unavailable"
+    },
+    "unresolvedSpeakersNotice": "Speakers aren't separated across recordings.",
+    "@unresolvedSpeakersNotice": {
+        "description": "Quiet line under the transcript heading explaining that voices could not be separated across recordings"
+    },
+    "unresolvedSpeakersTitle": "About Speaker Labels",
+    "@unresolvedSpeakersTitle": {
+        "description": "Title of the sheet explaining unresolved speaker labels"
+    },
+    "unresolvedSpeakersMessage": "Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.",
+    "@unresolvedSpeakersMessage": {
+        "description": "Body of the About Speaker Labels sheet"
+    },
+    "nameSpeakerTitle": "Name Speaker",
+    "@nameSpeakerTitle": {
+        "description": "Title of the name-speaker sheet when the speaker has no resolvable number"
+    },
+    "playbackPreparingAudio": "Preparing Audio…",
+    "@playbackPreparingAudio": {
+        "description": "Inline label on the detail audio player while playback is still being prepared"
+    },
+    "playbackBackToCurrent": "Back to Current",
+    "@playbackBackToCurrent": {
+        "description": "Pill above the player that scrolls the transcript back to the currently playing line"
+    },
+    "playbackAudioUnavailable": "Audio Unavailable",
+    "@playbackAudioUnavailable": {
+        "description": "Inline label when the conversation's audio cannot be played at all"
+    },
+    "playbackAudioLoadFailed": "Couldn't Load Audio",
+    "@playbackAudioLoadFailed": {
+        "description": "Inline label when loading the audio stream fails"
+    },
+    "playbackAudioNetworkFailed": "Check Connection",
+    "@playbackAudioNetworkFailed": {
+        "description": "Inline label when fetching the audio URLs fails on transport"
     }
 }

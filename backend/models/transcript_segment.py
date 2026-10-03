@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, Literal, Mapping, Optional, List, Tuple
+import math
 import uuid
 import re
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
+from models.speaker_label_provenance import project_source
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -71,6 +73,7 @@ class TranscriptSegment(BaseModel):
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
+    speaker_label_source: Optional[Literal['manual', 'auto', 'carried']] = None
     start: float
     end: float
     translations: Optional[List[Translation]] = Field(default_factory=list)
@@ -90,6 +93,8 @@ class TranscriptSegment(BaseModel):
     # V2 accepted-send run start in capture samples. Stops live text merging
     # from turning two valid windows across a VAD skip into one false window.
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
+    audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
+    audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
     # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
@@ -100,14 +105,26 @@ class TranscriptSegment(BaseModel):
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
     @model_serializer(mode='wrap')
-    def _serialize_internal_evidence(self, handler):
+    def _serialize_internal_evidence(self, handler, info):
         # A wrap serializer also runs when a parent conversation is dumped. Leave
         # the return type inferred so Pydantic retains the public field schema.
         # Omit absent internal markers to keep ordinary v1 payloads unchanged.
         data = handler(self)
+        data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)
             if value is not None:
+                data[key] = value
+        excluded = info.exclude if isinstance(getattr(info, 'exclude', None), (dict, set, frozenset)) else frozenset()
+        included = getattr(info, 'include', None)
+        included = included if isinstance(included, (dict, set, frozenset)) else None
+        # Capture windows are storage-only. Python-mode dumps feed Firestore and internal
+        # rewrites; JSON-mode dumps are API responses, which must never carry them.
+        if getattr(info, 'mode', 'python') == 'json':
+            return data
+        for key in ('audio_capture_start', 'audio_capture_end'):
+            value = getattr(self, key)
+            if value is not None and key not in excluded and (included is None or key in included):
                 data[key] = value
         return data
 
@@ -117,6 +134,14 @@ class TranscriptSegment(BaseModel):
         speaker_in_payload = data.get('speaker') is not None
         speaker_id_in_payload = data.get('speaker_id') is not None
         super().__init__(**data)
+        self.speaker_label_source = project_source(
+            {
+                'person_id': self.person_id,
+                'is_user': self.is_user,
+                'speaker_label_source': self.speaker_label_source,
+                'speaker_match_source': self.speaker_match_source,
+            }
+        )
         self._speaker_id_synthesized = not speaker_in_payload and not speaker_id_in_payload
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -130,6 +155,27 @@ class TranscriptSegment(BaseModel):
                 self.speaker_id = 0
         else:
             self.speaker_id = 0
+
+    def _clear_audio_capture_window(self) -> None:
+        self.audio_capture_start = self.audio_capture_end = None
+
+    def _merge_audio_capture_window(self, other: 'TranscriptSegment') -> None:
+        a_start, a_end = self.audio_capture_start, self.audio_capture_end
+        b_start, b_end = other.audio_capture_start, other.audio_capture_end
+        if (
+            a_start is not None
+            and a_end is not None
+            and b_start is not None
+            and b_end is not None
+            and all(math.isfinite(value) for value in (a_start, a_end, b_start, b_end))
+            and a_start < a_end
+            and b_start < b_end
+            and max(a_start, b_start) <= min(a_end, b_end)
+        ):
+            self.audio_capture_start = min(a_start, b_start)
+            self.audio_capture_end = max(a_end, b_end)
+        else:
+            self._clear_audio_capture_window()
 
     def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
         """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
@@ -292,6 +338,7 @@ class TranscriptSegment(BaseModel):
             a.text += f' {b.text}'
             a.end = b.end
             a.translations = _join_translations(a, b)
+            a._merge_audio_capture_window(b)
             _absorb(b, a)
             return a, None
 
@@ -326,6 +373,8 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.speaker_match_source != a.speaker_match_source:
                 return a, b
+            if b.speaker_label_source != a.speaker_label_source:
+                return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
             # An unplaced point must not merge into a covered segment and
@@ -350,9 +399,12 @@ class TranscriptSegment(BaseModel):
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
+                        a._clear_audio_capture_window()
+                        b._clear_audio_capture_window()
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        a._merge_audio_capture_window(b)
                         _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
@@ -360,19 +412,24 @@ class TranscriptSegment(BaseModel):
                     if prefix:
                         a.text = prefix
                         a.end = min(a.end, b.start)
+                        a._clear_audio_capture_window()
+                        b._clear_audio_capture_window()
                         return a, b
                     a.text = ""
+                    b._merge_audio_capture_window(a)
                     _absorb(a, b)
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                a._merge_audio_capture_window(b)
                 _absorb(b, a)
                 return a, None
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                a._merge_audio_capture_window(b)
                 _absorb(b, a)
                 return a, None
 
@@ -410,6 +467,10 @@ class TranscriptSegment(BaseModel):
             )
 
         return CombineSegmentsResult(segments, joined_similar_segments, removed_ids, absorbed_into)
+
+
+def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in segment.items() if key not in ('audio_capture_start', 'audio_capture_end')}
 
 
 class ImprovedTranscriptSegment(BaseModel):

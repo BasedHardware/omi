@@ -327,7 +327,7 @@ struct TaskSourceClassification: Equatable {
 
 // MARK: - Task Priority
 
-enum TaskPriority: String, Codable {
+enum TaskPriority: String, Codable, Sendable {
   case high
   case medium
   case low
@@ -405,7 +405,7 @@ enum TaskClassification: String, Codable, CaseIterable {
   }
 }
 
-struct ExtractedTask: Codable {
+struct ExtractedTask: Codable, Sendable {
   let title: String
   let description: String?
   let priority: TaskPriority
@@ -535,7 +535,7 @@ struct TaskExtractionContext {
 }
 
 /// Result from vector/FTS search during tool-calling extraction
-struct TaskSearchResult: Codable {
+struct TaskSearchResult: Codable, Sendable {
   /// Stable backend action-item ID when this result can be mutated. Local and
   /// staged rows remain search evidence but deliberately have no task ID.
   let taskID: String?

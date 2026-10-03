@@ -1,6 +1,9 @@
 import asyncio
+import contextvars
+import logging
 import threading
 import time
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -19,6 +22,8 @@ from utils import speaker_sample
 from utils.speaker_tag_prompts import service
 from utils.stt import pre_recorded
 from utils.executors import ExecutorSaturatedError, MonitoredThreadPoolExecutor
+from utils.other import storage
+from tests.unit.fixtures.audio_chunk_storage import memory_bucket
 
 NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -55,7 +60,11 @@ class World:
                 {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9},
                 {'id': 's2', 'speaker_id': 1, 'start': 9, 'end': 12},
             ]
-            return {'id': conversation_id, 'transcript_segments': segments}, ['s1', 's2'], [], []
+            raw = {'id': conversation_id, 'transcript_segments': segments}
+            raw['_speaker_learning_queued'] = bool(kwargs.get('owner_segment_ids')) or bool(
+                kwargs.get('person_id') and kwargs.get('use_for_speech_training')
+            )
+            return raw, ['s1', 's2'], [], []
 
         monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
 
@@ -87,9 +96,13 @@ def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'owner_segment_ids': ['s1'],
         }
     ]
-    assert world.scheduled[0][0] is service.store_owner_voice_sample
+    assert world.scheduled[0] == (
+        service.run_authorized_owner_learning,
+        {'uid': 'u', 'conversation_id': 'c1', 'segment_ids': ['s1'], 'card_generation': 0},
+    )
     assert response.voice_sample_queued and response.quality_outcome == Q.owner_missed
     assert world.answered == ['pid']
     name, properties = world.events[-1]
@@ -97,13 +110,15 @@ def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
     assert set(properties) == {'kind', 'origin', 'answer', 'quality_outcome', 'first_time', 'voice_sample_queued'}
 
 
-def test_free_user_cannot_name_other_people(monkeypatch):
+def test_free_user_names_a_person_on_a_served_card(monkeypatch):
+    # Automatic suggestions are paid; naming by hand is not. A card served before a
+    # downgrade, or an owner check answered with who it really is, must still apply.
     world = World(monkeypatch, paid=False)
-    with pytest.raises(service.TagPromptForbidden):
-        service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
-    with pytest.raises(service.TagPromptForbidden):
-        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
-    assert world.assignments == []
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
+    service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+    assert world.assignments[0]['person_id'] == 'p1' and world.created[0]['name'] == 'Ana'
+    assert len(world.assignments) == 2
+    assert all(a['is_user'] is False and a['use_for_speech_training'] is True for a in world.assignments)
 
 
 def test_naming_a_person_teaches_voice_when_allowed(monkeypatch):
@@ -111,7 +126,12 @@ def test_naming_a_person_teaches_voice_when_allowed(monkeypatch):
     response = service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
     assert world.assignments[0]['person_id'] == 'p1' and world.assignments[0]['use_for_speech_training'] is True
     fn, kwargs = world.scheduled[0]
-    assert fn is service.extract_speaker_samples and kwargs['segment_ids'] == ['s1', 's2']
+    assert fn is service.run_authorized_person_learning and kwargs == {
+        'uid': 'u',
+        'person_id': 'p1',
+        'conversation_id': 'c1',
+        'segment_ids': ['s1', 's2'],
+    }
     assert response.quality_outcome == Q.person_missed_known
 
 
@@ -124,6 +144,34 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
     assert response.quality_outcome == Q.person_not_enrolled
 
 
+def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch):
+    world = World(monkeypatch)
+
+    def assign(uid, conversation_id, **kwargs):
+        raw = {'id': conversation_id, 'transcript_segments': [{'id': 's1', 'start': 0, 'end': 9}]}
+        raw['_speaker_learning_queued'] = False
+        return raw, ['s1'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
+    recorded = []
+
+    class _Counter:
+        def labels(self, **labels):
+            recorded.append(labels)
+            return SimpleNamespace(inc=lambda: None)
+
+    monkeypatch.setattr(service, 'SPEAKER_TAG_PROMPT_VOICE_SAMPLES', _Counter())
+    response = service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
+    assert response.voice_sample_queued
+    assert world.scheduled == [
+        (
+            service.run_authorized_person_learning,
+            {'uid': 'u', 'person_id': 'p1', 'conversation_id': 'c1', 'segment_ids': ['s1']},
+        )
+    ]
+    assert any(labels.get('outcome') == 'queued' for labels in recorded)
+
+
 def test_rejecting_an_automatic_label_clears_it(monkeypatch):
     world = World(monkeypatch)
     response = service.apply_answer('u', _request(K.owner_check, O.auto_user, A.not_me), world.schedule, NOW)
@@ -134,16 +182,26 @@ def test_rejecting_an_automatic_label_clears_it(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_me', 'person_id': None},
         }
     ]
     assert response.quality_outcome == Q.owner_auto_rejected
 
 
-def test_unknown_voice_and_skip_write_nothing(monkeypatch):
+def test_unknown_voice_writes_an_anonymous_decision_and_skip_writes_nothing(monkeypatch):
     world = World(monkeypatch)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.skip), world.schedule, NOW)
-    assert world.assignments == [] and world.answered == ['pid', 'pid']
+    assert world.assignments == [
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+        }
+    ]
+    assert world.answered == ['pid', 'pid']
 
 
 def test_invalid_answer_for_kind(monkeypatch):
@@ -421,6 +479,82 @@ def test_list_verification_pool_is_bounded_and_dedupes_inflight(monkeypatch):
     assert queued.done()
 
 
+def test_list_verification_deadline_logs_info_not_error(monkeypatch, caplog):
+    pool = MonitoredThreadPoolExecutor(name='tag-deadline', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    caplog.set_level(logging.INFO)
+
+    def timed_out(uid, row, start, end, text, *, verification_deadline):
+        raise service.FutureTimeoutError()
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', timed_out)
+    try:
+        future = service._submit_list_verification('u', {'id': 'late'}, 0, 5, 'one two', time.monotonic() + 1)
+        cleared = threading.Event()
+        future.add_done_callback(lambda _: cleared.set())
+        with pytest.raises(service.FutureTimeoutError):
+            future.result(timeout=2)
+        assert cleared.wait(timeout=2)
+        verification_key = service._verification_cache_key('u', {'id': 'late'}, 0, 5, 'one two')
+        assert 'speaker tag list verification deadline reached' in [record.getMessage() for record in caplog.records]
+        assert not any(
+            record.levelno >= logging.ERROR and 'speaker tag list verification' in record.getMessage()
+            for record in caplog.records
+        )
+        assert verification_key not in service._inflight_verifications
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_list_verification_unexpected_error_logs_error_with_traceback(monkeypatch, caplog):
+    pool = MonitoredThreadPoolExecutor(name='tag-failure', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    caplog.set_level(logging.INFO)
+
+    def boom(uid, row, start, end, text, *, verification_deadline):
+        raise RuntimeError('doomed')
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', boom)
+    try:
+        future = service._submit_list_verification('u', {'id': 'doom'}, 0, 5, 'one two', time.monotonic() + 1)
+        cleared = threading.Event()
+        future.add_done_callback(lambda _: cleared.set())
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        assert cleared.wait(timeout=2)
+        verification_key = service._verification_cache_key('u', {'id': 'doom'}, 0, 5, 'one two')
+        [failure] = [
+            record
+            for record in caplog.records
+            if record.levelno >= logging.ERROR and 'speaker tag list verification failed' in record.getMessage()
+        ]
+        assert 'error_type=RuntimeError' in failure.getMessage()
+        assert failure.exc_info
+        assert verification_key not in service._inflight_verifications
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_list_verification_propagates_contextvars(monkeypatch):
+    pool = MonitoredThreadPoolExecutor(name='tag-context', max_workers=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    marker = contextvars.ContextVar('speaker_tag_marker', default='absent')
+    observed = []
+
+    def verify(uid, row, start, end, text, *, verification_deadline):
+        observed.append(marker.get())
+        return b'ok'
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', verify)
+    try:
+        marker.set('byok-marker')
+        future = service._submit_list_verification('u', {'id': 'ctx'}, 0, 5, 'one two', time.monotonic() + 1)
+        assert future.result(timeout=2) == b'ok'
+        assert observed == ['byok-marker']
+    finally:
+        pool.shutdown(wait=True)
+
+
 def test_verification_stt_runs_inline_with_one_budgeted_provider_attempt(monkeypatch):
     def forbidden_shared_pool(*args, **kwargs):
         pytest.fail('verification submitted STT to a shared executor')
@@ -576,11 +710,16 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
         ],
     }
     clipped = []
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(
         service,
         'conversation_clip_pcm',
-        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * 16000,
+        lambda uid, conv, start, end, **kwargs: clipped.append((start, end))
+        or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
     )
 
     async def verify(wav, rate, text, language=None):
@@ -590,7 +729,9 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
     monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]], dtype=np.float32))
     monkeypatch.setattr(
-        service.voice_profiles_db, 'add_owner_voice_confirmation', lambda uid, embedding, pool, conversation_id: 1
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda uid, embedding, pool, **kwargs: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -600,14 +741,20 @@ def test_owner_sample_gets_only_prompt_segments_still_assigned(monkeypatch):
     world = World(monkeypatch, paid=False)
 
     def assign(uid, conversation_id, **kwargs):
-        return {'transcript_segments': [{'id': 's1', 'start': 0, 'end': 9}]}, ['s1', 's9'], [], []
+        raw = {'transcript_segments': [{'id': 's1', 'start': 0, 'end': 9}], '_speaker_learning_queued': True}
+        return raw, ['s1', 's9'], [], []
 
     monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
     response = service.apply_answer(
         'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1', 'stale']), world.schedule, NOW
     )
     fn, kwargs = world.scheduled[0]
-    assert fn is service.store_owner_voice_sample and kwargs['segment_ids'] == ['s1']
+    assert fn is service.run_authorized_owner_learning and kwargs == {
+        'uid': 'u',
+        'conversation_id': 'c1',
+        'segment_ids': ['s1'],
+        'card_generation': 0,
+    }
     assert response.voice_sample_queued
 
 
@@ -631,8 +778,14 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hello there friend'}],
     }
     pooled = []
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6)
+    )
 
     async def verify(wav, rate, text, language=None):
         assert text == 'hello there friend' and language == 'en'
@@ -643,12 +796,46 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id: pooled.append((embedding, pool([embedding]))) or 1,
+        lambda uid, embedding, pool, **kwargs: pooled.append((embedding, pool([embedding]))) or 1,
     )
     outcome = asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a']))
     assert outcome == 'stored'
     assert pooled[0][0] == [3.0, 4.0]
     assert pooled[0][1] == pytest.approx([0.6, 0.8])
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_real_live_batches_still_supply_owner_confirmations(memory_bucket, monkeypatch, protection):
+    origin = 1700000000.0
+    uid, cid = 'synthetic-user', 'synthetic'
+    parts = [{'timestamp': origin + offset, 'data': b'\x01\x00' * 64000} for offset in (0, 4)]
+    storage.upload_audio_chunks_batch(parts, uid, cid, data_protection_level=protection)
+    conversation = {
+        'id': cid,
+        'started_at': origin,
+        'language': 'en',
+        'audio_files': [{'chunk_timestamps': [origin, origin + 4], 'duration': 8}],
+        'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hello there friend'}],
+        'manual_speaker_assignments': {'generation': 1, 'segments': {'a': {'generation': 1, 'is_user': True}}},
+    }
+    monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *args: conversation)
+
+    async def verify(wav, rate, text, language=None):
+        assert text == 'hello there friend' and language == 'en'
+        assert wav[44:] == b'\x01\x00' * (rate * 8)
+        return text, True, 'ok'
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *args: np.array([[3.0, 4.0]]))
+    pooled = []
+    monkeypatch.setattr(
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda *args, **kwargs: pooled.append(args[1]) or True,
+    )
+    assert asyncio.run(service.store_owner_voice_sample(uid, cid, ['a'])) == 'stored'
+    assert pooled == [[3.0, 4.0]]
+    assert len(memory_bucket.listings) == len(memory_bucket.reads) == 1
 
 
 def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
@@ -657,8 +844,14 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'language': 'en',
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hi'}],
     }
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6)
+    )
 
     async def verify(wav, rate, text, language=None):
         return None, False, 'multi_speaker: ratio=0.40'
@@ -693,6 +886,7 @@ def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_a_person', 'person_id': None},
         }
     ]
     assert ignored == [('u', 'c1', 1, NOW)] and world.answered == ['pid']
@@ -795,3 +989,11 @@ def test_ignored_voice_uses_the_merged_survivor_and_resolved_speaker(monkeypatch
     )
     service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='donor'), now=NOW)
     assert markers == [(('u', 'survivor', 8, NOW), {'assignment_generation': 7})]
+
+
+def test_free_user_can_reject_previously_served_paid_card(monkeypatch):
+    world = World(monkeypatch, paid=False)
+    service.apply_answer(
+        'u', _request(K.confirm_person, O.auto_person, A.someone_else, suggested_person_id='p1'), world.schedule, NOW
+    )
+    assert world.assignments and world.assignments[0]['person_id'] is None

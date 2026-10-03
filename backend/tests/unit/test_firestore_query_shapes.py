@@ -14,33 +14,46 @@ fresh recording fakes; the tests then assert:
 - digest-pinned covered-by/skip entries keep their reviewed function bodies,
 - driver trials are isolated: fresh clients per driver, deep-copied arguments,
   reset seeds/queues per trial, and leftover queued rows fail,
-- the unserved-shape ledgers match the checked-in ``firestore_query_known_gaps``
-  ledger exactly (full row metadata compared in both sections), and
+- every recorded *serving* shape is covered by the checked-in manifest
+  (zero-serving-debt guard — explicit ``serving=False`` profile rows are
+  reported separately, never as debt), and
 - the export artifact is deterministic and schema-stable.
-
-The checked-in ledger is a reviewed baseline: tests never rewrite it.
 """
 
 from __future__ import annotations
 
 import ast
-import copy
+import inspect
 import json
 import socket
 import sys
 import textwrap
 import types
 from datetime import date, datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import database.conversations
 from scripts import firestore_query_shapes as export_mod
-from tests.support.firestore_index_rules import required_index
+from tests.support.firestore_index_rules import is_served, required_index
+from tests.support.firestore_caller_witnesses import (
+    WITNESSES,
+    matching_profile,
+    witness_completeness_errors,
+)
+from tests.support.firestore_conversation_profiles import PROFILES, discover_conversation_callers
 from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, SKIPS
+from tests.support.firestore_outside_query_drivers import BODY_DIGEST as OUTSIDE_BODY_DIGEST
+from tests.support.firestore_serving_query_inventory import (
+    discover_serving_query_functions,
+    serving_function_body_digest,
+)
 from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
+    CallerProfile,
     DriverEntry,
     DriverResult,
     _FrozenDate,
@@ -57,11 +70,8 @@ from tests.support.firestore_shape_recorder import (
     install_recorder,
 )
 
-import database.conversations
-
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DATABASE_ROOT = BACKEND_ROOT / 'database'
-LEDGER_PATH = BACKEND_ROOT / 'tests' / 'support' / 'firestore_query_known_gaps.json'
 MANIFEST_PATH = BACKEND_ROOT.parent / 'firestore.indexes.json'
 
 
@@ -90,11 +100,6 @@ def export_payload(driver_results) -> dict:
     return export_mod.build_export(driver_results, manifest)
 
 
-@pytest.fixture(scope='module')
-def ledger() -> dict:
-    return json.loads(LEDGER_PATH.read_text())
-
-
 def _fake_module(monkeypatch: pytest.MonkeyPatch, name: str) -> types.ModuleType:
     module = types.ModuleType(name)
     monkeypatch.setitem(sys.modules, name, module)
@@ -118,6 +123,7 @@ def _entry(
         'candidate_index': candidate,
         'required_index': required,
         'served': served,
+        'serving': True,
         'uncertain': uncertain,
         'reason': reason,
     }
@@ -130,16 +136,16 @@ def _real_count_verdict(manifest: dict) -> dict:
         with client.recording_context('database.conversations.get_conversations_count', {}):
             database.conversations.get_conversations_count('shape-user', start_date=FROZEN_NOW)
     shape = client.shapes[0]
-    assert shape.orders == ()
+    assert shape.orders == (('created_at', 'DESCENDING'),)
     required = required_index(shape)
     assert required is not None
-    assert dict(required.fields)['created_at'] == 'ASCENDING'
+    assert dict(required.fields)['created_at'] == 'DESCENDING'
     return export_mod.shape_verdict(shape, manifest)
 
 
 @pytest.fixture(scope='module')
 def discovered_keys() -> set[str]:
-    return {row['key'] for row in discover_query_functions(DATABASE_ROOT)}
+    return {row['key'] for row in discover_serving_query_functions(BACKEND_ROOT)}
 
 
 def test_registry_covers_all_discovered_functions(discovered_keys):
@@ -159,8 +165,13 @@ def test_covered_by_references_resolve():
 
 def test_registry_domains_and_neutral_reasons_well_formed():
     for key, entry in DRIVERS.items():
-        for name, values in entry.domains.items():
-            assert values, f'{key}: domain {name} is empty'
+        assert len({profile.name for profile in entry.profiles}) == len(entry.profiles)
+        for profile in entry.profiles:
+            assert profile.name
+            assert not (profile.domains.keys() & (entry.base.keys() | entry.neutrals.keys() | entry.domains.keys()))
+        for domains in [entry.domains, *(profile.domains for profile in entry.profiles)]:
+            for name, values in domains.items():
+                assert values, f'{key}: domain {name} is empty'
         for name, spec in entry.neutrals.items():
             assert (
                 isinstance(spec, tuple) and len(spec) == 2 and str(spec[1]).strip()
@@ -272,22 +283,28 @@ def test_covered_by_helpers_observed_in_named_driver(driver_results):
     assert not missing, f'covered-by helpers not observed in any named covering driver: {missing}'
 
 
-def test_digest_pinned_entries_unchanged():
-    """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
+@pytest.fixture(scope='module')
+def pinned_entry_review_errors():
     bad = []
     for key, entry in COVERED_BY.items():
         if entry.expect_observed:
             continue
         if not entry.body_digest:
             bad.append(f'{key}: expect_observed=False without a body digest')
-        elif entry.body_digest != function_body_digest(key):
+        elif entry.body_digest != serving_function_body_digest(key):
             bad.append(f'{key}: body changed since review — re-review coverage')
     for key, entry in SKIPS.items():
         if entry.body_digest is None:
             bad.append(f'{key}: skip without a body digest')
-        elif entry.body_digest != function_body_digest(key):
+        elif entry.body_digest != serving_function_body_digest(key):
             bad.append(f'{key}: body changed since skip review — re-review the skip')
-    assert not bad, '; '.join(bad)
+    return bad
+
+
+@pytest.mark.slow
+def test_digest_pinned_entries_unchanged(pinned_entry_review_errors):
+    """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
+    assert not pinned_entry_review_errors, '; '.join(pinned_entry_review_errors)
 
 
 def _mutating_driver_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
@@ -344,6 +361,23 @@ def test_driver_deep_copies_arguments_across_trials(monkeypatch):
     assert [s.signature() for s in first.shapes] == [s.signature() for s in second.shapes]
 
 
+def test_named_profiles_deep_copy_arguments_and_keep_export_provenance(monkeypatch):
+    _mutating_driver_module(monkeypatch)
+    entry = DriverEntry(
+        'driver_fixtures_mutating.mutating',
+        base={'payload': {'items': [], 'depth': {'n': 0}}},
+        profiles=(CallerProfile('one', {'flag': [True]}), CallerProfile('two', {'flag': [False]})),
+        trials=2,
+    )
+    first = run_driver(entry)
+    second = run_driver(entry)
+    assert not first.errors and not second.errors
+    assert entry.base['payload'] == {'items': [], 'depth': {'n': 0}}
+    assert [shape.to_dict() for shape in first.shapes] == [shape.to_dict() for shape in second.shapes]
+    assert [shape.parameter_combo['caller_profile'] for shape in first.shapes] == ['one', 'one', 'two', 'two']
+    assert all(shape.driver_function == entry.function for shape in first.shapes)
+
+
 def test_registry_body_digests_are_frozen_literals():
     """BODY_DIGEST must be a literal dict matching every digest-pinned entry."""
     registry_path = BACKEND_ROOT / 'tests' / 'support' / 'firestore_query_driver_registry.py'
@@ -357,7 +391,7 @@ def test_registry_body_digests_are_frozen_literals():
     assert isinstance(digest_node, ast.Dict), 'BODY_DIGEST must be a literal dict'
     pinned = ast.literal_eval(digest_node)
     expected = {key: entry.body_digest for key, entry in {**COVERED_BY, **SKIPS}.items() if entry.body_digest}
-    assert pinned == expected
+    assert pinned | OUTSIDE_BODY_DIGEST == expected
 
 
 def test_function_body_digest_tracks_signature_and_body(tmp_path):
@@ -428,19 +462,10 @@ def test_swallowed_socket_attempt_still_fails(monkeypatch):
     assert any('network connection attempt' in error.error for error in result.errors)
 
 
-def test_ledger_is_well_formed(ledger):
-    assert ledger['schema_version'] == 1
-    ids = [row['id'] for row in ledger['known_gaps']] + [row['id'] for row in ledger['uncertain']]
-    assert len(ids) == len(set(ids)), 'duplicate ids in the ledger'
-    for row in ledger['known_gaps'] + ledger['uncertain']:
-        assert set(row) >= {'id', 'shape', 'required_index'}
-        assert row['shape']['collection_group']
-
-
-def test_known_gaps_match_checked_in_ledger(export_payload, ledger):
+def test_export_has_zero_serving_debt(export_payload):
+    """The whole recorded serving surface is covered by the checked-in manifest."""
     computed = export_mod.evaluate_shapes(export_payload['shapes'])
-    sections = export_mod.compare_ledgers(computed, ledger)
-    message = export_mod.format_guard_failure(sections)
+    message = export_mod.format_guard_failure(computed)
     assert not message, message
 
 
@@ -448,158 +473,97 @@ def _sig_id(signature: dict) -> str:
     return export_mod._signature_id(signature)
 
 
-def test_new_certain_gap_fails():
+def test_new_certain_serving_gap_fails():
     computed = export_mod.evaluate_shapes([_entry('a1', served=False)])
-    sections = export_mod.compare_ledgers(computed, {'schema_version': 1, 'known_gaps': [], 'uncertain': []})
-    assert sections['new_gaps'] == ['a1']
-    assert not sections['stale_gaps']
+    message = export_mod.format_guard_failure(computed)
+    assert 'a1' in message
+    assert 'UNSERVED serving shapes' in message
 
 
-def test_stale_gap_fails():
-    sig = {'collection_group': 'c'}
-    computed = export_mod.evaluate_shapes([_entry('a1', served=True)])
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [{'id': _sig_id(sig), 'shape': sig, 'required_index': {}}],
-        'uncertain': [],
-    }
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert sections['stale_gaps'] == [_sig_id(sig)]
-
-
-def test_served_shape_with_ledger_gap_is_stale():
-    gap = _entry('a1', served=False)
-    assert export_mod.evaluate_shapes([gap])['known_gaps']
-    served = dict(gap, served=True)
-    assert not export_mod.evaluate_shapes([served])['known_gaps']
-
-
-def test_changed_required_index_fails():
-    sig = {'collection_group': 'c'}
-    new = {'collectionGroup': 'c', 'queryScope': 'COLLECTION', 'fields': [{'fieldPath': 'b'}]}
-    computed = export_mod.evaluate_shapes([_entry(_sig_id(sig), served=False, required=new, signature=sig)])
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [{'id': _sig_id(sig), 'shape': sig, 'required_index': {'fields': [{'fieldPath': 'a'}]}}],
-        'uncertain': [],
-    }
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert sections['changed_required'] == [_sig_id(sig)]
-    assert not sections['new_gaps']
-    assert not sections['stale_gaps']
-    assert not sections['invalid_ledger']
-
-
-def test_tampered_stored_shape_fails():
-    """A stored shape that does not hash to its own id is an invalid row."""
-    sig = {'collection_group': 'c'}
-    computed = export_mod.evaluate_shapes([_entry(_sig_id(sig), served=False, signature=sig)])
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [{'id': _sig_id(sig), 'shape': {'collection_group': 'tampered'}, 'required_index': {}}],
-        'uncertain': [],
-    }
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert sections['invalid_ledger']
-    assert sections['changed_shape'] == [_sig_id(sig)]
-
-
-def test_duplicate_ledger_ids_fail():
-    sig = {'collection_group': 'c'}
-    row = {'id': _sig_id(sig), 'shape': sig, 'required_index': {}}
-    ledger = {'schema_version': 1, 'known_gaps': [row, dict(row)], 'uncertain': []}
-    sections = export_mod.compare_ledgers({'known_gaps': {}, 'uncertain': {}}, ledger)
-    assert any('duplicate id' in problem for problem in sections['invalid_ledger'])
-
-
-def test_id_in_both_ledger_sections_fails():
-    sig = {'collection_group': 'c'}
-    row = {'id': _sig_id(sig), 'shape': sig, 'required_index': {}}
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [row],
-        'uncertain': [dict(row, reason='or')],
-    }
-    sections = export_mod.compare_ledgers({'known_gaps': {}, 'uncertain': {}}, ledger)
-    assert any('both ledger sections' in problem for problem in sections['invalid_ledger'])
-
-
-def test_new_uncertainty_fails():
+def test_serving_uncertain_row_fails():
     sig = {'collection_group': 'c'}
     computed = export_mod.evaluate_shapes(
         [_entry(_sig_id(sig), served=False, uncertain=True, reason='or', signature=sig)]
     )
-    sections = export_mod.compare_ledgers(computed, {'schema_version': 1, 'known_gaps': [], 'uncertain': []})
-    assert sections['new_uncertain'] == [_sig_id(sig)]
+    message = export_mod.format_guard_failure(computed)
+    assert _sig_id(sig) in message
+    assert 'UNRESOLVED uncertain' in message
 
 
-def test_matching_uncertain_ledger_passes():
+def test_uncertain_and_certain_same_id_reports_certain():
+    """A certain serving gap wins over an uncertain row sharing the stable id."""
     sig = {'collection_group': 'c'}
-    computed = export_mod.evaluate_shapes(
-        [_entry(_sig_id(sig), served=False, uncertain=True, reason='or', signature=sig)]
-    )
-    ledger = export_mod.build_ledger(computed)
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert not export_mod.format_guard_failure(sections)
+    certain = _entry('dup', served=False, signature=sig)
+    uncertain = _entry('dup', served=False, uncertain=True, reason='r', signature=sig)
+    for entries in ([certain, uncertain], [uncertain, certain]):
+        computed = export_mod.evaluate_shapes(entries)
+        assert 'dup' in computed['known_gaps']
+        assert 'dup' not in computed['uncertain']
 
 
-def test_changed_uncertain_metadata_fails():
-    sig = {'collection_group': 'c'}
-    computed = export_mod.evaluate_shapes(
-        [_entry(_sig_id(sig), served=False, uncertain=True, reason='or-group', signature=sig)]
-    )
-    computed_row = computed['uncertain'][_sig_id(sig)]
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [],
-        'uncertain': [dict(computed_row, reason='different-reason')],
-    }
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert sections['changed_uncertain'] == [_sig_id(sig)]
-    assert not sections['changed_required']
-    assert not sections['invalid_ledger']
+def test_nonserving_unserved_is_reported_not_debt():
+    entry = dict(_entry('n1', served=False), serving=False)
+    computed = export_mod.evaluate_shapes([entry])
+    assert 'n1' in computed['nonserving']
+    assert not export_mod.format_guard_failure(computed)
+    assert 'n1' in export_mod.format_nonserving_rows(computed)
 
 
-def test_manifest_index_resolving_uncertainty_requires_pruning():
-    sig = {'collection_group': 'c'}
-    resolved = _entry(_sig_id(sig), served=True, uncertain=True, reason='or', signature=sig)
-    computed = export_mod.evaluate_shapes([resolved])
-    assert not computed['uncertain']
-    ledger = {
-        'schema_version': 1,
-        'known_gaps': [],
-        'uncertain': [{'id': _sig_id(sig), 'shape': sig, 'required_index': {}, 'reason': 'or'}],
-    }
-    sections = export_mod.compare_ledgers(computed, ledger)
-    assert sections['stale_uncertain'] == [_sig_id(sig)]
+def test_nonserving_cannot_mask_serving_debt():
+    """A serving row sharing an id with a non-serving row is still debt."""
+    nonserving = dict(_entry('masked', served=False), serving=False)
+    serving = _entry('masked', served=False)
+    for entries in ([nonserving, serving], [serving, nonserving]):
+        computed = export_mod.evaluate_shapes(entries)
+        assert 'masked' in computed['known_gaps']
+        assert 'masked' not in computed['nonserving']
 
 
-def test_uncertain_but_served_is_not_ledger_debt():
+def test_flipping_nonserving_row_to_serving_fails():
+    """A non-serving row smuggled into the serving surface fails the guard."""
+    entry = dict(_entry('flip', served=False), serving=False)
+    assert not export_mod.format_guard_failure(export_mod.evaluate_shapes([entry]))
+    flipped = dict(entry, serving=True)
+    assert 'flip' in export_mod.format_guard_failure(export_mod.evaluate_shapes([flipped]))
+
+
+def test_served_shapes_produce_no_debt():
+    assert not export_mod.format_guard_failure(export_mod.evaluate_shapes([_entry('a1', served=True)]))
+
+
+def test_uncertain_but_served_is_not_debt():
     sig = {'collection_group': 'c'}
     computed = export_mod.evaluate_shapes([_entry(_sig_id(sig), served=True, uncertain=True, signature=sig)])
-    assert computed == {'known_gaps': {}, 'uncertain': {}}
+    assert computed == {'known_gaps': {}, 'uncertain': {}, 'nonserving': {}}
+
+
+def test_real_bounded_count_rejects_an_ascending_only_manifest():
+    manifest = {
+        'indexes': [
+            {
+                'collectionGroup': 'conversations',
+                'queryScope': 'COLLECTION',
+                'fields': [
+                    {'fieldPath': field, 'order': 'ASCENDING'} for field in ('discarded', 'created_at', '__name__')
+                ],
+            }
+        ],
+    }
+    assert not _real_count_verdict(manifest)['served']
 
 
 def test_real_shape_manifest_mutation():
-    """Adding precisely the required index flips a real gap to stale."""
+    """Removing the required index flips a real served shape to debt."""
     unserved = _real_count_verdict({'indexes': []})
     assert not unserved['served']
-    computed = export_mod.evaluate_shapes([unserved])
-    ledger = export_mod.build_ledger(computed)
-    assert not export_mod.format_guard_failure(export_mod.compare_ledgers(computed, ledger))
+    message = export_mod.format_guard_failure(export_mod.evaluate_shapes([unserved]))
+    assert unserved['id'] in message
 
     required = unserved['required_index']
     assert required is not None
-    served_manifest = {'indexes': [required]}
-    served = _real_count_verdict(served_manifest)
+    served = _real_count_verdict({'indexes': [required]})
     assert served['served']
-    sections = export_mod.compare_ledgers(export_mod.evaluate_shapes([served]), ledger)
-    assert sections['stale_gaps'] == [unserved['id']]
-
-    tampered = copy.deepcopy(ledger)
-    tampered['known_gaps'][0]['required_index'] = {'collectionGroup': 'other'}
-    sections = export_mod.compare_ledgers(computed, tampered)
-    assert sections['changed_required'] == [unserved['id']]
+    assert not export_mod.format_guard_failure(export_mod.evaluate_shapes([served]))
 
 
 def test_export_schema_and_counts(export_payload):
@@ -617,6 +581,7 @@ def test_export_schema_and_counts(export_payload):
             'candidate_index',
             'required_index',
             'served',
+            'serving',
             'uncertain',
             'reason',
         }
@@ -674,6 +639,141 @@ def test_same_signature_singleton_and_multi_in_retain_refused_case():
     for entries in ([singleton, multi], [multi, singleton]):
         computed = export_mod.evaluate_shapes(entries)
         assert singleton['id'] in computed['uncertain']
+
+
+@pytest.fixture(scope='module')
+def conversation_caller_inventory():
+    return discover_conversation_callers(BACKEND_ROOT)
+
+
+def test_conversation_caller_profiles_are_complete(conversation_caller_inventory):
+    """Discovered bindings must match the named runtime witnesses exactly."""
+    errors = witness_completeness_errors(conversation_caller_inventory)
+    assert not errors, '; '.join(errors)
+    bound = set()
+    for witness in WITNESSES.values():
+        names = {profile.name for profile in PROFILES[witness.target]}
+        assert witness.profiles and set(witness.profiles) <= names
+        bound.update(witness.profiles)
+    assert bound == {profile.name for profiles in PROFILES.values() for profile in profiles}
+
+
+@pytest.mark.parametrize('change', ['new-caller', 'wrapper-reference', 'assigned-alias'])
+def test_conversation_caller_sentinel_detects_new_references(tmp_path, change):
+    """A new call site — direct, wrapped, or aliased — is a new discovered
+    binding that completeness checking then flags as missing a witness."""
+    path = tmp_path / 'consumer.py'
+    path.write_text(
+        'from database.conversations import get_conversations as listing\n' 'def read(uid):\n    return listing(uid)\n'
+    )
+    before = discover_conversation_callers(tmp_path)
+    if change == 'new-caller':
+        path.write_text(path.read_text() + '\ndef new_read(uid):\n    return listing(uid, starred=True)\n')
+    elif change == 'wrapper-reference':
+        path.write_text(path.read_text() + '\ndef wrapper(uid):\n    return run_blocking(pool, listing, uid)\n')
+    else:
+        path.write_text(path.read_text() + '\nalias = listing\ndef aliased(uid):\n    return alias(uid)\n')
+    after = discover_conversation_callers(tmp_path)
+    assert len(after) == len(before) + 1, (before, after)
+    new_keys = set(after) - set(before)
+    assert all(row['target'] == 'database.conversations.get_conversations' for row in after.values())
+    errors = witness_completeness_errors(after, {})
+    assert new_keys and all(any(key in error for error in errors) for key in new_keys)
+
+
+@pytest.mark.parametrize(
+    'widened',
+    [
+        {'categories': ['work']},
+        {'date_field': 'started_at'},
+        {'starred': True, 'include_discarded': True},
+    ],
+)
+def test_widened_argument_domains_fail_runtime_profile_membership(widened):
+    """A caller passing an argument outside every named profile's declared
+    domain must fail the runtime capture guard."""
+    signature = inspect.signature(database.conversations.get_conversations)
+    bound = signature.bind('u1', **widened)
+    bound.apply_defaults()
+    names = (profile.name for profile in PROFILES['database.conversations.get_conversations'])
+    assert matching_profile('database.conversations.get_conversations', dict(bound.arguments), tuple(names)) is None
+
+
+def test_every_conversation_profile_is_exported_and_served(driver_results, export_payload):
+    for target, profiles in PROFILES.items():
+        result = driver_results[target]
+        assert not result.errors
+        assert {shape.parameter_combo['caller_profile'] for shape in result.shapes} == {p.name for p in profiles}
+        exported = [row for row in export_payload['shapes'] if row['driver_function'] == target]
+        assert exported and all(row['served'] for row in exported), target
+        assert {row['parameter_combo']['caller_profile']['value'] for row in exported} == {p.name for p in profiles}
+        for shape in result.shapes:
+            combo = shape.parameter_combo
+            if combo['caller_profile'].startswith('main-'):
+                assert combo['categories'] is None
+                assert not (len(combo.get('sources') or []) > 1 and len(combo.get('statuses') or []) > 1)
+                if combo['caller_profile'].startswith('main-list'):
+                    assert combo['statuses']
+
+
+@pytest.mark.parametrize(
+    'helper,status_sizes', [('get_conversations_count', [0, 1, 2]), ('get_conversations_without_photos', [1, 2])]
+)
+def test_main_conversation_profiles_preserve_the_entire_accepted_matrix(driver_results, helper, status_sizes):
+    combos = [
+        shape.parameter_combo
+        for shape in driver_results[f'database.conversations.{helper}'].shapes
+        if shape.parameter_combo['caller_profile'].startswith('main-')
+    ]
+    actual = {
+        (
+            combo['include_discarded'],
+            len(combo['statuses'] or []),
+            len(combo['sources'] or []),
+            bool(combo['folder_id']),
+            combo['starred'],
+            bool(combo['start_date']),
+            bool(combo['end_date']),
+        )
+        for combo in combos
+    }
+    expected = {
+        values
+        for values in product(
+            [False, True], status_sizes, [0, 1, 2], [False, True], [None, False, True], [False, True], [False, True]
+        )
+        if not (values[1] > 1 and values[2] > 1)
+    }
+    assert actual == expected
+
+
+@pytest.mark.parametrize('field', ['source', 'starred', 'folder_id'])
+def test_shared_desc_indexes_have_necessary_singleton_count_witnesses(driver_results, field):
+    manifest = export_mod.load_manifest(MANIFEST_PATH)
+    witnesses = [
+        shape
+        for shape in driver_results['database.conversations.get_conversations_count'].shapes
+        if shape.aggregations
+        and shape.orders == (('created_at', 'DESCENDING'),)
+        and {predicate.field for predicate in shape.filters} == {field, 'created_at'}
+    ]
+    assert witnesses, f'{field}: accepted dated count with this sole equality must be recorded'
+    without = {
+        **manifest,
+        'indexes': [
+            entry
+            for entry in manifest['indexes']
+            if not (
+                entry['collectionGroup'] == 'conversations'
+                and entry['queryScope'] == 'COLLECTION'
+                and [item['fieldPath'] for item in entry['fields']] == [field, 'created_at', '__name__']
+                and entry['fields'][1].get('order') == 'DESCENDING'
+                and entry['fields'][2].get('order') == 'DESCENDING'
+            )
+        ],
+    }
+    assert all(is_served(shape, manifest) for shape in witnesses)
+    assert all(not is_served(shape, without) for shape in witnesses)
 
 
 def test_export_main_writes_exact_path(tmp_path, driver_results, monkeypatch, capsys):

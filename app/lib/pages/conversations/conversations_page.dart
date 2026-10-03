@@ -16,7 +16,6 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -34,6 +33,7 @@ import 'package:omi/widgets/home_bottom_bar.dart';
 enum _ConversationListRowKind {
   topSpacer,
   dateHeader,
+  processing,
   captureGapHeader,
   captureGap,
   conversation,
@@ -139,6 +139,7 @@ List<_ConversationListRow> _buildConversationListRows({
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
   Map<DateTime, List<CalendarCaptureGap>> captureGapsByDate = const {},
+  Map<DateTime, ServerConversation> processingByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -148,13 +149,14 @@ List<_ConversationListRow> _buildConversationListRows({
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final captureGaps = captureGapsByDate[date] ?? const <CalendarCaptureGap>[];
+    final processing = processingByDate[date];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
     // A day with only uncaptured meetings still deserves its date header —
     // the capture-gap group is the honest row for that day.
-    if (entries.isEmpty && captureGaps.isEmpty) continue;
+    if (entries.isEmpty && captureGaps.isEmpty && processing == null) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -176,6 +178,19 @@ List<_ConversationListRow> _buildConversationListRows({
       captureGap: null,
       conversationIndex: -1,
     ));
+
+    // Process Now belongs to the list, above the day where the completed conversation lands.
+    if (processing != null) {
+      rows.add((
+        kind: _ConversationListRowKind.processing,
+        date: date,
+        isFirst: false,
+        conversation: processing,
+        recording: null,
+        captureGap: null,
+        conversationIndex: -1,
+      ));
+    }
 
     if (captureGaps.isNotEmpty) {
       rows.add((
@@ -239,6 +254,26 @@ List<_ConversationListRow> _buildConversationListRows({
   }
 
   return rows;
+}
+
+bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
+    index >= 0 &&
+    index < rows.length &&
+    rows[index].kind == _ConversationListRowKind.conversation &&
+    rows[index].conversation!.isLocked;
+
+/// For a locked conversation row in a run of two or more consecutive locked rows (one day): the
+/// whole run when [index] starts it, an empty list when an earlier row already drew it, and null
+/// for any other row, which draws itself.
+List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int index) {
+  if (!_isLockedRow(rows, index)) return null;
+  if (_isLockedRow(rows, index - 1)) return const [];
+  var end = index + 1;
+  while (_isLockedRow(rows, end)) {
+    end++;
+  }
+  if (end - index < 2) return null;
+  return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
 /// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
@@ -459,17 +494,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  Widget _buildNoConversationsHero(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120),
-      child: OmiEmptyState(
-        icon: Icons.forum_rounded,
-        title: context.l10n.noConversationsYet,
-        message: context.l10n.noConversationsHeroMessage,
-      ),
-    );
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -521,6 +545,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
+        final processingNewest = newestProcessingConversation(snapshot.processingConversations);
+        final processingByDate = <DateTime, ServerConversation>{
+          if (processingNewest != null)
+            conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
+        };
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -539,6 +568,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           if (showCaptureGaps) ...captureGapsByDate.keys,
+          ...processingByDate.keys,
         }.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
@@ -546,6 +576,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
           captureGapsByDate: captureGapsByDate,
+          processingByDate: processingByDate,
         );
 
         return RefreshIndicator(
@@ -579,8 +610,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ? HomeDailyRecaps(key: _recapsKey)
                     : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
-              // Process Now belongs to the list, above the day where the completed conversation lands.
-              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
@@ -599,10 +628,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
-              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
-                const SliverToBoxAdapter(child: SizedBox(height: 20))
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
@@ -611,7 +641,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && isShowingConversationSkeleton)
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  isShowingConversationSkeleton)
                 _buildLoadingShimmer()
               else
                 SliverList(
@@ -643,6 +676,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                           isFirst: row.isFirst,
                         );
+                      case _ConversationListRowKind.processing:
+                        return ProcessingConversationWidget(
+                          key: ValueKey('processing_${row.conversation!.id}'),
+                          conversation: row.conversation!,
+                        );
                       case _ConversationListRowKind.captureGapHeader:
                         return CaptureGapHeader(
                           key: ValueKey('gaps_${row.date.toIso8601String()}'),
@@ -654,6 +692,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           gap: row.captureGap!,
                         );
                       case _ConversationListRowKind.conversation:
+                        // Consecutive locked rows share one frosted card and one upgrade action;
+                        // the run's first row draws it and the rest of the run draws nothing.
+                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        if (lockedRun != null) {
+                          if (lockedRun.isEmpty) return const SizedBox.shrink();
+                          return LockedConversationRun(
+                            key: ValueKey('locked_run_${row.conversation!.id}'),
+                            conversations: lockedRun,
+                            date: row.date,
+                          );
+                        }
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
                           conversation: row.conversation!,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -335,9 +336,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future setUserPeople() async {
-    final people = await getAllPeople();
-    if (people != null) {
-      SharedPreferencesUtil().cachedPeople = people;
+    final response = await getAllPeople();
+    if (response != null) {
+      SharedPreferencesUtil().cachedPeople =
+          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
     }
     notifyListeners();
   }

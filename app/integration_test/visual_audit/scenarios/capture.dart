@@ -39,6 +39,9 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
 
+  @override
+  bool get pendantCaptureVerified => true;
+
   bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
@@ -197,9 +200,7 @@ class HomeFrame extends StatelessWidget {
                 semanticLabel: 'Sync',
                 onTap: () {},
                 badgeCount: pendingSync!,
-                quietBadge: true,
-                color: Colors.transparent,
-                icon: Icon(Icons.cloud_outlined, size: 18, color: OmiColors.textTertiary),
+                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
               ),
             HeaderCircleButton(
               semanticLabel: 'Search',

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,10 @@ class CapacityFallbackKwargs(TypedDict, total=False):
     replay_diagnostics: ReplayLagDiagnostics
 
 
+class FailureFallbackKwargs(TypedDict, total=False):
+    failure_subtype: str
+
+
 def capacity_fallback_kwargs(
     subtype: str | None, diagnostics: ReplayLagDiagnostics | None = None
 ) -> CapacityFallbackKwargs:
@@ -120,8 +125,9 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = frozenset(
+ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
+        'gate_unavailable',
         'timeout',
         'provider_5xx',
         'provider_429',
@@ -152,12 +158,32 @@ ALLOWED_REASONS = frozenset(
     }
 )
 
-# Diagnostic detail in the log only. The shared metric's reason vocabulary and
-# label dimensions remain unchanged.
-ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+# Diagnostic detail stays in the log; metric dimensions stay fixed and live
+# STT reasons share the bounded vocabulary used by cost health.
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout'})
+ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
+    {
+        'initialization_failed',
+        'connection_lost',
+        'send_failed',
+        'socket_unavailable',
+        'modulate_serve_error',
+        'provider_rate_limited',
+        'soniox_idle_timeout',
+        'soniox_request_timeout',
+        'soniox_rotation',
+        'provider_5xx',
+        'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
+        'soniox_invalid_hint',
+        'untyped',
+    }
+)
 
 ALLOWED_COMPONENTS = frozenset(
     {
+        'screen_task_gate',
         'sync_dispatch',
         'pusher',
         'stt_selection',
@@ -196,6 +222,7 @@ def record_fallback(
     capacity_subtype: str | None = None,
     replay_diagnostics: ReplayLagDiagnostics | None = None,
     first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
+    failure_subtype: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -238,6 +265,9 @@ def record_fallback(
                 *fields,
                 first_text_diagnostics.log_fields(),
             )
+        elif reason_label == 'other' and failure_subtype is not None:
+            subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
         else:
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
@@ -272,3 +302,36 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
         text = default
     normalized = ''.join(char if char.isalnum() or char in _SAFE_LABEL_CHARS else '_' for char in text)
     return (normalized or default)[:_LABEL_MAX_LENGTH]
+
+
+def initialize_live_stt_exhausted_children() -> None:
+    """Expose zero before the first burst so increase() can observe it."""
+    providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
+    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    for reason in sorted(reasons):
+        for provider in providers:
+            for replacement in providers:
+                OMI_FALLBACK_TOTAL.labels(
+                    component='stt_live_session',
+                    from_mode=provider,
+                    to_mode=replacement,
+                    reason=reason,
+                    outcome='exhausted',
+                )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_live_session',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+
+
+initialize_live_stt_exhausted_children()

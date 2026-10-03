@@ -53,24 +53,26 @@ class FilterBottomSheet extends StatelessWidget {
 
                       const SizedBox(height: OmiSpacing.xl),
 
-                      // Categories
-                      _buildSectionTitle(AppLocalizations.of(context).categories),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _buildCategoryChips(context, provider),
-
-                      const SizedBox(height: OmiSpacing.xl),
+                      // Categories (hidden while the catalog offers none)
+                      if (provider.categories.isNotEmpty) ...[
+                        _buildSectionTitle(AppLocalizations.of(context).categories),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _buildCategoryChips(context, provider),
+                        const SizedBox(height: OmiSpacing.xl),
+                      ],
 
                       // Sort Options
                       _buildSectionTitle(AppLocalizations.of(context).sortBy),
                       const SizedBox(height: OmiSpacing.sm),
                       _buildSortOptions(context, provider),
 
-                      const SizedBox(height: OmiSpacing.xl),
-
-                      // Capabilities
-                      _buildSectionTitle(AppLocalizations.of(context).capabilities),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _buildCapabilities(context, provider),
+                      // Capabilities (hidden while the catalog offers none)
+                      if (provider.capabilities.isNotEmpty) ...[
+                        const SizedBox(height: OmiSpacing.xl),
+                        _buildSectionTitle(AppLocalizations.of(context).capabilities),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _buildCapabilities(context, provider),
+                      ],
                     ],
                   ),
                 ),

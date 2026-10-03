@@ -10,6 +10,7 @@ import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -87,7 +88,8 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
       ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
       ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
-      ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => const [])),
+      ChangeNotifierProvider(
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
       ChangeNotifierProvider(create: (_) => OnboardingProvider()),
       ChangeNotifierProvider(create: (_) => McpProvider()),
       ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),

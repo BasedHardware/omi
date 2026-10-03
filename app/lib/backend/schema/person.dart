@@ -65,6 +65,14 @@ class Person {
   final int? labelsToConfirm;
   final DateTime? lastLabeledAt;
 
+  /// `learned`, `pending`, `needs_more_speech`, `disabled` or `unknown`: what teaching this
+  /// person's voice came to, from the server.
+  final String voiceLearningState;
+
+  /// Clear speech of this person Omi has to learn from, and how much more it needs.
+  final double? voiceSpeechSeconds;
+  final double? voiceNeededSeconds;
+
   Person({
     required this.id,
     required this.name,
@@ -85,6 +93,9 @@ class Person {
     this.confidenceReasons = const [],
     this.labelsToConfirm,
     this.lastLabeledAt,
+    this.voiceLearningState = 'unknown',
+    this.voiceSpeechSeconds,
+    this.voiceNeededSeconds,
   });
 
   Person copyWith({
@@ -93,6 +104,10 @@ class Person {
     List<String>? speechSamples,
     bool? pinned,
     DateTime? Function()? pinnedAt,
+    int? Function()? conversationCount,
+    DateTime? Function()? lastHeardAt,
+    double? Function()? talkSeconds,
+    int? Function()? autoConversationCount,
   }) {
     return Person(
       id: id,
@@ -104,16 +119,19 @@ class Person {
       speechSamplesVersion: speechSamplesVersion,
       colorIdx: colorIdx,
       voiceReadiness: voiceReadiness,
-      conversationCount: conversationCount,
-      lastHeardAt: lastHeardAt,
-      talkSeconds: talkSeconds,
-      autoConversationCount: autoConversationCount,
+      conversationCount: conversationCount != null ? conversationCount() : this.conversationCount,
+      lastHeardAt: lastHeardAt != null ? lastHeardAt() : this.lastHeardAt,
+      talkSeconds: talkSeconds != null ? talkSeconds() : this.talkSeconds,
+      autoConversationCount: autoConversationCount != null ? autoConversationCount() : this.autoConversationCount,
       pinned: pinned ?? this.pinned,
       pinnedAt: pinnedAt != null ? pinnedAt() : this.pinnedAt,
       confidence: confidence,
       confidenceReasons: confidenceReasons,
       labelsToConfirm: labelsToConfirm,
       lastLabeledAt: lastLabeledAt,
+      voiceLearningState: voiceLearningState,
+      voiceSpeechSeconds: voiceSpeechSeconds,
+      voiceNeededSeconds: voiceNeededSeconds,
     );
   }
 
@@ -153,6 +171,9 @@ class Person {
       confidenceReasons: generated.confidenceReasons,
       labelsToConfirm: generated.labelsToConfirm,
       lastLabeledAt: generated.lastLabeledAt,
+      voiceLearningState: generated.voiceLearningState,
+      voiceSpeechSeconds: generated.voiceSpeechSeconds,
+      voiceNeededSeconds: generated.voiceNeededSeconds,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }
@@ -177,10 +198,33 @@ class Person {
       confidenceReasons: confidenceReasons,
       labelsToConfirm: labelsToConfirm,
       lastLabeledAt: lastLabeledAt,
+      voiceLearningState: voiceLearningState,
+      voiceSpeechSeconds: voiceSpeechSeconds,
+      voiceNeededSeconds: voiceNeededSeconds,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {...toGenerated().toJson(), 'color_idx': colorIdx};
   }
+}
+
+List<Person> preserveCachedPeopleStats(List<Person> incoming, List<Person> cached) {
+  final byId = {for (final person in cached) person.id: person};
+  return incoming.map((person) {
+    final prior = byId[person.id];
+    if (prior == null ||
+        (prior.conversationCount == null &&
+            prior.lastHeardAt == null &&
+            prior.talkSeconds == null &&
+            prior.autoConversationCount == null)) {
+      return person;
+    }
+    return person.copyWith(
+      conversationCount: () => prior.conversationCount,
+      lastHeardAt: () => prior.lastHeardAt,
+      talkSeconds: () => prior.talkSeconds,
+      autoConversationCount: () => prior.autoConversationCount,
+    );
+  }).toList();
 }

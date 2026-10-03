@@ -29,7 +29,12 @@ from google.protobuf.json_format import MessageToDict
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tests.support.firestore_index_rules import is_served, required_index, resolved_candidate_index
-from tests.support.firestore_shape_recorder import Aggregation, QueryFilter, QueryShape
+from tests.support.firestore_shape_recorder import (
+    Aggregation,
+    QueryFilter,
+    QueryShape,
+    document_path_template,
+)
 
 SCHEMA_VERSION = 1
 RESOURCE = re.compile(r'^projects/([^/]+)/databases/([^/]+)/collectionGroups/([^/]+)/(indexes|fields)/(.+)$')
@@ -110,6 +115,31 @@ def synthetic_path(collection: str, namespace: str) -> str:
     return f'users/{namespace}/{collection}'
 
 
+def oracle_collection_path(encoded: Mapping[str, Any], namespace: str) -> str:
+    """Resolve the probe collection path, preserving root-collection identity.
+
+    A COLLECTION-scope shape recorded against a one-segment path is a real
+    collection-group root (e.g. ``feedback_reports``). Deeper recorded paths
+    still probe the synthetic ``users/<namespace>/`` tree so no live user
+    document is ever read.
+    """
+    if encoded['scope'] != 'COLLECTION':
+        return synthetic_path(encoded['collection_group'], namespace)
+    recorded = encoded.get('collection_path')
+    if not isinstance(recorded, str) or not recorded:
+        raise ValueError('recorded COLLECTION shape omitted collection_path')
+    segments = recorded.split('/')
+    if not all(segments):
+        raise ValueError(f'recorded collection_path is malformed: {recorded!r}')
+    if len(segments) % 2 == 0:
+        raise ValueError(f'recorded collection_path ends in a document segment: {recorded!r}')
+    if segments[-1] != encoded['collection_group']:
+        raise ValueError(f'recorded collection_path ends in the wrong collection: {recorded!r}')
+    if len(segments) == 1:
+        return recorded
+    return synthetic_path(encoded['collection_group'], namespace)
+
+
 def decode_value(value: Mapping[str, Any], client: Any, path: str) -> Any:
     kind, data = value['type'], value.get('value')
     if kind in {'null', 'bool', 'int', 'str'}:
@@ -168,7 +198,7 @@ def flatten_tree(tree: Any) -> list[QueryFilter]:
 
 
 def hydrate_shape(encoded: Mapping[str, Any], client: Any, namespace: str) -> QueryShape:
-    path = synthetic_path(encoded['collection_group'], namespace)
+    path = oracle_collection_path(encoded, namespace)
     tree = encoded.get('filter_tree')
     if tree is None and encoded.get('filters'):
         tree = {'op': 'AND', 'filters': encoded['filters']}
@@ -245,6 +275,23 @@ def filter_structure(tree: Any, preserve_order: bool = False) -> Any:
     return result
 
 
+def _recorded_path_template(encoded: Mapping[str, Any]) -> str:
+    """Derive the uid-normalized path identity from collection_path itself.
+
+    A supplied ``document_path_template`` is only accepted when it agrees with
+    the recorded path — a stale template must never let a root probe and a
+    subcollection probe collapse into one signature.
+    """
+    recorded = encoded.get('collection_path')
+    if not isinstance(recorded, str) or not recorded:
+        return encoded['collection_group']
+    derived = document_path_template(recorded)
+    supplied = encoded.get('document_path_template')
+    if supplied is not None and supplied != derived:
+        raise ValueError('recorded document_path_template disagrees with collection_path')
+    return derived
+
+
 def query_signature(encoded: Mapping[str, Any]) -> str:
     tree = encoded.get('filter_tree')
     if tree is None and encoded.get('filters'):
@@ -253,6 +300,7 @@ def query_signature(encoded: Mapping[str, Any]) -> str:
         {
             'collection': encoded['collection_group'],
             'scope': encoded['scope'],
+            'path_template': _recorded_path_template(encoded),
             'filters': filter_structure(
                 tree, any(item['value']['type'] == 'snapshot' for item in encoded.get('cursors', ()))
             ),
@@ -273,9 +321,12 @@ def deduplicate(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 'signature': json.loads(signature),
                 'id': hashlib.sha256(signature.encode()).hexdigest()[:16],
+                'serving': False,
                 'entries': {},
             },
         )
+        if entry['shape'].get('serving', True):
+            group['serving'] = True
         group['entries'].setdefault(entry['id'], entry)
     return [groups[key] for key in sorted(groups)]
 
@@ -506,6 +557,7 @@ def run_groups(
         return {
             'id': group['id'],
             'signature': group['signature'],
+            'serving': group['serving'],
             'shape_ids': [entry['id'] for entry in entries],
             'calling_functions': sorted({entry['calling_function'] for entry in entries}),
             'observed': observed,
@@ -527,6 +579,17 @@ def build_report(
     errors: list[dict[str, Any]],
 ) -> dict[str, Any]:
     predictions = [prediction for result in results for prediction in result['predictions']]
+
+    def outcome_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+        row_predictions = [prediction for row in rows for prediction in row['predictions']]
+        return {
+            **{
+                status: sum(row['observed']['status'] == status for row in rows)
+                for status in ('served', 'unserved', 'error')
+            },
+            'rule_bugs': sum(bool(prediction['rule_bugs']) for prediction in row_predictions),
+        }
+
     counts = {
         'exported_shapes': len(export['shapes']),
         'unique_queries': len(deduplicate(export['shapes'])),
@@ -538,6 +601,10 @@ def build_report(
         'rule_bugs': sum(bool(prediction['rule_bugs']) for prediction in predictions),
         'review_findings': sum(bool(prediction['review_findings']) for prediction in predictions),
         'resolved_uncertain': sum(prediction['resolution'] is not None for prediction in predictions),
+        'serving_shapes': sum(1 for entry in export['shapes'] if entry['shape'].get('serving', True)),
+        'nonserving_shapes': sum(1 for entry in export['shapes'] if not entry['shape'].get('serving', True)),
+        'serving_counts': outcome_counts([result for result in results if result['serving']]),
+        'nonserving_counts': outcome_counts([result for result in results if not result['serving']]),
     }
     resolved = [
         {
@@ -564,7 +631,7 @@ def build_report(
         'comparisons_valid': comparisons_valid,
         'export_sha256': hashlib.sha256(canonical(export).encode()).hexdigest(),
         'manifest_sha256': hashlib.sha256(canonical(inventory.get('manifest', {})).encode()).hexdigest(),
-        'normalization': 'Synthetic collection/document paths; limit=1 and offset=0; limit_to_last reverses wire orders. '
+        'normalization': 'Collection paths are synthetic except recorded one-segment collection-group roots, which probe the real root collection on dev/QA targets only (production roots are refused before any client is created); limit=1 and offset=0; limit_to_last reverses wire orders. '
         'Collection groups retain their real ID and may read at most one existing document. Values are never reported.',
         'empty_group_probe': probe,
         'inventory': inventory,
@@ -587,7 +654,11 @@ def markdown_report(report: Mapping[str, Any]) -> str:
         '| Measure | Count |',
         '| --- | ---: |',
     ]
-    lines += [f'| {key} | {value} |' for key, value in report['counts'].items()]
+    lines += [f"| {key} | {value} |" for key, value in report['counts'].items() if not isinstance(value, dict)]
+    for outcome_key in ('serving_counts', 'nonserving_counts'):
+        if outcome_key in report['counts']:
+            lines += ['', f'| {outcome_key} | Count |', '| --- | ---: |']
+            lines += [f'| {status} | {value} |' for status, value in report['counts'][outcome_key].items()]
     if not report['comparisons_valid']:
         lines += [
             '',
@@ -612,6 +683,17 @@ def markdown_report(report: Mapping[str, Any]) -> str:
     if report['errors']:
         lines += ['', '## Run errors', *[f"- {item['error_type']}: {item['error']}" for item in report['errors']]]
     return '\n'.join(lines) + '\n'
+
+
+def has_root_probe(export: Mapping[str, Any]) -> bool:
+    """True when the export probes a real collection-group root (one-segment path)."""
+
+    return any(
+        entry['shape'].get('scope') == 'COLLECTION'
+        and isinstance(entry['shape'].get('collection_path'), str)
+        and len(entry['shape']['collection_path'].split('/')) == 1
+        for entry in export.get('shapes', ())
+    )
 
 
 def write_reports(report: Mapping[str, Any], output_dir: Path) -> None:
@@ -669,6 +751,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('expected a non-empty v1 recorder export')
     if any(driver.get('errors') for driver in export.get('drivers', [])):
         parser.error('recorder export has driver errors')
+    if has_root_probe(export) and (args.project, args.database) != ('based-hardware-dev', 'jit-qa'):
+        parser.error(
+            'root collection-group probes only run on based-hardware-dev/jit-qa; '
+            'real production roots are never read'
+        )
     namespace = f'index-oracle-{uuid.uuid4().hex}'
     started = time.monotonic()
     deadline = started + args.max_runtime

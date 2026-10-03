@@ -656,6 +656,28 @@ actor TranscriptionStorage {
       return updatedRows
     }
   }
+
+  @discardableResult
+  func updateLiveSpeakerAssignment(
+    sessionId: Int64,
+    speakerId: Int,
+    personId: String
+  ) async throws -> Int {
+    let db = try await ensureInitialized()
+
+    return try await db.write { database -> Int in
+      try database.execute(
+        sql: """
+          UPDATE transcription_segments
+          SET isUser = ?, personId = ?
+          WHERE sessionId = ? AND speaker = ?
+          """,
+        arguments: [false, personId, sessionId, speakerId]
+      )
+      return database.changesCount
+    }
+  }
+
   /// Get all segments for a session ordered by segmentOrder
   func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
     let db = try await ensureInitialized()

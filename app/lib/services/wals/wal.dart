@@ -228,6 +228,15 @@ class Wal {
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
 
+  /// Unix timestamp (seconds) when the server confirmed this recording synced
+  /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
+  /// 0 = unknown: records synced before this field existed, and WALs whose
+  /// status was migrated without a timestamp. The synced-copy auto-remove
+  /// policy deliberately skips records with 0 — never delete on unknown age.
+  int syncedAt;
+
+  bool keptForTranscriptRecovery;
+
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -338,6 +347,8 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
+    this.syncedAt = 0,
+    this.keptForTranscriptRecovery = false,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -374,6 +385,8 @@ class Wal {
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
+      syncedAt: json['synced_at'] ?? 0,
+      keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
     );
   }
 
@@ -406,6 +419,8 @@ class Wal {
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
       'uploaded_at': uploadedAt,
+      'synced_at': syncedAt,
+      if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
     };
   }
 

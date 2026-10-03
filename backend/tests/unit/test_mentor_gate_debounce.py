@@ -106,6 +106,59 @@ def _enable(gate, **env):
         gate.monkeypatch.setenv(key, str(value))
 
 
+@pytest.mark.parametrize(
+    'skip',
+    [
+        'frequency_off',
+        'invalid_frequency',
+        'local_rate',
+        'remote_rate',
+        'daily_send_cap',
+        'word_floor',
+        'min_seconds',
+        'new_words',
+        'daily_eval_cap',
+        'claim_busy',
+        'authority_changed',
+    ],
+)
+def test_cheap_rejections_do_not_resolve_entitlement(gate, skip):
+    _enable(gate)
+    app = gate.app
+    messages = MESSAGES_LONG
+    if skip in {'min_seconds', 'new_words', 'daily_eval_cap'}:
+        if skip == 'daily_eval_cap':
+            _enable(gate, MENTOR_GATE_DAILY_CAP=1)
+        _run(gate)
+        if skip != 'min_seconds':
+            _age(gate, 10_000)
+        if skip == 'daily_eval_cap':
+            messages = [{'text': 'newword ' * 800, 'is_user': True}]
+    elif skip in {'frequency_off', 'invalid_frequency'}:
+        app.get_mentor_notification_frequency.return_value = 0 if skip == 'frequency_off' else 99
+    elif skip == 'local_rate':
+        app.mem_db.get_proactive_noti_sent_at.return_value = app.time.time()
+    elif skip == 'remote_rate':
+        app.redis_db.get_proactive_noti_sent_at.return_value = app.time.time()
+    elif skip == 'daily_send_cap':
+        gate.monkeypatch.setattr(app, '_proactive_daily_cap_reached', lambda uid: True)
+    elif skip == 'word_floor':
+        messages = MESSAGES_SHORT
+    elif skip == 'claim_busy':
+        gate.shared.claims.add('uid-debounce')
+    elif skip == 'authority_changed':
+        gate.monkeypatch.setattr(
+            app.mentor_gate_state, '_read_shared', MagicMock(side_effect=[None, {'ts': app.time.time()}])
+        )
+    app.mentor_plan_allows_evaluation.reset_mock()
+    gate.evaluate.reset_mock()
+    app.get_prompt_memories.reset_mock()
+    assert _run(gate, messages=messages) is None
+    app.mentor_plan_allows_evaluation.assert_not_called()
+    gate.evaluate.assert_not_called()
+    app.get_prompt_memories.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Off by default
 # ---------------------------------------------------------------------------

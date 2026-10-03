@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
@@ -89,6 +90,7 @@ class _Pins {
 Future<PeopleProvider> _pump(
   WidgetTester tester, {
   List<Person>? people,
+  Future<PeopleListResponse?> Function()? loadPeople,
   Future<bool> Function(String)? deletePersonById,
   _Pins? pins,
 }) async {
@@ -97,7 +99,7 @@ Future<PeopleProvider> _pump(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final provider = PeopleProvider(
-    loadPeople: () async => [...(people ?? _people)],
+    loadPeople: loadPeople ?? () async => PeopleListResponse(people: [...(people ?? _people)]),
     deletePersonById: deletePersonById ?? (_) async => true,
     setPinned: (pins ?? _Pins()).call,
   );
@@ -356,11 +358,11 @@ void main() {
     expect(find.text("Omi usually recognizes Sam Okafor's voice, but you've only confirmed it a few times."),
         findsOneWidget);
     expect(find.text('Picked in 2 suggestions'), findsWidgets);
-    expect(find.text('Counts'), findsWidgets);
+    expect(find.text('Helps'), findsWidgets);
     expect(find.text('1 match moved to someone else'), findsOneWidget);
-    expect(find.text('Counts against'), findsOneWidget);
+    expect(find.text('Hurts'), findsOneWidget);
     expect(find.text('3 automatic matches nobody confirmed'), findsOneWidget);
-    expect(find.text('Barely counts'), findsOneWidget);
+    expect(find.text('Barely helps'), findsOneWidget);
     expect(find.text('Label them in 1 more conversation.'), findsOneWidget);
   });
 
@@ -374,8 +376,8 @@ void main() {
     await tester.tap(find.text('Maya Chen'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pin Maya Chen'), findsOneWidget);
-    expect(find.text('Omi will ask you to confirm close matches instead of guessing.'), findsOneWidget);
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Omi asks before matching close voices.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('person_confidence_pill')));
     await tester.pumpAndSettle();
     expect(find.text('Maya Chen is Confirmed. Omi keeps learning from each label.'), findsOneWidget);
@@ -456,5 +458,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('people_clean_up_row_p-cs')), findsNothing);
     expect(find.text('Delete 2 People'), findsOneWidget);
+  });
+
+  testWidgets('a truncated stats load shows the incomplete-counts notice until a complete refresh', (tester) async {
+    var truncated = true;
+    final provider = await _pump(tester,
+        loadPeople: () async => truncated
+            ? PeopleListResponse(people: [..._people], statsTruncated: true)
+            : PeopleListResponse(people: [..._people]));
+
+    expect(find.byKey(const Key('people_stats_incomplete')), findsOneWidget);
+    expect(find.text('Counts may be incomplete.'), findsOneWidget);
+
+    truncated = false;
+    await provider.refresh();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('people_stats_incomplete')), findsNothing);
+  });
+
+  testWidgets('an empty truncated list shows no incomplete-counts notice', (tester) async {
+    await _pump(tester, loadPeople: () async => const PeopleListResponse(people: [], statsTruncated: true));
+
+    expect(find.byKey(const Key('people_stats_incomplete')), findsNothing);
+    expect(find.text('No People Yet'), findsOneWidget);
+  });
+
+  testWidgets('the cached partial marker keeps the notice visible after a failed refresh', (tester) async {
+    var fail = false;
+    final provider = await _pump(tester,
+        loadPeople: () async => fail ? null : PeopleListResponse(people: [..._people], statsTruncated: true));
+
+    expect(find.byKey(const Key('people_stats_incomplete')), findsOneWidget);
+
+    fail = true;
+    await provider.refresh();
+    await tester.pumpAndSettle();
+    expect(provider.loadFailed, isTrue);
+    expect(provider.people, isNotEmpty);
+    expect(find.byKey(const Key('people_stats_incomplete')), findsOneWidget);
   });
 }

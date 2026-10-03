@@ -292,3 +292,6 @@ pnpm-workspace.yaml
 
 +# amp orb portal links (generated); .amp/services.yaml stays tracked
 +.amp/portals/
+
+.github/firestore-workflow
+.github/firestore-source

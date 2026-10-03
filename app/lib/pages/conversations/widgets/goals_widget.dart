@@ -27,9 +27,12 @@ int? goalSliderDivisions(double targetValue) {
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
-  const GoalsWidget({super.key, this.onRefresh});
+  const GoalsWidget({super.key, this.onRefresh, this.showHeader = true});
 
   final VoidCallback? onRefresh;
+
+  /// False when the host page's app bar already carries the "Goals" title and the add action.
+  final bool showHeader;
 
   @override
   State<GoalsWidget> createState() => GoalsWidgetState();
@@ -312,28 +315,29 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.title3)),
-                    if (goals.length < _maxGoals)
-                      Transform.translate(
-                        // Keeps the painted circle on the card's right edge.
-                        offset: const Offset((kOmiMinTapTarget - 32) / 2, 0),
-                        child: OmiIconButton.filled(
-                          label: context.l10n.addGoal,
-                          onPressed: addGoal,
-                          diameter: 32,
-                          fillColor: OmiColors.surface2,
-                          color: OmiColors.textSecondary,
-                          icon: const Icon(Icons.add),
+              if (widget.showHeader)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.title3)),
+                      if (goals.length < _maxGoals)
+                        Transform.translate(
+                          // Keeps the painted circle on the card's right edge.
+                          offset: const Offset((kOmiMinTapTarget - 32) / 2, 0),
+                          child: OmiIconButton.filled(
+                            label: context.l10n.addGoal,
+                            onPressed: addGoal,
+                            diameter: 32,
+                            fillColor: OmiColors.surface2,
+                            color: OmiColors.textSecondary,
+                            icon: const Icon(Icons.add),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               // Goals list
               ...goals.asMap().entries.map((entry) {
                 final goal = entry.value;
