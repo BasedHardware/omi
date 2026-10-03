@@ -54,25 +54,30 @@ ingress:
   tls: []
 
 env:
-  # Optional shared evidence. Missing bindings use strict process-local state.
+  # Shared customer-data admission and reservation evidence.
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: based-hardware
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
   - name: REDIS_DB_HOST
     valueFrom:
       configMapKeyRef:
-        name: prod-omi-reservation-runtime-config
+        name: prod-omi-backend-config
         key: REDIS_DB_HOST
-        optional: true
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
-        key: VERTEX_RESERVATION_REDIS_PASSWORD
-        optional: true
+        key: REDIS_DB_PASSWORD
   - name: REDIS_DB_PORT
-    valueFrom:
-      configMapKeyRef:
-        name: prod-omi-reservation-runtime-config
-        key: REDIS_DB_PORT
-        optional: true
+    value: "13151"
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN

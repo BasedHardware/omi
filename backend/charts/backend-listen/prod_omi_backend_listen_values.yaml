@@ -91,6 +91,10 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED

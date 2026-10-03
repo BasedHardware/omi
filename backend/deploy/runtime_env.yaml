@@ -2044,6 +2044,19 @@ environments:
       namespace: prod-omi-backend
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
+      env:
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
       static_address_name: prod-omi-self-hosted-llm-ip-address
     gcp_project: based-hardware
     gke:
@@ -2394,6 +2407,15 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2560,6 +2582,19 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2714,6 +2749,15 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -2765,6 +2809,12 @@ environments:
               version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
+              version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -2935,7 +2985,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             GCP_LOCATION:
               value: us-central1
@@ -2958,6 +3008,15 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+              category: service_discovery
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3089,6 +3148,12 @@ environments:
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3175,7 +3240,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
@@ -3227,6 +3292,15 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+              category: service_discovery
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -3335,6 +3409,12 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3424,7 +3504,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
@@ -3452,6 +3532,15 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+              category: service_discovery
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -3555,6 +3644,12 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3629,7 +3724,7 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
@@ -3643,6 +3738,15 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+              category: service_discovery
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:

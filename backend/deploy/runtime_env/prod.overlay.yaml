@@ -4,10 +4,36 @@ compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
+    env:
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
     static_address_name: prod-omi-self-hosted-llm-ip-address
   gke:
     backend-listen:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        REDIS_DB_PORT:
+          value: '13151'
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
@@ -189,6 +215,19 @@ overlay:
           category: rollout
     pusher:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        REDIS_DB_PORT:
+          value: '13151'
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
@@ -319,6 +358,15 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -349,6 +397,12 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
             version: latest
@@ -362,6 +416,18 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -513,6 +579,13 @@ overlay:
         # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
         # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
         # service reads needs its own grant to this account. Every backend Cloud Run service is pinned.
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -520,6 +593,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
@@ -642,6 +727,13 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync-backfill:
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -649,6 +741,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -750,6 +854,13 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-integration:
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -757,6 +868,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            category: service_discovery
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
