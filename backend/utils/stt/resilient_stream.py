@@ -405,6 +405,16 @@ async def reconnect_live_stt_socket(receiver: Any) -> bool:
             meter_source=ring,
         )
         if not adopted:
+            if (
+                receiver.recovery.client_has_left()
+                or not receiver.host.state.active
+                or receiver.host.state.stt_terminal_failure
+            ):
+                retire_window_replay_socket(receiver, raw)
+                await abort_replay_socket(raw)
+                hop.note_failure(None, continuing=True)
+                RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+                return False
             raise RuntimeError('Soniox replay send failed')
     except asyncio.CancelledError:
         hop.note_failure(None)

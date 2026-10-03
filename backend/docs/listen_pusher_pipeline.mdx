@@ -730,8 +730,9 @@ The retained window span bypasses downstream VAD gating and finalize signals
 during replay: speech admitted with window gain cannot be discarded by a
 different downstream VAD decision. Ordinary sends keep their existing gate.
 Each adopted replacement gets 15 seconds of new capture headroom while it
-processes a potentially full source backlog. The finite three-provider suffix
-bounds retention at 150 seconds; stalled un-emitted audio still fails over
+processes a potentially full source backlog. The bounded target-and-time
+recovery controller (unique targets within the shared episode) bounds
+retention at 150 seconds; stalled un-emitted audio still fails over
 before eviction. This ceiling grows from the original 90-second ring only
 while a replacement is handling its replay obligation. As soon as transcript
 progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
@@ -783,8 +784,9 @@ monitor observations therefore cannot repeat an exhausted chain.
 A managed session may make one additional Soniox connection after that leg's
 previous transport loss (`connection_lost` or `send_failed`), only when its
 local circuit is closed and no untried configured Deepgram rescue is available.
-The failed window never re-arms. Rebuilds now have an actual three-attempt
-session budget (two on the legacy path), rather than counting distinct providers.
+The failed window never re-arms. Rebuilds share the bounded target-and-time
+recovery controller (unique targets inside the shared 60s episode) rather than
+counting distinct providers.
 Concurrent last-resort handshakes retain the configured circuit probe limit.
 A session waits at most 12 seconds for an occupied non-account probe slot;
 account benches and window shedding are never forced. At the 300ms default

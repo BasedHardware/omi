@@ -9,11 +9,20 @@ import pytest
 from tests.unit.test_parakeet_window_live import runtime, receiver, Client  # noqa: F401
 from tests.unit.test_live_cost_router import controls  # noqa: F401
 from routers.listen.receiver import ListenReceiver
-from utils.stt import parakeet_window as window, streaming as st, live_session
+from utils.stt import (
+    parakeet_window as window,
+    streaming as st,
+    live_session,
+    live_chain,
+    recovery_state,
+    replay_delivery,
+)
 from utils.metrics import OMI_FALLBACK_TOTAL
-from utils.stt.live_failure import PendingLiveFailover, live_stt_terminal_reason
+from utils.stt.live_failure import PendingLiveFailover, live_stt_terminal_reason, settle_terminal_socket
+from utils.stt.live_gate import GateState
+from utils.stt.live_metrics import REPLAY_AUDIO, REPLAY_CLOSED, REPLAY_SKIPPED
 from utils.stt.live_signal import provider_observation
-from utils.stt.replay_delivery import ReplayTailSocket
+from utils.stt.replay_delivery import ReplayTailSocket, replay_packets
 from utils.stt.resilient_stream import ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket
@@ -138,8 +147,6 @@ def fallback_count():
 
 async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=False, source=None):
     if router_on:
-        from utils.stt.live_gate import GateState
-
         monkeypatch.setenv('STT_ROUTING_MODE', 'on')
         monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
         live_session.health._cost_local[('modulate-velma-2', 'all')] = GateState(
@@ -207,7 +214,6 @@ async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=Fals
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor,router_on', [('soniox', False), ('modulate-velma-2', False), ('soniox', True)])
 async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(monkeypatch, successor, router_on):
-    from utils.stt import recovery_state, replay_delivery
 
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
     monkeypatch.setattr(replay_delivery, 'TAIL_RESIDENCE_SECONDS', 200.0)
@@ -269,8 +275,6 @@ async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(mo
     ],
 )
 async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, order):
-    from utils.stt import recovery_state, replay_delivery
-    from utils.stt.live_metrics import REPLAY_CLOSED
 
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 200.0)
@@ -307,7 +311,6 @@ async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, ord
 
 @pytest.mark.asyncio
 async def test_managed_soniox_internal_finish_still_fails_over(monkeypatch):
-    from utils.stt import recovery_state
 
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 300.0)
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', 'soniox', 'modulate-velma-2'])
@@ -459,8 +462,6 @@ async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypa
         entered.set()
         await asyncio.Event().wait()
 
-    from utils.stt import live_chain
-
     monkeypatch.setattr(st, '_primary_is_serving', handshake)
     monkeypatch.setattr(st, 'fallback_socket_is_serving', handshake)
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', handshake)
@@ -485,7 +486,6 @@ async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypa
 
 
 def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
-    from utils.stt.replay_delivery import replay_packets
 
     monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PACKET_BYTES', 4)
     assert list(replay_packets(((0, b'AA'), (1, b'BBBB'), (8, b'CCCCCC')))) == [
@@ -502,7 +502,6 @@ def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkeypatch):
-    from utils.stt import recovery_state, replay_delivery
 
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 150.0)
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 200.0)
@@ -542,8 +541,6 @@ async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkey
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monkeypatch, virtual_clock, successor):
-    from utils.stt import replay_delivery
-    from utils.stt.live_metrics import REPLAY_SKIPPED, REPLAY_AUDIO, REPLAY_CLOSED
 
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
@@ -616,7 +613,6 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypatch, successor):
-    from utils.stt.live_failure import settle_terminal_socket
 
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
@@ -652,7 +648,6 @@ async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypa
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
 async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkeypatch, virtual_clock, successor):
-    from utils.stt import replay_delivery
 
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])

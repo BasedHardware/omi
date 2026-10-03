@@ -232,7 +232,9 @@ class PendingLiveFailover:
         # A hop still unproven when its owner departs is degraded recovery,
         # not evidence that we terminated an active client's transcription.
         source = self.source_outcome
-        if source is not None and source.client_has_left is not None and source.client_has_left():
+        if source is not None and (
+            getattr(source, 'owner_closing', False) or (source.client_has_left is not None and source.client_has_left())
+        ):
             continuing = True
         # The hop belongs to the source leg; a successor failure changes the
         # outcome, never the source cause used to reconcile health evidence.

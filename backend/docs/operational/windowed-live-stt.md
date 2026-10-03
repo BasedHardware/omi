@@ -254,9 +254,10 @@ resets it. Once that budget is exhausted, the deadline remains armed. The
 timer also fires during a slow POST or after four consecutive speech-containing
 empty POSTs, whichever comes first. The existing listen death monitor selects
 the next vendor and replays the untranscribed capture from the 90-second ring;
-the failed Parakeet leg is excluded for the rest of that session. The managed
-chain permits up to three failed routes before exhaustion (legacy listen and
-PTT retain their two-failover limit). Once text has been emitted, these
+the failed Parakeet leg is excluded for the rest of that session. Session
+recovery is bounded by one target-and-time budget — at most 20 unique targets
+inside the shared 60s episode — for managed and legacy listen alike; PTT
+retains its existing two-failover limit unchanged. Once text has been emitted, these
 startup bounds are disarmed. No sentence anchor or emitted text is changed.
 `omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
@@ -276,13 +277,15 @@ paces each adapter at **1x real time**. The adapter declarations in Soniox and
 Modulate and the conservative default for Deepgram/Parakeet share this ceiling.
 [Soniox cadence](https://soniox.com/docs/stt/rt/error-handling#real-time-cadence)
 requires real-time or near-real-time input and warns about prolonged bursts.
-[Modulate streaming docs](https://www.modulate.ai/api-overview) and
+[Modulate streaming docs](https://docs.modulate.ai/api-reference/stt/streaming.md) and
 [Deepgram streaming docs](https://developers.deepgram.com/docs/live-streaming-audio)
 do not establish a numeric accelerated replay ceiling; 1x is our conservative
 choice, not a claimed vendor limit. The owned Parakeet adapter has no documented
 accelerated replay contract, so it also receives the conservative default.
 
-A replacement has **5s setup + 20s replay**, a 25s admission budget. Unanswered
+Each replacement target gets a **5s per-target setup budget** (dial plus
+serving check) and a **20s replay prefix wall**, both spent from the session's
+single **60s episode** total rather than restarting per target. Unanswered
 capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
 with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
 Emitted capture prefixes remain excluded. This is an intentional bounded-loss
@@ -291,12 +294,13 @@ replay rejection retains the remaining obligation for the next eligible leg.
 
 Live ingestion does not await the failover lock. A supervisor-owned ordered tail
 holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
-At 1x live input the lag stays fixed until silence allows it to drain. The
+At 1x live input the lag stays fixed until admitted audio actually pauses;
+silence still forwarded as PCM does not let it catch up. The
 healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
 5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
 packet represents 1.024s). This is audio delivery delay, not a vendor transcript
 latency guarantee. A nonresponsive transport is rejected: the replay helper
-admits at most two queued packets and waits at most 2s for space; prefix wall
+admits at most two packets counting queued plus in-flight audio and waits at most 2s for space; prefix wall
 admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
 queue. Setup timeout skips its requested family and continues within that
 attempt budget. Cancelled/unadopted replay legs close both adapter tasks and
@@ -317,8 +321,8 @@ never raw socket cleanup flags — and a disconnect/reconnect flap cannot
 resurrect a departed receiver.
 
 Each real dial gets `min(5s, remaining episode)` covering both connect and the
-post-upgrade serving check; there is no outer clip across the chain, so a slow
-target cannot starve its successors. Attempt accounting is by unique target
+post-upgrade serving check; every target draws from the one 60s episode, so a
+slow target spends shared budget rather than receiving a fresh allowance. Attempt accounting is by unique target
 identity, capped at 20 (16 registry + up to 4 legacy protocols), reserved at
 the real dial seam only: selector calls, circuit refusals, capacity skips, and
 unavailable routes spend nothing. One transient same-provider Soniox re-entry
@@ -329,21 +333,28 @@ Recovery legs opt into per-leg writer pacing at the transport, not just
 admission: each write starts no earlier than `previous_start + audio_duration`
 (sustained ≤1x, no catch-up credit on a stalled-then-resumed transport), with
 each `ws.send` bounded by `min(2s, episode remaining)`. The observable burst
-allowance is bounded queue+in-flight bytes (at most three 16KiB frames); that
+allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
 bound never grows. Prefix delivery — replay enqueues plus the frozen transport
 writes they owed — must complete inside the **20s prefix wall**, not just the
 episode, so `REPLAY_WALL` measures actual prefix delivery. Live audio carries
 first-admission birth time through tail→snapshot→successor; a bounded interval
 `BirthLedger` (8192 entries, adjacent coalescing by earliest birth) prunes at
-the retained ring head, and live intervals older than the 28s residence bound
-are retired and metered once rather than replayed again.
+the retained ring head. Live-audio birth is the first capture acceptance,
+preserved across retry; contiguous silence arriving as PCM does not itself
+allow catch-up. Retained recovery-tail frames have a strict 28s maximum capture
+age: expired cuts are metered, queued writes already past that age reject as
+`capacity_full`, and intervals older than the bound are retired and metered
+once rather than replayed again. Stalls or repeated failures do not promise
+delivery of all audio or transcripts.
 
 Scoped recovery memory bound (recovery PCM only): ring ≤4,800,000B + prefix
 snapshot ≤640,000B + live tail ≤832,000B + replay queue 32,768B + in-flight
-16,384B + window PCM 1,920,000B ≈ **8,241,152B per session ≈ 125.75 MiB for
-16 sessions**. This excludes Python object overhead, VAD state, POST transients,
-ordinary 2,000-item queues, and general process RSS — it is not a pod memory
-claim. No recovery state is persisted; nothing survives the session.
+16,384B + window PCM 1,920,000B ≈ **8,241,152B per session**, a
+conservative planning allowance of **125.75 MiB for 16 sessions at 16 kHz**
+(**375.75 MiB at 48 kHz**). This excludes Python object overhead, VAD
+state, POST transients, ordinary 2,000-item queues, and general process RSS —
+it is not a pod memory claim. No recovery state is persisted; nothing survives
+the session.
 
 Metrics use only bounded source/successor families (`parakeet`, `modulate`,
 `soniox`, `deepgram`, `unknown`), preinitialized across all combinations so a
@@ -502,8 +513,8 @@ A replacement is recovered only after a nonempty transcript, including TDT. A
 successful empty TDT POST proves breaker health but does not settle failover recovery.
 If every other non-TDT leg is absent/open, one bounded primary probe can bypass a
 non-account bench. The flag-enabled preflight therefore leaves admission to the
-chain. The old path retains its two-failover limit; the managed chain allows three
-hops across four providers.
+chain. Legacy listen shares the same bounded target-and-time controller; PTT
+retains its two-failover limit.
 
 Full local window admission is checked before constructing the window socket,
 including static/shadow serving. Capacity refusals also engage the existing
