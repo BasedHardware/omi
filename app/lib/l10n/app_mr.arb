@@ -11358,7 +11358,7 @@
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
     "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
     "diagnosticsLastDuration": "गेले {duration}",
-    "chatReplyOffline": "कनेक्ट होऊ शकलो नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "chatReplyOffline": "कनेक्ट करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
     "chatReplyServerError": "आमच्या बाजूने काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
     "chatReplyTimeout": "उत्तर येण्यासाठी खूप वेळ लागला. कृपया पुन्हा प्रयत्न करा.",
     "chatReplyNotSignedIn": "तुम्ही साइन इन केलेले नाही. साइन इन करा आणि पुन्हा प्रयत्न करा.",

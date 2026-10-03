@@ -12301,5 +12301,5 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chatReplyNotSignedIn => 'Nie ste prihlásení. Prihláste sa a skúste to znova.';
 
   @override
-  String get chatAppsLoadFailed => 'Aplikácie četu sa nepodarilo načítať. Skúste to znova.';
+  String get chatAppsLoadFailed => 'Chatové aplikácie sa nepodarilo načítať. Skúste to znova.';
 }

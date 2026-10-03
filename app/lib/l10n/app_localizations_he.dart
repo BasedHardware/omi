@@ -12202,7 +12202,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'לא ניתן להתחבר. בדקו את החיבור ונסו שוב.';
+  String get chatReplyOffline => 'לא ניתן להתחבר. בדוק את החיבור שלך ונסה שוב.';
 
   @override
   String get chatReplyServerError => 'משהו השתבש אצלנו. נסה שוב.';

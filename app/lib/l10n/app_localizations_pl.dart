@@ -12332,7 +12332,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'Nie można połączyć. Sprawdź połączenie i spróbuj ponownie.';
+  String get chatReplyOffline => 'Nie można się połączyć. Sprawdź połączenie i spróbuj ponownie.';
 
   @override
   String get chatReplyServerError => 'Coś poszło nie tak po naszej stronie. Spróbuj ponownie.';

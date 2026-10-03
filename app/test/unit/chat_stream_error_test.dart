@@ -56,7 +56,8 @@ void main() {
     });
 
     test('a malformed JSON error frame becomes the bounded failure, never raw text', () {
-      final chunk = parseVoiceMessageStreamChunk('error: {"error": 7}', 'id');
+      // Syntactically invalid JSON: jsonDecode throws FormatException inside the parser.
+      final chunk = parseVoiceMessageStreamChunk('error: {"error":', 'id');
 
       expect(chunk, isNotNull);
       expect(chunk!.type, MessageChunkType.error);

@@ -152,7 +152,13 @@ void main() {
       apps = AppProvider()..selectedChatAppId = 'a2';
     });
 
-    Future<void> pumpDrawer(WidgetTester tester, {required ValueChanged<App> onDisable, VoidCallback? onClear}) async {
+    Future<GlobalKey<ScaffoldState>> pumpDrawer(
+      WidgetTester tester, {
+      required ValueChanged<App> onDisable,
+      ValueChanged<String>? onSelectApp,
+      VoidCallback? onEnableApps,
+      VoidCallback? onClear,
+    }) async {
       final key = GlobalKey<ScaffoldState>();
       await tester.pumpWidget(
         MultiProvider(
@@ -166,8 +172,8 @@ void main() {
             home: Scaffold(
               key: key,
               endDrawer: ChatAppsDrawer(
-                onSelectApp: (_) {},
-                onEnableApps: () {},
+                onSelectApp: onSelectApp ?? (_) {},
+                onEnableApps: onEnableApps ?? () {},
                 onDisableApp: onDisable,
                 onClearChat: onClear ?? () {},
               ),
@@ -178,6 +184,7 @@ void main() {
       );
       key.currentState!.openEndDrawer();
       await tester.pumpAndSettle();
+      return key;
     }
 
     testWidgets('Clear Chat sits below the app list', (tester) async {
@@ -201,9 +208,35 @@ void main() {
       final persona = _chatApp('p1', 'Friend')..capabilities = {'persona'};
       messages.chatApps = [_chatApp('a1', 'Notes'), persona];
 
-      await pumpDrawer(tester, onDisable: (_) {});
+      String? selected;
+      var enableAppsOpened = 0;
+      final key = await pumpDrawer(
+        tester,
+        onDisable: (_) {},
+        onSelectApp: (id) => selected = id,
+        onEnableApps: () => enableAppsOpened++,
+      );
 
       expect(find.text('Friend'), findsOneWidget);
+
+      // Rendering is not selectability: tap the rows and assert the callbacks
+      // fire so a broken tap handler cannot pass this contract. Choosing any
+      // row pops the drawer, so re-open it between taps.
+      await tester.tap(find.text('Friend'));
+      await tester.pumpAndSettle();
+      expect(selected, 'p1');
+
+      key.currentState!.openEndDrawer();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Omi'));
+      await tester.pumpAndSettle();
+      expect(selected, 'no_selected');
+
+      key.currentState!.openEndDrawer();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Enable Apps'));
+      await tester.pumpAndSettle();
+      expect(enableAppsOpened, 1);
     });
 
     testWidgets('a failed fetch keeps the prior rows, shows the error, and retry reloads', (tester) async {

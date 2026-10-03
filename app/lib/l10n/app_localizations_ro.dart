@@ -12348,7 +12348,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'Nu se poate conecta. Verificați conexiunea și încercați din nou.';
+  String get chatReplyOffline => 'Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.';
 
   @override
   String get chatReplyServerError => 'Ceva a mers prost de partea noastră. Încearcă din nou.';

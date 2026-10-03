@@ -558,11 +558,16 @@ The selected app instructions customize identity and presentation only. Existing
 </selected_app_instructions>
 </selected_chat_app>"""
 
-    # Plugin-specific instructions for regular apps
+    # Plugin-specific instructions for regular apps. Name/description are user-editable
+    # developer text, so escape them: a crafted closing tag must not be able to close
+    # <plugin_instructions> and inject adjacent system-prompt structure.
     plugin_info = ""
     plugin_section = ""
     if app:
-        plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response."
+        plugin_info = (
+            f"Your name is: {escape(app.name, quote=False)}, and your personality/description "
+            f"is '{escape(app.description, quote=False)}'.\nMake sure to reflect your personality in your response."
+        )
         plugin_section = f"""<plugin_instructions>
 {plugin_info}
 </plugin_instructions>

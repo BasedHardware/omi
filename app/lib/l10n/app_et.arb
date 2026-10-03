@@ -3801,7 +3801,7 @@
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
     "diagnosticsLastDuration": "Viimased {duration}",
-    "chatReplyOffline": "Ühendust ei saa luua. Kontrollige ühendust ja proovige uuesti.",
+    "chatReplyOffline": "Ühendust ei saa luua. Kontrolli ühendust ja proovi uuesti.",
     "chatReplyServerError": "Meie poolel läks midagi valesti. Palun proovi uuesti.",
     "chatReplyTimeout": "Vastus võttis liiga kaua aega. Palun proovi uuesti.",
     "chatReplyNotSignedIn": "Sa pole sisse logitud. Logi sisse ja proovi uuesti.",

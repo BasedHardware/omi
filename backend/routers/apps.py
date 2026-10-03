@@ -23,7 +23,7 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import UnsafeWebhookURLError, get_webhook_client, get_webhook_semaphore
+from utils.http_client import UnsafeWebhookURLError, get_webhook_client, get_webhook_semaphore, safe_request_target
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -771,8 +771,14 @@ def search_apps(
                 [err['loc'][0] for err in e.errors() if err.get('loc')],
             )
 
-    # Always exclude persona type apps from results
-    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    # Persona apps are hidden from browse/search — they are private chat identities, not catalog
+    # listings. The one exception is the installed-apps read: the mobile chat picker loads the
+    # user's installed apps from this endpoint, and a persona the user already enabled must
+    # reappear there after restart/refresh or the picker silently loses it.
+    if installed_apps:
+        filtered_apps = apps
+    else:
+        filtered_apps = [app for app in apps if not app.is_a_persona()]
 
     # Apply rating filter
     if rating is not None:
@@ -2270,11 +2276,30 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
         if app.external_integration.setup_completed_url:
             client = get_webhook_client()
             setup_url = app.external_integration.setup_completed_url
-            separator = '&' if '?' in setup_url else '?'
+            # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
+            # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
+            # IP while presenting the original Host/SNI, so a DNS record swapped between check and
+            # connect (SSRF / DNS rebinding) cannot redirect this probe at an internal service.
+            try:
+                pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, setup_url)
+            except UnsafeWebhookURLError:
+                logger.warning('app_install_failure class=setup_configuration')
+                raise HTTPException(
+                    status_code=422,
+                    detail='This app has an invalid setup endpoint. Contact its developer.',
+                )
+            separator = '&' if '?' in pinned_url else '?'
             try:
                 async with get_webhook_semaphore():
-                    res = await client.get(f'{setup_url}{separator}uid={uid}')
-            except UnsafeWebhookURLError:
+                    res = await client.get(
+                        f'{pinned_url}{separator}uid={uid}',
+                        headers=pin_kwargs['headers'],
+                        extensions=pin_kwargs['extensions'],
+                        follow_redirects=False,
+                    )
+            except (UnsafeWebhookURLError, httpx.InvalidURL):
+                # InvalidURL: a malformed developer URL that survived pinning (e.g. illegal
+                # characters in the path) must not 500 — it is an app misconfiguration.
                 logger.warning('app_install_failure class=setup_configuration')
                 raise HTTPException(
                     status_code=422,
@@ -2294,9 +2319,18 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
                 )
             if not _setup_completed_from_response(res):
                 logger.warning('app_install_failure class=setup_incomplete')
+                integration = app.external_integration
+                has_setup_ui = bool(
+                    integration and (integration.auth_steps or integration.setup_instructions_file_path)
+                )
                 raise HTTPException(
                     status_code=400,
-                    detail='App setup is not completed. Open the app setup instructions and connect the required account, then try again.',
+                    detail=(
+                        'App setup is not completed. Open the app setup instructions and connect the '
+                        'required account, then try again.'
+                        if has_setup_ui
+                        else 'App setup is not completed. Finish the setup on the developer side, then try again.'
+                    ),
                 )
 
     newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)

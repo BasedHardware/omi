@@ -656,8 +656,14 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required Map<String, String> fields,
   required String fileFieldName,
   required String method,
+  Future<void>? abortTrigger,
 }) async {
-  var request = http.MultipartRequest(method, Uri.parse(url));
+  // Abortable when a trigger is supplied: an abandoned POST (setup deadline
+  // expired) must not keep running server-side, or a user retry submits the
+  // same turn twice. http 1.6 exposes this via AbortableMultipartRequest.
+  var request = abortTrigger == null
+      ? http.MultipartRequest(method, Uri.parse(url))
+      : http.AbortableMultipartRequest(method, Uri.parse(url), abortTrigger: abortTrigger);
   request.headers.addAll(headers);
   request.fields.addAll(fields);
 
@@ -866,6 +872,9 @@ Stream<String> _sseBlocks(Stream<List<int>> byteStream) async* {
 
 ChatStreamException _classifyStreamError(Object e) {
   if (e is TimeoutException) return const ChatStreamException(ChatStreamFailureClass.timeout);
+  // The setup-deadline abort fires exactly when the wait expired, so it is the
+  // timeout failure, not an unknown client error.
+  if (e is http.RequestAbortedException) return const ChatStreamException(ChatStreamFailureClass.timeout);
   if (isTransientNetworkError(e)) return const ChatStreamException(ChatStreamFailureClass.offline);
   return classifyChatStreamFailure(e);
 }
@@ -901,6 +910,13 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
   ApiStreamingSeams? seams,
 }) async* {
+  // Setup-deadline abort (same rationale as the multipart variant): the POST
+  // must die with the wait, or a retry can submit the chat turn twice. Armed
+  // before the try so the error handlers can cancel it.
+  final setupAbort = Completer<void>();
+  final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: method, headers: headers, body: body);
@@ -919,7 +935,7 @@ Stream<String> makeStreamingApiCall({
     var builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
 
     http.Request buildRequest() {
-      final request = http.Request(method, Uri.parse(url));
+      final request = http.AbortableRequest(method, Uri.parse(url), abortTrigger: setupAbort.future);
       request.headers.addAll(builtHeaders);
       if (body.isNotEmpty) {
         request.headers['Content-Type'] = 'application/json';
@@ -950,18 +966,25 @@ Stream<String> makeStreamingApiCall({
     }
 
     if (streamedResponse.statusCode != 200) {
+      setupAbortTimer.cancel();
       yield* _streamErrorOrThrow(streamedResponse);
       return;
     }
 
+    // Headers arrived: the setup deadline no longer applies. Cancel before the
+    // body streams so the abort cannot kill a healthy long-lived SSE read
+    // (inactivity/total stream timeouts govern that phase).
+    setupAbortTimer.cancel();
     yield* _sseBlocks(streamedResponse.stream);
   } on AuthTokenUnavailableException catch (e) {
+    setupAbortTimer.cancel();
     await _handleAuthUnavailable(e, expireTerminalSession: true);
     Logger.debug('Authenticated streaming request blocked before send: ${e.result.runtimeType}');
     throw ChatStreamException(
       e.result is AuthTokenTransientFailure ? ChatStreamFailureClass.offline : ChatStreamFailureClass.notSignedIn,
     );
   } catch (e, stackTrace) {
+    setupAbortTimer.cancel();
     final failure = _classifyStreamError(e);
     Logger.error('Streaming request error: ${failure.kind} status=${failure.statusCode}');
     if (!isTransientNetworkError(e) && e is! ChatStreamException && e is! TimeoutException) {
@@ -979,6 +1002,15 @@ Stream<String> makeMultipartStreamingApiCall({
   String fileFieldName = 'files',
   ApiStreamingSeams? seams,
 }) async* {
+  // Setup-deadline abort: without this, the timeout below abandons the wait
+  // but the POST keeps running and can still reach the server — a retry then
+  // submits the same chat turn twice. The trigger aborts the in-flight
+  // request as soon as the deadline passes. Armed before the try so the
+  // error handlers can cancel it.
+  final setupAbort = Completer<void>();
+  final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: 'POST', headers: headers, body: '');
@@ -1003,6 +1035,7 @@ Stream<String> makeMultipartStreamingApiCall({
           fields: fields,
           fileFieldName: fileFieldName,
           method: 'POST',
+          abortTrigger: setupAbort.future,
         );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
@@ -1027,19 +1060,27 @@ Stream<String> makeMultipartStreamingApiCall({
     }
 
     if (response.statusCode != 200) {
+      setupAbortTimer.cancel();
       yield* _streamErrorOrThrow(response);
       return;
     }
 
+    // Headers arrived: the setup deadline no longer applies (see
+    // makeStreamingApiCall). The inactivity/total stream timeouts govern the
+    // body phase.
+    setupAbortTimer.cancel();
+
     // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
     yield* _sseBlocks(response.stream);
   } on AuthTokenUnavailableException catch (e) {
+    setupAbortTimer.cancel();
     await _handleAuthUnavailable(e, expireTerminalSession: true);
     Logger.debug('Authenticated multipart streaming request blocked before send: ${e.result.runtimeType}');
     throw ChatStreamException(
       e.result is AuthTokenTransientFailure ? ChatStreamFailureClass.offline : ChatStreamFailureClass.notSignedIn,
     );
   } catch (e, stackTrace) {
+    setupAbortTimer.cancel();
     final failure = _classifyStreamError(e);
     Logger.error('Multipart streaming request error: ${failure.kind} status=${failure.statusCode}');
     if (!isTransientNetworkError(e) && e is! ChatStreamException && e is! TimeoutException) {

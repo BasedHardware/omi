@@ -3836,7 +3836,7 @@
     "diagnosticsLongestGap": "Najdłuższa przerwa",
     "diagnosticsSincePairingSummary": "Od sparowania: zerwania: {drops}, nieudane połączenia: {failed}.",
     "diagnosticsLastDuration": "Ostatnie {duration}",
-    "chatReplyOffline": "Nie można połączyć. Sprawdź połączenie i spróbuj ponownie.",
+    "chatReplyOffline": "Nie można się połączyć. Sprawdź połączenie i spróbuj ponownie.",
     "chatReplyServerError": "Coś poszło nie tak po naszej stronie. Spróbuj ponownie.",
     "chatReplyTimeout": "Odpowiedź trwała zbyt długo. Spróbuj ponownie.",
     "chatReplyNotSignedIn": "Nie jesteś zalogowany. Zaloguj się i spróbuj ponownie.",

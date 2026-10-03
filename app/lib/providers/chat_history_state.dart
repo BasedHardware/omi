@@ -180,7 +180,21 @@ mixin ChatHistoryState on ChangeNotifier {
 
   void setLoadingMessages(bool value) {
     isLoadingMessages = value;
+    // An app-switch read replaces the whole visible thread (refreshMessages with
+    // dropdownSelected). While it runs, a send would beginChatTurn() (invalidating
+    // the read) and then append the new turn to the old app's projection once the
+    // stale read still lands. Fence sends for the switch window only.
+    isSwitchingChatApp = value && _pendingAppSwitch;
+    if (!value) _pendingAppSwitch = false;
     notifyListeners();
+  }
+
+  /// Set by the drawer's app switch before its bootstrap read starts.
+  bool _pendingAppSwitch = false;
+  bool isSwitchingChatApp = false;
+
+  void markPendingAppSwitch() {
+    _pendingAppSwitch = true;
   }
 
   void setClearingChat(bool value) {
@@ -199,7 +213,9 @@ mixin ChatHistoryState on ChangeNotifier {
     if (isFreshChat) return;
     final epoch = ++_historyEpoch;
     final appId = appProvider?.selectedChatAppId;
+    if (dropdownSelected) markPendingAppSwitch();
     isLoadingMessages = true;
+    isSwitchingChatApp = dropdownSelected;
     loadingOlderMessages = false;
     hasOlderMessages = false;
     notifyListeners();
@@ -207,6 +223,7 @@ mixin ChatHistoryState on ChangeNotifier {
       final result = await chatSessionsApi.messages(id);
       if (_historyDisposed || epoch != _historyEpoch) return;
       isLoadingMessages = false;
+      isSwitchingChatApp = false;
       if (result is ApiFailure<List<ServerMessage>>) {
         historyProblem = result.problem;
       } else {
@@ -221,6 +238,7 @@ mixin ChatHistoryState on ChangeNotifier {
           await (legacyMessagesLoader ?? getMessagesServer)(appId: appId, dropdownSelected: dropdownSelected);
       if (_historyDisposed || epoch != _historyEpoch || appId != appProvider?.selectedChatAppId) return;
       isLoadingMessages = false;
+      isSwitchingChatApp = false;
       messages = loaded;
       historyProblem = null;
       // The legacy cache has no session/app key. Never use it in an explicitly selected thread.

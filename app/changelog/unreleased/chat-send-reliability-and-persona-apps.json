@@ -1,3 +1,3 @@
 {
-  "change": "Chat replies now report a clear reason and retry reliably when the connection, server, or sign-in fails — and persona apps appear in the chat app picker. Installing an app now shows why it failed and lets you retry after paying."
+  "change": "Chat now explains reply and install failures, retries reliably, and shows persona apps in the chat app picker."
 }

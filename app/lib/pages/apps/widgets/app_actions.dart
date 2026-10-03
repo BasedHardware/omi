@@ -23,9 +23,11 @@ bool appNeedsDetailToEnable(App app) {
   if (app.isPaid && !app.isUserPaid) return true;
   final integration = app.externalIntegration;
   if (integration == null) return false;
-  return integration.authSteps.isNotEmpty ||
-      (integration.setupInstructionsFilePath?.isNotEmpty ?? false) ||
-      (integration.setupCompletedUrl?.isNotEmpty ?? false);
+  // `setupCompletedUrl` alone must NOT route to the detail page: the detail view
+  // probes that developer URL with the user's UID on arrival (before the data-access
+  // consent dialog), and without auth steps or instructions it shows no setup UI —
+  // only a dead end. The backend enable gate returns the honest failure instead.
+  return integration.authSteps.isNotEmpty || (integration.setupInstructionsFilePath?.isNotEmpty ?? false);
 }
 
 /// The one consent question before an app that works outside Omi receives the reader's data.

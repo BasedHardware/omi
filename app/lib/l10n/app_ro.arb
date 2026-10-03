@@ -3801,7 +3801,7 @@
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
     "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
     "diagnosticsLastDuration": "Ultimele {duration}",
-    "chatReplyOffline": "Nu se poate conecta. Verificați conexiunea și încercați din nou.",
+    "chatReplyOffline": "Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.",
     "chatReplyServerError": "Ceva a mers prost de partea noastră. Încearcă din nou.",
     "chatReplyTimeout": "Răspunsul a durat prea mult. Încearcă din nou.",
     "chatReplyNotSignedIn": "Nu ești conectat. Conectează-te și încearcă din nou.",

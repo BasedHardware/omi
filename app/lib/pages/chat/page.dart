@@ -734,7 +734,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
-    if (provider.chatMutationInProgress || provider.isClearingChat) return;
+    // `isSwitchingChatApp` fences only the app-switch bootstrap read: a send
+    // there would invalidate the read and append the turn to the previous
+    // app's transcript. Same-thread loading does not block sending.
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     String? currentContext = _selectedContext;
     setState(() {
       _selectedContext = null;
@@ -763,7 +766,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   /// Sends the message behind a failed reply again (the reply's Try Again).
   Future<void> _retryReply(ServerMessage failed) async {
     final provider = context.read<MessageProvider>();
-    if (provider.chatMutationInProgress || provider.isClearingChat) return;
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     provider.setSendingMessage(true);
     _resumeFollowingAndScroll(animated: true);
     await provider.retryFailedReply(failed);

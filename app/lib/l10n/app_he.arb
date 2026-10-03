@@ -11358,7 +11358,7 @@
     "diagnosticsLongestGap": "הפער הארוך ביותר",
     "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
     "diagnosticsLastDuration": "{duration} אחרונות",
-    "chatReplyOffline": "לא ניתן להתחבר. בדקו את החיבור ונסו שוב.",
+    "chatReplyOffline": "לא ניתן להתחבר. בדוק את החיבור שלך ונסה שוב.",
     "chatReplyServerError": "משהו השתבש אצלנו. נסה שוב.",
     "chatReplyTimeout": "התשובה ארכה יותר מדי זמן. נסה שוב.",
     "chatReplyNotSignedIn": "לא התחברת. התחבר ונסה שוב.",

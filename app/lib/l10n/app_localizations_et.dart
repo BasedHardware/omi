@@ -12287,7 +12287,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrollige ühendust ja proovige uuesti.';
+  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrolli ühendust ja proovi uuesti.';
 
   @override
   String get chatReplyServerError => 'Meie poolel läks midagi valesti. Palun proovi uuesti.';

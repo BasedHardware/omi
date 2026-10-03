@@ -3805,5 +3805,5 @@
     "chatReplyServerError": "Niečo sa pokazilo na našej strane. Skúste to znova.",
     "chatReplyTimeout": "Odpoveď trvala príliš dlho. Skúste to znova.",
     "chatReplyNotSignedIn": "Nie ste prihlásení. Prihláste sa a skúste to znova.",
-    "chatAppsLoadFailed": "Aplikácie četu sa nepodarilo načítať. Skúste to znova."
+    "chatAppsLoadFailed": "Chatové aplikácie sa nepodarilo načítať. Skúste to znova."
 }

@@ -68,10 +68,10 @@ def _app_dict(**overrides):
     return data
 
 
-def _external_app(setup_url='https://provider.test/status', **overrides):
+def _external_app(setup_url='https://provider.test/status', integration=None, **overrides):
     return _app_dict(
         capabilities={'external_integration'},
-        external_integration={'setup_completed_url': setup_url},
+        external_integration=integration or {'setup_completed_url': setup_url},
         **overrides,
     )
 
@@ -91,6 +91,14 @@ def _enable(app, client=None, *, user_paid=False, tester=False):
     fastapi_app.include_router(target_router)
     fastapi_app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
     with ExitStack() as stack:
+        stack.enter_context(
+            # safe_request_target does real DNS resolution; hermetic tests must pin without network.
+            patch.object(
+                apps_router,
+                'safe_request_target',
+                lambda url: (url, {'headers': {}, 'extensions': {}}),
+            )
+        )
         stack.enter_context(patch.object(apps_router, 'get_available_app_by_id', lambda _id, _uid: app))
         stack.enter_context(patch.object(apps_router, 'get_webhook_client', lambda: client))
         stack.enter_context(patch.object(apps_router, 'is_tester', lambda _uid: tester))
@@ -194,6 +202,23 @@ def test_incomplete_or_malformed_setup_returns_400(body):
     assert response.status_code == 400, body
     detail = response.json()['detail']
     assert 'setup is not completed' in detail
+    # Guidance matches the app's actual setup surface: in-app instructions when
+    # configured, otherwise the developer-side completion path.
+    assert 'setup instructions' in detail or 'developer side' in detail
+    assert enable_calls == []
+
+
+@pytest.mark.parametrize('body', [b'{"is_setup_completed": false}', b'not json'])
+def test_incomplete_setup_with_setup_ui_points_at_the_instructions(body):
+    app = _external_app(
+        integration={
+            'setup_completed_url': 'https://provider.test/status',
+            'setup_instructions_file_path': 'instructions.md',
+        }
+    )
+    response, _, enable_calls = _enable(app, _Client(response=_response(200, body)))
+    assert response.status_code == 400, body
+    detail = response.json()['detail']
     assert 'setup instructions' in detail
     assert enable_calls == []
 
@@ -204,6 +229,51 @@ def test_completed_setup_enables_exactly_once():
     assert response.json() == {'status': 'ok'}
     assert client.calls == 1
     assert enable_calls == ['app-1']
+
+
+def test_setup_probe_uses_the_pinned_target():
+    """The setup check must connect to the validated/pinned URL with its Host/SNI metadata,
+    not the raw developer-controlled string (SSRF / DNS-rebinding guard)."""
+    seen = {}
+
+    class _CaptureClient:
+        async def get(self, url, **kwargs):
+            seen['url'] = url
+            seen['kwargs'] = kwargs
+            return _response(200)
+
+    def _pin(url):
+        seen['pinned_from'] = url
+        return 'https://93.184.216.34/status', {
+            'headers': {'Host': 'provider.test'},
+            'extensions': {'sni_hostname': 'provider.test'},
+        }
+
+    fastapi_app = FastAPI()
+    target_router = copy(apps_router.router)
+    target_router.routes = [
+        route
+        for route in apps_router.router.routes
+        if getattr(route, 'path', None) == '/v1/apps/enable' and 'POST' in (getattr(route, 'methods', None) or set())
+    ]
+    fastapi_app.include_router(target_router)
+    fastapi_app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(apps_router, 'get_available_app_by_id', lambda _id, _uid: _external_app()))
+        stack.enter_context(patch.object(apps_router, 'get_webhook_client', lambda: _CaptureClient()))
+        stack.enter_context(patch.object(apps_router, 'safe_request_target', _pin))
+        stack.enter_context(patch.object(apps_router, 'is_tester', lambda _uid: False))
+        stack.enter_context(patch.object(apps_router, 'get_is_user_paid_app', lambda _id, _uid: False))
+        stack.enter_context(patch.object(apps_router, 'enable_app', lambda _uid, _id: True))
+        stack.enter_context(patch.object(apps_router, 'increase_app_installs_count', lambda _id: None))
+        response = TestClient(fastapi_app).post('/v1/apps/enable', params={'app_id': 'app-1'})
+
+    assert response.status_code == 200
+    assert seen['pinned_from'] == 'https://provider.test/status'
+    assert seen['url'] == 'https://93.184.216.34/status?uid=user-1'
+    assert seen['kwargs']['headers'] == {'Host': 'provider.test'}
+    assert seen['kwargs']['extensions'] == {'sni_hostname': 'provider.test'}
+    assert seen['kwargs']['follow_redirects'] is False
 
 
 def test_enable_failure_logs_carry_no_body_or_identity(caplog):

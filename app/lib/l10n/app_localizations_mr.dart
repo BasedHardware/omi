@@ -12300,7 +12300,7 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'कनेक्ट होऊ शकलो नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.';
+  String get chatReplyOffline => 'कनेक्ट करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.';
 
   @override
   String get chatReplyServerError => 'आमच्या बाजूने काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.';

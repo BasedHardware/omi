@@ -12341,17 +12341,17 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'Nem sikerült csatlakozni. Ellenőrizze a kapcsolatot, és próbálja újra.';
+  String get chatReplyOffline => 'Nem sikerült csatlakozni. Ellenőrizd a kapcsolatot, és próbáld újra.';
 
   @override
-  String get chatReplyServerError => 'Valami hiba történt a mi oldalunkon. Kérjük, próbáld újra.';
+  String get chatReplyServerError => 'Valami hiba történt a mi oldalunkon. Kérlek, próbáld újra.';
 
   @override
-  String get chatReplyTimeout => 'A válasz túl sokáig tartott. Kérjük, próbáld újra.';
+  String get chatReplyTimeout => 'A válasz túl sokáig tartott. Kérlek, próbáld újra.';
 
   @override
   String get chatReplyNotSignedIn => 'Nem vagy bejelentkezve. Jelentkezz be, és próbáld újra.';
 
   @override
-  String get chatAppsLoadFailed => 'Nem sikerült betölteni a csevegőalkalmazásokat. Kérjük, próbáld újra.';
+  String get chatAppsLoadFailed => 'Nem sikerült betölteni a csevegőalkalmazásokat. Kérlek, próbáld újra.';
 }
