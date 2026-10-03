@@ -248,10 +248,17 @@ class App(AppBaseModel):
             and self.external_integration.triggers_on == 'audio_bytes'
         )
 
-    def filter_proactive_notification_scopes(self, params: List[str]) -> List[str]:
-        if not self.proactive_notification:
+    def filter_proactive_notification_scopes(
+        self, params: Optional[List[str]] = None
+    ) -> List[str]:
+        if not self.proactive_notification or not params:
             return []
-        return [param for param in params if param in self.proactive_notification.scopes]
+        return [
+            param
+            for param in params
+            if isinstance(param, str)
+            and param in self.proactive_notification.scopes
+        ]
 
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
