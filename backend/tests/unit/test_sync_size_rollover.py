@@ -15,6 +15,7 @@ import hashlib
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
 from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.types import document as document_pb
+from google.cloud.firestore_v1.vector import Vector
 import pytest
 
 from database._client import FIRESTORE_DOCUMENT_KINDS, firestore_document_kind, firestore_error_document_path
@@ -127,6 +128,68 @@ def test_below_the_budget_adjacent_chunks_still_merge(caplog):
     assert not _events(caplog)
 
 
+def _sized_row(store, key, timestamp, stored_bytes):
+    """Intake ``key`` and pad its stored summary until the row estimates to ``stored_bytes``.
+
+    The bulk sits in ``structured`` (a long stored summary) rather than the
+    transcript, so the dedupe text index stays small and the test stays fast.
+    """
+    intake(store, chunk(key, timestamp))
+    row = _row(store, key)
+    row['structured'] = {'title': '', 'overview': ''}
+    base = estimate_firestore_document_bytes(row, None)
+    row['structured']['overview'] = 'x' * (stored_bytes - base)
+    assert estimate_firestore_document_bytes(row, None) == stored_bytes
+
+
+def _receipt_bridge_store(stored_bytes):
+    """A labeled ~stored_bytes row 'a' and a small separate row 'c' a bridge will join."""
+    store = StrictFirestore()
+    _sized_row(store, 'a', 1000, stored_bytes)
+    intake(store, chunk('c', 1240, text='A separate later remark.'))
+    _row(store, 'a')['manual_speaker_assignments'] = {
+        'segments': {'a': {'generation': 1, 'person_id': 'p', 'is_user': False}}
+    }
+    return store
+
+
+def test_default_budget_write_that_fits_is_exactly_the_unbounded_assignment(monkeypatch, caplog):
+    """850 KiB stored plus a small bridge stays under 900 KiB, so nothing changes.
+
+    The unbounded run (budget lifted far past any document) is the pre-PR
+    assignment: same canonical, receipt owner, donor redirect, index and rows.
+    """
+    stored = 850 * 1024
+    unbounded = _receipt_bridge_store(stored)
+    with monkeypatch.context() as patch:
+        patch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 10**12)
+        expected = intake(unbounded, chunk('b', 1120, text='One short bridging sentence.'))
+    bounded = _receipt_bridge_store(stored)
+    caplog.clear()
+    result = intake(bounded, chunk('b', 1120, text='One short bridging sentence.'))
+    assert assignment.SYNC_CONVERSATION_BYTE_BUDGET == 900 * 1024
+    assert result == expected
+    assert bounded.rows == unbounded.rows
+    assert result[0]['id'] == 'a' and not result[1]
+    assert _row(bounded, 'c')['sync_merged_into'] == 'a'
+    assert estimate_firestore_document_bytes(_row(bounded, 'a'), None) < assignment.SYNC_CONVERSATION_BYTE_BUDGET
+    assert not _events(caplog)
+
+
+def test_default_budget_write_just_over_the_budget_rolls_over(caplog):
+    store = StrictFirestore()
+    _sized_row(store, 'a', 1000, assignment.SYNC_CONVERSATION_BYTE_BUDGET - 50)
+    before = deepcopy(_row(store, 'a'))
+    assert estimate_firestore_document_bytes(before, None) <= assignment.SYNC_CONVERSATION_BYTE_BUDGET
+    caplog.clear()
+    result, created, survivors = intake(store, chunk('b', 1060, text='One sentence too many.'))
+    assert result['id'] == 'b' and created and len(survivors) == 1
+    assert _row(store, 'a') == before
+    assert _events(caplog) == [
+        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1'
+    ]
+
+
 def test_full_canonical_is_left_untouched_and_new_speech_starts_a_conversation(monkeypatch, caplog):
     store = _full_store(monkeypatch)
     before = deepcopy(_row(store, 'a'))
@@ -137,11 +200,7 @@ def test_full_canonical_is_left_untouched_and_new_speech_starts_a_conversation(m
     assert not _row(store, 'b').get('sync_merged_from')
     assert len(conversations(store)) == 2
     events = _events(caplog)
-    # 'a' only borders the chunk, so it is recognised as full without a merge.
-    assert events == [
-        'event=sync_assignment_target outcome=size_rollover trigger=full_neighbor created=true '
-        'excluded=0 skipped_full=1'
-    ]
+    assert events == ['event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1']
     fallback = _events(caplog, 'omi_fallback_event')
     assert fallback and 'from=canonical_append to=size_rollover' in fallback[0]
 
@@ -159,7 +218,9 @@ def test_identical_retry_and_later_chunks_land_in_the_rollover(monkeypatch, capl
     assert len(conversations(store)) == 2
 
 
-def _full_chain(monkeypatch, length=8):
+def _full_chain(monkeypatch, length=6):
+    # Longer than the four-step bound the first version had, so every accepted
+    # rollover must be re-checked to reach a safe home.
     store = _full_store(monkeypatch)
     ids = ['a']
     for i, start in enumerate(range(1060, 1000 + 60 * length, 60)):
@@ -182,19 +243,16 @@ def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch
         tail['transcript_segments'][0].update(start=30.0, end=39.5)
         tail['finished_at'] = chunk('end', 1000 + 60 * len(ids))['finished_at']
     else:
-        # Only borders the two newest full rows (both within the 120 s gap),
-        # which are recognised without a merge.
+        # Only borders the newest full rows; the continuity chain still reaches
+        # every one, and each is merged into the plan and then excluded.
         tail = chunk('tail', 1000 + 60 * len(ids), text='The last short sentence.')
     result, created, survivors = intake(store, tail)
     assert result['id'] == 'tail' and created and len(survivors) == 1
     assert {cid: _row(store, cid) for cid in ids} == frozen
     assert len(conversations(store)) == len(ids) + 1
-    expected = (
-        'trigger=estimate created=true excluded=8 skipped_full=0'
-        if overlapping
-        else ('trigger=full_neighbor created=true excluded=0 skipped_full=2')
-    )
-    assert _events(caplog) == [f'event=sync_assignment_target outcome=size_rollover {expected}']
+    assert _events(caplog) == [
+        f'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded={len(ids)}'
+    ]
     assert len(_events(caplog, 'omi_fallback_event')) == 1
 
 
@@ -388,8 +446,7 @@ def test_one_size_limit_commit_retries_once_into_a_new_conversation(adapter, cap
     events = _events(caplog)
     assert events[0] == 'event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=conversation'
     assert (
-        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true '
-        'excluded=1 skipped_full=0'
+        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true ' 'excluded=1'
     ) in events
     assert any('to=size_limit_retry' in message for message in _events(caplog, 'omi_fallback_event'))
     # An identical retry later deduplicates into the conversation the backstop
@@ -493,7 +550,17 @@ def test_document_path_is_parsed_from_the_verbatim_prod_message():
     assert firestore_error_document_path(error) == ('users', 'uid-1', 'conversations', 'conv-1.')
 
 
-def test_estimate_counts_references_and_never_undercounts_unknown_values():
+def test_estimate_sizes_vectors_per_dimension_and_sets_as_arrays():
+    empty = estimate_firestore_document_bytes({}, 'p/d')
+    assert estimate_firestore_document_bytes({'v': Vector([0.1, 0.2, 0.3])}, 'p/d') == empty + 2 + 8 * 3
+    assert estimate_firestore_document_bytes({'s': {'ab', 'c'}}, 'p/d') == empty + 2 + 3 + 2
+    assert estimate_firestore_document_bytes({'s': frozenset({1, 2})}, 'p/d') == empty + 2 + 16
+    assert estimate_firestore_document_bytes({'s': {'ab', 'c'}}, 'p/d') == estimate_firestore_document_bytes(
+        {'s': ['ab', 'c']}, 'p/d'
+    )
+
+
+def test_estimate_counts_references_and_floors_unknown_values():
     class _Ref:
         path = 'users/u/conversations/c'
 

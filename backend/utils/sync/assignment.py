@@ -38,18 +38,11 @@ _T = TypeVar('_T')
 # canonical conversation. When the canonical's next write is estimated above
 # this budget, the incoming chunk starts (or joins) another conversation
 # instead. The estimate follows Firestore's documented storage-size rules on
-# the encoded payload, so it is exact for known value types and over-counts
-# unknown ones; the 124 KiB headroom covers the estimate's remaining blind spots
-# (the document name in test doubles, SDK sentinels) and the few bytes a later
-# dedupe-only retry adds without needing a rollover.
+# the encoded payload, so it is exact for the value types sync writes; the
+# 124 KiB headroom covers the estimate's remaining blind spots (the document
+# name in test doubles, SDK values without a documented size) and the few bytes
+# a later dedupe-only retry adds without needing a rollover.
 SYNC_CONVERSATION_BYTE_BUDGET = FIRESTORE_MAX_DOCUMENT_BYTES - 124 * 1024  # 900 KiB
-# A stored conversation this close to the budget is treated as full when it only
-# borders the incoming chunk: one chunk's transcript is a few KiB, so this
-# rolls over slightly early instead of decrypting and re-merging a long chain of
-# full neighbours on every upload. A neighbour that overlaps the chunk in time
-# is always merged, because only it can already hold this chunk's speech.
-# Capped at a tenth of the budget so a smaller budget keeps a proportional margin.
-_FULL_NEIGHBOR_MARGIN_BYTES = 64 * 1024
 
 
 def capture_mismatch(left: dict, right: dict) -> str:
@@ -134,8 +127,6 @@ class _Plan(NamedTuple):
     kept: tuple[int, ...]
     payload: dict
     estimated_bytes: int
-    # Full neighbours left out of matching because they cannot hold this speech.
-    skipped_full: int
 
     @property
     def grows(self) -> bool:
@@ -263,11 +254,10 @@ def assign_in_transaction(
             matched[plan_target_id] = plan_target
             extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
             extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
-        skipped_full: set[str] = set()
         while True:
             ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
             ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
-            ids -= excluded | skipped_full
+            ids -= excluded
             before = len(matched)
             candidates = []
             for cid in sorted(ids - matched.keys()):
@@ -275,10 +265,6 @@ def assign_in_transaction(
                 if raw and not raw.get('deleted') and interval_matches(raw, extent):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
-                        continue
-                    if cid not in (own_id, plan_target_id) and _full_neighbor(raw, incoming):
-                        # Neither bridge through nor extend into it.
-                        skipped_full.add(cid)
                         continue
                     candidates.append((cid, raw))
             if receipt_owner is None:
@@ -441,12 +427,14 @@ def assign_in_transaction(
             kept,
             payload,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
-            len(skipped_full),
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
-    # assignment re-planned inside the same transaction before any write. Each
-    # accepted rollover is itself re-checked. The loop terminates: a plan never
+    # assignment re-planned inside the same transaction before any write. The
+    # decision is made only from the complete encoded plan against the budget,
+    # so a write that fits behaves exactly as before. Each accepted rollover is
+    # itself re-checked (a chain of full rows costs one plan per row, which only
+    # an account at the ceiling pays). The loop terminates: a plan never
     # matches or targets an excluded row, so every pass excludes at least one
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
@@ -477,14 +465,13 @@ def assign_in_transaction(
             trigger = 'unavailable'
             break
         excluded, chosen = excluded | drop, rollover
-    if trigger != 'unavailable' and (excluded or chosen.skipped_full):
+    if trigger != 'unavailable' and excluded:
         # One event per committed plan, however many full rows it stepped past.
         logger.warning(
-            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d skipped_full=%d',
-            trigger or 'full_neighbor',
+            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
+            trigger,
             str(chosen.created).lower(),
             len(excluded),
-            chosen.skipped_full,
         )
         record_fallback(
             component='sync_dispatch',
@@ -547,14 +534,6 @@ def _stored_document_bytes(
         stored.pop(field, None)
     path = getattr(reference, 'path', None)
     return estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
-
-
-def _full_neighbor(raw: dict, incoming: dict) -> bool:
-    """A stored row too full to take speech it can only border, never overlap."""
-    overlaps = raw['started_at'] < incoming['finished_at'] and incoming['started_at'] < raw['finished_at']
-    budget = SYNC_CONVERSATION_BYTE_BUDGET
-    margin = min(_FULL_NEIGHBOR_MARGIN_BYTES, budget // 10)
-    return not overlaps and estimate_firestore_document_bytes(raw, None) > budget - margin
 
 
 def size_limited_conversation(error: BaseException, canonical: Optional[str]) -> tuple[Optional[str], str]:

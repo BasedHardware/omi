@@ -175,8 +175,10 @@ backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
 safe home, so the original write was attempted unchanged. `firestore_error=document_size_limit`
 should then be rare; when it still occurs it names `sync_day_index`, `sync_recent`,
 a `donor`, or a `conversation` rejected a second time after the backstop retry.
-`skipped_full` on the rollover event counts full neighbours that only border the
-chunk and were left out without being merged.
+`excluded` on the rollover event counts the full conversations the committed plan
+stepped past. When the only id the chunk can create a conversation under is its own
+existing or redirected anchor, there is no safe home: fences hold, but the write
+can fail again after the backstop, so `size_rollover_unavailable` is not a recovery.
 
 ## Run ownership and recovery
 

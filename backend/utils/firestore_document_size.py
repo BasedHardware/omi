@@ -17,9 +17,13 @@ def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: st
     Document name: each path segment plus one byte, plus 16. Document: the
     fields plus 32. Field: name (UTF-8 plus one) plus value. Strings are UTF-8
     plus one; booleans and null one; numbers and timestamps eight; geo points
-    sixteen; bytes their length; arrays the sum of their values; maps are sized
-    like an embedded document (their fields plus 32). See
+    sixteen; bytes their length; arrays (the SDK also accepts sets) the sum of
+    their values; vectors eight per dimension; references their document name;
+    maps are sized like an embedded document (their fields plus 32). See
     https://firebase.google.com/docs/firestore/storage-size.
+
+    Exact for those documented types. Any other SDK value is sized from its
+    text form with a 16-byte floor, which is not guaranteed to over-count.
     """
     if document_path:
         name_bytes = sum(len(part.encode('utf-8')) + 1 for part in document_path.split('/')) + 16
@@ -40,14 +44,26 @@ def _value_bytes(value: Any) -> int:
     if isinstance(value, Mapping):
         # A map is sized like an embedded document: its fields plus 32 bytes.
         return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set, frozenset)):
+        # The SDK encodes a set or frozenset as an array.
         return sum(_value_bytes(item) for item in value)
+    if _is_vector(value):
+        return 8 * len(value)
     if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
         return 16
     path = getattr(value, 'path', None)
     if isinstance(path, str):
         # A document reference is stored as its full name, like a document name.
         return sum(len(part.encode('utf-8')) + 1 for part in path.split('/')) + 16
-    # Any other SDK value: its text form, floored so a terse repr is never cheaper
-    # than the widest fixed-size value Firestore stores.
+    # Any other SDK value has no documented size here: its text form, floored at
+    # the widest fixed-size value. A best effort, not a guaranteed over-count.
     return max(len(str(value).encode('utf-8')) + 1, 16)
+
+
+def _is_vector(value: Any) -> bool:
+    """``google.cloud.firestore_v1.vector.Vector``, recognised without importing the SDK.
+
+    Duck-typed so this pure module never pulls Firestore into import-isolated
+    test harnesses.
+    """
+    return type(value).__name__ == 'Vector' and callable(getattr(value, 'to_map_value', None))
