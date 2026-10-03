@@ -765,7 +765,14 @@ frame or longer discards missed-slot credit instead of bursting. A longer unansw
 is cut to its newest 20 seconds with a bounded skipped-seconds metric; this
 explicit cut is not an emitted-text safe trim. Live ingestion continues into a
 bounded 26-second ordered PCM tail, which drains before EOS on departure;
-undelivered teardown cuts are metered. See the replay pacing and latency contract
+undelivered teardown cuts are metered. On recovery-armed sessions an ordinary
+client disconnect owns one absolute shutdown deadline: the receiver keeps
+already-connected prefix and tail delivery, queued wire writes, EOS, and final
+provider callbacks inside a 28-second delivery budget, then allows up to 2
+seconds of bounded cancellation/abort cleanup, while the transcript consumer
+stays alive until the bounded STT drain completes so last provider callbacks
+persist before finalization; flag-off sessions keep the legacy supervision
+order unchanged. See the replay pacing and latency contract
 in `backend/docs/operational/windowed-live-stt.md`. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
