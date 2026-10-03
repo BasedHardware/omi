@@ -276,6 +276,48 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
         ):
             self.assertIn(f"      - {job_id}", workflow)
 
+    def test_android_full_release_and_patch_use_the_shared_admission_boundary(self):
+        import yaml
+
+        workflows = yaml.safe_load((ROOT / "codemagic.yaml").read_text())["workflows"]
+        for name, publish in (
+            ("android-prod-internal", "flutter build appbundle"),
+            ("android-prod-patch", "shorebird patch android"),
+        ):
+            with self.subTest(name=name):
+                workflow = workflows[name]
+                self.assertIn("mobile_release_admission", workflow["environment"]["groups"])
+                script = next(step["script"] for step in workflow["scripts"] if publish in step["script"])
+                self.assertLess(script.index("bash scripts/admit_android_source.sh"), script.index(publish))
+
+    def test_failed_android_admission_cannot_publish_a_production_patch(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / "codemagic.yaml").read_text())["workflows"]["android-prod-patch"]
+        script = next(step["script"] for step in workflow["scripts"] if "shorebird patch android" in step["script"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # All git reads return one exact fixture source, including the tag.
+            git = root / "git"
+            git.write_text('#!/bin/sh\nprintf "%s\\n" "' + SHA + '"\n')
+            python = root / "python3"
+            python.write_text('#!/bin/sh\nexit 5\n')
+            shorebird = root / "shorebird"
+            published = root / "published"
+            shorebird.write_text('#!/bin/sh\ntouch "$PATCH_PUBLISHED"\n')
+            for executable in (git, python, shorebird):
+                executable.chmod(0o755)
+            env = dict(
+                os.environ,
+                PATH=str(root) + os.pathsep + os.environ["PATH"],
+                CM_TAG="v1.0.554-android-patch-cm",
+                GITHUB_TOKEN="",
+                PATCH_PUBLISHED=str(published),
+            )
+            result = subprocess.run(["bash", "-c", script], cwd=ROOT / "app", env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 5, result.stderr)
+            self.assertFalse(published.exists())
+
     def test_emulator_action_script_cannot_mask_native_failure_with_passing_smoke(self):
         import yaml
 

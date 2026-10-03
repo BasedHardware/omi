@@ -1044,7 +1044,7 @@ checks:
     reason: "store lookup failures and malformed responses must not be treated as empty history or build zero"
   - id: mobile-release-admission
     command: ["python3", ".github/scripts/test_verify_mobile_release_admission.py"]
-    triggers: [".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    triggers: ["app/scripts/admit_android_source.sh", ".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "tag admission must consume exact-SHA first-attempt Release Eligibility and the explicit Mobile Release Eligibility aggregate"
   - id: mobile-admission-collector

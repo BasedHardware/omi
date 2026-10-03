@@ -36,8 +36,10 @@ emulator that owns valuable app state.
 
 ## Exact-source release admission
 
-Android tag builds pass `--platform android` to the authenticated collector and
-offline verifier. A green aggregate with conditionally skipped app jobs is not
+Android full-release and production Shorebird-patch tag builds call the shared
+`app/scripts/admit_android_source.sh`, which passes `--platform android` to the
+authenticated collector and offline verifier. Both refuse publication without
+exact-source acceptance; patch tags must also identify the checked-out source. A green aggregate with conditionally skipped app jobs is not
 Android acceptance. The collector verifies the canonical workflow/run/job,
 main branch, source SHA, success and first attempt. PR and nightly results
 cannot admit a release; a push or explicit manual run on main can.
