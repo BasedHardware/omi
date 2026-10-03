@@ -30,7 +30,7 @@ omi goal list
 Stream goals directly from the CLI output pipeline into formatted CommonMark:
 
 ```sh
-omi --json goal list | python goals_to_markdown.py -
+omi --json goal list --include-inactive --limit 100 | python goals_to_markdown.py -
 ```
 
 ### 2. Export to a Dedicated Vault Note
@@ -38,8 +38,9 @@ omi --json goal list | python goals_to_markdown.py -
 Export your goals into a single Markdown note with atomic file replacement:
 
 ```sh
-omi --json goal list | python goals_to_markdown.py - -o ~/vault/Goals.md --force
+omi --json goal list --include-inactive --limit 100 | python goals_to_markdown.py - -o ~/vault/Goals.md --force
 ```
+
 
 ### 3. Multi-File Ingestion & Deduplication
 
@@ -98,6 +99,8 @@ python goals_to_markdown.py goals.json -d ~/vault/Goals/ --group-by type --force
 
 ### Sample Exported Note (`Goals.md`)
 
+> **Note on Omi API Schema:** The converter seamlessly renders both official Omi API `success_criteria` arrays (present on `GoalResponse` models) and custom user `subtasks` / `tasks` lists into nested task checkboxes:
+
 ```markdown
 ---
 type: goals
@@ -127,9 +130,11 @@ tags:
   - [x] Run 25 km in week 2
   - [ ] Complete 30 km long run
   - [ ] Complete final 20 km taper run
-- [ ] **Read 12 Technical Books** `[======....] 60.0%` *(7.2 / 12 books · `#goal_read_books`)*
-  - [ ] Finish Designing Data-Intensive Applications
-  - [ ] Complete Database Internals chapter 4
+- [ ] **Launch Developer Portfolio** `[====......] 40.0%` *(Scale · `#goal_portfolio`)*
+  > **Outcome:** Establish public open source portfolio and engineering presence.
+  - [x] Build automated CI/CD pipeline and integration tests
+  - [ ] Publish 3 architecture walkthroughs
+  - [ ] Deploy custom analytics dashboard
 
 ## ✅ Achieved Goals
 
@@ -152,7 +157,7 @@ _No inactive goals._
 Add a scheduled task or startup hook to keep your Obsidian goal checklist continuously in sync:
 
 ```sh
-omi --json goal list | python goals_to_markdown.py - -o ~/Documents/Obsidian/Vault/OmiGoals.md --force
+omi --json goal list --include-inactive --limit 100 | python goals_to_markdown.py - -o ~/Documents/Obsidian/Vault/OmiGoals.md --force
 ```
 
 - **Interactive Checkboxes**: Checking or unchecking boxes in Obsidian works immediately as standard Markdown tasks.
@@ -163,8 +168,9 @@ omi --json goal list | python goals_to_markdown.py - -o ~/Documents/Obsidian/Vau
 
 1. Run the command to generate `goals.md`:
    ```sh
-   omi --json goal list | python goals_to_markdown.py - -o goals.md
+   omi --json goal list --include-inactive --limit 100 | python goals_to_markdown.py - -o goals.md
    ```
+
 2. In Notion, open your target page or dashboard.
 3. Click **Settings & members** &rarr; **Import** (or use `/import` inline) and select **Markdown & CSV**.
 4. Select `goals.md`. Notion will automatically transform the document into native interactive To-do blocks, callouts, and hierarchical subtasks.

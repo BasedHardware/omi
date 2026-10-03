@@ -12,7 +12,7 @@ Features:
 
 Usage:
     # Direct stdin pipeline:
-    omi --json goal list | python goals_to_markdown.py - -o goals.md
+    omi --json goal list --include-inactive --limit 100 | python goals_to_markdown.py - -o goals.md
 
     # Merge multiple export snapshots with deduplication:
     python goals_to_markdown.py page1.json page2.json -o vault/goals.md --force
@@ -54,8 +54,12 @@ def safe_float(val: Any, default: float = 0.0) -> float:
     if isinstance(val, bool):
         return 1.0 if val else 0.0
     if isinstance(val, (int, float)):
-        if math.isfinite(val):
-            return float(val)
+        try:
+            f_val = float(val)
+            if math.isfinite(f_val):
+                return f_val
+        except OverflowError:
+            return default
         return default
     if isinstance(val, str):
         cleaned = val.strip()
@@ -63,9 +67,23 @@ def safe_float(val: Any, default: float = 0.0) -> float:
             num = float(cleaned)
             if math.isfinite(num):
                 return num
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             pass
     return default
+
+
+def is_truthy(flag: Any) -> bool:
+    """Determine boolean truthiness with defensive handling of string flags."""
+    if flag is None:
+        return False
+    if isinstance(flag, bool):
+        return flag
+    if isinstance(flag, (int, float)):
+        return safe_float(flag) > 0
+    if isinstance(flag, str):
+        return flag.strip().lower() in BOOLEAN_TRUE_VALUES
+    return False
+
 
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
@@ -144,22 +162,27 @@ def atomic_write_file(dest_path: Path | str, content: str, force: bool = True) -
 
 def calculate_progress(goal: Dict[str, Any]) -> float:
     """Calculate progress percentage (0.0 to 100.0) for a goal record."""
-    goal_type = str(goal.get("goal_type") or "numeric").strip().lower()
+    status = str(goal.get("status") or "").strip().lower()
+    if status in COMPLETED_STATUSES:
+        return 100.0
 
+    raw_current = goal.get("current_value")
+    # If no progress has been recorded yet, progress is 0.0 unless completed
+    if raw_current is None:
+        return 0.0
+
+    goal_type = str(goal.get("goal_type") or "numeric").strip().lower()
     if goal_type == "boolean":
-        val = goal.get("current_value")
+        val = raw_current
         if isinstance(val, bool):
             return 100.0 if val else 0.0
         if isinstance(val, (int, float)):
             return 100.0 if safe_float(val) > 0 else 0.0
         if isinstance(val, str):
             return 100.0 if val.strip().lower() in BOOLEAN_TRUE_VALUES else 0.0
-        status = str(goal.get("status") or "").strip().lower()
-        if status in COMPLETED_STATUSES:
-            return 100.0
         return 0.0
 
-    current = safe_float(goal.get("current_value"), default=0.0)
+    current = safe_float(raw_current, default=0.0)
     target = safe_float(goal.get("target_value"), default=10.0)
     min_val = safe_float(goal.get("min_value"), default=0.0)
 
@@ -177,8 +200,14 @@ def calculate_progress(goal: Dict[str, Any]) -> float:
         pct = ((min_val - current) / (min_val - target)) * 100.0
         return min(max(pct, 0.0), 100.0)
 
-    # Target equals min_val
-    return 100.0 if current >= target else 0.0
+    # Target equals min_val (qualitative goal or exact numeric boundary)
+    if target == min_val:
+        is_qualitative = goal.get("metric") is None and (target == 0.0 or raw_current == 0.0)
+        if is_qualitative:
+            return 100.0 if status in COMPLETED_STATUSES else 0.0
+        return 100.0 if current >= target else 0.0
+
+    return 0.0
 
 
 def render_progress_bar(percentage: float, width: int = 10) -> str:
@@ -198,9 +227,13 @@ def is_goal_completed(goal: Dict[str, Any]) -> bool:
     if status in COMPLETED_STATUSES:
         return True
 
+    raw_current = goal.get("current_value")
+    if raw_current is None:
+        return False
+
     goal_type = str(goal.get("goal_type") or "numeric").strip().lower()
     if goal_type == "boolean":
-        val = goal.get("current_value")
+        val = raw_current
         if isinstance(val, bool):
             return val
         if isinstance(val, (int, float)):
@@ -209,15 +242,22 @@ def is_goal_completed(goal: Dict[str, Any]) -> bool:
             return val.strip().lower() in BOOLEAN_TRUE_VALUES
         return False
 
-    current = safe_float(goal.get("current_value"), default=0.0)
+    current = safe_float(raw_current, default=0.0)
     target = safe_float(goal.get("target_value"), default=10.0)
     min_val = safe_float(goal.get("min_value"), default=0.0)
 
-    if target > min_val and current >= target:
-        return True
-    if target < min_val and current <= target:
-        return True
-    return calculate_progress(goal) >= 100.0
+    if target > min_val:
+        return current >= target
+    elif target < min_val:
+        return current <= target
+
+    # target == min_val
+    is_qualitative = goal.get("metric") is None and (target == 0.0 or raw_current == 0.0)
+    if is_qualitative:
+        return status in COMPLETED_STATUSES
+    return current >= target
+
+
 
 
 def determine_status_category(goal: Dict[str, Any]) -> str:
@@ -243,15 +283,19 @@ def extract_goals(raw_data: Any) -> List[Dict[str, Any]]:
     if isinstance(raw_data, list):
         goals_list = [it for it in raw_data if isinstance(it, dict)]
     elif isinstance(raw_data, dict):
-        for candidate_key in ("goals", "items", "data", "results"):
+        for candidate_key in ("goals", "items", "data", "results", "goal"):
             candidate = raw_data.get(candidate_key)
             if isinstance(candidate, list):
                 goals_list = [it for it in candidate if isinstance(it, dict)]
+                break
+            elif isinstance(candidate, dict) and candidate:
+                goals_list = [candidate]
                 break
         else:
             # Single goal object
             if raw_data:
                 goals_list = [raw_data]
+
 
     # Ensure stable goal id for each record
     normalized_goals: List[Dict[str, Any]] = []
@@ -371,9 +415,11 @@ def format_goal_tree(goal: Dict[str, Any]) -> str:
             if isinstance(sub, dict):
                 raw_st = str(sub.get("title") or sub.get("name") or "Subtask")
                 sub_title = re.sub(r"\s+", " ", raw_st).strip()
-                sub_done = sub.get("completed") or sub.get("done") or False
-                sub_box = "[x]" if bool(sub_done) else "[ ]"
+                raw_done = sub.get("completed") if "completed" in sub else sub.get("done")
+                sub_box = "[x]" if is_truthy(raw_done) else "[ ]"
                 lines.append(f"  - {sub_box} {sub_title}")
+
+
             elif isinstance(sub, str) and sub.strip():
                 clean_sub = re.sub(r"\s+", " ", str(sub)).strip()
                 sub_box = "[x]" if completed else "[ ]"
