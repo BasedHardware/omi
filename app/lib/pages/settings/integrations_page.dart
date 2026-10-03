@@ -128,9 +128,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   /// The app catalog below the connected services (what the Apps tab loaded).
   Future<void> _loadApps() async {
     try {
-      final appProvider = context.read<AppProvider>();
-      if (appProvider.apps.isEmpty) await appProvider.getApps();
-      if (mounted && appProvider.popularApps.isEmpty) await appProvider.getPopularApps();
+      await context.read<AppProvider>().ensureCatalogLoaded();
     } catch (e, s) {
       Logger.handle(e, s, message: 'Error loading the app catalog on Integrations');
     }

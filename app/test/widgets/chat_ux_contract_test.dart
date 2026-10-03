@@ -11,6 +11,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -61,6 +63,30 @@ void main() {
     testWidgets('a reply that cannot be retried shows no button', (tester) async {
       await tester.pumpWidget(_host(const ChatReplyError()));
       expect(find.text('Try Again'), findsNothing);
+    });
+
+    testWidgets('each failure class shows its localized cause and retry still works', (tester) async {
+      final expected = {
+        ChatStreamFailureClass.offline: 'Unable to connect. Check your connection and try again.',
+        ChatStreamFailureClass.server: 'Something went wrong on our side. Please try again.',
+        ChatStreamFailureClass.timeout: 'The response took too long. Please try again.',
+        ChatStreamFailureClass.quota:
+            "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
+        ChatStreamFailureClass.notSignedIn: "You're not signed in. Sign in and try again.",
+        ChatStreamFailureClass.unknown: "Omi couldn't reply. Check your connection and try again.",
+      };
+      for (final entry in expected.entries) {
+        var retries = 0;
+        await tester.pumpWidget(_host(ChatReplyError(failure: entry.key, onRetry: () => retries++)));
+        expect(find.text(entry.value), findsOneWidget, reason: entry.key.name);
+        await tester.tap(find.text('Try Again'));
+        expect(retries, 1, reason: entry.key.name);
+      }
+    });
+
+    testWidgets('a null failure falls back to the generic copy', (tester) async {
+      await tester.pumpWidget(_host(const ChatReplyError(failure: null)));
+      expect(find.text("Omi couldn't reply. Check your connection and try again."), findsOneWidget);
     });
 
     testWidgets('is translated', (tester) async {
@@ -126,7 +152,13 @@ void main() {
       apps = AppProvider()..selectedChatAppId = 'a2';
     });
 
-    Future<void> pumpDrawer(WidgetTester tester, {required ValueChanged<App> onDisable, VoidCallback? onClear}) async {
+    Future<GlobalKey<ScaffoldState>> pumpDrawer(
+      WidgetTester tester, {
+      required ValueChanged<App> onDisable,
+      ValueChanged<String>? onSelectApp,
+      VoidCallback? onEnableApps,
+      VoidCallback? onClear,
+    }) async {
       final key = GlobalKey<ScaffoldState>();
       await tester.pumpWidget(
         MultiProvider(
@@ -140,8 +172,8 @@ void main() {
             home: Scaffold(
               key: key,
               endDrawer: ChatAppsDrawer(
-                onSelectApp: (_) {},
-                onEnableApps: () {},
+                onSelectApp: onSelectApp ?? (_) {},
+                onEnableApps: onEnableApps ?? () {},
                 onDisableApp: onDisable,
                 onClearChat: onClear ?? () {},
               ),
@@ -152,6 +184,7 @@ void main() {
       );
       key.currentState!.openEndDrawer();
       await tester.pumpAndSettle();
+      return key;
     }
 
     testWidgets('Clear Chat sits below the app list', (tester) async {
@@ -169,6 +202,73 @@ void main() {
       expect(find.byTooltip('Disable Coach'), findsNothing, reason: 'the app you are chatting with');
       await tester.tap(find.byTooltip('Disable Notes'));
       expect(disabled?.id, 'a1');
+    });
+
+    testWidgets('persona apps appear as selectable rows', (tester) async {
+      final persona = _chatApp('p1', 'Friend')..capabilities = {'persona'};
+      messages.chatApps = [_chatApp('a1', 'Notes'), persona];
+
+      String? selected;
+      var enableAppsOpened = 0;
+      final key = await pumpDrawer(
+        tester,
+        onDisable: (_) {},
+        onSelectApp: (id) => selected = id,
+        onEnableApps: () => enableAppsOpened++,
+      );
+
+      expect(find.text('Friend'), findsOneWidget);
+
+      // Rendering is not selectability: tap the rows and assert the callbacks
+      // fire so a broken tap handler cannot pass this contract. Choosing any
+      // row pops the drawer, so re-open it between taps.
+      await tester.tap(find.text('Friend'));
+      await tester.pumpAndSettle();
+      expect(selected, 'p1');
+
+      key.currentState!.openEndDrawer();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Omi'));
+      await tester.pumpAndSettle();
+      expect(selected, 'no_selected');
+
+      key.currentState!.openEndDrawer();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Enable Apps'));
+      await tester.pumpAndSettle();
+      expect(enableAppsOpened, 1);
+    });
+
+    testWidgets('a failed fetch keeps the prior rows, shows the error, and retry reloads', (tester) async {
+      var loads = 0;
+      messages.chatAppsLoaderOverride = ({offset = 0, limit = 100}) async {
+        loads++;
+        return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      };
+      messages.chatAppsProblem = const ApiProblem(ApiProblemKind.transport);
+
+      await pumpDrawer(tester, onDisable: (_) {});
+
+      expect(find.text('Notes'), findsOneWidget);
+      expect(find.text("Couldn't load chat apps. Please try again."), findsOneWidget);
+      expect(find.textContaining('No chat apps enabled'), findsNothing);
+
+      await tester.tap(find.widgetWithText(OmiButton, 'Try Again'));
+      await tester.pump();
+      expect(loads, 1);
+      expect(find.text('Notes'), findsOneWidget);
+    });
+
+    testWidgets('a genuine empty result keeps Omi and Enable Apps selectable with no error or spinner', (tester) async {
+      messages.chatApps = [];
+
+      await pumpDrawer(tester, onDisable: (_) {});
+
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(find.byType(OmiErrorState), findsNothing);
+      expect(find.textContaining('No chat apps enabled'), findsNothing);
+      expect(find.text('Omi'), findsOneWidget);
+      expect(find.text('Enable Apps'), findsOneWidget);
     });
   });
 }

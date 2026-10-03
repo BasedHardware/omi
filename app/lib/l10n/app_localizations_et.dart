@@ -12218,24 +12218,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Hääl';
-
-  @override
-  String get assistantVoice => 'Assistendi hääl';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
-
-  @override
-  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
-
-  @override
-  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
@@ -12303,6 +12285,39 @@ class AppLocalizationsEt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimased $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get chatReplyServerError => 'Meie poolel läks midagi valesti. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyTimeout => 'Vastus võttis liiga kaua aega. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Sa pole sisse logitud. Logi sisse ja proovi uuesti.';
+
+  @override
+  String get chatAppsLoadFailed => 'Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
 
   @override
   String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';

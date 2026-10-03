@@ -12246,24 +12246,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Balsas';
-
-  @override
-  String get assistantVoice => 'Asistento balsas';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Pasirinktas balsas bendras mobiliesiems ir kompiuteriui.';
-
-  @override
-  String get readChatRepliesAloud => 'Skaityti pokalbio atsakymus garsiai';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Kalba tik tada, kai leidžia \"Balso atsakas\".';
-
-  @override
-  String get voicePreviewSample => 'Sveiki, aš Omi. Tai mano balsas.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
@@ -12331,6 +12313,39 @@ class AppLocalizationsLt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Paskutinės $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nepavyko prisijungti. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String get chatReplyServerError => 'Mūsų pusėje įvyko klaida. Bandykite dar kartą.';
+
+  @override
+  String get chatReplyTimeout => 'Atsakymas užtruko per ilgai. Bandykite dar kartą.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nesate prisijungę. Prisijunkite ir bandykite dar kartą.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nepavyko įkelti pokalbių programų. Bandykite dar kartą.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Balsas';
+
+  @override
+  String get assistantVoice => 'Asistento balsas';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pasirinktas balsas bendras mobiliesiems ir kompiuteriui.';
+
+  @override
+  String get readChatRepliesAloud => 'Skaityti pokalbio atsakymus garsiai';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Kalba tik tada, kai leidžia \"Balso atsakas\".';
+
+  @override
+  String get voicePreviewSample => 'Sveiki, aš Omi. Tai mano balsas.';
 
   @override
   String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';

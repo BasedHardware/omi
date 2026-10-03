@@ -12279,24 +12279,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voce';
-
-  @override
-  String get assistantVoice => 'Vocea asistentului';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Vocea aleasă este partajată între mobil și desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Citește răspunsurile din chat cu voce tare';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Vorbește doar când \"Răspuns vocal\" permite.';
-
-  @override
-  String get voicePreviewSample => 'Bună, sunt Omi. Aceasta este vocea mea.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
@@ -12364,6 +12346,39 @@ class AppLocalizationsRo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimele $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.';
+
+  @override
+  String get chatReplyServerError => 'Ceva a mers prost de partea noastră. Încearcă din nou.';
+
+  @override
+  String get chatReplyTimeout => 'Răspunsul a durat prea mult. Încearcă din nou.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nu ești conectat. Conectează-te și încearcă din nou.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nu s-au putut încărca aplicațiile de chat. Încearcă din nou.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Vocea asistentului';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vocea aleasă este partajată între mobil și desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Citește răspunsurile din chat cu voce tare';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Vorbește doar când \"Răspuns vocal\" permite.';
+
+  @override
+  String get voicePreviewSample => 'Bună, sunt Omi. Aceasta este vocea mea.';
 
   @override
   String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
