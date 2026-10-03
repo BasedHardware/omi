@@ -2,7 +2,14 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from utils.stt.resilient_stream import socket_is_finishing
+
+
+@pytest.fixture(autouse=True)
+def _recovery_on(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 def _managed(owner_closing: bool, raw_finishing: bool):

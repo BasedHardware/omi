@@ -73,6 +73,7 @@ def test_enqueue_normalizes_before_failover_capture_stamp_and_queue(monkeypatch)
     receiver.speaker_provider_epoch = MagicMock()
     receiver.host.transcripts = MagicMock()
     receiver.recovery = LiveRecoveryController(receiver.host)
+    receiver.recovery_enabled = True
     receiver._candidate_token = None
     captured = []
     receiver._capture = lambda _kind, segments: captured.append(segments[0]['text'])
@@ -126,6 +127,7 @@ async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_pro
     receiver.host.stt_language = 'en'
     receiver.host.language_profile = None
     receiver.recovery = LiveRecoveryController(receiver.host)
+    receiver.recovery_enabled = True
     receiver._candidate_token = None
     receiver.stt_socket = None
     monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda _host: False)

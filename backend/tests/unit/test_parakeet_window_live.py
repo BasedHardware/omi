@@ -11,6 +11,9 @@ import numpy as np
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
+from config.live_stt_recovery import session_recovery_enabled
+from utils.stt.recovery_state import LiveRecoveryController
+
 from utils.stt import (
     connect_backoff as connect_backoff_module,
     live_chain,
@@ -153,6 +156,11 @@ async def _wait_requests(client, count: int) -> None:
         await _REAL_SLEEP(0)
 
 
+@pytest.fixture(autouse=True)
+def _recovery_on(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 def receiver():
     emitted = []
     host = SimpleNamespace(
@@ -168,8 +176,11 @@ def receiver():
         is_multi_channel=False,
         use_custom_stt=False,
     )
+    enabled = session_recovery_enabled(host)
     return SimpleNamespace(
         host=host,
+        recovery_enabled=enabled,
+        recovery=LiveRecoveryController(host) if enabled else None,
         _stt_failed_providers=set(),
         vad_gate=None,
         _enqueue_stt_segments=lambda segments, **kwargs: emitted.extend(segments),
