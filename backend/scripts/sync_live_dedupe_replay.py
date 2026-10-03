@@ -89,7 +89,12 @@ def _audio_plan(payload: dict) -> tuple[list[dict], dict]:
             'channel': wal.get('channel', 'mono'),
             'codec': wal.get('codec', 'pcm16'),
         }
-        received = validated_live_ranges(claim, envelopes)
+        wall_start = wal.get('wal_start_seconds')
+        if wall_start is not None and (
+            type(wall_start) not in (int, float) or not math.isfinite(wall_start) or wall_start <= 0
+        ):
+            raise ValueError('WAL wall start must be a finite positive number')
+        received = validated_live_ranges(claim, envelopes, wal_start_seconds=wall_start, frame_samples=samples)
         evidence_abstained = evidence_abstained or received is None
         keep = (
             plan_unreceived_frames(samples, received, frame_start=first, sample_rate=rate)
