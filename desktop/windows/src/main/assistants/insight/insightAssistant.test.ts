@@ -53,8 +53,12 @@ vi.mock('./persist', async () => {
   return { persistInsight: h.persistInsight, toPayload: actual.toPayload }
 })
 vi.mock('./promptStore', () => ({ getInsightAnalysisPrompt: () => 'PROMPT' }))
+vi.mock('../core/outputLanguage', async () => {
+  const actual =
+    await vi.importActual<typeof import('../core/outputLanguage')>('../core/outputLanguage')
+  return { ...actual, getUserLanguage: h.getUserLanguage }
+})
 vi.mock('./context', () => ({
-  getUserLanguage: h.getUserLanguage,
   loadInsightContext: h.loadInsightContext,
   MAX_LOOKBACK_MS: 3_600_000
 }))

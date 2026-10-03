@@ -20,6 +20,7 @@ import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
 import type { RewindFrame } from '../../../shared/types'
 import { intervalElapsed } from '../insight/gating'
 import { extractMemory } from './gemini'
+import { withOutputLanguage } from '../core/outputLanguage'
 import { MEMORY_SYSTEM_PROMPT, buildUserPrompt } from './prompt'
 import { persistMemory } from './persist'
 import type { MemoryExtractionResult } from './models'
@@ -122,7 +123,8 @@ export class MemoryAssistant implements ProactiveAssistant {
       // ring like Mac) means the dedup list survives an app restart.
       const recent = recentMemories(20)
       const userPrompt = buildUserPrompt(frame.app || '', recent)
-      result = await extractMemory(session, MEMORY_SYSTEM_PROMPT, userPrompt, imageBase64)
+      const systemPrompt = await withOutputLanguage(MEMORY_SYSTEM_PROMPT)
+      result = await extractMemory(session, systemPrompt, userPrompt, imageBase64)
     } catch (e) {
       // Errors are just logged (no backoff — the next interval retries).
       console.warn('[memory] extraction error:', e instanceof Error ? e.name : 'Error')

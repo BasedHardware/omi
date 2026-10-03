@@ -23,6 +23,7 @@ import { getBackendSession, getSessionEpoch } from '../core/session'
 import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
 import type { FocusSessionStatus, RewindFrame } from '../../../shared/types'
 import { analyzeScreenshot } from './gemini'
+import { withOutputLanguage } from '../core/outputLanguage'
 import { loadFocusContext } from './context'
 import { buildFocusPrompt } from './prompt'
 import { getFocusSystemPrompt } from './promptStore'
@@ -181,7 +182,8 @@ export class FocusAssistant implements ProactiveAssistant {
     try {
       const context = await loadFocusContext(new Date())
       const prompt = buildFocusPrompt(context, this.history)
-      analysis = await analyzeScreenshot(session, getFocusSystemPrompt(), prompt, imageBase64)
+      const systemPrompt = await withOutputLanguage(getFocusSystemPrompt())
+      analysis = await analyzeScreenshot(session, systemPrompt, prompt, imageBase64)
       // A real answer clears the error backoff.
       this.consecutiveErrors = 0
       this.backoffEndsAt = null

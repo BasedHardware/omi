@@ -8,6 +8,7 @@
 // `screenshots`/`ocrText`/`appName`/`timestamp` — a verbatim example that named a
 // non-existent table would send the model querying nothing.
 import { REWIND_SCHEMA_DESC } from './models'
+import { outputLanguageInstruction } from '../core/outputLanguage'
 
 /** Bump wipes a user's saved custom prompt (see promptStore.migrate) so a prompt
  *  fix reaches people who edited theirs. v3 tracks Mac: retired the 2026
@@ -92,9 +93,8 @@ export const DB_SCHEMA_BLOCK = `DATABASE SCHEMA for execute_sql:\n${REWIND_SCHEM
  *  Mac's language directive. Mirrors InsightAssistant.swift:564-568. */
 export function buildSystemPrompt(analysisPrompt: string, language: string | null): string {
   let out = analysisPrompt
-  if (language && language !== 'en') {
-    out += `\n\nIMPORTANT: Respond in the user's preferred language: ${language}`
-  }
+  const languageInstruction = outputLanguageInstruction(language)
+  if (languageInstruction) out += `\n\n${languageInstruction}`
   out += `\n\n${DB_SCHEMA_BLOCK}`
   return out
 }
