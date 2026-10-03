@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import importlib.util
 import json
 import shutil
@@ -60,6 +61,32 @@ def test_canary_renders_only_independent_pinned_deployment(environment):
 def test_mutable_canary_image_rejected(image):
     with pytest.raises(ValueError):
         renderer.detach({}, image, 2, {})
+
+
+@pytest.mark.skipif(shutil.which('helm') is None, reason='Helm render contract requires helm')
+def test_live_control_snapshot_preserves_manual_runtime_overrides_and_is_not_mutated():
+    control = renderer.render('prod', IMAGE, 2, {})
+    control['metadata']['name'] = 'prod-omi-backend-listen'
+    control['spec']['selector']['matchLabels'].pop('track')
+    control['spec']['template']['metadata']['labels'].pop('track')
+    container = control['spec']['template']['spec']['containers'][0]
+    container['env'] = [
+        {'name': 'STT_SERVICE_MODELS', 'value': 'live-reviewed-order'},
+        {'name': 'STT_FAILOVER_RECOVERY_ENABLED', 'value': 'false'},
+    ]
+    container['resources']['limits']['memory'] = '4Gi'
+    before = copy.deepcopy(control)
+    candidate = renderer.render('prod', IMAGE, 2, {'STT_FAILOVER_RECOVERY_ENABLED': 'true'}, control)
+    out = candidate['spec']['template']['spec']['containers'][0]
+    assert out['resources']['limits']['memory'] == '4Gi'
+    assert out['env'] == [
+        {'name': 'STT_SERVICE_MODELS', 'value': 'live-reviewed-order'},
+        {'name': 'STT_FAILOVER_RECOVERY_ENABLED', 'value': 'true'},
+    ]
+    assert control == before
+    control['metadata']['namespace'] = 'dev-omi-backend'
+    with pytest.raises(ValueError):
+        renderer.render('prod', IMAGE, 2, {}, control)
 
 
 def test_dev_manifest_has_no_shared_identity_or_state():

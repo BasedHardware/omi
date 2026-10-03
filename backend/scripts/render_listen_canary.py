@@ -36,7 +36,7 @@ def detach(deployment: dict, image: str, replicas: int, env: dict[str, str]) -> 
     pod = spec['template']
     pod['metadata']['labels'].pop('app.kubernetes.io/managed-by', None)
     pod['metadata']['labels']['track'] = 'canary'
-    container = pod['spec']['containers'][0]
+    container = next(c for c in pod['spec']['containers'] if c['name'] == 'backend-listen')
     container['image'] = image
     current_env = {entry['name']: entry for entry in container.get('env', [])}
     current_env.update({name: {'name': name, 'value': value} for name, value in env.items()})
@@ -44,7 +44,7 @@ def detach(deployment: dict, image: str, replicas: int, env: dict[str, str]) -> 
     return result
 
 
-def render(environment: str, image: str, replicas: int, env: dict[str, str]) -> dict:
+def render(environment: str, image: str, replicas: int, env: dict[str, str], control: dict | None = None) -> dict:
     release = f'{environment}-omi-backend-listen'
     rendered = subprocess.run(
         [
@@ -65,6 +65,33 @@ def render(environment: str, image: str, replicas: int, env: dict[str, str]) -> 
     ).stdout
     deployment = next(doc for doc in yaml.safe_load_all(rendered) if doc and doc.get('kind') == 'Deployment')
     deployment['metadata']['namespace'] = f'{environment}-omi-backend'
+    if control is not None:
+        if (
+            control.get('kind') != 'Deployment'
+            or control.get('apiVersion') != 'apps/v1'
+            or control.get('metadata', {}).get('name') != release
+            or control.get('metadata', {}).get('namespace') != f'{environment}-omi-backend'
+        ):
+            raise ValueError('control snapshot must be the main listen Deployment in the selected namespace')
+        selector = control['spec']['selector']
+        labels = control['spec']['template']['metadata']['labels']
+        expected = deployment['spec']['selector']['matchLabels']
+        if (
+            selector.get('matchExpressions')
+            or any(labels.get(key) != value for key, value in expected.items())
+            or any(labels.get(key) != value for key, value in selector.get('matchLabels', {}).items())
+        ):
+            raise ValueError('control pod labels do not match the chart Service selector')
+        if len([c for c in control['spec']['template']['spec']['containers'] if c['name'] == 'backend-listen']) != 1:
+            raise ValueError('control must contain exactly one backend-listen container')
+        # The chart owns object shape; the explicit live snapshot owns actual
+        # runtime settings, including manual Helm env overrides and scheduling.
+        # Do not copy server metadata/status or Helm ownership annotations.
+        deployment['spec']['template'] = copy.deepcopy(control['spec']['template'])
+        deployment['spec']['selector'] = copy.deepcopy(selector)
+        for key in ('strategy', 'progressDeadlineSeconds'):
+            if key in control['spec']:
+                deployment['spec'][key] = copy.deepcopy(control['spec'][key])
     return detach(deployment, image, replicas, env)
 
 
@@ -74,6 +101,7 @@ def main() -> None:
     parser.add_argument('--image', required=True)
     parser.add_argument('--replicas', type=int, default=2)
     parser.add_argument('--env', action='append', default=[], metavar='NAME=VALUE')
+    parser.add_argument('--control-deployment', type=Path, help='coordinator-captured main Deployment YAML or JSON')
     args = parser.parse_args()
     env = {}
     for item in args.env:
@@ -81,7 +109,12 @@ def main() -> None:
         if not sep or not re.fullmatch(r'[A-Z][A-Z0-9_]*', name):
             parser.error('--env requires NAME=VALUE')
         env[name] = value
-    print(yaml.safe_dump(render(args.environment, args.image, args.replicas, env), sort_keys=False), end='')
+    if args.environment == 'prod' and args.control_deployment is None:
+        parser.error('prod requires --control-deployment to preserve live configuration')
+    control = yaml.safe_load(args.control_deployment.read_text()) if args.control_deployment else None
+    if args.control_deployment and not isinstance(control, dict):
+        parser.error('control snapshot must be a Deployment object')
+    print(yaml.safe_dump(render(args.environment, args.image, args.replicas, env, control), sort_keys=False), end='')
 
 
 if __name__ == '__main__':

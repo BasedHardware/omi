@@ -2,7 +2,9 @@
 
 `backend/scripts/render_listen_canary.py` renders **only** the chart's Deployment,
 renames it `prod-omi-backend-listen-canary`, pins a registry digest and fixes
-replicas. It retains resources, probes, node scheduling, service account,
+replicas. Prod requires an explicit coordinator-captured main Deployment
+snapshot: its pod template preserves live Helm/env overrides as well as
+resources, probes, node scheduling, service account,
 secrets/config refs, scrape annotations and graceful termination. The caller
 reviews the YAML before applying it. No cluster calls occur while rendering.
 
@@ -40,6 +42,12 @@ Record their revisions and refuse unrelated STT configuration changes during
 the bake. Regenerate from the same reviewed chart source for expansion; do not
 silently render a newer main chart. Review routine deploy changes, refresh pod
 identity/exposure after restarts, and preserve simultaneous controls.
+
+Keep the initial control snapshot for every expansion render. A new snapshot
+would silently change canary configuration. Compare the initial snapshot with
+main immediately before apply; if a routine deploy changed STT settings,
+HOLD/review rather than continuing with unlike controls. Snapshot capture is
+read-only deployment metadata, never customer documents or secret payloads.
 
 ## Image facts verified from the current workflows
 

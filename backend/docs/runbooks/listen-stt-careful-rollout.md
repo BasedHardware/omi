@@ -52,7 +52,8 @@ and [watch queries](listen-stt-canary-queries.promql) are part of this card.
    kubectl --context "$PROD_CTX" -n "$NS" get deploy prod-omi-backend-listen -o yaml > /tmp/listen-control.yaml
    kubectl --context "$PROD_CTX" -n "$NS" get pods -l app.kubernetes.io/name=backend-listen -o json > /tmp/listen-controls.json
    backend/.venv/bin/python backend/scripts/render_listen_canary.py --environment prod \
-     --image "$IMAGE" --replicas 2 --env STT_FAILOVER_RECOVERY_ENABLED=true > /tmp/listen-canary.yaml
+     --image "$IMAGE" --replicas 2 --control-deployment /tmp/listen-control.yaml \
+     --env STT_FAILOVER_RECOVERY_ENABLED=true > /tmp/listen-canary.yaml
    kubectl --context "$PROD_CTX" -n "$NS" diff -f /tmp/listen-canary.yaml
    # diff exit 1 means differences; any other nonzero status is an error.
    kubectl --context "$PROD_CTX" -n "$NS" apply -f /tmp/listen-canary.yaml
