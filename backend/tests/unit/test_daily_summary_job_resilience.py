@@ -211,7 +211,7 @@ def test_per_user_budget_exceeded_is_recorded_and_skipped() -> None:
 
 def test_failing_hour_group_does_not_abort_the_remaining_groups() -> None:
     with _loaded_job() as (notifications, notification_db, _redis, _fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {21: ['UTC'], 22: ['Etc/GMT+1']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {21: ['UTC'], 22: ['Etc/GMT+1']}
         served: List[str] = []
 
         def read_users(timezones: List[str], target_hour: int) -> List[Any]:
@@ -265,7 +265,7 @@ def test_job_budget_checkpoints_the_unfinished_tail() -> None:
 
 def test_next_execution_resumes_at_the_checkpointed_tail() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: ['UTC']}
         notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(9)
         notifications.summary_budget.write_job_cursor(
             notifications.summary_budget.job_cursor_key(),
@@ -285,7 +285,7 @@ def test_a_partially_read_hour_group_does_not_clear_the_checkpoint() -> None:
     """A dropped timezone chunk is a partial enumeration. Finishing the run as if
     it were complete retires users the job never even listed."""
     with _loaded_job() as (notifications, notification_db, redis, fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {22: [f'tz-{i:02d}' for i in range(40)]}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: [f'tz-{i:02d}' for i in range(40)]}
         served: List[str] = []
 
         def read_users(timezones: List[str], _target_hour: int) -> List[Any]:
@@ -453,7 +453,7 @@ def test_cursor_helpers_are_fail_soft_when_redis_is_down() -> None:
 def test_job_survives_a_redis_outage_end_to_end() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
         redis.fail = True
-        notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: ['UTC']}
         notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(3)
         served: List[str] = []
         notifications._send_summary_notification = lambda user: served.append(user[0])
@@ -616,3 +616,81 @@ def test_an_oversized_card_costs_the_card_not_the_notification() -> None:
         payload = sends[0][0][3]
         assert 'content_blocks' not in payload
         assert payload['text'] == 'You shipped the thing.'
+
+
+def test_checkpoint_resumes_original_recipients_after_hour_and_noon_rollover() -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        now = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        original = now - timedelta(hours=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(11, 'tail', original),
+        )
+        reads = []
+
+        def selector(zones, hour):
+            reads.append((zones, hour))
+            return [('tail', [], 'UTC')] if zones == ['UTC'] and hour == 11 else []
+
+        # Exercise real timezone grouping with the saved instant. Narrowing
+        # tzdata avoids unrelated empty groups without stubbing the builder.
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc
+        )
+        notification_db.get_users_for_daily_summary_indexed = selector
+        served = []
+        notifications._send_summary_notification = lambda user: served.append(
+            (user[0], notifications._display_date_for_now(user[2], user[3]))
+        )
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+
+        assert outcome.ok and outcome.complete
+        assert reads == [(['UTC'], 11), (['UTC'], 12)]
+        assert served == [('tail', original.date() - timedelta(days=1))]
+        assert redis.store == {}
+
+
+def test_incomplete_saved_cohort_is_retained_instead_of_replaced_by_current_hour() -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        now = datetime(2026, 10, 3, 23, 0, tzinfo=timezone.utc)
+        original = now - timedelta(hours=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications._get_timezones_grouped_by_hour = lambda at: {at.hour: ['UTC']}
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(22, 'tail', original),
+        )
+        reads = []
+
+        def unavailable(zones, hour):
+            reads.append(hour)
+            raise RuntimeError('query unavailable')
+
+        notification_db.get_users_for_daily_summary_indexed = unavailable
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert not outcome.ok and not outcome.complete
+        assert reads == [22]
+        saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+        assert notifications.summary_budget.cursor_cohort_utc(saved) == original
+
+
+def test_due_local_hours_include_half_and_quarter_hour_zones() -> None:
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+        now = datetime(2026, 10, 3, 16, 15, tzinfo=timezone.utc)
+        grouped = notifications._get_timezones_grouped_by_hour(now)
+        assert 'Asia/Kathmandu' in grouped[22]
+        assert 'Asia/Kolkata' in grouped[21]
+        assert notifications._display_date_for_now('Asia/Kathmandu', now) == now.date()

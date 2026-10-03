@@ -154,8 +154,25 @@ def job_cursor_key() -> str:
     return JOB_CURSOR_KEY
 
 
-def make_cursor(target_hour: Optional[int], uid: Optional[str]) -> Dict[str, Any]:
-    return {_CURSOR_HOUR: target_hour, _CURSOR_UID: uid}
+def make_cursor(
+    target_hour: Optional[int], uid: Optional[str], cohort_utc: Optional[datetime] = None
+) -> Dict[str, Any]:
+    cursor: Dict[str, Any] = {_CURSOR_HOUR: target_hour, _CURSOR_UID: uid}
+    if cohort_utc is not None:
+        cursor['cohort_utc'] = cohort_utc.astimezone(timezone.utc).isoformat()
+    return cursor
+
+
+def cursor_cohort_utc(cursor: Optional[Dict[str, Any]]) -> Optional[datetime]:
+    """Old checkpoints have no instant; malformed or naive timestamps are ignored."""
+    value = (cursor or {}).get('cohort_utc')
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
 
 
 def cursor_hour(cursor: Optional[Dict[str, Any]]) -> Optional[int]:

@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from time import monotonic
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import pytz
@@ -55,18 +55,18 @@ def local_day_bounds_utc(display_date, tz_name: Optional[str]):
     return start_date_utc, end_date_utc
 
 
-def _display_date_for_now(tz_name: Optional[str]):
+def _display_date_for_now(tz_name: Optional[str], at: Optional[datetime] = None):
     """Calendar day the cron summarizes at this instant (noon split, then UTC fallback)."""
     if tz_name:
         try:
             user_tz = pytz.timezone(tz_name)
-            now_in_user_tz = datetime.now(user_tz)
+            now_in_user_tz = at.astimezone(user_tz) if at is not None else datetime.now(user_tz)
             if now_in_user_tz.hour < 12:
                 return now_in_user_tz.date() - timedelta(days=1)
             return now_in_user_tz.date()
         except Exception as e:
             logger.error(e)
-    now_utc = datetime.now(pytz.utc)
+    now_utc = at.astimezone(pytz.utc) if at is not None else datetime.now(pytz.utc)
     if now_utc.hour < 12:
         return now_utc.date() - timedelta(days=1)
     return now_utc.date()
@@ -143,7 +143,7 @@ def generate_daily_summary_on_demand(
 
 
 def _generate_and_store_daily_summary(
-    uid, date_str, start_date_utc, end_date_utc
+    uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
     and, when it declined, which guard declined it.
@@ -211,6 +211,16 @@ def _generate_and_store_daily_summary(
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with summary content')
         release_daily_summary_lock(uid, date_str)
         return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
+
+    if prepare_delivery is not None:
+        try:
+            prepare_delivery()
+        except Exception:
+            # No generation or persistence has happened. A token-read failure
+            # must leave the owner retryable, rather than persisting a recap
+            # that the existing-record guard would never deliver on retry.
+            release_daily_summary_lock(uid, date_str)
+            raise
 
     summary_data = generate_comprehensive_daily_summary(
         uid,
@@ -323,12 +333,15 @@ class DailySummaryJobStats:
     failed: int = 0
     timed_out: int = 0
     skipped_for_budget: int = 0
+    recipient_docs_selected: int = 0
+    recipient_queries: int = 0
 
     def as_log(self) -> str:
         return (
             f'groups_attempted={self.groups_attempted} groups_failed={self.groups_failed} '
             f'attempted={self.attempted} succeeded={self.succeeded} failed={self.failed} '
-            f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget}'
+            f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget} '
+            f'recipient_docs_selected={self.recipient_docs_selected} recipient_queries={self.recipient_queries}'
         )
 
 
@@ -336,6 +349,7 @@ class DailySummaryJobStats:
 class DailySummaryCronOutcome:
     ok: bool
     error_text: Optional[str] = None
+    complete: bool = True
 
 
 def should_run_job() -> bool:
@@ -348,7 +362,7 @@ def should_run_job() -> bool:
 
 async def start_cron_job() -> None:
     """
-    Main cron job entry point. Runs at the top of every UTC hour.
+    Main cron job entry point. Runs every 15 minutes for local-hour delivery.
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     token = uuid4().hex
@@ -384,6 +398,32 @@ async def start_cron_job() -> None:
 
 
 async def send_daily_summary_notification() -> DailySummaryCronOutcome:
+    """Resume the original due cohort before selecting the current local hours.
+
+    A cursor without its UTC selection instant only reorders *today's* query;
+    after an hour rollover it cannot reach the owners deferred yesterday's tick.
+    Preserve the instant through selection and generation (including the noon
+    date split), then run the current cohort if the saved one completes.
+    """
+    now = datetime.now(pytz.utc)
+    cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, summary_budget.job_cursor_key())
+    resumed_at = summary_budget.cursor_cohort_utc(cursor)
+    if resumed_at is not None and resumed_at.replace(minute=0, second=0, microsecond=0) != now.replace(
+        minute=0, second=0, microsecond=0
+    ):
+        resumed = await _send_daily_summary_cohort(resumed_at, cursor)
+        if not resumed.complete:
+            return resumed
+        current = await _send_daily_summary_cohort(now, None)
+        return DailySummaryCronOutcome(
+            ok=resumed.ok and current.ok,
+            error_text=resumed.error_text or current.error_text,
+            complete=current.complete,
+        )
+    return await _send_daily_summary_cohort(now, cursor)
+
+
+async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict]) -> DailySummaryCronOutcome:
     """
     Send daily summary notifications to users based on their local hour preference.
 
@@ -408,12 +448,11 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     cursor_key = summary_budget.job_cursor_key()
 
     try:
-        timezones_by_hour = _get_timezones_grouped_by_hour()
+        timezones_by_hour = _get_timezones_grouped_by_hour(cohort_utc)
     except Exception as e:
         logger.error(f"Error grouping daily summary timezones: {e}")
-        return DailySummaryCronOutcome(ok=False, error_text=str(e))
+        return DailySummaryCronOutcome(ok=False, error_text=str(e), complete=False)
 
-    cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, cursor_key)
     resume_hour = summary_budget.cursor_hour(cursor)
     resume_uid = summary_budget.cursor_uid(cursor)
 
@@ -431,7 +470,7 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
         if stop_processing or monotonic() >= deadline:
             completed_all = False
             stop_processing = True
-            await _checkpoint(cursor_key, target_hour, None)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
             )
@@ -439,16 +478,21 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
             return ProcessOutcome.retry('daily summary budget exhausted', reason='timeout')
 
         stats.groups_attempted += 1
+        stats.recipient_queries += (len(timezones) + 29) // 30
         try:
             users, query_error, group_fully_read = await _get_users_for_daily_summary(timezones, target_hour)
         except Exception as e:
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
+            completed_all = False
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
 
         if query_error and not users:
             stats.groups_failed += 1
+            completed_all = False
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
             return ProcessOutcome.reject(str(query_error), reason='user_query')
 
@@ -459,11 +503,12 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
             # job never even listed. Keep the run resumable and point the next
             # execution at this hour.
             completed_all = False
-            await _checkpoint(cursor_key, target_hour, None)
+            await _checkpoint(cursor_key, target_hour, None, cohort_utc)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
             )
 
+        stats.recipient_docs_selected += len(users)
         if not users:
             return ProcessOutcome.ack()
 
@@ -477,7 +522,12 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
         failed_before = stats.failed
         timed_out_before = stats.timed_out
         finished_group = await _send_bulk_summary_notification(
-            ordered_users, deadline=deadline, stats=stats, target_hour=target_hour, cursor_key=cursor_key
+            [(*user, cohort_utc) for user in ordered_users],
+            deadline=deadline,
+            stats=stats,
+            target_hour=target_hour,
+            cursor_key=cursor_key,
+            cohort_utc=cohort_utc,
         )
         if not finished_group:
             completed_all = False
@@ -513,8 +563,9 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
         return DailySummaryCronOutcome(
             ok=False,
             error_text='; '.join(result.outcome.error_text or 'hour_failed' for result in failures),
+            complete=completed_all,
         )
-    return DailySummaryCronOutcome(ok=True)
+    return DailySummaryCronOutcome(ok=True, complete=completed_all)
 
 
 def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Optional[Tuple[Any, ...]]:
@@ -527,9 +578,14 @@ def _resume_user(users: List[Tuple[Any, ...]], resume_uid: Optional[str]) -> Opt
     return None
 
 
-async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional[str]) -> None:
+async def _checkpoint(
+    cursor_key: str, target_hour: Optional[int], uid: Optional[str], cohort_utc: Optional[datetime] = None
+) -> None:
     await run_blocking(
-        db_executor, summary_budget.write_job_cursor, cursor_key, summary_budget.make_cursor(target_hour, uid)
+        db_executor,
+        summary_budget.write_job_cursor,
+        cursor_key,
+        summary_budget.make_cursor(target_hour, uid, cohort_utc),
     )
 
 
@@ -579,12 +635,13 @@ async def _get_users_for_daily_summary(
     return _reduce_daily_summary_chunks(chunk_results, target_hour)
 
 
-def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
+def _get_timezones_grouped_by_hour(at: Optional[datetime] = None) -> Dict[int, List[str]]:
     """Group all timezones by their current local hour."""
+    now = at if at is not None else datetime.now(pytz.utc)
     timezones_by_hour: Dict[int, List[str]] = {}
     for tz_name in pytz.all_timezones:
         tz = pytz.timezone(tz_name)
-        current_hour = datetime.now(tz).hour
+        current_hour = now.astimezone(tz).hour
         if current_hour not in timezones_by_hour:
             timezones_by_hour[current_hour] = []
         timezones_by_hour[current_hour].append(tz_name)
@@ -699,14 +756,23 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # user, suppressing their recap on mobile/web too (#9357). The desktop
     # trial only gates desktop features, not the recap the mobile app renders.
 
-    display_date = _display_date_for_now(user_tz_name)
+    display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
     date_str = display_date.strftime('%Y-%m-%d')
 
-    summary_data, created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    tokens = user_data[1] if len(user_data) > 1 else None
+
+    def prepare_delivery() -> None:
+        nonlocal tokens
+        if tokens is None:
+            tokens = notification_db.get_all_tokens(uid)
+            logger.info('daily_summary_delivery_token_read owners=1 tokens=%d', len(tokens))
+
+    summary_data, created, declined = _generate_and_store_daily_summary(
+        uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery
+    )
     pending_webhook: Optional[dict] = None
     if created and summary_data:
-        tokens = user_data[1] if len(user_data) > 1 else None
         _deliver_current_day_summary(uid, date_str, summary_data, tokens)
         # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
         pending_webhook = summary_data
@@ -746,6 +812,7 @@ async def _send_bulk_summary_notification(
     stats: Optional[DailySummaryJobStats] = None,
     target_hour: Optional[int] = None,
     cursor_key: Optional[str] = None,
+    cohort_utc: Optional[datetime] = None,
 ) -> bool:
     """Send one hour group's summaries. Returns True if the whole group was served.
 
@@ -765,7 +832,7 @@ async def _send_bulk_summary_notification(
         if deadline is not None and monotonic() >= deadline:
             counters.skipped_for_budget += len(users) - i
             if cursor_key:
-                await _checkpoint(cursor_key, target_hour, str(users[i][0]))
+                await _checkpoint(cursor_key, target_hour, str(users[i][0]), cohort_utc)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='timeout', outcome='degraded'
             )
@@ -818,7 +885,7 @@ async def _send_bulk_summary_notification(
                 counters.succeeded += 1
 
         if cursor_key and i + _BATCH_SIZE < len(users):
-            await _checkpoint(cursor_key, target_hour, str(users[i + _BATCH_SIZE][0]))
+            await _checkpoint(cursor_key, target_hour, str(users[i + _BATCH_SIZE][0]), cohort_utc)
 
         if counters.timed_out >= DAILY_SUMMARY_MAX_ABANDONED_USERS:
             # Abandoned threads still occupy postprocess_executor slots. Past this

@@ -1,5 +1,7 @@
 """Server-side daily-summary recipient selection (#13210)."""
 
+import pytest
+
 import database.notifications as notifications_module
 from database.firestore_index_registry import (
     DAILY_SUMMARY_RECIPIENTS_QUERY,
@@ -95,7 +97,7 @@ class _FakeDb:
 
 def test_indexed_selection_issues_three_filters(monkeypatch):
     fake = _FakeDb({'u1': {'time_zone': 'UTC', 'fcm_token': 'legacy'}})
-    monkeypatch.setattr(notifications_module, 'db', fake)
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
 
     notifications_module.get_users_for_daily_summary_indexed(['UTC', 'America/New_York'], 22)
 
@@ -110,7 +112,7 @@ def test_indexed_selection_issues_three_filters(monkeypatch):
 def test_indexed_selection_chunks_more_than_thirty_zones(monkeypatch):
     zones = [f'Zone/{i}' for i in range(31)]
     fake = _FakeDb({})
-    monkeypatch.setattr(notifications_module, 'db', fake)
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
 
     notifications_module.get_users_for_daily_summary_indexed(zones, 8)
 
@@ -119,7 +121,7 @@ def test_indexed_selection_chunks_more_than_thirty_zones(monkeypatch):
     assert fake.users_collection.completed_queries[1][2] == ('time_zone', 'in', zones[30:])
 
 
-def test_indexed_selection_returns_subcollection_and_legacy_tokens(monkeypatch):
+def test_indexed_selection_defers_all_token_reads(monkeypatch):
     fake = _FakeDb(
         {
             'u1': {'time_zone': 'UTC', 'fcm_token': 'legacy'},
@@ -127,38 +129,35 @@ def test_indexed_selection_returns_subcollection_and_legacy_tokens(monkeypatch):
         },
         tokens={'u1': ['sub-a', 'legacy']},
     )
-    monkeypatch.setattr(notifications_module, 'db', fake)
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
 
     result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
 
     by_uid = {uid: (tokens, zone) for uid, tokens, zone in result}
-    assert by_uid['u1'] == (['sub-a', 'legacy'], 'UTC')
-    assert by_uid['u2'] == ([], 'UTC')
+    assert by_uid['u1'] == (None, 'UTC')
+    assert by_uid['u2'] == (None, 'UTC')
 
 
 def test_indexed_selection_keeps_tokenless_users(monkeypatch):
     fake = _FakeDb({'u1': {'time_zone': 'UTC'}})
-    monkeypatch.setattr(notifications_module, 'db', fake)
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
 
     result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
 
-    assert result == [('u1', [], 'UTC')]
+    assert result == [('u1', None, 'UTC')]
 
 
-def test_indexed_selection_skips_a_raising_chunk(monkeypatch, caplog):
+def test_indexed_selection_propagates_a_raising_chunk(monkeypatch, caplog):
     zones_a = [f'A/{i}' for i in range(30)]
     zones_b = ['B/0']
     fake = _FakeDb(
         {'keep': {'time_zone': 'A/0'}, 'drop': {'time_zone': 'B/0'}},
         raise_on_zones=zones_b,
     )
-    monkeypatch.setattr(notifications_module, 'db', fake)
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
 
-    with caplog.at_level('ERROR'):
-        result = notifications_module.get_users_for_daily_summary_indexed(zones_a + zones_b, 22)
-
-    assert result == [('keep', [], 'A/0')]
-    assert 'Error querying chunk for daily summary' in caplog.text
+    with pytest.raises(RuntimeError, match='index unavailable'):
+        notifications_module.get_users_for_daily_summary_indexed(zones_a + zones_b, 22)
 
 
 def test_daily_summary_recipients_query_is_registered():

@@ -778,3 +778,48 @@ def test_a_backfill_failure_does_not_swallow_the_webhook(monkeypatch):
     assert created, 'the current day was stored before the backfill ran'
     assert len(sent) == 1, 'and pushed'
     assert len(webhooks) == 1, 'so its webhook must still have been sent'
+
+
+def test_scheduled_tokens_are_read_only_for_a_new_recap(monkeypatch):
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    reads = []
+    monkeypatch.setattr(notif.notification_db, 'get_all_tokens', lambda uid: reads.append(uid) or ['tok1'])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert reads == ['uid1']
+    assert len(created) == len(sent) == 1
+    assert sent[0]['kwargs']['tokens'] == ['tok1']
+
+    # A repeated tick encounters the durable record, even after Redis expiry.
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: created[0])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert reads == ['uid1']
+    assert len(created) == len(sent) == 1
+
+
+def test_dormant_or_contended_owner_costs_no_token_reads(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(
+        notif.notification_db, 'get_all_tokens', lambda *_a: (_ for _ in ()).throw(AssertionError('token read'))
+    )
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *_a, **_k: [])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a: False)
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+
+
+def test_token_read_failure_cannot_persist_an_undeliverable_recap(monkeypatch):
+    generated, created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+
+    def unavailable(_uid):
+        raise RuntimeError('token query unavailable')
+
+    monkeypatch.setattr(notif.notification_db, 'get_all_tokens', unavailable)
+    with pytest.raises(RuntimeError, match='token query unavailable'):
+        notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert generated == created == sent == []
+    assert len(released) == 1
+    monkeypatch.setattr(notif.notification_db, 'get_all_tokens', lambda _uid: ['tok1'])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert len(generated) == len(created) == len(sent) == 1
