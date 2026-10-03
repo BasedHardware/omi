@@ -623,27 +623,6 @@ def real_pipeline():
     return pipeline
 
 
-def _segments_from_bytes(path, frame_words):
-    from models.transcript_segment import TranscriptSegment
-
-    with wave.open(str(path), 'rb') as wav:
-        payload = wav.readframes(wav.getnframes())
-    values = [
-        int.from_bytes(payload[i : i + 2], 'little', signed=True) for i in range(0, len(payload), FRAME_SAMPLES * 2)
-    ]
-    return [
-        TranscriptSegment(
-            text=frame_words(v),
-            start=i * 0.5,
-            end=i * 0.5 + 0.5,
-            speaker='SPEAKER_00',
-            is_user=False,
-            speaker_id=0,
-        )
-        for i, v in enumerate(values)
-    ]
-
-
 @pytest.mark.parametrize('skew', [40, 1200])
 def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypatch, tmp_path, skew):
     import threading
@@ -749,6 +728,186 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     texts = [s['text'] for s in store.rows[('users', 'u', 'conversations', row['id'])]['transcript_segments']]
     assert sorted(texts) == sorted(word(i) for i in range(10))
     assert prerecorded_calls
+
+
+def _segments_from_bytes(path, frame_words, frame_samples=FRAME_SAMPLES):
+    from models.transcript_segment import TranscriptSegment
+
+    with wave.open(str(path), 'rb') as wav:
+        payload = wav.readframes(wav.getnframes())
+    values = [
+        int.from_bytes(payload[i : i + 2], 'little', signed=True) for i in range(0, len(payload), frame_samples * 2)
+    ]
+    return [
+        TranscriptSegment(
+            text=frame_words(v),
+            start=i * frame_samples / RATE,
+            end=(i + 1) * frame_samples / RATE,
+            speaker='SPEAKER_00',
+            is_user=False,
+            speaker_id=0,
+        )
+        for i, v in enumerate(values)
+    ]
+
+
+SMALL_FRAME_SAMPLES = 3200
+
+
+def _write_short_frame_wav(path, frame_values):
+    with wave.open(str(path), 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(RATE)
+        for value in frame_values:
+            wav.writeframes(_frame_bytes(value, SMALL_FRAME_SAMPLES))
+
+
+def _short_tail_batch(monkeypatch, wav_path):
+    from utils.sync import recording_lineage
+
+    claim = _claim()
+    env = _envelope([_run(0, 9, samples_per_frame=SMALL_FRAME_SAMPLES)])
+    monkeypatch.setattr(
+        recording_lineage, 'load_lineage', lambda *a, **k: ([generation(1, capture_evidence=env)], None, False)
+    )
+    return coverage_mod.apply_batch_wal_audio_coverage(
+        'u',
+        ORIGIN,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        wav_paths=[str(wav_path)],
+        source_frame_maps={
+            str(wav_path): {
+                'claim': claim,
+                'offsets': [i * SMALL_FRAME_SAMPLES for i in range(11)],
+                'incomplete': False,
+            }
+        },
+        decoded_frames={str(wav_path): [SMALL_FRAME_SAMPLES] * 10},
+    )
+
+
+def test_short_novel_tail_marked_and_admitted_past_vad_floor(real_pipeline, monkeypatch, tmp_path):
+    pipeline = real_pipeline
+    _coverage_env(monkeypatch)
+    wav_path = tmp_path / f'{WAV_STEM}.wav'
+    _write_short_frame_wav(wav_path, range(10))
+    batch = _short_tail_batch(monkeypatch, wav_path)
+    assert batch['status'] == 'applied' and len(batch['wav_paths']) == 1
+    derivative = batch['wav_paths'][0]
+    mapping = batch['source_frame_maps'][derivative]
+    assert mapping['coverage_trimmed'] is True
+    assert _duration(derivative) == pytest.approx(0.4)
+    assert _read_payload(derivative) == _frame_bytes(8, SMALL_FRAME_SAMPLES) + _frame_bytes(9, SMALL_FRAME_SAMPLES)
+
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', _ts)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *a, **k: [{'start': 0, 'end': 0.4}])
+    admitted = set()
+    pipeline.retrieve_vad_segments(derivative, admitted, [], source_frame_map=mapping)
+    assert len(admitted) == 1
+    exported = next(iter(admitted))
+    assert _read_payload(exported) == _read_payload(derivative)
+
+    dropped = set()
+    pipeline.retrieve_vad_segments(derivative, dropped, [], source_frame_map=None)
+    assert dropped == set()
+    dropped_default = set()
+    pipeline.retrieve_vad_segments(
+        derivative, dropped_default, [], source_frame_map={**mapping, 'coverage_trimmed': False}
+    )
+    assert dropped_default == set()
+
+
+def test_subsecond_tail_saved_transcript_contains_new_word(real_pipeline, monkeypatch, tmp_path):
+    import threading
+
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_sync_cross_job_assignment import intake
+    from tests.unit.test_sync_lineage_dedupe_replay import at, live_row, seeded_store
+    from utils.conversations import lifecycle
+
+    from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
+
+    pipeline = real_pipeline
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
+    _coverage_env(monkeypatch)
+    wav_path = tmp_path / f'{WAV_STEM}.wav'
+    _write_short_frame_wav(wav_path, range(10))
+    batch = _short_tail_batch(monkeypatch, wav_path)
+    assert batch['status'] == 'applied' and len(batch['wav_paths']) == 1
+    derivative = batch['wav_paths'][0]
+    mapping = batch['source_frame_maps'][derivative]
+
+    live_segments = [
+        {
+            'start': i * 0.5,
+            'end': i * 0.5 + 0.5,
+            'text': f'live-word-{i}',
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 0,
+            'is_user': False,
+        }
+        for i in range(9)
+    ]
+    row = live_row(
+        started_at=at(1760000000),
+        finished_at=at(1760000004.5),
+        transcript_segments=live_segments,
+    )
+    store = seeded_store([row])
+
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', _ts)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *a, **k: [{'start': 0, 'end': 0.4}])
+    segmented = set()
+    pipeline.retrieve_vad_segments(derivative, segmented, [], source_frame_map=mapping)
+    assert len(segmented) == 1
+    seg_path = next(iter(segmented))
+
+    def word(value):
+        return f'live-word-{value}' if value < 9 else 'new-word-9'
+
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
+    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
+    monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
+    prerecorded_calls = []
+
+    def fake_prerecorded(url, **kwargs):
+        prerecorded_calls.append(url)
+        return (['w'], 'en')
+
+    monkeypatch.setattr(pipeline, 'prerecorded', fake_prerecorded)
+    monkeypatch.setattr(
+        pipeline, 'postprocess_words', lambda words, offset: _segments_from_bytes(seg_path, word, SMALL_FRAME_SAMPLES)
+    )
+    monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
+    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    finish = MagicMock()
+    monkeypatch.setattr(pipeline, 'finish_sync_segment', finish)
+
+    response = {'new_memories': set(), 'updated_memories': set()}
+    ok = pipeline.process_segment(
+        seg_path,
+        'u',
+        response,
+        threading.Lock(),
+        [],
+        target_conversation_id=row['id'],
+        client_device_id='pendant',
+    )
+    assert ok is True
+    assert prerecorded_calls
+    texts = [s['text'] for s in store.rows[('users', 'u', 'conversations', row['id'])]['transcript_segments']]
+    assert 'new-word-9' in texts
 
 
 def test_fully_covered_intake_never_calls_provider_or_enrichment(real_pipeline, monkeypatch, tmp_path):

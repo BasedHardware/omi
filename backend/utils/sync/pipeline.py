@@ -992,7 +992,7 @@ def retrieve_vad_segments(
 
     try:
         for i, segment in enumerate(segments):
-            if (segment['end'] - segment['start']) < 1:
+            if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{path_dir}/{segment_timestamp}.wav'

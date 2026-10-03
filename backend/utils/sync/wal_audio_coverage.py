@@ -228,6 +228,7 @@ def apply_wal_audio_coverage(
                     'claim': derivative_claim,
                     'offsets': rebased,
                     'incomplete': source_incomplete,
+                    'coverage_trimmed': True,
                 }
                 wav_paths.append(derivative_path)
     except Exception as e:
