@@ -59,6 +59,10 @@ final class ProactivityReceiptStore {
 
   func purge() throws {
     state = State(ownerID: state.ownerID)
+    try Self.purge(at: url)
+  }
+
+  static func purge(at url: URL) throws {
     if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
   }
 

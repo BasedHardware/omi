@@ -79,6 +79,19 @@ final class ProactivityReceiptStoreTests: XCTestCase {
     XCTAssertTrue(restarted.pending.isEmpty)
   }
 
+  func testColdSignOutPurgesJournalBeforeConsumerEverStarts() throws {
+    try withJournal { url in
+      let previousProcess = try ProactivityReceiptStore(url: url, ownerID: "a")
+      try previousProcess.record(itemID: "item", request: request("shown"))
+      let coldConsumer = ProactivityFeedConsumer(journalURL: url)
+      coldConsumer.purgeForOwnerTransition()
+      XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+      let nextSession = try ProactivityReceiptStore(url: url, ownerID: "a")
+      XCTAssertFalse(nextSession.hasShown("item"))
+      XCTAssertTrue(nextSession.pending.isEmpty)
+    }
+  }
+
   func testExpiryUsesServerClockAndRejectsMalformedOrFutureCreation() {
     let now = Date(timeIntervalSince1970: 1000)
     XCTAssertEqual(

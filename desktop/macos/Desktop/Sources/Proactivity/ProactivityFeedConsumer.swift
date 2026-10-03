@@ -12,12 +12,21 @@ final class ProactivityFeedConsumer {
   private var pendingPresentations = Set<String>()
   private var lastAttempt = Date.distantPast
   private var started = false
+  private let journalURL: URL
+
+  init(journalURL: URL? = nil) {
+    self.journalURL =
+      journalURL
+      ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent(Bundle.main.bundleIdentifier ?? "omi")
+      .appendingPathComponent("proactivity-receipts.json")
+  }
 
   func start() {
     if !started {
       started = true
       NotificationCenter.default.publisher(for: .runtimeOwnerDidChange).sink { [weak self] _ in
-        MainActor.assumeIsolated { self?.reset() }
+        MainActor.assumeIsolated { self?.purgeForOwnerTransition() }
       }.store(in: &observers)
       NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
         MainActor.assumeIsolated { self?.refresh() }
@@ -29,10 +38,15 @@ final class ProactivityFeedConsumer {
     refresh()
   }
 
-  private func reset() {
+  /// The central owner transition calls this even before the admitted shell starts.
+  /// A cold sign-out must delete a journal left by the previous process too.
+  func purgeForOwnerTransition() {
     work?.cancel()
     work = nil
-    do { try store?.purge() } catch { log("Proactivity: receipt purge failed") }
+    do {
+      try store?.purge()
+      try ProactivityReceiptStore.purge(at: journalURL)
+    } catch { log("Proactivity: receipt purge failed") }
     store = nil
     authorization = nil
     pendingPresentations.removeAll()
@@ -46,12 +60,9 @@ final class ProactivityFeedConsumer {
       Date().timeIntervalSince(lastAttempt) >= 30
     else { return }
     if authorization != snapshot {
-      if authorization != nil { reset() }
+      if authorization != nil { purgeForOwnerTransition() }
       do {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-          .appendingPathComponent(Bundle.main.bundleIdentifier ?? "omi")
-        store = try ProactivityReceiptStore(
-          url: root.appendingPathComponent("proactivity-receipts.json"), ownerID: snapshot.ownerID)
+        store = try ProactivityReceiptStore(url: journalURL, ownerID: snapshot.ownerID)
         authorization = snapshot
       } catch {
         log("Proactivity: receipt storage unavailable")
