@@ -11,6 +11,7 @@ from rich.markup import escape
 from omi_cli import config as cfg
 from omi_cli.auth import api_key as api_key_auth
 from omi_cli.auth import oauth as oauth_auth
+from omi_cli.key_info import verify_key
 from omi_cli.auth.store import clear_credentials
 from omi_cli.client import OmiClient
 from omi_cli.errors import AuthError, CliError, TransportError, UsageError
@@ -30,7 +31,10 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     return obj  # type: ignore[no-any-return]
 
 
-@app.command("login", help="Authenticate this profile. Prompts for browser or API key if no flag is given.")
+@app.command(
+    "login",
+    help="Authenticate this profile. Prompts for browser or API key if no flag is given.",
+)
 def login(
     typer_ctx: typer.Context,
     api_key_arg: Optional[str] = typer.Option(
@@ -78,14 +82,20 @@ def login(
     # Interactive picker — the new default UX.
     if not ctx.renderer.json_mode:
         renderer.info("How would you like to log in?")
-        renderer.info("  [bold]1[/bold]) Browser  — sign in with Google or Apple via OAuth (recommended for humans)")
-        renderer.info("  [bold]2[/bold]) API key  — paste a developer key from app.omi.me (recommended for agents/CI)")
+        renderer.info(
+            "  [bold]1[/bold]) Browser  — sign in with Google or Apple via OAuth (recommended for humans)"
+        )
+        renderer.info(
+            "  [bold]2[/bold]) API key  — paste a developer key from app.omi.me (recommended for agents/CI)"
+        )
     choice = typer.prompt("Choose 1 or 2", default="1").strip()
 
     if choice in {"1", "browser", "b"}:
         return _do_browser_login(ctx, provider=provider)
     if choice in {"2", "api-key", "key", "k"}:
-        api_key_input = typer.prompt("Paste your Omi developer API key", hide_input=True).strip()
+        api_key_input = typer.prompt(
+            "Paste your Omi developer API key", hide_input=True
+        ).strip()
         return _do_api_key_login(ctx, api_key_input)
     raise UsageError(
         message=f"Unrecognized choice: {choice!r}",
@@ -94,22 +104,26 @@ def login(
 
 
 def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
-    """Run the OAuth browser flow + verify the resulting Firebase token works."""
+    """Run browser sign-in and verify the provisioned developer key."""
     api_base = ctx.api_base_override or ctx.get_profile().api_base
-    profile = oauth_auth.login_with_browser(ctx.profile_name, api_base=api_base, provider=provider)
+    profile = oauth_auth.login_with_browser(
+        ctx.profile_name, api_base=api_base, provider=provider
+    )
 
-    # Verify the freshly-minted Firebase ID token actually authenticates against
+    # Verify the freshly provisioned developer key authenticates against
     # the Omi API. If it doesn't, roll back so the user isn't left holding a
     # half-broken OAuth profile.
+    scopes = None
     try:
         with OmiClient(profile, verbose=ctx.verbose) as client:
-            client.get("/v1/dev/user/memories", params={"limit": 1})
+            scopes, warning = verify_key(client)
+            if warning:
+                ctx.renderer.warn(warning)
     except AuthError as exc:
         clear_credentials(ctx.profile_name)
         raise exc
     except CliError as exc:
-        # Insufficient scope / 403 also bubbles as AuthError above. Anything
-        # else is a transient network blip — keep the credential, just warn.
+        # Preserve the freshly stored credential on transient verification errors.
         ctx.renderer.warn(
             f"Could not verify the new token right now ({escape(exc.message)}). It is stored — try again shortly."
         )
@@ -129,7 +143,17 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
                 "auth_method": profile.auth_method,
                 "api_base": profile.api_base,
                 "provider": provider,
+                "scopes": scopes,
             }
+        )
+    else:
+        ctx.renderer.info(
+            "Scopes: "
+            + (
+                escape(", ".join(scopes))
+                if scopes is not None
+                else "unknown (not reported)"
+            )
         )
 
 
@@ -140,24 +164,23 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
         name=ctx.profile_name,
         auth_method="api_key",
         api_key=cleaned_key,
-        api_base=ctx.api_base_override or ctx.load_config().get_profile(ctx.profile_name).api_base,
+        api_base=ctx.api_base_override
+        or ctx.load_config().get_profile(ctx.profile_name).api_base,
     )
     verification_warning = None
 
-    # Sanity check on a tolerant endpoint — see the original launch PR's
-    # rationale. Auth and transport failures leave disk unchanged; other
-    # HTTP errors preserve the existing warn-and-store policy.
+    scopes = None
     try:
         with OmiClient(profile, verbose=ctx.verbose) as client:
-            client.get("/v1/dev/user/memories", params={"limit": 1})
+            scopes, verification_warning = verify_key(client)
     except (AuthError, TransportError):
         raise
     except CliError as exc:
-        verification_warning = (
-            f"Could not verify the key right now ({escape(exc.message)}). It is stored — try again shortly."
-        )
+        verification_warning = f"Could not verify the key right now ({escape(exc.message)}). It is stored — try again shortly."
 
-    profile = api_key_auth.login_with_api_key(ctx.profile_name, cleaned_key, api_base=ctx.api_base_override)
+    profile = api_key_auth.login_with_api_key(
+        ctx.profile_name, cleaned_key, api_base=ctx.api_base_override
+    )
     if verification_warning:
         ctx.renderer.warn(verification_warning)
 
@@ -165,7 +188,23 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
         f"Logged in as profile [bold]{escape(profile.name)}[/bold] ({escape(profile.masked_credential())})."
     )
     if ctx.renderer.json_mode:
-        ctx.renderer.emit({"profile": profile.name, "auth_method": profile.auth_method, "api_base": profile.api_base})
+        ctx.renderer.emit(
+            {
+                "profile": profile.name,
+                "auth_method": profile.auth_method,
+                "api_base": profile.api_base,
+                "scopes": scopes,
+            }
+        )
+    else:
+        ctx.renderer.info(
+            "Scopes: "
+            + (
+                escape(", ".join(scopes))
+                if scopes is not None
+                else "unknown (not reported)"
+            )
+        )
 
 
 @app.command("logout", help="Clear credentials for the active profile.")
@@ -173,9 +212,13 @@ def logout(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     cleared = clear_credentials(ctx.profile_name)
     if cleared:
-        ctx.renderer.success(f"Cleared credentials for profile [bold]{escape(ctx.profile_name)}[/bold].")
+        ctx.renderer.success(
+            f"Cleared credentials for profile [bold]{escape(ctx.profile_name)}[/bold]."
+        )
     else:
-        ctx.renderer.warn(f"Profile [bold]{escape(ctx.profile_name)}[/bold] was not authenticated.")
+        ctx.renderer.warn(
+            f"Profile [bold]{escape(ctx.profile_name)}[/bold] was not authenticated."
+        )
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"profile": ctx.profile_name, "logged_out": cleared})
 
@@ -197,7 +240,10 @@ def status(typer_ctx: typer.Context) -> None:
     ctx.renderer.emit(payload, title="omi auth status")
 
 
-@app.command("whoami", help="Resolve the current credential against the API and display identity info.")
+@app.command(
+    "whoami",
+    help="Resolve the current credential against the API and display identity info.",
+)
 def whoami(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     # The public dev surface doesn't expose a /me endpoint, but a memories list
@@ -215,7 +261,9 @@ def whoami(typer_ctx: typer.Context) -> None:
     ctx.renderer.emit(payload, title="omi whoami")
 
 
-@app.command("refresh", help="Force-refresh the OAuth ID token (no-op for API-key profiles).")
+@app.command(
+    "refresh", help="Force-refresh the OAuth ID token (no-op for API-key profiles)."
+)
 def refresh(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     profile = ctx.get_profile()
@@ -228,7 +276,9 @@ def refresh(typer_ctx: typer.Context) -> None:
             ),
         )
     oauth_auth.refresh_id_token(profile.name)
-    ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{escape(profile.name)}[/bold].")
+    ctx.renderer.success(
+        f"Refreshed Firebase ID token for profile [bold]{escape(profile.name)}[/bold]."
+    )
     if ctx.renderer.json_mode:
         refreshed = ctx.reload_config().get_profile(profile.name)
         payload: dict[str, object] = {
@@ -241,7 +291,9 @@ def refresh(typer_ctx: typer.Context) -> None:
         ctx.renderer.emit(payload)
 
 
-def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover — utility for sibling commands
+def _ensure_authenticated(
+    profile: cfg.Profile,
+) -> None:  # pragma: no cover — utility for sibling commands
     if not profile.is_authenticated():
         raise UsageError(
             message="Not authenticated",
