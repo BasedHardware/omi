@@ -5,6 +5,8 @@ import SwiftUI
 final class NativeHomeState: ObservableObject {
     @Published private(set) var snapshot: NativeHomeSnapshot
     @Published private(set) var valid = true
+    @Published private(set) var pending: Set<String> = []
+    @Published private(set) var actionFailed = false
     private var revision = NativeSnapshotRevision()
     let action: (String, String?) async throws -> NativeConversation?
 
@@ -20,6 +22,15 @@ final class NativeHomeState: ObservableObject {
         self.snapshot = snapshot
     }
 
+    func send(_ method: String, _ id: String? = nil) async {
+        guard valid, !pending.contains(method) else { return }
+        pending.insert(method)
+        actionFailed = false
+        defer { pending.remove(method) }
+        do { _ = try await action(method, id) }
+        catch { if valid { actionFailed = true } }
+    }
+
     func invalidate() {
         valid = false
         snapshot = snapshot.withoutContent()
@@ -29,6 +40,7 @@ final class NativeHomeState: ObservableObject {
 @available(iOS 16.0, *)
 struct NativeHomeView: View {
     @ObservedObject var state: NativeHomeState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var colorScheme: ColorScheme? {
         switch state.snapshot.appearance {
@@ -54,9 +66,59 @@ struct NativeHomeView: View {
 
     private var library: some View {
         List {
+            if let chrome = state.snapshot.chrome {
+                if let capture = chrome.capture {
+                    Section { captureCard(capture) }
+                }
+                if !chrome.alerts.isEmpty {
+                    Section {
+                        ForEach(chrome.alerts) { control($0) }
+                    }
+                }
+                if !chrome.recaps.isEmpty {
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(chrome.recaps) { recap in
+                                    Button { dispatch("recap", recap.id) } label: {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            Text("\(recap.emoji)  \(recap.date)").font(.caption).foregroundStyle(.secondary)
+                                            Text(recap.title).font(.headline).foregroundStyle(.primary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                        .frame(width: dynamicTypeSize.isAccessibilitySize ? 300 : 240, alignment: .leading)
+                                        .padding(16)
+                                        .frame(minHeight: 130, alignment: .topLeading)
+                                        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                                    in: RoundedRectangle(cornerRadius: 20))
+                                    }.buttonStyle(.plain)
+                                        .accessibilityIdentifier("native-recap-\(recap.id)")
+                                }
+                            }.padding(.vertical, 4)
+                        }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        .listRowBackground(Color.clear)
+                    } header: {
+                        HStack {
+                            Text(chrome.recapsTitle)
+                            Spacer()
+                            Button(state.snapshot.copy.viewAll) { dispatch("recaps") }
+                                .textCase(nil)
+                        }
+                    }
+                }
+            }
+            if state.snapshot.chrome != nil {
+                Section {
+                    Button { dispatch("browse") } label: {
+                        HStack { Text(state.snapshot.copy.conversations).font(.headline); Spacer(); Text(state.snapshot.copy.viewAll) }
+                    }.buttonStyle(.plain).listRowBackground(Color.clear)
+                        .accessibilityIdentifier("native-browse-all")
+                }
+            }
             if state.snapshot.localRecordingCount > 0 {
                 Button {
-                    Task { _ = try? await state.action("browse", nil) }
+                    dispatch("browse")
                 } label: {
                     HStack {
                         Label(state.snapshot.copy.recordings, systemImage: "waveform")
@@ -66,11 +128,11 @@ struct NativeHomeView: View {
                 }
                 .accessibilityIdentifier("native-recordings")
             }
-            if state.snapshot.failed {
+            if state.snapshot.failed || state.actionFailed {
                 Section {
                     Text(state.snapshot.copy.error)
                     Button(state.snapshot.copy.retry) {
-                        Task { _ = try? await state.action("refresh", nil) }
+                        dispatch("refresh")
                     }
                     .accessibilityIdentifier("native-retry")
                 }
@@ -78,14 +140,14 @@ struct NativeHomeView: View {
             if state.snapshot.loading && state.snapshot.groups.isEmpty {
                 ProgressView().accessibilityLabel(state.snapshot.copy.loading)
             } else if !state.snapshot.failed && state.snapshot.groups.isEmpty {
-                Text(state.snapshot.copy.empty).foregroundStyle(.secondary)
+                Text(state.snapshot.copy.empty).foregroundStyle(.secondary).listRowBackground(Color.clear)
             }
             ForEach(state.snapshot.groups) { group in
                 Section(group.title) {
                     ForEach(group.conversations) { conversation in
                         if conversation.locked || conversation.status != "completed" {
                             Button {
-                                Task { _ = try? await state.action("open", conversation.id) }
+                                dispatch("open", conversation.id)
                             } label: {
                                 row(conversation)
                             }
@@ -103,23 +165,95 @@ struct NativeHomeView: View {
             }
             if state.snapshot.hasMore {
                 Button(state.snapshot.copy.loadMore) {
-                    Task { _ = try? await state.action("loadMore", nil) }
+                    dispatch("loadMore")
                 }
                 .disabled(state.snapshot.loading)
             }
         }
-        .listStyle(.plain)
-        .navigationTitle(state.snapshot.copy.conversations)
-        .navigationBarTitleDisplayMode(.inline)
-        .refreshable { _ = try? await state.action("refresh", nil) }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(state.snapshot.copy.viewAll) {
-                    Task { _ = try? await state.action("browse", nil) }
+        .listStyle(.insetGrouped)
+        .navigationTitle(state.snapshot.chrome?.home ?? state.snapshot.copy.conversations)
+        .navigationBarTitleDisplayMode(state.snapshot.chrome == nil ? .inline : .large)
+        .refreshable { await state.send("refresh") }
+        .safeAreaInset(edge: .bottom) {
+            if let chrome = state.snapshot.chrome {
+                NativeGlassControls {
+                    HStack(spacing: 12) {
+                        ForEach(chrome.footer) { action in
+                            if action.id == "chat" && !dynamicTypeSize.isAccessibilitySize {
+                                control(action, expanded: true).labelStyle(.titleAndIcon).modifier(NativeGlassButtonStyle()).frame(maxWidth: .infinity)
+                            } else {
+                                control(action).labelStyle(.iconOnly).modifier(NativeGlassButtonStyle())
+                                    .frame(minWidth: 44, minHeight: 44)
+                            }
+                        }
+                    }.padding(.horizontal, 16).padding(.vertical, 10)
                 }
-                .accessibilityIdentifier("native-browse-all")
             }
         }
+        .toolbar {
+            if let chrome = state.snapshot.chrome {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if let device = chrome.header.first {
+                        Button { dispatch(device.id) } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: device.symbol)
+                                Text(device.title)
+                            }
+                        }.disabled(!device.enabled || state.pending.contains(device.id))
+                            .accessibilityIdentifier("native-\(device.id)")
+                    }
+                }
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    ForEach(Array(chrome.header.dropFirst())) { action in
+                        Button { dispatch(action.id) } label: {
+                            Image(systemName: action.symbol)
+                        }.accessibilityLabel(action.title).accessibilityIdentifier("native-\(action.id)")
+                            .disabled(!action.enabled || state.pending.contains(action.id))
+                    }
+                }
+            } else {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(state.snapshot.copy.viewAll) { dispatch("browse") }
+                        .accessibilityIdentifier("native-browse-all")
+                }
+            }
+        }
+    }
+
+    private func dispatch(_ method: String, _ id: String? = nil) {
+        Task { await state.send(method, id) }
+    }
+
+    private func control(_ action: NativeHomeSnapshot.Chrome.Action, expanded: Bool = false) -> some View {
+        Button { dispatch(action.id) } label: {
+            Label { Text(action.title) } icon: { Image(systemName: action.symbol).font(.system(size: 20)) }
+                .frame(maxWidth: expanded ? .infinity : nil)
+        }
+            .disabled(!action.enabled || state.pending.contains(action.id))
+            .accessibilityIdentifier("native-\(action.id)")
+    }
+
+    private func captureCard(_ capture: NativeHomeSnapshot.Chrome.Capture) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: capture.source == "phone" ? "iphone" : capture.source == "call" ? "phone.fill" : "waveform")
+                    .font(.title2).accessibilityHidden(true)
+                Button { dispatch("capture") } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(capture.status).font(.headline).foregroundStyle(.primary)
+                        Text([capture.elapsed, capture.detail].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(.plain)
+                ForEach(capture.actions) { action in
+                    Button { dispatch(action.id) } label: { Image(systemName: action.symbol).frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel(action.title).disabled(!action.enabled || state.pending.contains(action.id))
+                }
+            }
+            if !capture.explanation.isEmpty { Text(capture.explanation).font(.footnote).foregroundStyle(.secondary) }
+            if !capture.lastLine.isEmpty { Text(capture.lastLine).font(.subheadline).lineLimit(2) }
+        }.padding(.vertical, 4)
+            .accessibilityIdentifier("native-live-capture")
     }
 
     private func row(_ conversation: NativeConversation) -> some View {

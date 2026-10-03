@@ -1,22 +1,25 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/conversations/daily_recaps_page.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -25,6 +28,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 import 'native_conversation_projection.dart';
 import 'native_read_session.dart';
@@ -40,18 +44,27 @@ Future<bool> supportsIosSwiftUi() async {
 
 /// Stage one: SwiftUI renders the library; the current services still own every read and action.
 class IosNativeHome extends StatefulWidget {
-  const IosNativeHome({super.key, this.requestInitialLoad = true, this.loadRecaps});
+  const IosNativeHome(
+      {super.key,
+      this.requestInitialLoad = true,
+      this.loadRecaps,
+      this.header = const [],
+      this.footer = const [],
+      this.alerts = const []});
 
   final bool requestInitialLoad;
   final RecentRecapsLoader? loadRecaps;
+  final List<NativeHomeAction> header, footer, alerts;
 
   @override
   State<IosNativeHome> createState() => IosNativeHomeState();
 }
 
 class IosNativeHomeState extends State<IosNativeHome> {
-  final _recapsKey = GlobalKey<HomeDailyRecapsState>();
-  final _headerScrollController = ScrollController();
+  List<DailySummary> _recaps = [];
+  CaptureCardPresentation? _capture;
+  String? _captureKey;
+  bool _captureScheduled = false;
   late final ConversationProvider _conversations;
   late final LocalRecordingsProvider _recordings;
   late final NativeReadSession _session;
@@ -83,10 +96,12 @@ class IosNativeHomeState extends State<IosNativeHome> {
         if (mounted && _session.active) _conversations.getInitialConversations();
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadRecaps());
+    });
   }
 
   void scrollToTop() {
-    if (_headerScrollController.hasClients) _headerScrollController.jumpTo(0);
     _invalidate();
     setState(() => _viewGeneration++);
   }
@@ -177,7 +192,84 @@ class IosNativeHomeState extends State<IosNativeHome> {
         'starred': l10n.starred,
         'lockedHint': l10n.upgradeToUnlimited,
       },
+      'chrome': {
+        'home': l10n.home,
+        'tasks': l10n.tasks,
+        'ask': l10n.askOmi,
+        'recapsTitle': l10n.dailyRecaps,
+        'header': widget.header.map((action) => action.projection).toList(),
+        'footer': widget.footer.map((action) => action.projection).toList(),
+        'alerts': widget.alerts.map((action) => action.projection).toList(),
+        'recaps': visible
+            ? [
+                for (final recap in _recaps)
+                  {
+                    'id': recap.id,
+                    'title': recap.headline,
+                    'date': recapDateLabel(context, recap.date),
+                    'emoji': recap.dayEmoji,
+                  }
+              ]
+            : <Object>[],
+        'capture': visible ? _captureProjection() : null,
+      },
     };
+  }
+
+  Map<String, Object?>? _captureProjection() {
+    final presentation = _capture;
+    if (presentation == null) return null;
+    final card = presentation.card;
+    return {
+      'status': card.status,
+      'detail': card.detail ?? '',
+      'source': card.source,
+      'elapsed': card.elapsed == null ? '' : LiveCaptureCard.formatElapsed(card.elapsed!),
+      'lastLine': card.lastLine ?? '',
+      'explanation': card.explanation ?? card.note ?? '',
+      'actions': [
+        if (card.onPauseToggle != null)
+          {
+            'id': 'pauseCapture',
+            'title': card.paused ? context.l10n.resume : context.l10n.pause,
+            'symbol': card.paused ? 'play.fill' : 'pause.fill',
+            'enabled': true,
+          },
+        for (final (index, action) in presentation.controls.indexed)
+          {
+            'id': 'captureControl$index',
+            'title': action.label,
+            'symbol': action.symbol,
+            'enabled': true,
+          },
+      ],
+    };
+  }
+
+  void _captureChanged(CaptureCardPresentation? presentation) {
+    _capture = presentation;
+    if (_captureScheduled) return;
+    _captureScheduled = true;
+    scheduleMicrotask(() {
+      _captureScheduled = false;
+      if (!mounted || !_session.active) return;
+      final key = jsonEncode(_captureProjection());
+      if (key != _captureKey) {
+        _captureKey = key;
+        _scheduleUpdate();
+      }
+    });
+  }
+
+  Future<void> _loadRecaps() async {
+    final result = await _session
+        .read(() async => widget.loadRecaps != null ? widget.loadRecaps!() : getDailySummaries(limit: 3, offset: 0));
+    if (!mounted || result == null) return;
+    if (result.ok) {
+      final seen = <String>{};
+      _recaps = result.items.where((item) => item.id.isNotEmpty && seen.add(item.id)).toList();
+    }
+    _scheduleUpdate();
   }
 
   Future<void> _publish() async {
@@ -231,26 +323,49 @@ class IosNativeHomeState extends State<IosNativeHome> {
         return _project(detail, includeDetail: true);
       case 'open':
         if (conversation == null) throw PlatformException(code: 'native_conversation_missing');
-        await routeToPage(context, ConversationDetailPage(conversation: conversation));
+        await openConversationListRow(context, _conversations, conversation);
       case 'browse':
         await routeToPage(
           context,
-          Scaffold(
-            appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversations)),
-            body: const ConversationsPage(requestInitialLoad: false),
-          ),
+          const ConversationsPage(requestInitialLoad: false, nativeLibrary: true),
         );
       case 'refresh':
         context.read<CaptureProvider>().refreshInProgressConversations();
         await Future.wait([
           _conversations.getInitialConversations(),
           _recordings.refresh(),
-          if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+          _loadRecaps(),
         ]);
       case 'loadMore':
         await _conversations.getMoreConversationsFromServer();
+      case 'recaps':
+        await routeToPage(context, const DailyRecapsPage());
+      case 'recap':
+        final matches = _recaps.where((item) => item.id == id);
+        if (matches.isEmpty) throw PlatformException(code: 'native_recap_missing');
+        final recap = matches.first;
+        PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: recap.id, date: recap.date);
+        final result = await routeToPage(context, DailySummaryDetailPage(summaryId: recap.id, summary: recap));
+        if (mounted && result is Map && result['deleted'] == true) _recaps.removeWhere((item) => item.id == recap.id);
+      case 'capture':
+        await _capture?.onOpen();
+      case 'pauseCapture':
+        _capture?.card.onPauseToggle?.call();
       default:
-        throw MissingPluginException('Unknown native presentation action');
+        final chrome =
+            [...widget.header, ...widget.footer, ...widget.alerts].where((action) => action.id == call.method);
+        if (chrome.isNotEmpty && chrome.first.enabled) {
+          await chrome.first.perform();
+        } else if (call.method.startsWith('captureControl')) {
+          final index = int.tryParse(call.method.substring('captureControl'.length));
+          final controls = _capture?.controls;
+          if (index == null || controls == null || index >= controls.length || index < 0) {
+            throw PlatformException(code: 'native_capture_control_missing');
+          }
+          controls[index].onTap();
+        } else {
+          throw MissingPluginException('Unknown native presentation action');
+        }
     }
     if (mounted) await _publish();
     return null;
@@ -272,29 +387,13 @@ class IosNativeHomeState extends State<IosNativeHome> {
     _scheduleUpdate();
     if (!_session.active) return const Center(child: OmiSpinner());
     final generation = _viewGeneration;
-    return Column(
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        Flexible(
-          child: SingleChildScrollView(
-            controller: _headerScrollController,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ConversationCaptureWidget(showsCall: true),
-                const SpeechProfileCardWidget(),
-                const UpdateFirmwareCardWidget(),
-                const SpeakerTagPromptCard(),
-                const CaptureRecoveryBanner(),
-                if (widget.loadRecaps == null)
-                  HomeDailyRecaps(key: _recapsKey)
-                else
-                  HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
-              ],
-            ),
-          ),
+        Offstage(
+          child: ConversationCaptureWidget(showsCall: true, onPresentation: _captureChanged),
         ),
-        Expanded(
-          flex: 2,
+        Positioned.fill(
           child: UiKitView(
             key: ValueKey('native-home-$_viewGeneration'),
             viewType: 'com.omi.native_ui/home',
@@ -314,7 +413,14 @@ class IosNativeHomeState extends State<IosNativeHome> {
     _conversations.removeListener(_scheduleUpdate);
     _recordings.removeListener(_scheduleUpdate);
     unawaited(_authSubscription?.cancel());
-    _headerScrollController.dispose();
     super.dispose();
   }
+}
+
+class NativeHomeAction {
+  const NativeHomeAction(this.id, this.title, this.symbol, this.perform, {this.enabled = true});
+  final String id, title, symbol;
+  final FutureOr<void> Function() perform;
+  final bool enabled;
+  Map<String, Object?> get projection => {'id': id, 'title': title, 'symbol': symbol, 'enabled': enabled};
 }

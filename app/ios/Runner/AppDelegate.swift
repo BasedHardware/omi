@@ -148,6 +148,9 @@ final class QuickActionsIconPatcher: NSObject {
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiNativeHome") {
       registrar.register(NativeHomeViewFactory(messenger: messenger), withId: "com.omi.native_ui/home")
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiNativeSurface") {
+      registrar.register(NativeSurfaceViewFactory(messenger: messenger), withId: "com.omi.native_ui/surface")
+    }
     let nativeUIConfig = FlutterMethodChannel(name: "com.omi.native_ui/config", binaryMessenger: messenger)
     nativeUIConfig.setMethodCallHandler { call, result in
       guard call.method == "isSupported" else { result(FlutterMethodNotImplemented); return }

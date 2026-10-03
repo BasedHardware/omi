@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
@@ -93,6 +96,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   }
 
   void _delete() {
+    if (_isSaving) return;
     unawaited(deleteMemoryWithUndo(context, widget.provider, widget.memory));
     Navigator.pop(context);
     widget.onDelete?.call(context, widget.memory, widget.provider);
@@ -102,7 +106,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final memory = widget.memory;
-    return OmiEditSheet(
+    final classic = OmiEditSheet(
       title: _readOnly ? l10n.memoryDetailsTitle : l10n.editMemoryTitle,
       isDirty: _isDirty,
       enabled: !_isSaving,
@@ -215,6 +219,37 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
         ),
       ),
     );
+    return IosNativeEdit(
+        title: _readOnly ? l10n.memoryDetailsTitle : l10n.editMemoryTitle,
+        isDirty: _isDirty,
+        enabled: !_isSaving,
+        failed: _saveFailed,
+        fallback: classic,
+        sections: [
+          NativeSection('memory_body', [
+            NativeRow('memory_text',
+                _readOnly ? (memory.isLocked ? l10n.upgradeToUnlimited : _originalContent) : l10n.memoryContentHint,
+                kind: _readOnly ? 'label' : 'text',
+                value: _readOnly ? null : contentController.text,
+                enabled: !_isSaving,
+                action: _readOnly ? null : (value) => setState(() => contentController.text = value as String)),
+            if (!memory.isLocked && (memory.ledgerSlot ?? '').trim().isNotEmpty)
+              NativeRow('memory_slot', memory.ledgerSlot!, kind: 'label'),
+            if (!memory.isLocked && (memory.ledgerBody ?? '').trim().isNotEmpty)
+              NativeRow('memory_playbook', memory.ledgerBody!.trim(), kind: 'label'),
+            if (!_readOnly) ...[
+              NativeRow('memory_baseline', _isBaseline ? l10n.unpinAsBaseline : l10n.pinAsBaseline,
+                  kind: 'toggle', value: _isBaseline, enabled: !_isSaving, action: (_) => _toggleBaseline()),
+              NativeRow('memory_delete', l10n.deleteMemory,
+                  destructive: true, enabled: !_isSaving, action: (_) => _delete()),
+            ],
+          ])
+        ],
+        toolbar: [
+          if (!_readOnly)
+            NativeRow('memory_save', _saveFailed ? l10n.tryAgain : l10n.save,
+                enabled: !_isSaving && contentController.text.trim().isNotEmpty, action: (_) => _handleSave()),
+        ]);
   }
 
   Future<void> _handleSave() async {

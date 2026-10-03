@@ -20,6 +20,38 @@ struct NativeConversation: Decodable, Equatable, Identifiable {
 }
 
 struct NativeHomeSnapshot: Decodable, Equatable {
+    struct Chrome: Decodable, Equatable {
+        struct Action: Decodable, Equatable, Identifiable {
+            let id: String
+            let title: String
+            let symbol: String
+            let enabled: Bool
+        }
+        struct Recap: Decodable, Equatable, Identifiable {
+            let id: String
+            let title: String
+            let date: String
+            let emoji: String
+        }
+        struct Capture: Decodable, Equatable {
+            let status: String
+            let detail: String
+            let elapsed: String
+            let source: String
+            let lastLine: String
+            let explanation: String
+            let actions: [Action]
+        }
+        let home: String
+        let tasks: String
+        let ask: String
+        let recapsTitle: String
+        let header: [Action]
+        let footer: [Action]
+        let alerts: [Action]
+        let recaps: [Recap]
+        let capture: Capture?
+    }
     struct Group: Decodable, Equatable, Identifiable {
         let id: String
         let title: String
@@ -55,6 +87,7 @@ struct NativeHomeSnapshot: Decodable, Equatable {
     let localRecordingCount: Int
     let groups: [Group]
     let copy: Copy
+    let chrome: Chrome?
 
     func conversation(id: String) -> NativeConversation? {
         groups.lazy.flatMap(\.conversations).first { $0.id == id }
@@ -63,7 +96,7 @@ struct NativeHomeSnapshot: Decodable, Equatable {
     func withoutContent() -> NativeHomeSnapshot {
         NativeHomeSnapshot(version: version, revision: revision, appearance: appearance,
                            locale: locale, direction: direction, loading: false, failed: false,
-                           hasMore: false, localRecordingCount: 0, groups: [], copy: copy)
+                           hasMore: false, localRecordingCount: 0, groups: [], copy: copy, chrome: nil)
     }
 
     static func decode(_ value: Any) throws -> NativeHomeSnapshot {
@@ -78,6 +111,15 @@ struct NativeHomeSnapshot: Decodable, Equatable {
         let ids = snapshot.groups.flatMap(\.conversations).map(\.id)
         guard Set(ids).count == ids.count, !ids.contains("") else {
             throw ContractError.invalidSnapshot
+        }
+        if let chrome = snapshot.chrome {
+            let controls = chrome.header + chrome.footer + chrome.alerts + (chrome.capture?.actions ?? [])
+            let controlsIDs = controls.map(\.id)
+            let recapIDs = chrome.recaps.map(\.id)
+            guard Set(controlsIDs).count == controlsIDs.count, !controlsIDs.contains(""),
+                  Set(recapIDs).count == recapIDs.count, !recapIDs.contains("") else {
+                throw ContractError.invalidSnapshot
+            }
         }
         for conversation in snapshot.groups.flatMap(\.conversations) {
             if conversation.locked,

@@ -1,6 +1,7 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -221,7 +222,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
       body: _isLoading
           ? const NotificationsSettingsLoadingShimmer()
@@ -238,6 +239,44 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               ],
             ),
     );
+    return IosNativeSurface(
+        title: context.l10n.notifications,
+        fallback: classic,
+        loading: _isLoading,
+        toolbar: [
+          NativeRow('notifications_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+            Navigator.of(context).pop();
+          })
+        ],
+        sections: _isLoading
+            ? []
+            : [
+                NativeSection(
+                    'frequency',
+                    [
+                      NativeRow('notification_frequency', context.l10n.notificationFrequency,
+                          subtitle: _getFrequencyDescription(context, _notificationFrequency),
+                          kind: 'choice',
+                          value: '$_notificationFrequency',
+                          options: {
+                            for (var value = 0; value <= 5; value++) '$value': _getFrequencyLabel(context, value)
+                          },
+                          action: (value) => _updateNotificationFrequency(int.parse(value as String)))
+                    ],
+                    footer: context.l10n.notificationFrequencyDescription),
+                NativeSection('recap', [
+                  NativeRow('notification_recap', context.l10n.dailySummary,
+                      kind: 'toggle',
+                      value: _dailySummaryEnabled,
+                      action: (value) => _updateDailySummaryEnabled(value as bool)),
+                  NativeRow('notification_hour', context.l10n.deliveryTime,
+                      kind: 'choice',
+                      value: '$_dailySummaryHour',
+                      enabled: _dailySummaryEnabled,
+                      options: {for (var hour = 0; hour < 24; hour++) '$hour': _formatHourDisplay(context, hour)},
+                      action: (value) => _updateDailySummaryHour(int.parse(value as String))),
+                ]),
+              ]);
   }
 
   Widget _buildFrequencyCard() {

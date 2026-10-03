@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -387,7 +389,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Material(
+    final classic = Material(
       color: OmiColors.surface0,
       child: SafeArea(
         bottom: false,
@@ -422,6 +424,122 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
         ),
       ),
     );
+    if (_scope?.people == true) return classic;
+    final overview = _overview;
+    final folders = overview?.folders.isNotEmpty == true
+        ? overview!.folders
+        : [
+            for (final folder in context.watch<FolderProvider?>()?.folders ?? const [])
+              SearchFolderCount(id: folder.id, name: folder.name, icon: folder.icon, color: folder.color),
+          ];
+    final dates = OmiDateFormat.of(context);
+    final browsing = _query.text.trim().isEmpty;
+    return IosNativeSurface(
+        title: _scope?.title ?? l10n.search,
+        fallback: classic,
+        loading: _searching || _loadingScope,
+        failed: !browsing && _results.partial,
+        empty: l10n.noResultsFound,
+        searchValue: _query.text,
+        searchPlaceholder: l10n.search,
+        search: (value) {
+          _query.text = value as String;
+          _onChanged(value);
+        },
+        onRefresh: (_) => _scope != null
+            ? _openScope(_scope!)
+            : browsing
+                ? _loadOverview()
+                : _run(_query.text.trim()),
+        toolbar: [
+          NativeRow('search_close', _scope == null ? l10n.close : l10n.back, symbol: 'chevron.left', action: (_) {
+            if (_scope == null) {
+              Navigator.of(context).maybePop();
+            } else {
+              _closeScope();
+            }
+          })
+        ],
+        sections: [
+          if (_scope != null)
+            NativeSection('search_scope_results', [
+              for (final (index, conversation) in _scopeConversations.indexed)
+                NativeRow(
+                    'search_scope_$index', conversation.isLocked ? l10n.conversations : conversation.structured.title,
+                    subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                    action: (_) => _openConversation(conversation)),
+            ])
+          else if (browsing) ...[
+            NativeSection('search_browse', [
+              NativeRow('search_starred', l10n.starred,
+                  action: (_) => _openScope(_Scope(title: l10n.starred, starred: true))),
+              for (final (index, folder) in folders.indexed)
+                NativeRow('search_folder_$index', folder.name,
+                    kind: 'menu',
+                    options: {'open': l10n.open, 'edit': l10n.edit},
+                    action: (value) => value == 'open'
+                        ? _openScope(_Scope(title: folder.name, folderId: folder.id))
+                        : _editFolder(folder.id)),
+              NativeRow('search_recaps', l10n.recaps, action: (_) => routeToPage(context, const DailyRecapsPage())),
+              NativeRow('search_memories', l10n.memories, action: (_) => routeToPage(context, const MemoriesPage())),
+              NativeRow('search_people', l10n.people,
+                  action: (_) => _openScope(_Scope(title: l10n.people, people: true))),
+              NativeRow('search_places', l10n.places,
+                  action: (_) => routeToPage(context,
+                      ConversationMapPage(conversations: context.read<ConversationProvider>().displayedConversations))),
+              NativeRow('search_new_folder', l10n.newFolder, action: (_) async {
+                if (await showCreateFolderBottomSheet(context) && mounted) await _loadOverview();
+              }),
+            ]),
+            NativeSection('search_recent', [
+              for (final (index, query) in _recent.indexed)
+                NativeRow('search_recent_$index', query, action: (_) => _useRecent(query))
+            ]),
+          ] else ...[
+            NativeSection(
+                'search_recaps_results',
+                [
+                  for (final (index, recap) in _results.recaps.indexed)
+                    NativeRow('search_recap_$index', recap.headline,
+                        subtitle: '${recapDateLabel(context, recap.date)} · ${recap.overview}', action: (_) {
+                      _remember(_query.text);
+                      return routeToPage(context, DailySummaryDetailPage(summaryId: recap.id, summary: recap));
+                    })
+                ],
+                title: l10n.recaps),
+            NativeSection(
+                'search_conversation_results',
+                [
+                  for (final (index, conversation) in _results.conversations.indexed)
+                    NativeRow('search_conversation_$index',
+                        conversation.isLocked ? l10n.conversations : conversation.structured.title,
+                        subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                        action: (_) => _openConversation(conversation))
+                ],
+                title: l10n.conversations),
+            NativeSection(
+                'search_task_results',
+                [
+                  for (final (index, task) in _results.tasks.indexed)
+                    NativeRow('search_task_$index', task.description, action: (_) {
+                      _remember(_query.text);
+                      return showActionItemFormSheet(context, actionItem: task);
+                    })
+                ],
+                title: l10n.tasks),
+            NativeSection(
+                'search_memory_results',
+                [
+                  for (final (index, memory) in _results.memories.indexed)
+                    NativeRow('search_memory_$index', memory.content, action: (_) {
+                      _remember(_query.text);
+                      context.read<MemoriesProvider>().setSearchQuery(_query.text.trim());
+                      return routeToPage(context, const MemoriesPage());
+                    })
+                ],
+                title: l10n.memories),
+          ],
+        ]);
   }
 
   Widget _buildBody(BuildContext context) {

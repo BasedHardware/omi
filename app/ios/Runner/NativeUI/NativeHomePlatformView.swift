@@ -29,7 +29,7 @@ private final class UnavailableNativeHomeView: NSObject, FlutterPlatformView {
 private final class NativeHomePlatformView: NSObject, @preconcurrency FlutterPlatformView {
     private let channel: FlutterMethodChannel
     private let state: NativeHomeState
-    private let container: NativeHostingContainer
+    private let container: NativeHostingContainer<NativeHomeView>
 
     init(frame: CGRect, viewId: Int64, snapshot: NativeHomeSnapshot, messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(name: "com.omi.native_ui/home/\(viewId)", binaryMessenger: messenger)
@@ -88,10 +88,10 @@ private enum NativePresentationError: Error {
 /// SwiftUI gets proper UIKit controller containment, including trait and safe-area changes.
 @available(iOS 16.0, *)
 @MainActor
-private final class NativeHostingContainer: UIView {
-    private let host: UIHostingController<NativeHomeView>
+final class NativeHostingContainer<Content: View>: UIView {
+    private let host: UIHostingController<Content>
 
-    init(frame: CGRect, rootView: NativeHomeView) {
+    init(frame: CGRect, rootView: Content) {
         host = UIHostingController(rootView: rootView)
         super.init(frame: frame)
         host.view.backgroundColor = .clear

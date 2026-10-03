@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -49,7 +52,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return OmiEditSheet(
+    final classic = OmiEditSheet(
       title: _isEditing ? l10n.editMemoryTitle : l10n.newMemoryTitle,
       isDirty: _isDirty,
       enabled: !_isSaving,
@@ -127,9 +130,32 @@ class _MemoryDialogState extends State<MemoryDialog> {
         ),
       ),
     );
+    return IosNativeEdit(
+        title: _isEditing ? l10n.editMemoryTitle : l10n.newMemoryTitle,
+        isDirty: _isDirty,
+        enabled: !_isSaving,
+        failed: _saveFailed,
+        fallback: classic,
+        sections: [
+          NativeSection('memory_body', [
+            NativeRow('memory_text', l10n.memoryContentHint,
+                kind: 'text',
+                value: contentController.text,
+                enabled: !_isSaving,
+                action: (value) => setState(() => contentController.text = value as String)),
+            if (_isEditing)
+              NativeRow('memory_delete', l10n.deleteMemory,
+                  destructive: true, enabled: !_isSaving, action: (_) => _delete()),
+          ])
+        ],
+        toolbar: [
+          NativeRow('memory_save', _saveFailed ? l10n.tryAgain : l10n.save,
+              enabled: !_isSaving && contentController.text.trim().isNotEmpty, action: (_) => _handleSave()),
+        ]);
   }
 
   void _delete() {
+    if (_isSaving) return;
     final memory = widget.memory;
     if (memory == null) return;
     unawaited(deleteMemoryWithUndo(context, widget.provider, memory));
