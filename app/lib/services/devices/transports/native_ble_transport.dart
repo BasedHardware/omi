@@ -203,6 +203,11 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _pendingSubscriptions[key] = generation;
     Object? failure;
     try {
+      if (isBleAudioCharacteristicUuid(characteristicUuid)) {
+        final gate = beforeAudioResubscribe;
+        if (gate != null) await gate(characteristicUuid);
+        if (generation != _subscriptionGeneration) return;
+      }
       await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid).then((_) {
         if (generation == _subscriptionGeneration &&
             failure is TimeoutException &&
@@ -365,6 +370,8 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     }
   }
 
+  Future<void> Function(String characteristicUuid)? beforeAudioResubscribe;
+
   void _resubscribeAfterReconnect(List<BleService> services) {
     if (_isResubscribing) return;
     _isResubscribing = true;
@@ -373,6 +380,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       _services = services;
 
       // Native re-emits ready for a link that is already up, so keep live controllers.
+      final controlSubscriptions = <Future<void>>[];
       for (final key in _activeSubscriptionKeys) {
         final parts = key.split(':');
         if (parts.length == 2) {
@@ -380,9 +388,18 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
           if (controller == null || controller.isClosed) {
             _streamControllers[key] = StreamController<List<int>>.broadcast();
           }
-          unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+          if (!isBleAudioCharacteristicUuid(parts[1])) {
+            controlSubscriptions.add(_subscribeCharacteristic(parts[0], parts[1]));
+          }
         }
       }
+      unawaited(Future.wait(controlSubscriptions).then((_) {
+        for (final key in _activeSubscriptionKeys) {
+          final parts = key.split(':');
+          if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
+          unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+        }
+      }));
 
       _updateState(DeviceTransportState.connected);
       _audioSilenceResubscribes = 0;

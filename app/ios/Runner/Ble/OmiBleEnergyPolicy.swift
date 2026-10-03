@@ -75,3 +75,51 @@ enum OmiBleRssiDiagnostics {
         samples.last.map { max(0, nowMs - $0.ts) } ?? -1
     }
 }
+
+/// Attributes one recovery interval to the event that started it.
+struct OmiBleReconnectDiagnostics {
+    private var pendingTimestampMs: Int64?
+
+    mutating func recordEvent(timestampMs: Int64, eventType: String, isManual: Bool) {
+        if isManual {
+            pendingTimestampMs = nil
+            return
+        }
+        // Failed retry attempts belong to the outstanding loss. A newly lost
+        // physical link starts its own interval instead of inheriting an old one.
+        if eventType == "disconnect" || pendingTimestampMs == nil {
+            pendingTimestampMs = timestampMs
+        }
+    }
+
+    mutating func recovered(atMs: Int64, hadConnection: Bool) -> (eventTimestampMs: Int64, durationMs: Int64)? {
+        guard let timestamp = pendingTimestampMs else { return nil }
+        pendingTimestampMs = nil
+        guard hadConnection else { return nil }
+        return (timestamp, max(0, atMs - timestamp))
+    }
+
+    func retainedHistory<T>(
+        _ history: [T], nowMs: Int64, retentionMs: Int64, limit: Int, timestampOf: (T) -> Int64
+    ) -> [T] {
+        let recent = history.filter { timestampOf($0) >= nowMs - retentionMs }
+        // Keep one unresolved outage through count truncation, while respecting
+        // both age retention and the ring's total entry limit.
+        if limit > 0, let pending = recent.lastIndex(where: { timestampOf($0) == pendingTimestampMs }),
+           pending < recent.count - limit {
+            return [recent[pending]] + recent.suffix(limit - 1)
+        }
+        return Array(recent.suffix(limit))
+    }
+
+    mutating func backfilledHistory<T>(
+        _ history: [T], nowMs: Int64, hadConnection: Bool,
+        timestampOf: (T) -> Int64, withDuration: (T, Int64) -> T
+    ) -> [T]? {
+        guard let recovery = recovered(atMs: nowMs, hadConnection: hadConnection),
+              let index = history.lastIndex(where: { timestampOf($0) == recovery.eventTimestampMs }) else { return nil }
+        var result = history
+        result[index] = withDuration(history[index], recovery.durationMs)
+        return result
+    }
+}

@@ -8,6 +8,157 @@ class OmiBleEnergyPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleEnergyPolicy.swift')
 
+  def test_recovery_backfills_retained_history_after_retry_storms
+    Dir.mktmpdir('omi-ble-recovery-history') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'omi-ble-recovery-history-test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+
+        struct History {
+            var diagnostics = OmiBleReconnectDiagnostics()
+            var events: [[String: Any]] = []
+            let retentionMs: Int64 = 7 * 24 * 3600 * 1_000
+
+            mutating func append(_ timestamp: Int64, _ type: String, manual: Bool = false) {
+                diagnostics.recordEvent(timestampMs: timestamp, eventType: type, isManual: manual)
+                events.append(["timestamp": timestamp, "eventType": type, "timeToReconnectMs": Int64(0)])
+                events = diagnostics.retainedHistory(
+                    events, nowMs: timestamp, retentionMs: retentionMs, limit: 500,
+                    timestampOf: { $0["timestamp"] as? Int64 ?? 0 }
+                )
+            }
+
+            mutating func recover(_ timestamp: Int64, hadConnection: Bool = true) -> [[String: Any]]? {
+                // Use the native persisted shape, including its plist round trip.
+                let bytes = try! PropertyListSerialization.data(fromPropertyList: events, format: .binary, options: 0)
+                let stored = try! PropertyListSerialization.propertyList(from: bytes, options: [], format: nil) as! [[String: Any]]
+                return diagnostics.backfilledHistory(
+                    stored, nowMs: timestamp, hadConnection: hadConnection,
+                    timestampOf: { $0["timestamp"] as? Int64 ?? 0 },
+                    withDuration: { event, duration in
+                        var updated = event
+                        updated["timeToReconnectMs"] = duration
+                        return updated
+                    }
+                )
+            }
+        }
+
+        @main
+        struct RecoveryHistoryHarness {
+            static func main() {
+                var history = History()
+                history.append(1_000, "disconnect")
+                for attempt in 1...1_000 {
+                    history.append(1_000 + Int64(attempt) * 3_000, "fail_to_connect")
+                    precondition(history.events.count <= 500)
+                }
+                guard let updated = history.recover(3_004_000) else {
+                    fatalError("Original disconnect was evicted before recovery")
+                }
+                precondition(updated.count == 500)
+                precondition(updated[0]["timestamp"] as? Int64 == 1_000)
+                precondition(updated[0]["eventType"] as? String == "disconnect")
+                precondition(updated[0]["timeToReconnectMs"] as? Int64 == 3_003_000)
+                let retries = Array(updated.dropFirst())
+                precondition(retries.compactMap { $0["timestamp"] as? Int64 } == (502...1_000).map { 1_000 + Int64($0) * 3_000 })
+                precondition(retries.allSatisfy { ($0["timeToReconnectMs"] as? Int64) == 0 })
+                precondition(history.recover(3_005_000) == nil)
+
+                // Protected does not mean retained beyond the seven-day boundary.
+                history = History()
+                history.append(1_000, "disconnect")
+                history.append(1_000 + history.retentionMs, "fail_to_connect")
+                precondition(history.events.first?["timestamp"] as? Int64 == 1_000)
+                history.append(1_001 + history.retentionMs, "fail_to_connect")
+                precondition(history.events.count == 2)
+                precondition(history.recover(2_000 + history.retentionMs) == nil)
+                precondition(history.events.allSatisfy { ($0["timeToReconnectMs"] as? Int64) == 0 })
+                precondition(history.recover(3_000 + history.retentionMs) == nil)
+
+                // Initial success consumes the marker without manufacturing a reconnect.
+                history = History()
+                for attempt in 1...501 { history.append(Int64(attempt), "fail_to_connect") }
+                precondition(history.recover(502, hadConnection: false) == nil)
+                precondition(history.recover(503) == nil)
+                history.append(1_000, "disconnect")
+                history.append(1_500, "fail_to_connect")
+                let reconnected = history.recover(2_000)!
+                let timed = reconnected.filter { ($0["timeToReconnectMs"] as? Int64 ?? 0) > 0 }
+                precondition(timed.count == 1 && timed[0]["timestamp"] as? Int64 == 1_000)
+                precondition(timed[0]["timeToReconnectMs"] as? Int64 == 1_000)
+                precondition(!reconnected.contains { $0["timestamp"] as? Int64 == 1 })
+
+                // Manual cancellation releases the slot for newest history.
+                history = History()
+                history.append(1_000, "disconnect")
+                for attempt in 1...500 { history.append(1_000 + Int64(attempt), "fail_to_connect") }
+                history.append(2_000, "disconnect", manual: true)
+                precondition(history.events.count == 500)
+                precondition(!history.events.contains { $0["timestamp"] as? Int64 == 1_000 })
+                precondition(history.recover(3_000) == nil)
+            }
+        }
+      SWIFT
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE, harness, '-o', binary)
+      assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "recovery history assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
+  def test_recovery_latency_tracks_the_disconnect_across_failed_retries
+    Dir.mktmpdir('omi-ble-recovery') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'omi-ble-recovery-test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+
+        @main
+        struct RecoveryHarness {
+            static func main() {
+                var recovery = OmiBleReconnectDiagnostics()
+                recovery.recordEvent(timestampMs: 1_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 2_000, eventType: "fail_to_connect", isManual: false)
+                recovery.recordEvent(timestampMs: 5_000, eventType: "fail_to_connect", isManual: false)
+                let reconnected = recovery.recovered(atMs: 9_000, hadConnection: true)!
+                precondition(reconnected.eventTimestampMs == 1_000)
+                precondition(reconnected.durationMs == 8_000)
+                precondition(recovery.recovered(atMs: 10_000, hadConnection: true) == nil)
+
+                // Failure before the first successful connection must be
+                // consumed, so a later link loss starts a new recovery.
+                recovery.recordEvent(timestampMs: 11_000, eventType: "fail_to_connect", isManual: false)
+                precondition(recovery.recovered(atMs: 12_000, hadConnection: false) == nil)
+                precondition(recovery.recovered(atMs: 13_000, hadConnection: true) == nil)
+                recovery.recordEvent(timestampMs: 20_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 21_000, eventType: "fail_to_connect", isManual: false)
+                let laterRecovery = recovery.recovered(atMs: 25_000, hadConnection: true)!
+                precondition(laterRecovery.eventTimestampMs == 20_000)
+                precondition(laterRecovery.durationMs == 5_000)
+
+                recovery.recordEvent(timestampMs: 30_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 31_000, eventType: "disconnect", isManual: true)
+                precondition(recovery.recovered(atMs: 35_000, hadConnection: true) == nil)
+
+                // A new physical disconnect supersedes an earlier attempt;
+                // clock adjustments must not produce negative durations.
+                recovery.recordEvent(timestampMs: 40_000, eventType: "fail_to_connect", isManual: false)
+                recovery.recordEvent(timestampMs: 45_000, eventType: "disconnect", isManual: false)
+                let newLoss = recovery.recovered(atMs: 44_000, hadConnection: true)!
+                precondition(newLoss.eventTimestampMs == 45_000)
+                precondition(newLoss.durationMs == 0)
+            }
+        }
+      SWIFT
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE, harness, '-o', binary)
+      assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "recovery assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_rssi_polling_and_battery_history_policy
     Dir.mktmpdir('omi-ble-energy-policy') do |directory|
       harness = File.join(directory, 'main.swift')
