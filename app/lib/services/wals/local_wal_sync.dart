@@ -198,8 +198,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-    _recordingBindings.add((_now().millisecondsSinceEpoch ~/ 1000, _activeRecordingSessionId));
-    if (_recordingBindings.length > 16) _recordingBindings.removeAt(0);
+    // Only a change of recording counts, so rebinding the same one can't push out a window's start.
+    if (_recordingBindings.isEmpty || _recordingBindings.last.$2 != _activeRecordingSessionId) {
+      _recordingBindings.add((_now().millisecondsSinceEpoch ~/ 1000, _activeRecordingSessionId));
+      if (_recordingBindings.length > 16) _recordingBindings.removeAt(0);
+    }
   }
 
   /// Recording id captured before a flush. [stampConversationId] keeps its
@@ -291,6 +294,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     _captureEvidenceRoot = null;
     _nextSourceFramePosition = 0;
     _sourceClockEpoch = 0;
+    _recordingBindings.clear();
   }
 
   /// Completes when _initializeWals() finishes loading WALs from disk.
@@ -811,7 +815,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   /// When the store was bound to each recording, oldest first. The last few cover any conversation
-  /// still closing, since a recording lasts minutes.
+  /// still closing, since a recording lasts minutes. Logout clears them with the account's WALs.
   final List<(int, String?)> _recordingBindings = [];
 
   /// The recording the store was bound to at [seconds], the start of a conversation's window. A phone

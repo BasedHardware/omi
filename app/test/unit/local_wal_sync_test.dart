@@ -1057,5 +1057,59 @@ void main() {
 
       expect(newer.conversationId, isNull, reason: "the newer recording's audio is not c1's");
     });
+
+    test('still finds that recording after it is bound again many times', () async {
+      var nowSeconds = 1000;
+      final store = LocalWalSyncImpl(
+        listener,
+        now: () => DateTime.fromMillisecondsSinceEpoch(nowSeconds * 1000),
+        persistWals: (_) async {},
+      );
+      store.setActiveRecordingSessionId('stopped');
+      for (var i = 0; i < 20; i++) {
+        nowSeconds++;
+        store.setActiveRecordingSessionId('stopped');
+      }
+      nowSeconds = 1100;
+      store.setActiveRecordingSessionId('newer');
+      final stopped = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        recordingSessionId: 'stopped',
+      );
+      store.testWals = [stopped];
+
+      store.prepareConversationStamp(null);
+      await store.stampConversationId(1000, 'c1');
+
+      expect(stopped.conversationId, 'c1', reason: 'rebinding the same recording does not push out its start');
+    });
+
+    test('forgets the recordings of an account that logged out', () async {
+      final store = LocalWalSyncImpl(
+        listener,
+        now: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000),
+        persistWals: (_) async {},
+      );
+      store.setActiveRecordingSessionId('previous-account');
+      store.clearUserData();
+      final leftover = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        recordingSessionId: 'previous-account',
+      );
+      store.testWals = [leftover];
+
+      store.prepareConversationStamp(null);
+      await store.stampConversationId(1000, 'c1');
+
+      expect(leftover.conversationId, isNull, reason: "the next account's stamp never matches the old recording");
+    });
   });
 }
