@@ -329,7 +329,8 @@ actor ContextProactivityEngine {
     fence: ContextVisitFence,
     snapshot: ContextBucketSnapshot,
     frame: CapturedFrame,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    speechSection: String? = nil
   ) async -> ContextProactivityAdmissionOutcome {
     let route = ContextProactivityVisitAdmission.route(for: snapshot)
     guard route != .skip else { return .skipped }
@@ -341,8 +342,73 @@ actor ContextProactivityEngine {
       fence: fence,
       snapshot: snapshot,
       currentFrame: frame,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      speechSection: speechSection)
     return .legacyDirector
+  }
+
+  /// Transcript-triggered evaluation: while a context visit is active, a fresh
+  /// user utterance (admitted by `SpeechProactivityAdmission`) evaluates the
+  /// *current* bucket grounded on the live speech window, so a question spoken
+  /// mid-context gets an answer without waiting for a dwell. The same delivery
+  /// gates and freshness window apply as for any other director evaluation; a
+  /// speech prompt is additive evidence below the untrusted preamble, never an
+  /// instruction source.
+  func evaluateFromSpeech(speech: [TranscriptSpeechSlice]) async {
+    let flagEnabled = await MainActor.run { ContextBucketsFeature.isTranscriptProactivityEnabled }
+    guard flagEnabled else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    let gate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before speech evaluation: \(preflightReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: preflightReason, stage: .preflight, trigger: .speech)
+      return
+    }
+    // Speech evaluates the visit the user is in right now; with no active visit
+    // there is nothing to ground on.
+    guard let fence = await ContextVisitCoordinator.shared.activeFence() else {
+      log("Context director suppressed: speech has no active context visit")
+      return
+    }
+    guard fence.bucketID != nil else { return }
+    // Serialize against a still-running dwell or departure evaluation of the
+    // same visit, exactly like the other entry points.
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
+    let freshness = await store.fenceFreshness(fence)
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      freshness.fresh,
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else {
+      log("Context director suppressed: bucket has no validated memory to fuse with speech")
+      return
+    }
+    guard
+      let frameSample = await MainActor.run(body: {
+        AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
+      })
+    else { return }
+    let frameFreshness = await store.fenceFreshness(fence)
+    guard
+      frameFreshness.fresh,
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: frameSample.frame.captureTime,
+        storedAt: frameSample.storedAt,
+        startedAt: fence.startedAt,
+        endedAt: frameFreshness.endedAt)
+    else { return }
+    let speechSection = ContextProactivityPromptBuilder.liveSpeechSection(speech)
+    _ = await admitJITThenLegacyDirector(
+      fence: fence,
+      snapshot: snapshot,
+      frame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot,
+      speechSection: speechSection)
   }
 
   /// The shared post-settle tail of the director pipeline: presentation
@@ -354,8 +420,12 @@ actor ContextProactivityEngine {
     fence: ContextVisitFence,
     snapshot: ContextBucketSnapshot,
     currentFrame: CapturedFrame,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    speechSection: String? = nil
   ) async {
+    // The speech lane is the only caller that supplies a section, so the trigger is already
+    // in the arguments — no extra plumbing to keep in sync with a new entry point.
+    let gateTrigger = ContextProactivityTelemetry.GateTrigger.forSpeechSection(speechSection)
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
     guard Self.presentationSurfaceAvailable(attemptPreflight) else {
@@ -367,7 +437,8 @@ actor ContextProactivityEngine {
     let attemptReason = ContextDeliveryBudget.freeGate(input: attemptGate)
     guard attemptReason == .allowed else {
       log("Context director suppressed before attempt: \(attemptReason.rawValue)")
-      await ContextProactivityTelemetry.recordGateRejection(reason: attemptReason, stage: .attempt)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: attemptReason, stage: .attempt, trigger: gateTrigger)
       return
     }
 
@@ -377,7 +448,8 @@ actor ContextProactivityEngine {
     } catch { return }
     guard attempt.reason == .allowed, let deliveryID = attempt.id else {
       log("Context director suppressed: \(attempt.reason.rawValue)")
-      await ContextProactivityTelemetry.recordGateRejection(reason: attempt.reason, stage: .reservation)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: attempt.reason, stage: .reservation, trigger: gateTrigger)
       return
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -453,7 +525,8 @@ actor ContextProactivityEngine {
           currentFrame: currentFrame,
           recentDeliveries: recentDeliveries,
           authorizationSnapshot: authorizationSnapshot,
-          ownerID: ownerID)
+          ownerID: ownerID,
+          gateTrigger: gateTrigger)
         return
       }
     }
@@ -487,6 +560,8 @@ actor ContextProactivityEngine {
         volatileExtras += "\n\n" + section
       }
     }
+    // Speech rides last, after the candidates section, so the cached stable
+    // prefix and main's volatile ordering are both preserved.
     let uncachedPrompt =
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
@@ -495,6 +570,7 @@ actor ContextProactivityEngine {
         visitCount: snapshot.visitCount,
         environmentalSignal: envSignal)
       + volatileExtras
+      + (speechSection.map { "\n\n" + $0 } ?? "")
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -513,7 +589,8 @@ actor ContextProactivityEngine {
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
       log("Context director suppressed before model: \(evaluationReason.rawValue)")
-      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: evaluationReason, stage: .preModel, trigger: gateTrigger)
       await terminalize(
         deliveryID: deliveryID,
         decisionType: "silence",
@@ -613,6 +690,7 @@ actor ContextProactivityEngine {
           cacheKey: cacheKey,
           fence: fence,
           authorizationSnapshot: authorizationSnapshot,
+          gateTrigger: gateTrigger,
           includeInterjectCopyBudgets: interjectCopyBudgets)
         // A failed, empty, or gated hop keeps the first decision untouched:
         // retrieval may upgrade a decision, never lose one.
@@ -752,7 +830,7 @@ actor ContextProactivityEngine {
       guard presentationReason == .allowed else {
         log("Context director suppressed before presentation: \(presentationReason.rawValue)")
         await ContextProactivityTelemetry.recordGateRejection(
-          reason: presentationReason, stage: .presentation)
+          reason: presentationReason, stage: .presentation, trigger: gateTrigger)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -797,7 +875,8 @@ actor ContextProactivityEngine {
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
       let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
       guard handoffReason == .allowed else {
-        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: handoffReason, stage: .handoff, trigger: gateTrigger)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -876,13 +955,15 @@ actor ContextProactivityEngine {
     currentFrame: CapturedFrame,
     recentDeliveries: [ContextBucketRecentDelivery],
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    ownerID: String
+    ownerID: String,
+    gateTrigger: ContextProactivityTelemetry.GateTrigger
   ) async {
     let evaluationGate = await MainActor.run { Self.liveDeliveryGateInput() }
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
       log("Context candidate gate suppressed before model: \(evaluationReason.rawValue)")
-      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: evaluationReason, stage: .preModel, trigger: gateTrigger)
       await terminalize(
         deliveryID: deliveryID,
         decisionType: "silence",
@@ -1032,7 +1113,7 @@ actor ContextProactivityEngine {
       guard presentationReason == .allowed else {
         log("Context candidate suppressed before presentation: \(presentationReason.rawValue)")
         await ContextProactivityTelemetry.recordGateRejection(
-          reason: presentationReason, stage: .presentation)
+          reason: presentationReason, stage: .presentation, trigger: gateTrigger)
         try await store.completeDelivery(
           id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
           message: message, state: "suppressed")
@@ -1049,7 +1130,8 @@ actor ContextProactivityEngine {
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
       let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
       guard handoffReason == .allowed else {
-        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: handoffReason, stage: .handoff, trigger: gateTrigger)
         try await store.completeDelivery(
           id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
           message: message, state: "suppressed")
@@ -1141,6 +1223,7 @@ actor ContextProactivityEngine {
     cacheKey: String,
     fence: ContextVisitFence,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    gateTrigger: ContextProactivityTelemetry.GateTrigger,
     includeInterjectCopyBudgets: Bool = false
   ) async -> RetrievalHopOutcome {
     func abandoned(_ items: [ContextRetrievedItem], failure: String?) -> RetrievalHopOutcome {
@@ -1165,7 +1248,8 @@ actor ContextProactivityEngine {
     let hopGate = await MainActor.run { Self.liveDeliveryGateInput() }
     let hopReason = ContextDeliveryBudget.freeGate(input: hopGate)
     guard hopReason == .allowed else {
-      await ContextProactivityTelemetry.recordGateRejection(reason: hopReason, stage: .retrievalHop)
+      await ContextProactivityTelemetry.recordGateRejection(
+        reason: hopReason, stage: .retrievalHop, trigger: gateTrigger)
       return abandoned(items, failure: "pre_model_gate")
     }
     do {

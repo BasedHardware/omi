@@ -89,6 +89,8 @@ extension AppState {
         translations: translations
       )
 
+      var proactivitySegment: SpeakerSegment?
+
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,
         let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
@@ -102,6 +104,7 @@ extension AppState {
           updatedSeg.translations = speakerSegments[existingIdx].translations
         }
         speakerSegments[existingIdx] = updatedSeg
+        proactivitySegment = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
@@ -116,6 +119,7 @@ extension AppState {
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+          proactivitySegment = newSeg
 
         case .suppressIncoming:
           log(
@@ -125,7 +129,8 @@ extension AppState {
         case .replaceExisting(let existingSegmentId):
           guard let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == existingSegmentId }) else {
             appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
-            continue
+            proactivitySegment = newSeg
+            break
           }
 
           let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
@@ -135,6 +140,7 @@ extension AppState {
           var replacement = newSeg
           replacement.segmentId = existingSegmentId
           speakerSegments[existingIdx] = replacement
+          proactivitySegment = replacement
           segmentsToPersist.append(segmentWithID(segment, id: existingSegmentId))
           log(
             "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
@@ -142,6 +148,13 @@ extension AppState {
         }
       } else {
         appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+        proactivitySegment = newSeg
+      }
+
+      // Feed only the segment that survived local playback-echo dedup. Observing
+      // before that decision let Omi's own spoken response trigger proactivity.
+      if let proactivitySegment {
+        SpeechProactivityCoordinator.shared.observe(proactivitySegment.speechProactivitySlice)
       }
     }
 

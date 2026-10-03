@@ -252,6 +252,7 @@ extension AppState {
 
       isTranscribing = true
       recordingGeneration &+= 1
+      SpeechProactivityCoordinator.shared.reset()
       audioSource = effectiveSource
       currentTranscript = ""
       speakerSegments = []
@@ -920,6 +921,7 @@ extension AppState {
     // Even a redundant stop must invalidate in-flight rotations and the
     // settings restart — both abort on a `recordingGeneration` change.
     recordingGeneration &+= 1
+    SpeechProactivityCoordinator.shared.reset()
     // A second terminalization must not re-emit `Desktop Recording Stopped` —
     // the session that already owns the event cleared `isTranscribing`. The
     // user-facing error surface still clears: a "stop" on a session that
@@ -1110,6 +1112,7 @@ extension AppState {
     defer { conversationRotationInFlight = false }
     log("Transcription: Finishing conversation — reason=\(finalizationReason.rawValue)")
     recordingGeneration &+= 1
+    SpeechProactivityCoordinator.shared.reset()
     let rotationGeneration = recordingGeneration
 
     // Capture state before rotation; memory_created may arrive on the new WebSocket.
