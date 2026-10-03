@@ -12248,4 +12248,25 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Повторна обробка розмови…';
+
+  @override
+  String get conversationReprocessed => 'Розмову оновлено';
+
+  @override
+  String get loadingTranscript => 'Завантаження транскрипції…';
+
+  @override
+  String get transcriptLoadFailed => 'Не вдалося завантажити транскрипцію.';
+
+  @override
+  String get processingConversationProgress => 'Обробка розмови…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не вдалося обробити цю розмову.';
+
+  @override
+  String get waitForReprocessing => 'Зачекайте, доки завершиться повторна обробка.';
 }

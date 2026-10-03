@@ -12304,4 +12304,25 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Γίνεται επανεπεξεργασία της συνομιλίας…';
+
+  @override
+  String get conversationReprocessed => 'Η συνομιλία ενημερώθηκε';
+
+  @override
+  String get loadingTranscript => 'Φόρτωση απομαγνητοφώνησης…';
+
+  @override
+  String get transcriptLoadFailed => 'Δεν ήταν δυνατή η φόρτωση της απομαγνητοφώνησης.';
+
+  @override
+  String get processingConversationProgress => 'Επεξεργασία συνομιλίας…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Δεν ήταν δυνατή η επεξεργασία αυτής της συνομιλίας.';
+
+  @override
+  String get waitForReprocessing => 'Περιμένετε να ολοκληρωθεί η επανεπεξεργασία.';
 }

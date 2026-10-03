@@ -12222,4 +12222,25 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';
+
+  @override
+  String get conversationReprocessed => 'گفتگو به‌روز شد';
+
+  @override
+  String get loadingTranscript => 'در حال بارگیری متن…';
+
+  @override
+  String get transcriptLoadFailed => 'بارگیری متن ممکن نشد.';
+
+  @override
+  String get processingConversationProgress => 'در حال پردازش گفتگو…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'پردازش این گفتگو ممکن نشد.';
+
+  @override
+  String get waitForReprocessing => 'صبر کنید تا پردازش دوباره تمام شود.';
 }

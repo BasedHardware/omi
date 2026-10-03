@@ -12327,4 +12327,25 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationReprocessed => 'Na-update ang pag-uusap';
+
+  @override
+  String get loadingTranscript => 'Kumakarga ng transcript…';
+
+  @override
+  String get transcriptLoadFailed => 'Hindi ma-load ang transcript.';
+
+  @override
+  String get processingConversationProgress => 'Pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Hindi maproseso ang pag-uusap na ito.';
+
+  @override
+  String get waitForReprocessing => 'Hintaying matapos ang muling pagproseso.';
 }

@@ -12027,4 +12027,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => '会話を再処理しています…';
+
+  @override
+  String get conversationReprocessed => '会話を更新しました';
+
+  @override
+  String get loadingTranscript => '文字起こしを読み込んでいます…';
+
+  @override
+  String get transcriptLoadFailed => '文字起こしを読み込めませんでした。';
+
+  @override
+  String get processingConversationProgress => '会話を処理しています…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'この会話を処理できませんでした。';
+
+  @override
+  String get waitForReprocessing => '再処理が終わるまでお待ちください。';
 }

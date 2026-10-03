@@ -12260,4 +12260,25 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Ponowne przetwarzanie rozmowy…';
+
+  @override
+  String get conversationReprocessed => 'Rozmowa zaktualizowana';
+
+  @override
+  String get loadingTranscript => 'Wczytywanie transkrypcji…';
+
+  @override
+  String get transcriptLoadFailed => 'Nie udało się wczytać transkrypcji.';
+
+  @override
+  String get processingConversationProgress => 'Przetwarzanie rozmowy…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Nie udało się przetworzyć tej rozmowy.';
+
+  @override
+  String get waitForReprocessing => 'Poczekaj na zakończenie ponownego przetwarzania.';
 }

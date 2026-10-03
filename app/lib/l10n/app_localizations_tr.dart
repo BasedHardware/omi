@@ -12235,4 +12235,25 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
+
+  @override
+  String get conversationReprocessed => 'Konuşma güncellendi';
+
+  @override
+  String get loadingTranscript => 'Döküm yükleniyor…';
+
+  @override
+  String get transcriptLoadFailed => 'Döküm yüklenemedi.';
+
+  @override
+  String get processingConversationProgress => 'Konuşma işleniyor…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Bu konuşma işlenemedi.';
+
+  @override
+  String get waitForReprocessing => 'Yeniden işlemenin bitmesini bekleyin.';
 }

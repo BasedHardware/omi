@@ -12221,4 +12221,25 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
+
+  @override
+  String get conversationReprocessed => 'Vestlus on uuendatud';
+
+  @override
+  String get loadingTranscript => 'Transkriptsiooni laadimine…';
+
+  @override
+  String get transcriptLoadFailed => 'Transkriptsiooni ei õnnestunud laadida.';
+
+  @override
+  String get processingConversationProgress => 'Vestlust töödeldakse…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Seda vestlust ei õnnestunud töödelda.';
+
+  @override
+  String get waitForReprocessing => 'Oota, kuni uuesti töötlemine lõpeb.';
 }

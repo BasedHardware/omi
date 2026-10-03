@@ -12269,4 +12269,25 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'A beszélgetés újrafeldolgozása…';
+
+  @override
+  String get conversationReprocessed => 'A beszélgetés frissítve';
+
+  @override
+  String get loadingTranscript => 'Átirat betöltése…';
+
+  @override
+  String get transcriptLoadFailed => 'Nem sikerült betölteni az átiratot.';
+
+  @override
+  String get processingConversationProgress => 'A beszélgetés feldolgozása…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Ezt a beszélgetést nem sikerült feldolgozni.';
+
+  @override
+  String get waitForReprocessing => 'Várd meg, amíg az újrafeldolgozás befejeződik.';
 }

@@ -12155,4 +12155,25 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'กำลังประมวลผลการสนทนาอีกครั้ง…';
+
+  @override
+  String get conversationReprocessed => 'อัปเดตการสนทนาแล้ว';
+
+  @override
+  String get loadingTranscript => 'กำลังโหลดถอดความ…';
+
+  @override
+  String get transcriptLoadFailed => 'ไม่สามารถโหลดถอดความได้';
+
+  @override
+  String get processingConversationProgress => 'กำลังประมวลผลการสนทนา…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ไม่สามารถประมวลผลการสนทนานี้ได้';
+
+  @override
+  String get waitForReprocessing => 'รอให้การประมวลผลอีกครั้งเสร็จสิ้น';
 }

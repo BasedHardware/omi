@@ -21884,6 +21884,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Shown with a progress bar while the open conversation is reprocessed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocessing conversation…'**
+  String get reprocessingConversationProgress;
+
+  /// Toast after a reprocess finished and replaced the conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation updated'**
+  String get conversationReprocessed;
+
+  /// Transcript tab while the conversation's lines are being fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading transcript…'**
+  String get loadingTranscript;
+
+  /// Transcript tab when fetching the conversation's lines failed; shown above Try Again.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the transcript.'**
+  String get transcriptLoadFailed;
+
+  /// Shown while the server is still processing the conversation (transcript, summary).
+  ///
+  /// In en, this message translates to:
+  /// **'Processing conversation…'**
+  String get processingConversationProgress;
+
+  /// Transcript tab when the server marked the conversation as failed; shown above Try Again.
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation couldn\'t be processed.'**
+  String get conversationProcessingFailedMessage;
+
+  /// Toast when the reader tries to edit the transcript or a speaker while the conversation is being reprocessed.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait for reprocessing to finish.'**
+  String get waitForReprocessing;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

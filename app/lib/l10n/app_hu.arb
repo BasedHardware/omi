@@ -3878,5 +3878,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Az Omi legközelebb felismeri őt: {name}.} pending{Ez néhány másodpercig tart.} disabled{Kapcsold be a hangok mentését a Beállításokban, hogy az Omi felismerhesse őt: {name}.} other{Az Ominak több tiszta beszédre van szüksége tőle: {name}, és tovább próbálkozik.}}",
     "speakerLabelEarlierMatches": "Korábbi beszélgetések ezzel a hanggal: {count}",
     "speakerLabelText": "{part, select, likely{Valószínű} soundsLike{{name} hangjához hasonlít} notPerson{Nem {name}} carried{Továbbra is {name}. Átvéve az előző beszélgetésedből.} change{Módosítás} alsoTitle{Ő is {name}?} alsoBody{Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.} confirmed{Megerősítetted ezt a címkét} other{Áttekintés}}",
-    "speakerLabelTalkTime": "{duration} ebből a hangból"
+    "speakerLabelTalkTime": "{duration} ebből a hangból",
+    "reprocessingConversationProgress": "A beszélgetés újrafeldolgozása…",
+    "conversationReprocessed": "A beszélgetés frissítve",
+    "loadingTranscript": "Átirat betöltése…",
+    "transcriptLoadFailed": "Nem sikerült betölteni az átiratot.",
+    "processingConversationProgress": "A beszélgetés feldolgozása…",
+    "conversationProcessingFailedMessage": "Ezt a beszélgetést nem sikerült feldolgozni.",
+    "waitForReprocessing": "Várd meg, amíg az újrafeldolgozás befejeződik."
 }

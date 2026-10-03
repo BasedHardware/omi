@@ -12277,4 +12277,25 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Se reprocesează conversația…';
+
+  @override
+  String get conversationReprocessed => 'Conversație actualizată';
+
+  @override
+  String get loadingTranscript => 'Se încarcă transcrierea…';
+
+  @override
+  String get transcriptLoadFailed => 'Transcrierea nu a putut fi încărcată.';
+
+  @override
+  String get processingConversationProgress => 'Se procesează conversația…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Această conversație nu a putut fi procesată.';
+
+  @override
+  String get waitForReprocessing => 'Așteaptă finalizarea reprocesării.';
 }

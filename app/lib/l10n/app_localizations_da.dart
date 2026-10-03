@@ -12209,4 +12209,25 @@ class AppLocalizationsDa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Samtalen genbehandles…';
+
+  @override
+  String get conversationReprocessed => 'Samtalen er opdateret';
+
+  @override
+  String get loadingTranscript => 'Indlæser transskription…';
+
+  @override
+  String get transcriptLoadFailed => 'Transskriptionen kunne ikke indlæses.';
+
+  @override
+  String get processingConversationProgress => 'Behandler samtalen…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Samtalen kunne ikke behandles.';
+
+  @override
+  String get waitForReprocessing => 'Vent, til genbehandlingen er færdig.';
 }

@@ -12223,4 +12223,25 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Behandler samtalen på nytt…';
+
+  @override
+  String get conversationReprocessed => 'Samtalen er oppdatert';
+
+  @override
+  String get loadingTranscript => 'Laster transkripsjon…';
+
+  @override
+  String get transcriptLoadFailed => 'Kunne ikke laste transkripsjonen.';
+
+  @override
+  String get processingConversationProgress => 'Behandler samtalen…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Denne samtalen kunne ikke behandles.';
+
+  @override
+  String get waitForReprocessing => 'Vent til den nye behandlingen er ferdig.';
 }

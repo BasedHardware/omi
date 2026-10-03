@@ -12256,4 +12256,25 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Memproses semula perbualan…';
+
+  @override
+  String get conversationReprocessed => 'Perbualan dikemas kini';
+
+  @override
+  String get loadingTranscript => 'Memuatkan transkrip…';
+
+  @override
+  String get transcriptLoadFailed => 'Tidak dapat memuatkan transkrip.';
+
+  @override
+  String get processingConversationProgress => 'Memproses perbualan…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Perbualan ini tidak dapat diproses.';
+
+  @override
+  String get waitForReprocessing => 'Tunggu sehingga pemprosesan semula selesai.';
 }

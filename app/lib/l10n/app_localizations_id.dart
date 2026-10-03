@@ -12235,4 +12235,25 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Memproses ulang percakapan…';
+
+  @override
+  String get conversationReprocessed => 'Percakapan diperbarui';
+
+  @override
+  String get loadingTranscript => 'Memuat transkrip…';
+
+  @override
+  String get transcriptLoadFailed => 'Tidak dapat memuat transkrip.';
+
+  @override
+  String get processingConversationProgress => 'Memproses percakapan…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Percakapan ini tidak dapat diproses.';
+
+  @override
+  String get waitForReprocessing => 'Tunggu hingga pemrosesan ulang selesai.';
 }

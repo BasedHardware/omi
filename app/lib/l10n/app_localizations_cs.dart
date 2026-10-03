@@ -12222,4 +12222,25 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Konverzace se znovu zpracovává…';
+
+  @override
+  String get conversationReprocessed => 'Konverzace aktualizována';
+
+  @override
+  String get loadingTranscript => 'Načítání přepisu…';
+
+  @override
+  String get transcriptLoadFailed => 'Přepis se nepodařilo načíst.';
+
+  @override
+  String get processingConversationProgress => 'Konverzace se zpracovává…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tuto konverzaci se nepodařilo zpracovat.';
+
+  @override
+  String get waitForReprocessing => 'Počkejte na dokončení opětovného zpracování.';
 }

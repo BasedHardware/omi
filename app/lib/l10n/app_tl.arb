@@ -11339,5 +11339,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
     "speakerLabelEarlierMatches": "Mga naunang usapan na may ganitong boses: {count}",
     "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
-    "speakerLabelTalkTime": "{duration} ng boses na ito"
+    "speakerLabelTalkTime": "{duration} ng boses na ito",
+    "reprocessingConversationProgress": "Muling pinoproseso ang pag-uusap…",
+    "conversationReprocessed": "Na-update ang pag-uusap",
+    "loadingTranscript": "Kumakarga ng transcript…",
+    "transcriptLoadFailed": "Hindi ma-load ang transcript.",
+    "processingConversationProgress": "Pinoproseso ang pag-uusap…",
+    "conversationProcessingFailedMessage": "Hindi maproseso ang pag-uusap na ito.",
+    "waitForReprocessing": "Hintaying matapos ang muling pagproseso."
 }

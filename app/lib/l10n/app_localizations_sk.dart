@@ -12216,4 +12216,25 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
+
+  @override
+  String get conversationReprocessed => 'Konverzácia aktualizovaná';
+
+  @override
+  String get loadingTranscript => 'Načítava sa prepis…';
+
+  @override
+  String get transcriptLoadFailed => 'Prepis sa nepodarilo načítať.';
+
+  @override
+  String get processingConversationProgress => 'Konverzácia sa spracúva…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Túto konverzáciu sa nepodarilo spracovať.';
+
+  @override
+  String get waitForReprocessing => 'Počkajte na dokončenie opätovného spracovania.';
 }

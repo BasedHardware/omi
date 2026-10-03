@@ -12305,4 +12305,25 @@ class AppLocalizationsTa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationReprocessed => 'உரையாடல் புதுப்பிக்கப்பட்டது';
+
+  @override
+  String get loadingTranscript => 'டிரான்ஸ்கிரிப்ட் ஏற்றப்படுகிறது…';
+
+  @override
+  String get transcriptLoadFailed => 'டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get processingConversationProgress => 'உரையாடல் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'இந்த உரையாடலைச் செயலாக்க முடியவில்லை.';
+
+  @override
+  String get waitForReprocessing => 'மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.';
 }

@@ -12325,4 +12325,25 @@ class AppLocalizationsFr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Retraitement de la conversation…';
+
+  @override
+  String get conversationReprocessed => 'Conversation mise à jour';
+
+  @override
+  String get loadingTranscript => 'Chargement de la transcription…';
+
+  @override
+  String get transcriptLoadFailed => 'Impossible de charger la transcription.';
+
+  @override
+  String get processingConversationProgress => 'Traitement de la conversation…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Impossible de traiter cette conversation.';
+
+  @override
+  String get waitForReprocessing => 'Attendez la fin du retraitement.';
 }

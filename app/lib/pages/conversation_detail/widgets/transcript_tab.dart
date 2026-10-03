@@ -75,8 +75,56 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     return false;
   }
 
+  /// Transcript and speaker edits wait while the conversation is being reprocessed (the reprocess replaces the
+  /// lines they would change); say so instead of ignoring the tap.
+  bool _readyForTranscriptEdit(ConversationDetailProvider provider) {
+    if (!provider.loadingReprocessConversation) return _requireConnection();
+    OmiFeedback.info(context, context.l10n.waitForReprocessing);
+    return false;
+  }
+
+  /// What an empty Transcript tab says while its lines may still come: loading, couldn't load
+  /// (Try Again), or being processed. Null when the conversation really has no transcript, or
+  /// carries imported text instead, which the caller shows.
+  Widget? _pendingTranscriptState(
+    BuildContext context,
+    ConversationDetailProvider provider,
+    ServerConversation conversation,
+  ) {
+    if ((conversation.externalIntegration?.text ?? '').trim().isNotEmpty) return null;
+    final l10n = context.l10n;
+    final Widget state;
+    if (provider.detailLoad == ConversationDetailLoad.loading) {
+      state = OmiLoadingState(key: const Key('transcript_loading'), label: l10n.loadingTranscript);
+    } else if (provider.detailLoad == ConversationDetailLoad.failed) {
+      state = OmiErrorState(
+        key: const Key('transcript_load_failed'),
+        message: l10n.transcriptLoadFailed,
+        onRetry: () => provider.refreshConversation(trackLoad: true),
+      );
+    } else if (conversation.status == ConversationStatus.processing ||
+        conversation.status == ConversationStatus.in_progress ||
+        provider.isReprocessingOpenConversation) {
+      state = OmiLoadingState(key: const Key('transcript_processing'), label: l10n.processingConversationProgress);
+    } else if (conversation.status == ConversationStatus.failed) {
+      state = OmiErrorState(
+        key: const Key('transcript_processing_failed'),
+        message: l10n.conversationProcessingFailedMessage,
+        onRetry: provider.loadingReprocessConversation ? null : () => provider.reprocessConversation(),
+      );
+    } else {
+      state = OmiEmptyState(
+        key: const Key('transcript_empty'),
+        icon: Icons.notes,
+        title: l10n.noTranscriptAvailable,
+        message: l10n.noTranscriptMessage,
+      );
+    }
+    return Padding(padding: const EdgeInsets.only(top: OmiSpacing.xxl), child: state);
+  }
+
   void _editSegmentText(ConversationDetailProvider provider, int segmentIndex) {
-    if (!_requireConnection()) return;
+    if (!_readyForTranscriptEdit(provider)) return;
     final segments = provider.conversation.transcriptSegments;
     final segment = segments[segmentIndex];
     final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
@@ -107,7 +155,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     String segmentId,
     int speakerId,
   ) {
-    if (!_requireConnection()) return;
+    if (!_readyForTranscriptEdit(provider)) return;
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
@@ -134,7 +182,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   /// "Yes" under a line Omi named by voice: the user's answer for every line from that voice.
   void _confirmSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) {
     final personId = segment.personId;
-    if (personId == null || !_requireConnection()) return;
+    if (personId == null || !_readyForTranscriptEdit(provider)) return;
     final name = context.read<PeopleProvider>().people.where((p) => p.id == personId).firstOrNull?.name ?? '';
     OmiHaptics.light();
     _startSpeakerAssignment(provider, provider.conversation.id, segment.speakerId, personId, name, [segment.id], true);
@@ -142,7 +190,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 
   /// "Not <name>": clears that label from the voice and tells Omi not to match it that way again.
   Future<void> _rejectSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) async {
-    if (!_requireConnection()) return;
+    if (!_readyForTranscriptEdit(provider)) return;
     OmiHaptics.light();
     final rejected = await provider.rejectSpeakerLabel(segment, SpeakerRejection.notPerson);
     if (!mounted) return;
@@ -267,6 +315,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             final photos = conversation.photos;
 
             if (segments.isEmpty && photos.isEmpty) {
+              final pending = _pendingTranscriptState(context, provider, conversation);
+              if (pending != null) return pending;
               return Padding(
                 padding: const EdgeInsets.only(top: OmiSpacing.xxl),
                 child: ExpandableTextWidget(

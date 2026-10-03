@@ -12263,4 +12263,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Повторная обработка разговора…';
+
+  @override
+  String get conversationReprocessed => 'Разговор обновлён';
+
+  @override
+  String get loadingTranscript => 'Загрузка расшифровки…';
+
+  @override
+  String get transcriptLoadFailed => 'Не удалось загрузить расшифровку.';
+
+  @override
+  String get processingConversationProgress => 'Обработка разговора…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не удалось обработать этот разговор.';
+
+  @override
+  String get waitForReprocessing => 'Дождитесь окончания повторной обработки.';
 }

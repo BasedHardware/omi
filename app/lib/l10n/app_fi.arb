@@ -3782,5 +3782,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
     "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}",
     "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
-    "speakerLabelTalkTime": "{duration} tästä äänestä"
+    "speakerLabelTalkTime": "{duration} tästä äänestä",
+    "reprocessingConversationProgress": "Keskustelua käsitellään uudelleen…",
+    "conversationReprocessed": "Keskustelu päivitetty",
+    "loadingTranscript": "Ladataan litterointia…",
+    "transcriptLoadFailed": "Litterointia ei voitu ladata.",
+    "processingConversationProgress": "Keskustelua käsitellään…",
+    "conversationProcessingFailedMessage": "Tätä keskustelua ei voitu käsitellä.",
+    "waitForReprocessing": "Odota, kunnes uudelleenkäsittely on valmis."
 }

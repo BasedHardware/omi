@@ -12216,4 +12216,25 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Đang xử lý lại cuộc trò chuyện…';
+
+  @override
+  String get conversationReprocessed => 'Đã cập nhật cuộc trò chuyện';
+
+  @override
+  String get loadingTranscript => 'Đang tải bản ghi…';
+
+  @override
+  String get transcriptLoadFailed => 'Không thể tải bản ghi.';
+
+  @override
+  String get processingConversationProgress => 'Đang xử lý cuộc trò chuyện…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Không thể xử lý cuộc trò chuyện này.';
+
+  @override
+  String get waitForReprocessing => 'Hãy đợi quá trình xử lý lại hoàn tất.';
 }

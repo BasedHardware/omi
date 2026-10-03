@@ -14575,5 +14575,33 @@
                 "type": "String"
             }
         }
+    },
+    "reprocessingConversationProgress": "Reprocessing conversation…",
+    "@reprocessingConversationProgress": {
+        "description": "Shown with a progress bar while the open conversation is reprocessed."
+    },
+    "conversationReprocessed": "Conversation updated",
+    "@conversationReprocessed": {
+        "description": "Toast after a reprocess finished and replaced the conversation."
+    },
+    "loadingTranscript": "Loading transcript…",
+    "@loadingTranscript": {
+        "description": "Transcript tab while the conversation's lines are being fetched."
+    },
+    "transcriptLoadFailed": "Couldn't load the transcript.",
+    "@transcriptLoadFailed": {
+        "description": "Transcript tab when fetching the conversation's lines failed; shown above Try Again."
+    },
+    "processingConversationProgress": "Processing conversation…",
+    "@processingConversationProgress": {
+        "description": "Shown while the server is still processing the conversation (transcript, summary)."
+    },
+    "conversationProcessingFailedMessage": "This conversation couldn't be processed.",
+    "@conversationProcessingFailedMessage": {
+        "description": "Transcript tab when the server marked the conversation as failed; shown above Try Again."
+    },
+    "waitForReprocessing": "Wait for reprocessing to finish.",
+    "@waitForReprocessing": {
+        "description": "Toast when the reader tries to edit the transcript or a speaker while the conversation is being reprocessed."
     }
 }

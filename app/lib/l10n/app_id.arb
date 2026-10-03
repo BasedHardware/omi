@@ -3817,5 +3817,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengenali {name} lain kali.} pending{Ini butuh beberapa detik.} disabled{Aktifkan penyimpanan suara di Pengaturan agar Omi dapat mengenali {name}.} other{Omi butuh lebih banyak ucapan jelas dari {name} dan akan terus mencoba.}}",
     "speakerLabelEarlierMatches": "Percakapan sebelumnya dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Terdengar seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dilanjutkan dari percakapan terakhir Anda.} change{Ubah} alsoTitle{Apakah ini juga {name}?} alsoBody{Omi menemukan suara yang sama di percakapan sebelumnya.} confirmed{Anda telah mengonfirmasi label ini} other{Tinjau}}",
-    "speakerLabelTalkTime": "{duration} dari suara ini"
+    "speakerLabelTalkTime": "{duration} dari suara ini",
+    "reprocessingConversationProgress": "Memproses ulang percakapan…",
+    "conversationReprocessed": "Percakapan diperbarui",
+    "loadingTranscript": "Memuat transkrip…",
+    "transcriptLoadFailed": "Tidak dapat memuat transkrip.",
+    "processingConversationProgress": "Memproses percakapan…",
+    "conversationProcessingFailedMessage": "Percakapan ini tidak dapat diproses.",
+    "waitForReprocessing": "Tunggu hingga pemrosesan ulang selesai."
 }

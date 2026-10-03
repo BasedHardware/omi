@@ -12227,4 +12227,25 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
+
+  @override
+  String get conversationReprocessed => 'Keskustelu päivitetty';
+
+  @override
+  String get loadingTranscript => 'Ladataan litterointia…';
+
+  @override
+  String get transcriptLoadFailed => 'Litterointia ei voitu ladata.';
+
+  @override
+  String get processingConversationProgress => 'Keskustelua käsitellään…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tätä keskustelua ei voitu käsitellä.';
+
+  @override
+  String get waitForReprocessing => 'Odota, kunnes uudelleenkäsittely on valmis.';
 }

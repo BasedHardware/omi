@@ -3782,5 +3782,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi känner igen {name} nästa gång.} pending{Det tar några sekunder.} disabled{Aktivera sparande av röster i Inställningar så att Omi kan känna igen {name}.} other{Omi behöver mer tydligt tal från {name} och fortsätter försöka.}}",
     "speakerLabelEarlierMatches": "Tidigare konversationer med den här rösten: {count}",
     "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
-    "speakerLabelTalkTime": "{duration} av den här rösten"
+    "speakerLabelTalkTime": "{duration} av den här rösten",
+    "reprocessingConversationProgress": "Bearbetar samtalet igen…",
+    "conversationReprocessed": "Samtalet har uppdaterats",
+    "loadingTranscript": "Läser in transkription…",
+    "transcriptLoadFailed": "Det gick inte att läsa in transkriptionen.",
+    "processingConversationProgress": "Bearbetar samtalet…",
+    "conversationProcessingFailedMessage": "Det gick inte att bearbeta samtalet.",
+    "waitForReprocessing": "Vänta tills bearbetningen är klar."
 }

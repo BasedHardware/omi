@@ -12261,4 +12261,25 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationReprocessed => 'ಸಂಭಾಷಣೆಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get loadingTranscript => 'ಪ್ರತಿಲೇಖನ ಲೋಡ್ ಆಗುತ್ತಿದೆ…';
+
+  @override
+  String get transcriptLoadFailed => 'ಪ್ರತಿಲೇಖನವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get processingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ಈ ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get waitForReprocessing => 'ಮರುಸಂಸ್ಕರಣೆ ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ.';
 }

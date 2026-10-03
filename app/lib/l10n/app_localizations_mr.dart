@@ -12232,4 +12232,25 @@ class AppLocalizationsMr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'या आवाजाचे $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'संभाषण पुन्हा प्रक्रिया होत आहे…';
+
+  @override
+  String get conversationReprocessed => 'संभाषण अपडेट झाले';
+
+  @override
+  String get loadingTranscript => 'उतारा लोड होत आहे…';
+
+  @override
+  String get transcriptLoadFailed => 'उतारा लोड करता आला नाही.';
+
+  @override
+  String get processingConversationProgress => 'संभाषणावर प्रक्रिया होत आहे…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'या संभाषणावर प्रक्रिया करता आली नाही.';
+
+  @override
+  String get waitForReprocessing => 'पुन्हा प्रक्रिया पूर्ण होईपर्यंत थांबा.';
 }

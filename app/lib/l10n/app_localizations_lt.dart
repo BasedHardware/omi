@@ -12243,4 +12243,25 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Pokalbis apdorojamas iš naujo…';
+
+  @override
+  String get conversationReprocessed => 'Pokalbis atnaujintas';
+
+  @override
+  String get loadingTranscript => 'Įkeliamas nuorašas…';
+
+  @override
+  String get transcriptLoadFailed => 'Nepavyko įkelti nuorašo.';
+
+  @override
+  String get processingConversationProgress => 'Pokalbis apdorojamas…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Šio pokalbio nepavyko apdoroti.';
+
+  @override
+  String get waitForReprocessing => 'Palaukite, kol bus baigtas pakartotinis apdorojimas.';
 }

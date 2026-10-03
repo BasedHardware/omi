@@ -12222,4 +12222,25 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';
+
+  @override
+  String get conversationReprocessed => 'কথোপকথন আপডেট হয়েছে';
+
+  @override
+  String get loadingTranscript => 'ট্রান্সক্রিপ্ট লোড হচ্ছে…';
+
+  @override
+  String get transcriptLoadFailed => 'ট্রান্সক্রিপ্ট লোড করা যায়নি।';
+
+  @override
+  String get processingConversationProgress => 'কথোপকথন প্রক্রিয়া করা হচ্ছে…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'এই কথোপকথনটি প্রক্রিয়া করা যায়নি।';
+
+  @override
+  String get waitForReprocessing => 'পুনরায় প্রক্রিয়াকরণ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।';
 }

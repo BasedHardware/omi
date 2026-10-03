@@ -12287,4 +12287,25 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Разговорот повторно се обработува…';
+
+  @override
+  String get conversationReprocessed => 'Разговорот е ажуриран';
+
+  @override
+  String get loadingTranscript => 'Се вчитува транскриптот…';
+
+  @override
+  String get transcriptLoadFailed => 'Транскриптот не можеше да се вчита.';
+
+  @override
+  String get processingConversationProgress => 'Разговорот се обработува…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Овој разговор не можеше да се обработи.';
+
+  @override
+  String get waitForReprocessing => 'Почекајте да заврши повторната обработка.';
 }

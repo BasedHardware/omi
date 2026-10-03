@@ -12031,4 +12031,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => '대화를 다시 처리하는 중…';
+
+  @override
+  String get conversationReprocessed => '대화가 업데이트됨';
+
+  @override
+  String get loadingTranscript => '스크립트를 불러오는 중…';
+
+  @override
+  String get transcriptLoadFailed => '스크립트를 불러올 수 없습니다.';
+
+  @override
+  String get processingConversationProgress => '대화를 처리하는 중…';
+
+  @override
+  String get conversationProcessingFailedMessage => '이 대화를 처리할 수 없습니다.';
+
+  @override
+  String get waitForReprocessing => '다시 처리가 끝날 때까지 기다려 주세요.';
 }

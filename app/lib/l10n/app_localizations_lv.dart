@@ -12249,4 +12249,25 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Saruna tiek apstrādāta atkārtoti…';
+
+  @override
+  String get conversationReprocessed => 'Saruna atjaunināta';
+
+  @override
+  String get loadingTranscript => 'Ielādē transkripciju…';
+
+  @override
+  String get transcriptLoadFailed => 'Neizdevās ielādēt transkripciju.';
+
+  @override
+  String get processingConversationProgress => 'Saruna tiek apstrādāta…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Šo sarunu neizdevās apstrādāt.';
+
+  @override
+  String get waitForReprocessing => 'Uzgaidiet, līdz atkārtotā apstrāde beigsies.';
 }

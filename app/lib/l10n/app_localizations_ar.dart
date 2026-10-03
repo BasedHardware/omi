@@ -12150,4 +12150,25 @@ class AppLocalizationsAr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';
+
+  @override
+  String get conversationReprocessed => 'تم تحديث المحادثة';
+
+  @override
+  String get loadingTranscript => 'جارٍ تحميل النص…';
+
+  @override
+  String get transcriptLoadFailed => 'تعذّر تحميل النص.';
+
+  @override
+  String get processingConversationProgress => 'جارٍ معالجة المحادثة…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'تعذّرت معالجة هذه المحادثة.';
+
+  @override
+  String get waitForReprocessing => 'انتظر حتى تنتهي إعادة المعالجة.';
 }

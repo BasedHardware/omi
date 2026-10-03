@@ -11339,5 +11339,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
     "speakerLabelEarlierMatches": "ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: {count}",
     "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
-    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}"
+    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
+    "reprocessingConversationProgress": "ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…",
+    "conversationReprocessed": "ಸಂಭಾಷಣೆಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ",
+    "loadingTranscript": "ಪ್ರತಿಲೇಖನ ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
+    "transcriptLoadFailed": "ಪ್ರತಿಲೇಖನವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.",
+    "processingConversationProgress": "ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…",
+    "conversationProcessingFailedMessage": "ಈ ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗಲಿಲ್ಲ.",
+    "waitForReprocessing": "ಮರುಸಂಸ್ಕರಣೆ ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ."
 }

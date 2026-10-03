@@ -12268,4 +12268,25 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';
+
+  @override
+  String get conversationReprocessed => 'Разговорът е обновен';
+
+  @override
+  String get loadingTranscript => 'Транскрипцията се зарежда…';
+
+  @override
+  String get transcriptLoadFailed => 'Транскрипцията не можа да се зареди.';
+
+  @override
+  String get processingConversationProgress => 'Разговорът се обработва…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Този разговор не можа да бъде обработен.';
+
+  @override
+  String get waitForReprocessing => 'Изчакайте повторната обработка да приключи.';
 }

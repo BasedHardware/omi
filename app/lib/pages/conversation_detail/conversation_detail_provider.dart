@@ -33,6 +33,10 @@ typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
     {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
+/// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
+/// a tab with nothing to show yet uses this to say "loading" or "couldn't load" instead of blank.
+enum ConversationDetailLoad { idle, loading, failed }
+
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   static const Duration _speakerSummaryQuietPeriod = Duration(seconds: 4);
@@ -454,6 +458,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
+
+  /// The last [refreshConversation] that the page asked to track ([trackLoad]).
+  ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
+
+  /// Whether the open conversation is being reprocessed right now.
+  bool get isReprocessingOpenConversation =>
+      loadingReprocessConversation &&
+      reprocessConversationId.isNotEmpty &&
+      reprocessConversationId == conversationOrNull?.id;
+
+  /// The app of the last reprocess that failed, so "Try Again" repeats the same request.
+  String? lastFailedReprocessAppId;
   App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -566,6 +582,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final success = await updateConversationSegmentText(conversation.id, segment.id, newText.trim());
     if (!success && !_isDisposed) {
       conversation.transcriptSegments[segmentIndex].text = oldText;
+      notifyError('SEGMENT_EDIT_FAILED');
       notifyListeners();
     }
   }
@@ -602,6 +619,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
             editedStructured.sections.isEmpty) {
           editedStructured.overview = oldOverview;
           editedStructured.sections = oldSections;
+          notifyError('SUMMARY_EDIT_FAILED');
           notifyListeners();
         }
       }
@@ -626,6 +644,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           identical(editedConversation.appResults[index], editedResult) &&
           editedResult.content == trimmed) {
         editedResult.content = oldContent;
+        notifyError('SUMMARY_EDIT_FAILED');
         notifyListeners();
       }
     }
@@ -822,8 +841,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final generation = _speakerEditGeneration;
     final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
+    lastFailedReprocessAppId = null;
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
+    notifyInfo('REPROCESS_STARTED');
     try {
       var updatedConversation = await _reprocess(target.id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt);
       if (_isDisposed) return false;
@@ -831,6 +852,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
+        lastFailedReprocessAppId = appId;
         notifyError('REPROCESS_FAILED');
         notifyListeners();
         return false;
@@ -870,6 +892,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
         },
       );
+      lastFailedReprocessAppId = appId;
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -1042,17 +1065,28 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (_cachedConversation?.id != conversation.id) {
       _finishSpeakerLabelingSession();
     }
+    if (_cachedConversationId != conversation.id) detailLoad = ConversationDetailLoad.idle;
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
     _endedSpeakerLabelingSessionIds.remove(conversation.id);
     notifyListeners();
   }
 
-  Future<void> refreshConversation() async {
+  /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
+  /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
+  /// silent and never overwrite a tracked failure with "loading".
+  Future<void> refreshConversation({bool trackLoad = false}) async {
+    final openedId = conversationOrNull?.id;
+    if (openedId == null) return;
+    if (trackLoad) {
+      detailLoad = ConversationDetailLoad.loading;
+      notifyListeners();
+    }
+    var loaded = false;
     try {
-      final openedId = conversation.id;
       final updatedConversation = await _fetchConversation(openedId);
       if (_isDisposed) return;
+      loaded = updatedConversation != null;
       if (updatedConversation != null && conversationOrNull?.id == openedId) {
         if (updatedConversation.id != openedId) {
           if (!_syncConversationId.hasMatch(openedId)) return;
@@ -1071,6 +1105,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
+    }
+    if (_isDisposed) return;
+    if (trackLoad && conversationOrNull?.id != null) {
+      detailLoad = loaded ? ConversationDetailLoad.idle : ConversationDetailLoad.failed;
+      notifyListeners();
+    } else if (loaded && detailLoad == ConversationDetailLoad.failed) {
+      detailLoad = ConversationDetailLoad.idle;
+      notifyListeners();
     }
   }
 

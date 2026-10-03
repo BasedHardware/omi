@@ -3782,5 +3782,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconeixerà {name} la propera vegada.} pending{Això triga uns segons.} disabled{Activa el desament de veus a Configuració perquè Omi pugui reconèixer {name}.} other{Omi necessita més parla clara de {name} i continuarà intentant-ho.}}",
     "speakerLabelEarlierMatches": "Converses anteriors amb aquesta veu: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
-    "speakerLabelTalkTime": "{duration} d’aquesta veu"
+    "speakerLabelTalkTime": "{duration} d’aquesta veu",
+    "reprocessingConversationProgress": "S'està tornant a processar la conversa…",
+    "conversationReprocessed": "Conversa actualitzada",
+    "loadingTranscript": "S'està carregant la transcripció…",
+    "transcriptLoadFailed": "No s'ha pogut carregar la transcripció.",
+    "processingConversationProgress": "S'està processant la conversa…",
+    "conversationProcessingFailedMessage": "No s'ha pogut processar aquesta conversa.",
+    "waitForReprocessing": "Espera que acabi el reprocessament."
 }

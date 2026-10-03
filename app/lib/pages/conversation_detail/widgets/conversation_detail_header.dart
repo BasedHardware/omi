@@ -286,17 +286,33 @@ Future<void> showConversationFolderSheet(
     context,
     conversationId: conversation.id,
     currentFolderId: currentFolderId,
+    move: false,
   );
-  // Update locally at once for instant feedback.
-  if (newFolderId != null && context.mounted) {
-    context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
-    PlatformManager.instance.analytics.conversationMovedToFolder(
-      conversationId: conversation.id,
-      fromFolderId: currentFolderId,
-      toFolderId: newFolderId,
-      source: source,
+  if (newFolderId == null || !context.mounted) return;
+  // Update locally at once for instant feedback; a failed move puts the old folder back and says so.
+  final detailProvider = context.read<ConversationDetailProvider>();
+  detailProvider.updateFolderIdLocally(newFolderId);
+  final moved = await folderProvider.moveConversation(conversation.id, newFolderId);
+  if (!context.mounted) return;
+  if (!moved) {
+    if (detailProvider.conversationOrNull?.id == conversation.id &&
+        detailProvider.conversationOrNull?.folderId == newFolderId) {
+      detailProvider.updateFolderIdLocally(currentFolderId);
+    }
+    OmiFeedback.error(
+      context,
+      context.l10n.failedToUpdateFolder,
+      actionLabel: context.l10n.tryAgain,
+      onAction: () => showConversationFolderSheet(context, conversation, source: source),
     );
+    return;
   }
+  PlatformManager.instance.analytics.conversationMovedToFolder(
+    conversationId: conversation.id,
+    fromFolderId: currentFolderId,
+    toFolderId: newFolderId,
+    source: source,
+  );
 }
 
 /// Private or Shared, opened from the conversation's ⋯ menu.
@@ -315,6 +331,7 @@ abstract final class ConversationVisibilitySheet {
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
       if (!success) {
         provider.updateVisibilityLocally(previousVisibility);
+        if (context.mounted) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
         return;
       }
       PlatformManager.instance.analytics.conversationVisibilityChanged(

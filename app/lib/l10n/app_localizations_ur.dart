@@ -12234,4 +12234,25 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';
+
+  @override
+  String get conversationReprocessed => 'گفتگو اپ ڈیٹ ہو گئی';
+
+  @override
+  String get loadingTranscript => 'ٹرانسکرپٹ لوڈ ہو رہی ہے…';
+
+  @override
+  String get transcriptLoadFailed => 'ٹرانسکرپٹ لوڈ نہیں ہو سکی۔';
+
+  @override
+  String get processingConversationProgress => 'گفتگو پروسیس ہو رہی ہے…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'اس گفتگو کو پروسیس نہیں کیا جا سکا۔';
+
+  @override
+  String get waitForReprocessing => 'دوبارہ پروسیسنگ مکمل ہونے کا انتظار کریں۔';
 }

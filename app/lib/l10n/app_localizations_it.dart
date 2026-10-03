@@ -12292,4 +12292,25 @@ class AppLocalizationsIt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Rielaborazione della conversazione…';
+
+  @override
+  String get conversationReprocessed => 'Conversazione aggiornata';
+
+  @override
+  String get loadingTranscript => 'Caricamento della trascrizione…';
+
+  @override
+  String get transcriptLoadFailed => 'Impossibile caricare la trascrizione.';
+
+  @override
+  String get processingConversationProgress => 'Elaborazione della conversazione…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Impossibile elaborare questa conversazione.';
+
+  @override
+  String get waitForReprocessing => 'Attendi il termine della rielaborazione.';
 }

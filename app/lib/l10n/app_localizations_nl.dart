@@ -12262,4 +12262,25 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';
+
+  @override
+  String get conversationReprocessed => 'Gesprek bijgewerkt';
+
+  @override
+  String get loadingTranscript => 'Transcript laden…';
+
+  @override
+  String get transcriptLoadFailed => 'Kan het transcript niet laden.';
+
+  @override
+  String get processingConversationProgress => 'Gesprek wordt verwerkt…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Dit gesprek kon niet worden verwerkt.';
+
+  @override
+  String get waitForReprocessing => 'Wacht tot het opnieuw verwerken klaar is.';
 }

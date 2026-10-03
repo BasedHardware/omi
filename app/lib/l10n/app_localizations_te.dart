@@ -12274,4 +12274,25 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'సంభాషణను మళ్లీ ప్రాసెస్ చేస్తోంది…';
+
+  @override
+  String get conversationReprocessed => 'సంభాషణ నవీకరించబడింది';
+
+  @override
+  String get loadingTranscript => 'ట్రాన్స్‌క్రిప్ట్ లోడ్ అవుతోంది…';
+
+  @override
+  String get transcriptLoadFailed => 'ట్రాన్స్‌క్రిప్ట్‌ను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get processingConversationProgress => 'సంభాషణను ప్రాసెస్ చేస్తోంది…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ఈ సంభాషణను ప్రాసెస్ చేయలేకపోయాం.';
+
+  @override
+  String get waitForReprocessing => 'మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి.';
 }

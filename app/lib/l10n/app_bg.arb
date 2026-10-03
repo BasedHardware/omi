@@ -3782,5 +3782,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ще разпознае {name} следващия път.} pending{Това отнема няколко секунди.} disabled{Включете запазването на гласове в Настройки, за да може Omi да разпознава {name}.} other{Omi се нуждае от повече ясна реч от {name} и ще продължи да опитва.}}",
     "speakerLabelEarlierMatches": "Предишни разговори с този глас: {count}",
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
-    "speakerLabelTalkTime": "{duration} от този глас"
+    "speakerLabelTalkTime": "{duration} от този глас",
+    "reprocessingConversationProgress": "Разговорът се обработва повторно…",
+    "conversationReprocessed": "Разговорът е обновен",
+    "loadingTranscript": "Транскрипцията се зарежда…",
+    "transcriptLoadFailed": "Транскрипцията не можа да се зареди.",
+    "processingConversationProgress": "Разговорът се обработва…",
+    "conversationProcessingFailedMessage": "Този разговор не можа да бъде обработен.",
+    "waitForReprocessing": "Изчакайте повторната обработка да приключи."
 }

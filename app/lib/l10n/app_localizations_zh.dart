@@ -12006,4 +12006,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => '正在重新处理对话…';
+
+  @override
+  String get conversationReprocessed => '对话已更新';
+
+  @override
+  String get loadingTranscript => '正在加载转录…';
+
+  @override
+  String get transcriptLoadFailed => '无法加载转录。';
+
+  @override
+  String get processingConversationProgress => '正在处理对话…';
+
+  @override
+  String get conversationProcessingFailedMessage => '无法处理此对话。';
+
+  @override
+  String get waitForReprocessing => '请等待重新处理完成。';
 }

@@ -3782,5 +3782,12 @@
     "speakerLabelVoiceDetail": "{state, select, learned{次回から Omi が{name}さんを認識します。} pending{数秒かかります。} disabled{Omi が{name}さんを認識できるように、設定で声の保存をオンにしてください。} other{Omi は{name}さんのはっきりした音声がもっと必要です。引き続き試みます。}}",
     "speakerLabelEarlierMatches": "この声の過去の会話数：{count}",
     "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
-    "speakerLabelTalkTime": "この声の{duration}"
+    "speakerLabelTalkTime": "この声の{duration}",
+    "reprocessingConversationProgress": "会話を再処理しています…",
+    "conversationReprocessed": "会話を更新しました",
+    "loadingTranscript": "文字起こしを読み込んでいます…",
+    "transcriptLoadFailed": "文字起こしを読み込めませんでした。",
+    "processingConversationProgress": "会話を処理しています…",
+    "conversationProcessingFailedMessage": "この会話を処理できませんでした。",
+    "waitForReprocessing": "再処理が終わるまでお待ちください。"
 }

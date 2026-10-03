@@ -19,6 +19,7 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
@@ -43,6 +44,7 @@ import 'widgets/audio_download_progress_sheet.dart';
 import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
 import 'widgets/capture_recordings.dart';
+import 'widgets/conversation_activity_strip.dart';
 import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
@@ -269,7 +271,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
       await provider.initConversation();
       _recordResultViewed(provider, identityEpoch);
-      if (provider.conversation.appResults.isEmpty) {
+      if (_awaitsTranscript(provider.conversation)) {
+        // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
+        // full conversation and let the Transcript tab say it is loading, or offer Try Again.
+        unawaited(provider.refreshConversation(trackLoad: true).then((_) {
+          if (!mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+          _selectInitialTabIfNeeded(provider.conversation);
+          _recordResultViewed(provider, identityEpoch);
+        }));
+      } else if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
           // The initial list payload is enough to render the detail page. Fill
@@ -296,6 +306,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     });
   }
+
+  /// A conversation whose lines should exist but are not in the copy the page opened with.
+  static bool _awaitsTranscript(ServerConversation conversation) =>
+      conversation.transcriptSegments.isEmpty &&
+      conversation.photos.isEmpty &&
+      conversation.externalIntegration == null &&
+      !conversation.isLocked &&
+      !conversation.discarded;
 
   void _recordResultViewed(ConversationDetailProvider provider, int identityEpoch) {
     if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
@@ -524,9 +542,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (!provider.loadingReprocessConversation) {
-          await provider.reprocessConversation();
+        if (provider.loadingReprocessConversation) break;
+        if (!context.read<ConnectivityProvider>().isConnected) {
+          ConnectivityProvider.showNoInternetDialog(context);
+          break;
         }
+        await provider.reprocessConversation();
         break;
       case 'link_event':
         _handleLinkEvent(context, provider);
@@ -710,6 +731,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to toggle starred status: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToUpdateStarred);
     } finally {
       if (mounted) setState(() => _isTogglingStarred = false);
     }
@@ -758,6 +780,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to share conversation: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
     } finally {
       if (mounted && _isSharing) setState(() => _isSharing = false);
     }
@@ -863,7 +886,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         PullDownMenuItem(
           title: l10n.reprocessConversation,
           iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap: () => _handleMenuSelection(context, 'reprocess', provider),
+          onTap:
+              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
         ),
       if (showDeveloperTools) ...[
         PullDownMenuItem(
@@ -1004,9 +1028,28 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
-        if (error == 'REPROCESS_FAILED') OmiFeedback.error(context, context.l10n.errorProcessingConversation);
+        switch (error) {
+          case 'REPROCESS_FAILED':
+            final appId = detailProvider.lastFailedReprocessAppId;
+            OmiFeedback.error(
+              context,
+              context.l10n.errorProcessingConversation,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () => detailProvider.reprocessConversation(appId: appId),
+            );
+          case 'SEGMENT_EDIT_FAILED':
+          case 'SUMMARY_EDIT_FAILED':
+            OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+        }
       },
-      showInfo: (info) {},
+      showInfo: (info) {
+        switch (info) {
+          case 'REPROCESS_STARTED':
+            OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
+          case 'REPROCESS_SUCCESS':
+            OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
+        }
+      },
       child: Scaffold(
         key: scaffoldKey,
         extendBody: true,
@@ -1036,6 +1079,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                     controller: _controller!,
                     onTap: (_) => _hasExplicitTabSelection = true,
                   ),
+                  const ConversationActivityStrip(),
                   Expanded(
                     // Each tab owns the page's side margin, so a section can scroll edge to edge
                     // (the Summary tab's screenshot strip) instead of clipping at the margin.

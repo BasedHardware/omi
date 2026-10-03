@@ -12205,4 +12205,25 @@ class AppLocalizationsHi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
+
+  @override
+  String get reprocessingConversationProgress => 'बातचीत फिर से प्रोसेस हो रही है…';
+
+  @override
+  String get conversationReprocessed => 'बातचीत अपडेट हो गई';
+
+  @override
+  String get loadingTranscript => 'ट्रांसक्रिप्ट लोड हो रहा है…';
+
+  @override
+  String get transcriptLoadFailed => 'ट्रांसक्रिप्ट लोड नहीं हो सका।';
+
+  @override
+  String get processingConversationProgress => 'बातचीत प्रोसेस हो रही है…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'इस बातचीत को प्रोसेस नहीं किया जा सका।';
+
+  @override
+  String get waitForReprocessing => 'दोबारा प्रोसेसिंग पूरी होने तक प्रतीक्षा करें।';
 }
