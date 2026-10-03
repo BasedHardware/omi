@@ -4,6 +4,7 @@ Pydantic data models for pCloud Omi backup plugin.
 
 from __future__ import annotations
 
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -26,7 +27,7 @@ class PCloudUserSettings(BaseModel):
         default=True,
         description="Whether to export raw conversation audio",
     )
-    location_id: int = Field(
+    location_id: Literal[1, 2] = Field(
         default=1,
         description="pCloud data center: 1 for United States, 2 for Europe",
     )
