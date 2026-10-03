@@ -165,6 +165,25 @@ class SyncTransferForegroundService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
+    // Android 14+ limits shortService to about 3 minutes and Android 15+ limits dataSync to about
+    // 6 hours a day. When a limit is reached the system calls onTimeout and, if the service is still
+    // running a few seconds later, crashes the process with ForegroundServiceDidNotStopInTimeException.
+    // Stop here; the Dart transfer continues without the keep-alive, as it does when a start is refused.
+    override fun onTimeout(startId: Int) {
+        stopForTimeout()
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopForTimeout()
+    }
+
+    private fun stopForTimeout() {
+        Log.w(TAG, "Foreground service time limit reached; stopping sync keep-alive")
+        releaseWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onDestroy() {
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)

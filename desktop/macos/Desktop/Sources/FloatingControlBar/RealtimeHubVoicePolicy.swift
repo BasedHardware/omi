@@ -1,14 +1,14 @@
-/// One authority for which spoken voice each realtime provider is pinned to.
+/// One authority for which spoken voice each realtime provider session opens with.
 ///
-/// Both lanes deliberately use deep, calm male voices — Gemini's Charon and
-/// the gpt-realtime family's cedar (its counterpart) — so a provider failover
-/// changes the engine, not who Omi sounds like. Session builders read from
-/// here; a per-call-site string is how the lanes drifted apart (marin).
+/// The Gemini lane follows the shared assistant-voice selection (defaulting to
+/// Charon); OpenAI stays pinned to the gpt-realtime family's cedar. Session
+/// builders read from here; a per-call-site string is how the lanes drifted
+/// apart (marin).
 enum RealtimeHubVoicePolicy {
-  static func voiceName(for provider: RealtimeHubProvider) -> String {
+  static func voiceName(for provider: RealtimeHubProvider, assistantVoiceID: String = "Charon") -> String {
     switch provider {
     case .openai: return "cedar"
-    case .gemini: return "Charon"
+    case .gemini: return assistantVoiceID
     }
   }
 }

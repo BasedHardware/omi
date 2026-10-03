@@ -1029,6 +1029,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     NotificationCenter.default.addObserver(
       self, selector: #selector(voiceLanguagesChanged),
       name: .voiceLanguagesDidChange, object: nil)
+    observeAssistantVoiceChanges()
     if refreshEntitlement == nil {
       refreshEntitlement = {
         _ = await SubscriptionEntitlementService.shared.snapshot()

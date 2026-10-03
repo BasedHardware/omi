@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.content.ContextWrapper
 import android.content.ComponentName
+import android.content.pm.ServiceInfo
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,6 +68,36 @@ class SyncTransferForegroundServiceTest {
         // that ID is stale. The companion emulator probe verifies its real result.
         controller.destroy()
         assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+    }
+
+    @Test
+    fun `dataSync time limit stops the service and releases the wake lock`() {
+        val context = RuntimeEnvironment.getApplication()
+        assertTrue(SyncTransferForegroundService.start(context))
+        val start = shadowOf(context).getNextStartedService()
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+        service.onStartCommand(start, 0, 1)
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+
+        service.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertTrue(shadowOf(service).isForegroundStopped)
+        assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+        controller.destroy()
+    }
+
+    @Test
+    fun `shortService time limit stops the service`() {
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+
+        service.onTimeout(1)
+
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertTrue(shadowOf(service).isForegroundStopped)
+        controller.destroy()
     }
 
     @Test
