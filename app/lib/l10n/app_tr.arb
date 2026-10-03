@@ -3817,5 +3817,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi bir dahaki sefere {name} kişisini tanıyacak.} pending{Bu birkaç saniye sürer.} disabled{Omi {name} kişisini tanıyabilsin diye Ayarlar’da ses kaydetmeyi açın.} other{Omi, {name} kişisinin daha net konuşmasına ihtiyaç duyuyor ve denemeye devam edecek.}}",
     "speakerLabelEarlierMatches": "Bu sesle önceki sohbetler: {count}",
     "speakerLabelText": "{part, select, likely{Muhtemel} soundsLike{{name} gibi duyuluyor} notPerson{{name} değil} carried{Hâlâ {name}. Son sohbetinizden aktarıldı.} change{Değiştir} alsoTitle{Bu da {name} mi?} alsoBody{Omi aynı sesi önceki sohbetlerde buldu.} confirmed{Bu etiketi onayladınız} other{İncele}}",
-    "speakerLabelTalkTime": "Bu sesten {duration}"
+    "speakerLabelTalkTime": "Bu sesten {duration}",
+    "unnamedSpeakerLabel": "Konuşmacı",
+    "unresolvedSpeakersNotice": "Konuşmacılar kayıtlar arasında ayrıştırılamadı.",
+    "unresolvedSpeakersTitle": "Konuşmacı Etiketleri Hakkında",
+    "unresolvedSpeakersMessage": "Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.",
+    "nameSpeakerTitle": "Konuşmacıyı Adlandır"
 }

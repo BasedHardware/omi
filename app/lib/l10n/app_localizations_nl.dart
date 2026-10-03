@@ -12262,4 +12262,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Spreker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Sprekers zijn niet gescheiden over opnames heen.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Over sprekerlabels';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kon de andere stemmen niet uit elkaar houden over opnames heen. Tik op een sprekerlabel om te benoemen wie er spreekt.';
+
+  @override
+  String get nameSpeakerTitle => 'Spreker benoemen';
 }

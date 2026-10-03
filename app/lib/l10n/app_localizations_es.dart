@@ -12259,4 +12259,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de esta voz';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Hablante';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Las voces no están separadas entre grabaciones.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Acerca de las etiquetas de hablante';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi no pudo distinguir las demás voces entre las grabaciones. Toca una etiqueta de hablante para nombrar a quién habla.';
+
+  @override
+  String get nameSpeakerTitle => 'Nombrar hablante';
 }

@@ -12221,4 +12221,20 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Kõneleja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Kõnelejaid ei ole salvestuste vahel eraldatud.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Kõnelejate siltidest';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeta kõneleja';
 }

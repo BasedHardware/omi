@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
     "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
     "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
-    "speakerLabelTalkTime": "{duration} từ giọng nói này"
+    "speakerLabelTalkTime": "{duration} từ giọng nói này",
+    "unnamedSpeakerLabel": "Người nói",
+    "unresolvedSpeakersNotice": "Người nói không được tách ra giữa các bản ghi.",
+    "unresolvedSpeakersTitle": "Giới thiệu về nhãn người nói",
+    "unresolvedSpeakersMessage": "Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.",
+    "nameSpeakerTitle": "Đặt tên người nói"
 }

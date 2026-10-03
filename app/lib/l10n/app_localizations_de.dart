@@ -12320,4 +12320,20 @@ class AppLocalizationsDe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Sprecher';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Sprecher werden nicht aufnahmeübergreifend getrennt.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Über Sprecher-Bezeichnungen';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi konnte die anderen Stimmen aufnahmeübergreifend nicht unterscheiden. Tippe auf eine Sprecher-Bezeichnung, um zu benennen, wer spricht.';
+
+  @override
+  String get nameSpeakerTitle => 'Sprecher benennen';
 }

@@ -12027,4 +12027,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get unnamedSpeakerLabel => '話者';
+
+  @override
+  String get unresolvedSpeakersNotice => '話者は録音間で分離されていません。';
+
+  @override
+  String get unresolvedSpeakersTitle => '話者ラベルについて';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omiは録音間で他の声を区別できませんでした。話者ラベルをタップして、話している人の名前を付けてください。';
+
+  @override
+  String get nameSpeakerTitle => '話者に名前を付ける';
 }

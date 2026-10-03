@@ -12232,4 +12232,20 @@ class AppLocalizationsMr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'या आवाजाचे $duration';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'वक्ता';
+
+  @override
+  String get unresolvedSpeakersNotice => 'रेकॉर्डिंगमध्ये वक्ते वेगळे केलेले नाहीत.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'स्पीकर लेबलबद्दल';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi रेकॉर्डिंगमध्ये इतर आवाज वेगळे करू शकला नाही. कोण बोलत आहे ते नाव देण्यासाठी स्पीकर लेबलवर टॅप करा.';
+
+  @override
+  String get nameSpeakerTitle => 'वक्त्याला नाव द्या';
 }

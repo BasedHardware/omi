@@ -12223,4 +12223,20 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Taler';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Talerne er ikke adskilt på tvers av opptak.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Om taleretiketter';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi klarte ikke å skille de andre stemmene på tvers av opptakene. Trykk på en taleretikett for å navngi hvem som snakker.';
+
+  @override
+  String get nameSpeakerTitle => 'Navngi taler';
 }

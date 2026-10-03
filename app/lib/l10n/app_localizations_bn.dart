@@ -12222,4 +12222,20 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'স্পিকার';
+
+  @override
+  String get unresolvedSpeakersNotice => 'রেকর্ডিং জুড়ে স্পিকাররা আলাদা করা হয়নি।';
+
+  @override
+  String get unresolvedSpeakersTitle => 'স্পিকার লেবেল সম্পর্কে';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'রেকর্ডিং জুড়ে Omi অন্য কণ্ঠস্বরগুলো আলাদা করতে পারেনি। কে কথা বলছে তা নাম দিতে স্পিকার লেবেলে ট্যাপ করুন।';
+
+  @override
+  String get nameSpeakerTitle => 'স্পিকারের নাম দিন';
 }

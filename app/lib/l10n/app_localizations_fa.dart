@@ -12222,4 +12222,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'سخنران';
+
+  @override
+  String get unresolvedSpeakersNotice => 'گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'درباره برچسب‌های گوینده';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.';
+
+  @override
+  String get nameSpeakerTitle => 'نام‌گذاری گوینده';
 }

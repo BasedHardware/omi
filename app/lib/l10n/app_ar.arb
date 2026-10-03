@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{سيتعرّف Omi على {name} في المرة القادمة.} pending{يستغرق هذا بضع ثوانٍ.} disabled{فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على {name}.} other{يحتاج Omi إلى مزيد من الكلام الواضح من {name} وسيواصل المحاولة.}}",
     "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
-    "speakerLabelTalkTime": "{duration} من هذا الصوت"
+    "speakerLabelTalkTime": "{duration} من هذا الصوت",
+    "unnamedSpeakerLabel": "المتحدث",
+    "unresolvedSpeakersNotice": "لا يتم الفصل بين المتحدثين عبر التسجيلات.",
+    "unresolvedSpeakersTitle": "حول تسميات المتحدثين",
+    "unresolvedSpeakersMessage": "تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.",
+    "nameSpeakerTitle": "تسمية المتحدث"
 }

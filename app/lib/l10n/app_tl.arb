@@ -11339,5 +11339,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
     "speakerLabelEarlierMatches": "Mga naunang usapan na may ganitong boses: {count}",
     "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
-    "speakerLabelTalkTime": "{duration} ng boses na ito"
+    "speakerLabelTalkTime": "{duration} ng boses na ito",
+    "unnamedSpeakerLabel": "Speaker",
+    "unresolvedSpeakersNotice": "Hindi pinaghihiwalay ang mga speaker sa iba't ibang recording.",
+    "unresolvedSpeakersTitle": "Tungkol sa mga Label ng Speaker",
+    "unresolvedSpeakersMessage": "Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.",
+    "nameSpeakerTitle": "Pangalanan ang Speaker"
 }

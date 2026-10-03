@@ -12031,4 +12031,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get unnamedSpeakerLabel => '화자';
+
+  @override
+  String get unresolvedSpeakersNotice => '녹음 전반에 걸쳐 화자가 구분되지 않았습니다.';
+
+  @override
+  String get unresolvedSpeakersTitle => '화자 레이블 정보';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omi가 녹음 전반에서 다른 목소리를 구분하지 못했습니다. 말하는 사람의 이름을 지정하려면 화자 레이블을 탭하세요.';
+
+  @override
+  String get nameSpeakerTitle => '화자 이름 지정';
 }

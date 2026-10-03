@@ -12327,4 +12327,20 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Speaker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Hindi pinaghihiwalay ang mga speaker sa iba\'t ibang recording.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tungkol sa mga Label ng Speaker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.';
+
+  @override
+  String get nameSpeakerTitle => 'Pangalanan ang Speaker';
 }

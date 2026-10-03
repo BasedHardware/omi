@@ -12150,4 +12150,20 @@ class AppLocalizationsAr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'المتحدث';
+
+  @override
+  String get unresolvedSpeakersNotice => 'لا يتم الفصل بين المتحدثين عبر التسجيلات.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'حول تسميات المتحدثين';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.';
+
+  @override
+  String get nameSpeakerTitle => 'تسمية المتحدث';
 }

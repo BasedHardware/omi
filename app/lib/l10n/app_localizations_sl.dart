@@ -12254,4 +12254,20 @@ class AppLocalizationsSl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'Govorec';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Govorci niso ločeni med posnetki.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O oznakah govorcev';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.';
+
+  @override
+  String get nameSpeakerTitle => 'Poimenujte govorca';
 }

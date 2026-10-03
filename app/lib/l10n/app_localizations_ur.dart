@@ -12234,4 +12234,20 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get unnamedSpeakerLabel => 'مقرر';
+
+  @override
+  String get unresolvedSpeakersNotice => 'مقررین ریکارڈنگز میں الگ نہیں کیے گئے۔';
+
+  @override
+  String get unresolvedSpeakersTitle => 'مقرر لیبلز کے بارے میں';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ریکارڈنگز میں دوسری آوازوں کو الگ نہیں کر سکا۔ کون بات کر رہا ہے اسے نام دینے کے لیے اسپیکر لیبل پر ٹیپ کریں۔';
+
+  @override
+  String get nameSpeakerTitle => 'مقرر کا نام رکھیں';
 }
