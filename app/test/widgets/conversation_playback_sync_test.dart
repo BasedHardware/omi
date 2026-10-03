@@ -19,7 +19,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart' show conversationLocalDayKey;
-import 'package:omi/ui/ui.dart' show OmiColors;
+import 'package:omi/ui/ui.dart' show OmiColors, OmiPalette, OmiRadius;
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -313,6 +313,21 @@ Future<void> _removeDetail(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(milliseconds: 200));
 }
+
+Finder _currentFill(Finder scope) => find.ancestor(
+      of: scope,
+      matching: find.byWidgetPredicate((widget) =>
+          widget is DecoratedBox &&
+          widget.decoration is BoxDecoration &&
+          (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
+          (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll),
+    );
+
+ServerConversation _snapshotConversation({required double audioSeconds, required double transcriptEnd}) =>
+    _conversation(
+      segments: [for (var end = 10.0; end <= transcriptEnd; end += 10) _segment('s${end.toInt()}', end - 10, end)],
+      audioFiles: [_file('a', duration: audioSeconds, startsAfterSeconds: 0)],
+    );
 
 void main() {
   setUpAll(() async {
@@ -1021,6 +1036,387 @@ void main() {
     expect(find.byKey(const ValueKey('transcript_current_seg3')), findsNothing);
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
     expect(painter.progress, 0, reason: 'the waveform must not imply speech is aligned to the heard audio');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a same-id refresh expands the rendered remaining time before Play', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    fetch(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+    }
+
+    final harness = await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 10),
+      fake: fake,
+      fetch: fetch,
+    );
+    expect(find.text('-0:10'), findsOneWidget);
+
+    await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 120, transcriptEnd: 120),
+      fetch: fetch,
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+
+    expect(find.text('-2:00'), findsOneWidget,
+        reason: 'the refreshed snapshot re-derives the cached duration for the same id');
+    expect(fetches, 0, reason: 'metadata alone never fetches playback URLs');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a same-id refresh moves the waveform midpoint to the new wall end', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    fetch(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+    }
+
+    final harness = await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 10),
+      fake: fake,
+      fetch: fetch,
+    );
+    await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 120, transcriptEnd: 120),
+      fetch: fetch,
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+
+    final box = tester.getRect(find.byKey(const Key('detail_audio_waveform')));
+    await tester.tapAt(Offset(box.left + box.width / 2, box.center.dy));
+    await tester.pump();
+
+    expect(harness.controller.wallPosition.value, closeTo(60, 0.5),
+        reason: 'the tap lands on the refreshed wall timeline');
+    expect(harness.controller.pendingWallSeconds, closeTo(60, 0.5));
+    final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
+    expect(painter.progress, moreOrLessEquals(0.5, epsilon: 0.01));
+    expect(fetches, 0, reason: 'a pre-Play scrub still answers without loading audio');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('consecutive owner lines carry a migrating current fill', (tester) async {
+    final previousPalette = OmiColors.active;
+    addTearDown(() => OmiColors.active = previousPalette);
+    for (final palette in [OmiPalette.dark, OmiPalette.light]) {
+      OmiColors.active = palette;
+      final fake = _FakeAudioDevice();
+      final segments = [
+        _segment('s0', 0, 8, isUser: true, speakerId: 1),
+        _segment('s1', 10, 18, isUser: true, speakerId: 1),
+        _segment('s2', 20, 28, speakerId: 2),
+      ];
+      await _pumpDetail(
+        tester,
+        _conversation(segments: segments),
+        fake: fake,
+        fetch: (_) async =>
+            ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)])),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Play'));
+      await _flushPlatform(tester);
+      fake.emit(playing: true, positionSec: 5);
+      await _flushPlatform(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
+      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsOneWidget,
+          reason:
+              'the playing owner line paints its own background (${palette == OmiPalette.dark ? 'dark' : 'light'})');
+      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsNothing,
+          reason: 'the adjacent inactive owner line keeps no fill');
+      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s2'))), findsNothing);
+
+      fake.emit(playing: true, positionSec: 15);
+      await _flushPlatform(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
+      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsOneWidget,
+          reason: 'the fill migrates to the newly current owner line');
+      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsNothing,
+          reason: 'the previous owner line clears its fill');
+      expect(
+        find.ancestor(
+          of: find.byKey(const ValueKey('transcript_current_s1')),
+          matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.selected == true),
+        ),
+        findsOneWidget,
+        reason: 'the selected announcement survives the fill',
+      );
+      await _removeDetail(tester);
+    }
+  });
+
+  testWidgets('consecutive non-owner lines carry a migrating current fill', (tester) async {
+    final fake = _FakeAudioDevice();
+    final segments = [
+      _segment('s0', 0, 8, speakerId: 2),
+      _segment('s1', 10, 18, speakerId: 2),
+      _segment('s2', 20, 28, isUser: true, speakerId: 1),
+    ];
+    await _pumpDetail(
+      tester,
+      _conversation(segments: segments),
+      fake: fake,
+      fetch: (_) async =>
+          ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)])),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    fake.emit(playing: true, positionSec: 5);
+    await _flushPlatform(tester);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
+    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsOneWidget,
+        reason: 'the playing non-owner line paints its own background');
+    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsNothing,
+        reason: 'the adjacent inactive line keeps no fill');
+
+    fake.emit(playing: true, positionSec: 15);
+    await _flushPlatform(tester);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
+    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsOneWidget,
+        reason: 'the fill migrates between same-speaker non-owner lines');
+    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsNothing);
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a same-id audio source change unloads; the next Play resolves anew and resumes', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    fetch10(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 10)]));
+    }
+
+    fetch120(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+    }
+
+    final harness = await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 10),
+      fake: fake,
+      fetch: fetch10,
+    );
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    fake.emit(playing: true, positionSec: 4);
+    await _flushPlatform(tester);
+    expect(harness.controller.isPlaying, isTrue);
+
+    await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 120, transcriptEnd: 120),
+      fetch: fetch120,
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(harness.controller.isLoaded, isFalse, reason: 'the plan built on old sources is discarded');
+    expect(harness.controller.isPlaying, isFalse);
+    expect(find.bySemanticsLabel('Play'), findsOneWidget, reason: 'no automatic resume on a source change');
+    expect(fake.calls.where((c) => c == 'load'), hasLength(1));
+    expect(fetches, 1);
+
+    fake.calls.clear();
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    await _flushPlatform(tester);
+
+    expect(fetches, 2, reason: 'Play re-resolves the new sources');
+    expect(fake.calls.where((c) => c == 'load'), hasLength(1));
+    expect(_seekArtifacts(fake.calls), contains(closeTo(4, 0.01)),
+        reason: 'the preserved wall point resumes through the new mapping');
+    expect(fake.calls.last, 'play');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a transcript-only refresh keeps the loaded player and extends the wall end', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    fetch(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 10)]));
+    }
+
+    final harness = await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 10),
+      fake: fake,
+      fetch: fetch,
+    );
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    fake.emit(playing: true, positionSec: 4);
+    await _flushPlatform(tester);
+    fake.calls.clear();
+
+    await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 120),
+      fetch: fetch,
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+
+    expect(harness.controller.isLoaded, isTrue);
+    expect(harness.controller.isPlaying, isTrue);
+    expect(fake.calls, isEmpty, reason: 'a transcript refresh issues no native load/pause/seek');
+    expect(fetches, 1);
+
+    final box = tester.getRect(find.byKey(const Key('detail_audio_waveform')));
+    await tester.tapAt(Offset(box.left + box.width / 2, box.center.dy));
+    await _flushPlatform(tester);
+    expect(fake.calls.where((c) => c == 'load' || c == 'pause' || c == 'play'), isEmpty,
+        reason: 'a scrub seeks but never reloads or restarts playback');
+    expect(_seekArtifacts(fake.calls), contains(closeTo(10, 0.01)),
+        reason: 'midpoint of the refreshed 120 s wall snaps to the span end — the stale 10 s wall would seek 5');
+    final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
+    expect(painter.progress, moreOrLessEquals(10 / 120, epsilon: 0.01),
+        reason: 'the snapped playhead paints on the refreshed 120 s wall');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a value-equivalent audio refresh preserves the loaded partial playlist plan', (tester) async {
+    final fake = _FakeAudioDevice();
+    final segments = [
+      _segment('seg0', 0, 8),
+      _segment('seg1', 30, 38),
+      _segment('seg2', 360, 368),
+      _segment('seg3', 390, 398),
+    ];
+    urls() => ApiSuccess(AudioUrlsResponse(files: [
+          _url('a', 'cached', duration: 60),
+          _url('b', 'unavailable', duration: 60),
+        ]));
+    final harness = await _pumpDetail(
+      tester,
+      _conversation(
+        segments: segments,
+        audioFiles: [
+          _file('a', duration: 60, startsAfterSeconds: 0),
+          _file('b', duration: 60, startsAfterSeconds: 360),
+        ],
+      ),
+      fake: fake,
+      fetch: (_) async => urls(),
+    );
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    fake.emit(playing: true, positionSec: 30);
+    await _flushPlatform(tester);
+    await tester.pump();
+
+    expect(find.text('-0:30'), findsOneWidget);
+    fake.calls.clear();
+
+    await _pumpDetail(
+      tester,
+      _conversation(
+        segments: List.of(segments),
+        audioFiles: [
+          _file('a', duration: 60, startsAfterSeconds: 0),
+          _file('b', duration: 60, startsAfterSeconds: 360),
+        ],
+      ),
+      fetch: (_) async => urls(),
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+
+    expect(harness.controller.isLoaded, isTrue, reason: 'identical sources never invalidate the player');
+    expect(harness.controller.isPlaying, isTrue);
+    expect(find.text('-0:30'), findsOneWidget,
+        reason: 'the adopted plan duration and part offsets are not clobbered by metadata');
+    expect(fake.calls.where((c) => c == 'load' || c == 'pause' || c == 'seek'), isEmpty);
+    await _removeDetail(tester);
+  });
+
+  testWidgets('an in-flight load for superseded sources is rejected', (tester) async {
+    final fake = _FakeAudioDevice();
+    final release = Completer<ApiResult<AudioUrlsResponse>>();
+    var fetches = 0;
+    final harness = await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 10, transcriptEnd: 10),
+      fake: fake,
+      fetch: (_) {
+        fetches++;
+        return release.future;
+      },
+    );
+
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await tester.pump();
+    expect(fetches, 1);
+
+    await _pumpDetail(
+      tester,
+      _snapshotConversation(audioSeconds: 120, transcriptEnd: 120),
+      fetch: (_) async {
+        fetches++;
+        return ApiSuccess(
+            _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+      },
+      controllerParam: harness.controller,
+    );
+    await tester.pump();
+
+    release.complete(
+        ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 10)])));
+    await _flushPlatform(tester);
+
+    expect(fake.calls.where((c) => c == 'load'), isEmpty,
+        reason: 'the stale answer never loads a player for superseded sources');
+    expect(harness.controller.isLoaded, isFalse);
+    expect(find.bySemanticsLabel('Play'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Play'));
+    await _flushPlatform(tester);
+    await _flushPlatform(tester);
+    expect(fetches, 2);
+    expect(fake.calls.where((c) => c == 'load'), hasLength(1));
+    expect(fake.calls.last, 'play');
+    await _removeDetail(tester);
+  });
+
+  testWidgets('an in-place audio list mutation is detected on refresh', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    fetch(id) async {
+      fetches++;
+      return ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+    }
+
+    final files = [_file('a', duration: 10, startsAfterSeconds: 0)];
+    final conversation = _conversation(segments: [_segment('s0', 0, 10)], audioFiles: files);
+    final harness = await _pumpDetail(tester, conversation, fake: fake, fetch: fetch);
+    expect(find.text('-0:10'), findsOneWidget);
+
+    files.add(_file('b', duration: 110, startsAfterSeconds: 10));
+    await _pumpDetail(tester, conversation, fetch: fetch, controllerParam: harness.controller);
+    await tester.pump();
+
+    expect(find.text('-2:00'), findsOneWidget, reason: 'mutating the list in place must still read as a new snapshot');
+    expect(fetches, 0);
     await _removeDetail(tester);
   });
 }

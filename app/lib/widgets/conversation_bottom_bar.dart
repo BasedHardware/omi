@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -139,6 +140,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   List<(double, double)> _missingRanges = const [];
   bool _hasUnplaceableMissing = false;
 
+  AudioUrlsResponse? _resolvedUrls;
+
+  Object? _audioSourceSnapshot;
+
+  static const _sourceEquality = DeepCollectionEquality();
+
   /// Latest combined artifact position in seconds; the waveform, remaining
   /// time and wall playhead read it without rebuilding on every tick.
   final ValueNotifier<double> _artifactPosition = ValueNotifier(0);
@@ -167,6 +174,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   @override
   void initState() {
     super.initState();
+    _audioSourceSnapshot = _audioSourceFingerprint();
     _calculateTotalDuration();
     widget.playbackController?.attachSeekHandler(_seekWallHandler);
     // Provide the seek function to parent widget
@@ -181,9 +189,68 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       widget.playbackController?.attachSeekHandler(_seekWallHandler);
     }
     if (widget.conversation?.id != oldWidget.conversation?.id) {
+      _audioSourceSnapshot = _audioSourceFingerprint();
       _teardownPlayer(newConversation: true);
       _calculateTotalDuration();
+      return;
     }
+    final snapshot = _audioSourceFingerprint();
+    final sourceChanged = !_sourceEquality.equals(snapshot, _audioSourceSnapshot);
+    _audioSourceSnapshot = snapshot;
+    if (sourceChanged) {
+      _invalidateAudioSource();
+    } else {
+      _refreshWaveformMetadata();
+    }
+  }
+
+  List<Object?> _audioSourceFingerprint() {
+    final conversation = widget.conversation;
+    if (conversation == null) return const [];
+    final stamp = conversation.conversationAudio;
+    return [
+      (conversation.startedAt ?? conversation.createdAt).millisecondsSinceEpoch,
+      for (final file in _getSortedAudioFiles())
+        [
+          file.id,
+          file.provider,
+          file.startedAt?.millisecondsSinceEpoch,
+          file.duration,
+          List<double>.of(file.chunkTimestamps),
+        ],
+      if (stamp != null)
+        [
+          stamp.duration,
+          stamp.capturedDuration,
+          for (final span in stamp.spans) (span.fileId, span.wallOffset, span.artifactOffset, span.len),
+        ],
+    ];
+  }
+
+  void _invalidateAudioSource() {
+    _teardownPlayer(report: false, newConversation: true);
+    _calculateTotalDuration();
+    final controller = widget.playbackController;
+    if (controller == null) return;
+    final generation = _loadGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _loadGeneration) controller.playerDetached();
+    });
+  }
+
+  void _refreshWaveformMetadata() {
+    if (!_isAudioInitialized) {
+      _calculateTotalDuration();
+      return;
+    }
+    final metadata = _conversationMetadata(widget.conversation);
+    final resolvedWallEnd = _timelineMapper?.wallDuration ?? _totalDuration.inMilliseconds / 1000;
+    final wallEnd = math.max(metadata.wallEnd, resolvedWallEnd);
+    if (wallEnd == _wallEndSeconds) return;
+    _wallEndSeconds = wallEnd;
+    final urls = _resolvedUrls;
+    final conversation = widget.conversation;
+    if (urls != null && conversation != null) _updateMissingRanges(urls, conversation);
   }
 
   @override
@@ -229,10 +296,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     _timelineMapper = null;
     _singleArtifact = false;
     _artifactPosition.value = 0;
+    _resolvedUrls = null;
     if (newConversation) {
       _failure = null;
       _missingRanges = [];
       _hasUnplaceableMissing = false;
+      _readyParts = 0;
+      _totalParts = 0;
     }
     if (report) {
       widget.playbackController?.playerDetached();
@@ -242,13 +312,20 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// The length shown before playback starts, from the conversation alone. Replaced by the plan's
   /// length once the URLs resolve.
   void _calculateTotalDuration() {
-    if (widget.conversation == null) return;
-    _trackStartOffsets = [];
-    final conversation = widget.conversation!;
+    final metadata = _conversationMetadata(widget.conversation);
+    _trackStartOffsets = metadata.offsets;
+    _totalDuration = metadata.total;
+    _wallEndSeconds = metadata.wallEnd;
+  }
+
+  ({double wallEnd, Duration total, List<Duration> offsets}) _conversationMetadata(ServerConversation? conversation) {
+    final offsets = <Duration>[];
+    if (conversation == null) return (wallEnd: 0, total: Duration.zero, offsets: offsets);
     final segments = conversation.transcriptSegments;
     var wallEnd = segments.isEmpty ? 0.0 : segments.map((segment) => segment.end).reduce(math.max);
     final conversationStart = conversation.startedAt ?? conversation.createdAt;
-    for (final file in _getSortedAudioFiles()) {
+    final sortedFiles = ConversationPlaybackPlan.sortedFiles(conversation.audioFiles);
+    for (final file in sortedFiles) {
       final startedAt = file.startedAt;
       if (startedAt != null) {
         final fileWallEnd = startedAt.difference(conversationStart).inMilliseconds / 1000 + file.duration;
@@ -261,19 +338,20 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       // (the MP3 has inter-part gaps and lead-in silence collapsed out), so the
       // scrubber matches what the user can hear. Transcript-segment taps still
       // map their wall timestamp to the MP3 position via the spans manifest.
-      _totalDuration = Duration(milliseconds: (stamp.capturedDuration * 1000).toInt());
       final mappedEnd = AudioTimelineMapper(stamp.spans).wallDuration;
       if (mappedEnd > wallEnd) wallEnd = mappedEnd;
-      _wallEndSeconds = wallEnd;
-      return;
+      return (
+        wallEnd: wallEnd,
+        total: Duration(milliseconds: (stamp.capturedDuration * 1000).toInt()),
+        offsets: offsets
+      );
     }
     double totalSeconds = 0;
-    for (final audioFile in _getSortedAudioFiles()) {
-      _trackStartOffsets.add(Duration(milliseconds: (totalSeconds * 1000).toInt()));
+    for (final audioFile in sortedFiles) {
+      offsets.add(Duration(milliseconds: (totalSeconds * 1000).toInt()));
       totalSeconds += audioFile.duration;
     }
-    _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
-    _wallEndSeconds = wallEnd;
+    return (wallEnd: wallEnd, total: Duration(milliseconds: (totalSeconds * 1000).toInt()), offsets: offsets);
   }
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
@@ -557,6 +635,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final resolvedWallEnd = plan.mapper?.wallDuration ?? plan.duration.inMilliseconds / 1000;
     if (resolvedWallEnd > _wallEndSeconds) _wallEndSeconds = resolvedWallEnd;
     _isAudioInitialized = true;
+    _resolvedUrls = urls;
     // Only now, with the mapper adopted, do collapsed gaps have a wall range.
     _updateMissingRanges(urls, conversation);
     _attachPlayerListeners(player);

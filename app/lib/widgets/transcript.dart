@@ -1316,7 +1316,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (isCurrent) {
       line = Semantics(
         selected: true,
-        child: KeyedSubtree(key: ValueKey('transcript_current_${data.id}'), child: line),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          child: KeyedSubtree(key: ValueKey('transcript_current_${data.id}'), child: line),
+        ),
       );
     }
     return Container(
