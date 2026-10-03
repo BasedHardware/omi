@@ -922,6 +922,16 @@ _add(
     )
 )
 _add(
+    CoveredByEntry(
+        'database.dev_api_key._get_api_key_auth_result',
+        covered_by=(
+            'database.dev_api_key.get_api_key_auth_result',
+            'database.dev_api_key.get_user_and_scopes_by_api_key',
+        ),
+        reason='hashed-key lookup shared by the public auth entry points; the revocation fence retries through it',
+    )
+)
+_add(
     DriverEntry(
         'database.dev_api_key.get_user_id_by_api_key',
         base={'api_key': _DEV_KEY},
@@ -1348,6 +1358,14 @@ _add(
     DriverEntry(
         'database.mcp_api_key.get_user_id_by_api_key',
         base={'api_key': _MCP_KEY},
+        patchers=(_stub('database.redis_db.read_cached_mcp_api_key_auth_context', _CACHE_MISS),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.mcp_api_key._get_api_key_auth_result',
+        base={'hashed_key': 'a' * 64},
+        domains={'cache_available': [True, False]},
         patchers=(_stub('database.redis_db.read_cached_mcp_api_key_auth_context', _CACHE_MISS),),
     )
 )

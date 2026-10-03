@@ -212,6 +212,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Dev API. Read limits are intentionally separate from write limits so a
     # polling client cannot consume the processing/write budget. Developer and
     # MCP API-key contexts are keyed by app/key identity when available.
+    "dev:key_read": (120, 3600),
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
     # Conversation reads are limited in two tiers. Every conversation read consumes

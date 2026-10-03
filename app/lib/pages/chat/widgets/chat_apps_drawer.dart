@@ -67,16 +67,11 @@ class ChatAppsDrawer extends StatelessWidget {
                   ),
                 ),
                 Divider(color: OmiColors.border, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
-                  child: Text(
-                    l10n.selectApp,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-                  ),
-                ),
                 Expanded(
+                  // The rows say what they are: no "Select App" label above them, and no empty-state
+                  // sentence that explains the Enable Apps row below it.
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
                     children: [
                       _AppRow(
                         avatar: const ChatOmiAvatar(),
@@ -91,15 +86,6 @@ class ChatAppsDrawer extends StatelessWidget {
                           isSelected: selectedAppId == app.id,
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
-                        ),
-                      if (chatApps.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(OmiSpacing.lg),
-                          child: Text(
-                            l10n.noChatAppsEnabled,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                            textAlign: TextAlign.center,
-                          ),
                         ),
                       ListTile(
                         leading: Padding(
