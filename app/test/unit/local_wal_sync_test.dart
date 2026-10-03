@@ -1087,7 +1087,7 @@ void main() {
       final transportSynced = stamped(470, status: WalStatus.synced, filePath: name);
       local.testWals = [transportSynced];
 
-      await local.confirmSessionTranscription(500, 'c1', transcriptSpans: [(500, 531)]);
+      await local.confirmSessionTranscription(500, 'c1', transcriptSpans: [(501, 531)]);
 
       expect(transportSynced.status, WalStatus.miss,
           reason: 'a synced status from socket sends alone would status-skip the repair upload');
@@ -1135,7 +1135,7 @@ void main() {
         ..lastRetryAt = 400;
       local.testWals = [pending];
 
-      await local.confirmSessionTranscription(500, 'c1', transcriptSpans: [(500, 531)]);
+      await local.confirmSessionTranscription(500, 'c1', transcriptSpans: [(501, 531)]);
 
       expect(pending.retryCount, 2);
       expect(pending.lastRetryAt, 400);
@@ -1734,7 +1734,7 @@ void main() {
         );
 
     test('a span inside the WAL does not cover it', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(120, 130)], 100), isFalse);
+      expect(walCoveredByTranscript(wal(100, 60), [(120, 129)], 100), isFalse);
     });
 
     test('unordered, overlapping and adjacent spans that fully cover do', () {
@@ -1750,21 +1750,25 @@ void main() {
       );
     });
 
-    test('three seconds of slack at each outer edge is tolerated, four is not', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(103, 160)], 100), isTrue);
-      expect(walCoveredByTranscript(wal(100, 60), [(104, 160)], 100), isFalse);
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 157)], 100), isTrue);
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 156)], 100), isFalse);
+    test('thirty seconds of pause at each outer edge is tolerated, thirty-one is not', () {
+      expect(walTranscriptPauseToleranceSeconds, 30);
+      expect(walCoveredByTranscript(wal(100, 60), [(130, 160)], 100), isTrue);
+      expect(walCoveredByTranscript(wal(100, 60), [(131, 160)], 100), isFalse);
+      expect(walCoveredByTranscript(wal(100, 60), [(100, 130)], 100), isTrue);
+      expect(walCoveredByTranscript(wal(100, 60), [(100, 129)], 100), isFalse);
     });
 
-    test('the slack never bridges a one-second interior gap', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 130), (131, 160)], 100), isFalse);
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 140), (141, 160)], 100), isFalse);
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 158), (159, 160)], 100), isFalse,
-          reason: 'a hole inside the last slack seconds is still an interior hole');
+    test('a thirty-second interior pause is tolerated, thirty-one is not', () {
+      expect(walCoveredByTranscript(wal(100, 100), [(100, 120), (150, 200)], 100), isTrue,
+          reason: 'a 30 s silence between utterances is a pause, not a hole');
+      expect(walCoveredByTranscript(wal(100, 100), [(100, 120), (151, 200)], 100), isFalse,
+          reason: 'a 31 s interior hole is longer than the pause tolerance');
+      expect(walCoveredByTranscript(wal(100, 60), [(100, 158), (159, 160)], 100), isTrue,
+          reason: 'a one-second hole near the edge is an interior pause, not uncovered audio');
       expect(walCoveredByTranscript(wal(100, 60), [(100, 158)], 100), isTrue,
-          reason: 'a two-second uncovered tail is outer-edge slack, not a hole');
-      expect(walCoveredByTranscript(wal(100, 60), [(101, 102), (103, 160)], 100), isFalse);
+          reason: 'a two-second uncovered tail is outer-edge tolerance, not a hole');
+      expect(walCoveredByTranscript(wal(100, 60), [(101, 102), (103, 160)], 100), isTrue,
+          reason: 'a one-second head and a one-second interior pause both fall inside the tolerance');
     });
 
     test('no actual overlap fails even on a short WAL', () {
@@ -1775,13 +1779,27 @@ void main() {
           reason: 'a span beginning at the WAL end is no evidence either');
     });
 
-    test('a short overlap inside a minute fails', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(130, 131)], 100), isFalse);
+    test('a short utterance covers when both edges fall inside the tolerance', () {
+      expect(walCoveredByTranscript(wal(100, 60), [(130, 131)], 100), isTrue,
+          reason: 'a 30 s head and a 29 s tail around one utterance are both tolerable');
+      expect(walCoveredByTranscript(wal(100, 60), [(120, 128)], 100), isFalse,
+          reason: 'the same utterance ending 32 s early leaves an intolerable tail');
     });
 
-    test('partial head or tail coverage fails', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(110, 160)], 100), isFalse);
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 150)], 100), isFalse);
+    test('a head or tail longer than the tolerance fails', () {
+      expect(walCoveredByTranscript(wal(100, 60), [(131, 160)], 100), isFalse);
+      expect(walCoveredByTranscript(wal(100, 60), [(100, 129)], 100), isFalse);
+    });
+
+    test('two minutes of conversation with natural pauses and long silences are covered', () {
+      expect(
+        walCoveredByTranscript(
+          wal(100, 120),
+          [(102, 110), (112, 116), (121, 133), (135, 141), (149, 154), (172, 184), (187, 189), (214, 220)],
+          100,
+        ),
+        isTrue,
+      );
     });
 
     test('invalid or empty spans cover nothing', () {

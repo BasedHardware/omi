@@ -243,9 +243,27 @@ void main() {
     return hole;
   }
 
-  /// The contiguous 200-second transcript that, anchored by the fixture's live arrivals, covers
-  /// every WAL the session chunks — [0,60), [60,135) and [135,202) on this world's clock.
-  const fullSpans = [(0.0, 60.0), (60.0, 120.0), (120.0, 180.0), (180.0, 200.0)];
+  /// A 200-second conversation of 2–12 s utterances, 1–8 s pauses and 18/25 s silences, covering
+  /// WALs [0,60), [60,135), [135,202) when anchored by live arrivals and judged with pause tolerance.
+  const fullSpans = [
+    (0.0, 8.0),
+    (10.0, 14.0),
+    (19.0, 31.0),
+    (34.0, 40.0),
+    (48.0, 52.0),
+    (55.0, 60.0),
+    (78.0, 83.0),
+    (84.0, 86.0),
+    (89.0, 101.0),
+    (106.0, 112.0),
+    (113.0, 120.0),
+    (122.0, 128.0),
+    (131.0, 139.0),
+    (164.0, 172.0),
+    (175.0, 177.0),
+    (185.0, 195.0),
+    (198.0, 200.0),
+  ];
 
   /// Seconds since [origin] each WAL started, sorted — the exact split the coverage judgement made.
   List<int> offsetsOf(Iterable<Wal> wals, DateTime origin) {
@@ -292,13 +310,12 @@ void main() {
   }
 
   /// Streams [seconds] of pendant audio with no live arrivals, closes with a saved transcript of
-  /// [spans], and asserts every stamped copy fails closed and uploads for repair once.
-  Future<List<Wal>> plainTranscriptKeepsAll(
+  /// [spans], and returns (origin, covered, hole) once every stamped WAL is judged.
+  Future<(DateTime, List<Wal>, List<Wal>)> plainJudgedReplay(
     int seconds,
     List<(double, double)> spans, {
     Duration serverSkew = Duration.zero,
     bool hasStart = true,
-    String? failClosedReason,
   }) async {
     final origin = world.clock.now();
     final link = await connectPendant();
@@ -310,16 +327,28 @@ void main() {
       hasStart: hasStart,
       createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
     ));
+    final (covered, hole) = await judgedWals();
+    return (origin, covered, hole);
+  }
+
+  Future<List<Wal>> plainTranscriptKeepsAll(
+    int seconds,
+    List<(double, double)> spans, {
+    Duration serverSkew = Duration.zero,
+    bool hasStart = true,
+    String? failClosedReason,
+  }) async {
+    await plainJudgedReplay(seconds, spans, serverSkew: serverSkew, hasStart: hasStart);
     return expectAllKeptThenUploaded('c1', failClosedReason: failClosedReason);
   }
 
-  test('pendant: a fully covered transcript moves every copy into synced retention and uploads nothing', () async {
+  test('pendant: a conversation with natural pauses retains every copy and uploads nothing', () async {
     final anchorEstimates = <int>[];
     final (origin, covered) = await fullyCoveredReplay(anchorEstimates: anchorEstimates);
     final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
     // The fixture delivers each saved segment exactly end+2s after it ends, so every anchor estimate
-    // is origin+2 and the median anchor lands there; the spans then cover every WAL within the 3s
-    // boundary slack.
+    // is origin+2 and the median anchor lands there; the utterance pauses then fall inside the 30s
+    // pause tolerance and every WAL is covered.
     expect(anchorEstimates.toSet(), {originSeconds + 2},
         reason: 'each live segment arrives exactly 2s after it ends, so the median anchor is origin+2');
     expect(offsetsOf(covered, origin), [0, 60, 135]);
@@ -341,10 +370,11 @@ void main() {
   });
 
   test('pendant: an interior transcript gap keeps only the uncovered copies for repair', () async {
-    // The saved transcript never mentions seconds 60..120, so the 75-second WAL covering that hole
-    // stays miss-marked and recovers; the covered copies move into synced retention.
-    final (origin, covered, hole) = await judgedReplay(202, const [(0.0, 60.0), (120.0, 180.0), (180.0, 200.0)]);
-    expect(offsetsOf(hole, origin), [60], reason: 'only the WAL crossing the 60..120 hole remains miss');
+    // The saved transcript loses the utterances between seconds 86 and 131 — a 45-second hole past
+    // the pause tolerance — so the WAL covering that hole stays miss-marked and recovers.
+    final (origin, covered, hole) =
+        await judgedReplay(202, fullSpans.where((span) => span.$2 <= 86 || span.$1 >= 131).toList());
+    expect(offsetsOf(hole, origin), [60], reason: 'only the WAL crossing the 86..131 hole remains miss');
     expect(offsetsOf(covered, origin), [0, 135]);
     expect(audioFilesOnDisk(), hasLength(covered.length + hole.length),
         reason: 'covered copies are retained, not deleted; hole copies stay for repair');
@@ -358,16 +388,17 @@ void main() {
   });
 
   test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
-    // The saved transcript never mentions the first minute; live arrivals anchor the rest.
-    final (origin, covered, hole) = await judgedReplay(202, const [(60.0, 120.0), (120.0, 180.0), (180.0, 200.0)]);
-    expect(offsetsOf(hole, origin), [0], reason: 'the opening minute the transcript never mentions is kept for repair');
+    // The saved transcript never mentions the opening; its first anchored utterance lands 36 s in — past the pause tolerance.
+    final (origin, covered, hole) = await judgedReplay(202, fullSpans.where((span) => span.$1 >= 34).toList());
+    expect(offsetsOf(hole, origin), [0],
+        reason: 'the opening the transcript reaches only after 36s is kept for repair');
     expect(offsetsOf(covered, origin), [60, 135]);
     await expectRecoveryUploads('c1', hole);
   });
 
   test('pendant: a transcript that loses the tail keeps the tail and uploads it', () async {
-    // The saved transcript stops at second 120; everything after stays uncovered.
-    final (origin, covered, hole) = await judgedReplay(202, const [(0.0, 60.0), (60.0, 120.0)]);
+    // The saved transcript stops after the last utterance at second 86 while 90 s of audio keep streaming.
+    final (origin, covered, hole) = await judgedReplay(176, fullSpans.where((span) => span.$2 <= 86).toList());
     expect(offsetsOf(hole, origin), [60, 135], reason: 'only the WALs crossing the lost tail remain miss');
     expect(offsetsOf(covered, origin), [0]);
     await expectRecoveryUploads('c1', hole);
@@ -377,7 +408,7 @@ void main() {
     final origin = world.clock.now();
     final link = await connectPendant();
     // The pendant flushes 30 s of buffered audio the moment it connects, so the first chunk's start is
-    // backdated before the session window — the transcript cannot cover its head.
+    // backdated before the session window — a 32 s opening hole the pause tolerance cannot absorb.
     for (var i = 0; i < 3000; i++) {
       link.emitAudio();
     }
@@ -419,10 +450,13 @@ void main() {
     expect(kept.length, greaterThanOrEqualTo(3), reason: 'every stamped copy fails closed');
   });
 
-  test('pendant: a gapped timestamp transcript keeps every copy for repair', () async {
-    // Fifteen saved seconds in every twenty leave a five-second interior hole in
-    // every WAL, so even a transcript that mentions the whole session covers none of it.
-    await plainTranscriptKeepsAll(200, [for (var t = 1.0; t < 190; t += 20) (t, t + 15)]);
+  test('pendant: a gapped timestamp transcript retains every copy and uploads nothing', () async {
+    // Fifteen saved seconds in every twenty leave five-second pauses inside the tolerance,
+    // so a transcript that mentions the whole session covers all of it.
+    final (_, covered, hole) = await plainJudgedReplay(200, [for (var t = 1.0; t < 190; t += 20) (t, t + 15)]);
+    expect(hole, isEmpty, reason: 'five-second pauses are tolerated, not repair holes');
+    expect(covered, isNotEmpty);
+    await expectRecoveryUploads('c1', hole);
   });
 
   test('pendant: a server clock ahead of the phone still covers via the live anchor', () async {
@@ -443,10 +477,14 @@ void main() {
     expect(audioFilesOnDisk(), hasLength(covered.length));
   });
 
-  test('pendant: a conversation with no live arrivals and no start time keeps every copy', () async {
-    // An old row without started_at and no live anchor; the session-start fallback still
-    // leaves interior holes, so every copy fails closed.
-    await plainTranscriptKeepsAll(140, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)], hasStart: false);
+  test('pendant: a conversation with no live arrivals and no start time still covers via the session start', () async {
+    // An old row without started_at and no live anchor; the session-start fallback anchors the
+    // spans, and their five-second pauses fall inside the tolerance.
+    final (_, covered, hole) =
+        await plainJudgedReplay(140, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)], hasStart: false);
+    expect(hole, isEmpty);
+    expect(covered, isNotEmpty);
+    await expectRecoveryUploads('c1', hole);
   });
 
   test('pendant: no live arrivals falls back to the server start and keeps what it cannot cover', () async {

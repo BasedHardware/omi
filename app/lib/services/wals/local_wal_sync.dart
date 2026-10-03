@@ -150,13 +150,13 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
-/// Boundary slack when matching saved transcript spans to a WAL's outer edges: it absorbs the
-/// live-arrival anchor error, and never expands a span or bridges an interior gap.
-const walTranscriptSlackSeconds = 3;
+/// Pause tolerance for saved utterance gaps and WAL edges; coverage only suppresses automatic
+/// repair, never deletes audio, so short gaps are treated as pauses while the copy stays recoverable.
+const walTranscriptPauseToleranceSeconds = 30;
 
-/// Whether the saved transcript covers [wal]: the union of [transcriptSpans] — absolute epoch
-/// seconds sharing the WAL's clock — must reach both WAL edges within [walTranscriptSlackSeconds],
-/// with no positive interior hole and at least one actually overlapping span.
+/// Whether the saved transcript covers [wal]: [transcriptSpans] share its absolute epoch clock,
+/// must reach both edges within [walTranscriptPauseToleranceSeconds], have no longer interior
+/// hole, and include at least one actually overlapping span.
 @visibleForTesting
 bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conversationStartSeconds) {
   final framesPerSecond = wal.codec.getFramesPerSecond();
@@ -174,10 +174,11 @@ bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conve
   var unionStart = spans[first].$1, unionEnd = spans[first].$2;
   for (final span in spans.skip(first + 1)) {
     if (unionEnd >= end || span.$1 >= end) break; // coverage finished, or no later span can touch the WAL
-    if (span.$1 > unionEnd) return false; // a positive interior hole, slack or not
+    if (span.$1 > unionEnd + walTranscriptPauseToleranceSeconds) return false; // an interior hole longer than a pause
     unionEnd = max(unionEnd, span.$2);
   }
-  return unionStart <= start + walTranscriptSlackSeconds && unionEnd >= end - walTranscriptSlackSeconds;
+  return unionStart <= start + walTranscriptPauseToleranceSeconds &&
+      unionEnd >= end - walTranscriptPauseToleranceSeconds;
 }
 
 /// Where a saved transcript starts on the phone's clock, from when its live segments last arrived:
