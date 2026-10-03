@@ -12290,6 +12290,58 @@ class AppLocalizationsEt extends AppLocalizations {
   String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
 
   @override
+  String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
+
+  @override
+  String get conversationReprocessed => 'Vestlus on uuendatud';
+
+  @override
+  String get loadingTranscript => 'Transkriptsiooni laadimine…';
+
+  @override
+  String get transcriptLoadFailed => 'Transkriptsiooni ei õnnestunud laadida.';
+
+  @override
+  String get processingConversationProgress => 'Vestlust töödeldakse…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Seda vestlust ei õnnestunud töödelda.';
+
+  @override
+  String get waitForReprocessing => 'Oota, kuni uuesti töötlemine lõpeb.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Kõneleja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Kõnelejaid ei ole salvestuste vahel eraldatud.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Kõnelejate siltidest';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeta kõneleja';
+
+  @override
+  String get playbackPreparingAudio => 'Heli ettevalmistamine…';
+
+  @override
+  String get playbackBackToCurrent => 'Tagasi praeguse juurde';
+
+  @override
+  String get playbackAudioUnavailable => 'Heli pole saadaval';
+
+  @override
+  String get playbackAudioLoadFailed => 'Heli ei õnnestunud laadida';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
+
+  @override
   String get forYou => 'Sulle';
 
   @override

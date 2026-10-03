@@ -12205,6 +12205,58 @@ class AppLocalizationsHe extends AppLocalizations {
   String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
 
   @override
+  String get reprocessingConversationProgress => 'מעבד מחדש את השיחה…';
+
+  @override
+  String get conversationReprocessed => 'השיחה עודכנה';
+
+  @override
+  String get loadingTranscript => 'טוען תמליל…';
+
+  @override
+  String get transcriptLoadFailed => 'לא ניתן לטעון את התמליל.';
+
+  @override
+  String get processingConversationProgress => 'מעבד את השיחה…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'לא ניתן היה לעבד את השיחה הזו.';
+
+  @override
+  String get waitForReprocessing => 'המתן לסיום העיבוד מחדש.';
+
+  @override
+  String get unnamedSpeakerLabel => 'דובר';
+
+  @override
+  String get unresolvedSpeakersNotice => 'הדוברים אינם מופרדים בין ההקלטות.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'על תוויות הדוברים';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi לא הצליח להבדיל בין הקולות האחרים בין ההקלטות. הקשו על תווית דובר כדי לתת שם למי שמדבר.';
+
+  @override
+  String get nameSpeakerTitle => 'תן שם לדובר';
+
+  @override
+  String get playbackPreparingAudio => 'מכין אודיו…';
+
+  @override
+  String get playbackBackToCurrent => 'חזרה לנוכחי';
+
+  @override
+  String get playbackAudioUnavailable => 'האודיו לא זמין';
+
+  @override
+  String get playbackAudioLoadFailed => 'לא ניתן לטעון את האודיו';
+
+  @override
+  String get playbackAudioNetworkFailed => 'בדקו את החיבור';
+
+  @override
   String get forYou => 'בשבילך';
 
   @override

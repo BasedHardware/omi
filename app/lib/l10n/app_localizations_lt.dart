@@ -12318,6 +12318,58 @@ class AppLocalizationsLt extends AppLocalizations {
   String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
 
   @override
+  String get reprocessingConversationProgress => 'Pokalbis apdorojamas iš naujo…';
+
+  @override
+  String get conversationReprocessed => 'Pokalbis atnaujintas';
+
+  @override
+  String get loadingTranscript => 'Įkeliamas nuorašas…';
+
+  @override
+  String get transcriptLoadFailed => 'Nepavyko įkelti nuorašo.';
+
+  @override
+  String get processingConversationProgress => 'Pokalbis apdorojamas…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Šio pokalbio nepavyko apdoroti.';
+
+  @override
+  String get waitForReprocessing => 'Palaukite, kol bus baigtas pakartotinis apdorojimas.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Kalbėtojas';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Kalbėtojai neatskirti tarp įrašų.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Apie kalbėtojų žymas';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nepavyko atskirti kitų balsų tarp įrašų. Palieskite kalbėtojo žymą, kad pavadintumėte, kas kalba.';
+
+  @override
+  String get nameSpeakerTitle => 'Pavadinti kalbėtoją';
+
+  @override
+  String get playbackPreparingAudio => 'Ruošiamas garsas…';
+
+  @override
+  String get playbackBackToCurrent => 'Atgal prie dabartinio';
+
+  @override
+  String get playbackAudioUnavailable => 'Garsas nepasiekiamas';
+
+  @override
+  String get playbackAudioLoadFailed => 'Nepavyko įkelti garso';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Patikrinkite ryšį';
+
+  @override
   String get forYou => 'Jums';
 
   @override

@@ -12309,6 +12309,58 @@ class AppLocalizationsUr extends AppLocalizations {
   String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
 
   @override
+  String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';
+
+  @override
+  String get conversationReprocessed => 'گفتگو اپ ڈیٹ ہو گئی';
+
+  @override
+  String get loadingTranscript => 'ٹرانسکرپٹ لوڈ ہو رہی ہے…';
+
+  @override
+  String get transcriptLoadFailed => 'ٹرانسکرپٹ لوڈ نہیں ہو سکی۔';
+
+  @override
+  String get processingConversationProgress => 'گفتگو پروسیس ہو رہی ہے…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'اس گفتگو کو پروسیس نہیں کیا جا سکا۔';
+
+  @override
+  String get waitForReprocessing => 'دوبارہ پروسیسنگ مکمل ہونے کا انتظار کریں۔';
+
+  @override
+  String get unnamedSpeakerLabel => 'مقرر';
+
+  @override
+  String get unresolvedSpeakersNotice => 'مقررین ریکارڈنگز میں الگ نہیں کیے گئے۔';
+
+  @override
+  String get unresolvedSpeakersTitle => 'مقرر لیبلز کے بارے میں';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ریکارڈنگز میں دوسری آوازوں کو الگ نہیں کر سکا۔ کون بات کر رہا ہے اسے نام دینے کے لیے اسپیکر لیبل پر ٹیپ کریں۔';
+
+  @override
+  String get nameSpeakerTitle => 'مقرر کا نام رکھیں';
+
+  @override
+  String get playbackPreparingAudio => 'آڈیو تیار ہو رہا ہے…';
+
+  @override
+  String get playbackBackToCurrent => 'موجودہ پر واپس جائیں';
+
+  @override
+  String get playbackAudioUnavailable => 'آڈیو دستیاب نہیں';
+
+  @override
+  String get playbackAudioLoadFailed => 'آڈیو لوڈ نہیں ہو سکا';
+
+  @override
+  String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
+
+  @override
   String get forYou => 'آپ کے لیے';
 
   @override

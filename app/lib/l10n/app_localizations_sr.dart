@@ -12308,6 +12308,58 @@ class AppLocalizationsSr extends AppLocalizations {
   String get peopleStatsIncomplete => 'Бројеви можда нису потпуни.';
 
   @override
+  String get reprocessingConversationProgress => 'Поновна обрада разговора…';
+
+  @override
+  String get conversationReprocessed => 'Разговор је ажуриран';
+
+  @override
+  String get loadingTranscript => 'Учитавање транскрипта…';
+
+  @override
+  String get transcriptLoadFailed => 'Учитавање транскрипта није успело.';
+
+  @override
+  String get processingConversationProgress => 'Обрада разговора…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Овај разговор није могао да се обради.';
+
+  @override
+  String get waitForReprocessing => 'Сачекајте да се поновна обрада заврши.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Говорник';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Говорници нису одвојени кроз снимке.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'О ознакама говорника';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi није могао да разликује остале гласове кроз снимке. Додирните ознаку говорника да именујете ко говори.';
+
+  @override
+  String get nameSpeakerTitle => 'Именуј говорника';
+
+  @override
+  String get playbackPreparingAudio => 'Priprema zvuka…';
+
+  @override
+  String get playbackBackToCurrent => 'Nazad na trenutno';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nije dostupan';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk nije moguće učitati';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Proverite vezu';
+
+  @override
   String get forYou => 'За вас';
 
   @override

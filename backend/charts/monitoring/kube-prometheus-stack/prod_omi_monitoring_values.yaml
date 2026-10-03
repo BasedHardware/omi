@@ -153,6 +153,9 @@ prometheus:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+          # Keep canary telemetry, but distinguish it from main HPA input.
+          - source_labels: [__meta_kubernetes_pod_label_track]
+            target_label: listen_track
       - job_name: pusher-metrics
         scrape_interval: 15s
         metrics_path: /metrics

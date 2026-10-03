@@ -12292,6 +12292,58 @@ class AppLocalizationsSk extends AppLocalizations {
   String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
 
   @override
+  String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
+
+  @override
+  String get conversationReprocessed => 'Konverzácia aktualizovaná';
+
+  @override
+  String get loadingTranscript => 'Načítava sa prepis…';
+
+  @override
+  String get transcriptLoadFailed => 'Prepis sa nepodarilo načítať.';
+
+  @override
+  String get processingConversationProgress => 'Konverzácia sa spracúva…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Túto konverzáciu sa nepodarilo spracovať.';
+
+  @override
+  String get waitForReprocessing => 'Počkajte na dokončenie opätovného spracovania.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Hovorca';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Rečníci nie sú oddelení naprieč nahrávkami.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O popiskoch rečníkov';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.';
+
+  @override
+  String get nameSpeakerTitle => 'Pomenovať rečníka';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravuje sa zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Späť na aktuálne';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nie je k dispozícii';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk sa nepodarilo načítať';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
+
+  @override
   String get forYou => 'Pre vás';
 
   @override

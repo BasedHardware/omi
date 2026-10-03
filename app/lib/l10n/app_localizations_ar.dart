@@ -12225,6 +12225,58 @@ class AppLocalizationsAr extends AppLocalizations {
   String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
 
   @override
+  String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';
+
+  @override
+  String get conversationReprocessed => 'تم تحديث المحادثة';
+
+  @override
+  String get loadingTranscript => 'جارٍ تحميل النص…';
+
+  @override
+  String get transcriptLoadFailed => 'تعذّر تحميل النص.';
+
+  @override
+  String get processingConversationProgress => 'جارٍ معالجة المحادثة…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'تعذّرت معالجة هذه المحادثة.';
+
+  @override
+  String get waitForReprocessing => 'انتظر حتى تنتهي إعادة المعالجة.';
+
+  @override
+  String get unnamedSpeakerLabel => 'المتحدث';
+
+  @override
+  String get unresolvedSpeakersNotice => 'لا يتم الفصل بين المتحدثين عبر التسجيلات.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'حول تسميات المتحدثين';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.';
+
+  @override
+  String get nameSpeakerTitle => 'تسمية المتحدث';
+
+  @override
+  String get playbackPreparingAudio => 'جارٍ تجهيز الصوت…';
+
+  @override
+  String get playbackBackToCurrent => 'العودة إلى الحالي';
+
+  @override
+  String get playbackAudioUnavailable => 'الصوت غير متوفر';
+
+  @override
+  String get playbackAudioLoadFailed => 'تعذر تحميل الصوت';
+
+  @override
+  String get playbackAudioNetworkFailed => 'تحقق من الاتصال';
+
+  @override
   String get forYou => 'من أجلك';
 
   @override

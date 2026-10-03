@@ -12294,6 +12294,58 @@ class AppLocalizationsFa extends AppLocalizations {
   String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
 
   @override
+  String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';
+
+  @override
+  String get conversationReprocessed => 'گفتگو به‌روز شد';
+
+  @override
+  String get loadingTranscript => 'در حال بارگیری متن…';
+
+  @override
+  String get transcriptLoadFailed => 'بارگیری متن ممکن نشد.';
+
+  @override
+  String get processingConversationProgress => 'در حال پردازش گفتگو…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'پردازش این گفتگو ممکن نشد.';
+
+  @override
+  String get waitForReprocessing => 'صبر کنید تا پردازش دوباره تمام شود.';
+
+  @override
+  String get unnamedSpeakerLabel => 'سخنران';
+
+  @override
+  String get unresolvedSpeakersNotice => 'گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'درباره برچسب‌های گوینده';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.';
+
+  @override
+  String get nameSpeakerTitle => 'نام‌گذاری گوینده';
+
+  @override
+  String get playbackPreparingAudio => 'در حال آماده‌سازی صدا…';
+
+  @override
+  String get playbackBackToCurrent => 'بازگشت به مورد فعلی';
+
+  @override
+  String get playbackAudioUnavailable => 'صدا در دسترس نیست';
+
+  @override
+  String get playbackAudioLoadFailed => 'بارگیری صدا ممکن نشد';
+
+  @override
+  String get playbackAudioNetworkFailed => 'اتصال را بررسی کنید';
+
+  @override
   String get forYou => 'برای شما';
 
   @override

@@ -12314,6 +12314,58 @@ class AppLocalizationsPt extends AppLocalizations {
   String get peopleStatsIncomplete => 'As contagens podem estar incompletas.';
 
   @override
+  String get reprocessingConversationProgress => 'Reprocessando a conversa…';
+
+  @override
+  String get conversationReprocessed => 'Conversa atualizada';
+
+  @override
+  String get loadingTranscript => 'Carregando a transcrição…';
+
+  @override
+  String get transcriptLoadFailed => 'Não foi possível carregar a transcrição.';
+
+  @override
+  String get processingConversationProgress => 'Processando a conversa…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Não foi possível processar esta conversa.';
+
+  @override
+  String get waitForReprocessing => 'Aguarde o fim do reprocessamento.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Palestrante';
+
+  @override
+  String get unresolvedSpeakersNotice => 'As vozes não estão separadas entre as gravações.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Sobre as etiquetas de falante';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi não conseguiu distinguir as outras vozes entre as gravações. Toque numa etiqueta de falante para nomear quem está a falar.';
+
+  @override
+  String get nameSpeakerTitle => 'Nomear falante';
+
+  @override
+  String get playbackPreparingAudio => 'A preparar áudio…';
+
+  @override
+  String get playbackBackToCurrent => 'Voltar ao atual';
+
+  @override
+  String get playbackAudioUnavailable => 'Áudio indisponível';
+
+  @override
+  String get playbackAudioLoadFailed => 'Não foi possível carregar o áudio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verifique a ligação';
+
+  @override
   String get forYou => 'Para você';
 
   @override

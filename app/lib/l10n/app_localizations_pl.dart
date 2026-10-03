@@ -12335,6 +12335,58 @@ class AppLocalizationsPl extends AppLocalizations {
   String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';
 
   @override
+  String get reprocessingConversationProgress => 'Ponowne przetwarzanie rozmowy…';
+
+  @override
+  String get conversationReprocessed => 'Rozmowa zaktualizowana';
+
+  @override
+  String get loadingTranscript => 'Wczytywanie transkrypcji…';
+
+  @override
+  String get transcriptLoadFailed => 'Nie udało się wczytać transkrypcji.';
+
+  @override
+  String get processingConversationProgress => 'Przetwarzanie rozmowy…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Nie udało się przetworzyć tej rozmowy.';
+
+  @override
+  String get waitForReprocessing => 'Poczekaj na zakończenie ponownego przetwarzania.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Mówca';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Głosy nie są rozdzielone między nagraniami.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O etykietach mówców';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nie mogło odróżnić pozostałych głosów między nagraniami. Dotknij etykiety mówców, aby nazwać, kto mówi.';
+
+  @override
+  String get nameSpeakerTitle => 'Nazwij mówcę';
+
+  @override
+  String get playbackPreparingAudio => 'Przygotowywanie dźwięku…';
+
+  @override
+  String get playbackBackToCurrent => 'Wróć do bieżącego';
+
+  @override
+  String get playbackAudioUnavailable => 'Dźwięk niedostępny';
+
+  @override
+  String get playbackAudioLoadFailed => 'Nie udało się wczytać dźwięku';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Sprawdź połączenie';
+
+  @override
   String get forYou => 'Dla Ciebie';
 
   @override
