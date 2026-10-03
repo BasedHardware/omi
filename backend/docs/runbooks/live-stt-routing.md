@@ -317,7 +317,9 @@ with the control arm and the pre-ramp baseline. At small sample sizes these are
 operational gates, not a statistical proof of non-inferiority.
 
 Kill switch: set `STT_ROUTING_ON_PERCENT=0` or `STT_ROUTING_MODE=shadow` (`off`
-also restores static selection). Apply through the coordinator's config PR and
+also restores static selection; shared account quarantine stays enforced in
+every mode, so `off` never reopens a credential another pod withdrew). Apply
+through the coordinator's config PR and
 normal deployment; this is not an instant process-local env mutation.
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws the window leg.
 Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.yaml`

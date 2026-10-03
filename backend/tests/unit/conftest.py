@@ -5,6 +5,8 @@ import importlib.util
 import sys
 import types
 
+import pytest
+
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
     install_database_client_stub,
@@ -203,3 +205,30 @@ def _install_cachetools_stub():
 _install_prometheus_client_stub()
 _install_redis_stub()
 _install_cachetools_stub()
+
+
+@pytest.fixture(autouse=True)
+def _reset_live_stt_fleet_health():
+    """Reset the module-level live STT fleet-health singleton in place.
+
+    Account quarantine now persists in the shared singleton even while the
+    cost-routing kill switch is off (a mode-independent hard exclusion), so a
+    test that records a synthetic bench must not withdraw providers from
+    later tests. The reset swaps instance state in place because sibling
+    modules (live_chain, streaming, live_session) keep import-time references
+    to this exact object; rebinding the module attribute would leave them
+    sharing the polluted instance.
+    """
+    import sys
+
+    if 'utils.stt.live_health' not in sys.modules:
+        # Unrelated shards must not pay this module's import chain.
+        yield
+        return
+    from utils.stt import live_health
+
+    shared = live_health.health
+    fresh = type(shared)()
+    with shared._lock:
+        vars(shared).update(vars(fresh))
+    yield

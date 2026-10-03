@@ -1295,3 +1295,107 @@ def test_reset_fleet_provider_rejects_parakeet_without_endpoint_before_redis(mon
     monkeypatch.setattr(sys, 'argv', ['reset_fleet_provider.py', 'parakeet'])
     with pytest.raises(SystemExit):
         module.main()
+
+
+# --- Off-mode account quarantine: a mode-independent hard exclusion ----------
+
+
+async def _flush_bench_writes(pod):
+    for _ in range(200):
+        if not pod._bench_providers_in_flight and not pod._writes_in_flight['bench']:
+            break
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_off_mode_account_quarantine_is_shared_across_pods(monkeypatch):
+    """A quota/auth rejection on one pod withdraws the credential everywhere, routing off or not."""
+    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [time.time()]
+    redis = MemoryRedis(clock=lambda: now[0])
+    observing = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    observing._check_identity()
+    observing.quarantine('soniox', 'account', 600.0)
+    await _flush_bench_writes(observing)
+    account_key = live_stt_state.fleet_state_key('soniox', account=True)
+    assert account_key in redis.data
+    assert ('soniox', 'account') not in observing._pending_benches
+
+    sibling = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    sibling.cached_snapshot(['soniox'], 'en')
+    await sibling.refresh_once()
+    state = sibling.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'account'
+    assert state.excluded
+
+
+@pytest.mark.asyncio
+async def test_off_mode_selection_quarantine_stays_routing_only(monkeypatch):
+    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [time.time()]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    pod._check_identity()
+    pod.quarantine('soniox', 'selection', 600.0)
+    await _flush_bench_writes(pod)
+    assert live_stt_state.fleet_state_key('soniox') not in redis.data
+    assert live_stt_state.fleet_state_key('soniox', account=True) not in redis.data
+    assert not pod._pending_benches and not pod._benches
+
+
+@pytest.mark.asyncio
+async def test_off_mode_dial_is_denied_by_shared_account_bench(monkeypatch):
+    """End-to-end off-mode reproduction: the shared bench must raise NoPermittedTarget before any dial."""
+    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [time.time()]
+    redis = MemoryRedis(clock=lambda: now[0])
+    observing = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    observing._check_identity()
+    observing.quarantine('soniox', 'account', 600.0)
+    await _flush_bench_writes(observing)
+
+    monkeypatch.setattr(live_chain, 'health', observing)
+    connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
+    with pytest.raises(live_chain.NoPermittedTarget):
+        await _dial_soniox_only_chain(connect)
+    assert connect.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_off_mode_refresh_reads_account_state_only(monkeypatch):
+    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [time.time()]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    pod._check_identity()
+    # Routing-only evidence must exist in Redis yet never be read in off mode.
+    text_key, no_text_key = live_stt_state.fleet_score_keys('soniox', 'en', int(now[0] // 300))
+    redis.data[text_key] = '99'
+    redis.data[no_text_key] = '0'
+    redis.data[live_stt_state.fleet_state_key('soniox')] = f'selection:{now[0] + 600}'
+    redis.data[live_stt_state.fleet_state_key('soniox', account=True)] = f'account:{now[0] + 600}'
+    seen = []
+
+    class RecordingRedis(MemoryRedis):
+        async def mget(self, keys):
+            seen.extend(keys)
+            return await super().mget(keys)
+
+    pod._client = RecordingRedis(clock=lambda: now[0])
+    pod._client.data = redis.data
+    pod.cached_snapshot(['soniox'], 'en')
+    await pod.refresh_once()
+    assert live_stt_state.fleet_state_key('soniox', account=True) in seen
+    assert live_stt_state.fleet_state_key('soniox') not in seen
+    assert not any(':score:' in key for key in seen)
+    assert pod._interests == {}
+    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'account' and state.excluded
