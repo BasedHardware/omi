@@ -990,6 +990,8 @@ def _process_proactive_notification(uid: str, app: App, data):
     min_message_char_limit = 5
 
     prompt = data.get('prompt', '')
+    if prompt is None:
+        prompt = ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -1001,13 +1003,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         return None
 
     filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    if not isinstance(filter_scopes, list):
+        filter_scopes = []
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
-        if len(memories) > 0:
+        if isinstance(memories, list) and len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 
     chat_messages = []
@@ -1046,8 +1050,6 @@ def _process_proactive_notification(uid: str, app: App, data):
     # notifications share one ceiling rather than each having their own.
     incr_daily_notification_count(uid, _user_day_zone(uid))
     return message
-
-
 async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
