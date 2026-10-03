@@ -91,6 +91,37 @@ def bounded_language(language: str | None) -> str:
     return token if token in LANGUAGES else 'other'
 
 
+def scoped_identity(provider: str, endpoint: str | None) -> str:
+    """Opaque in-memory partition for one serving endpoint's selection state."""
+    if not endpoint:
+        return provider
+    return f'{provider}@{live_stt_state.fleet_prefix(provider, endpoint=endpoint)}'
+
+
+def scope_family(identity: str) -> str:
+    return identity.split('@', 1)[0]
+
+
+def _selection_prefix(identity: str) -> str:
+    if '@' in identity:
+        return identity.split('@', 1)[1]
+    return live_stt_state.fleet_prefix(identity)
+
+
+def _selection_state_key(identity: str) -> str:
+    return f'{_selection_prefix(identity)}:state:{scope_family(identity)}'
+
+
+def _selection_probe_key(identity: str) -> str:
+    return f'{_selection_prefix(identity)}:probe:{scope_family(identity)}'
+
+
+def _selection_score_keys(identity: str, language: str, bucket: int) -> tuple[str, str]:
+    family = scope_family(identity)
+    stem = f'{_selection_prefix(identity)}:score:{family}:{language}:{bucket}'
+    return stem + ':text', stem + ':no_text'
+
+
 def _timeout() -> float:
     try:
         return min(0.1, max(0.01, float(os.getenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.075'))))
@@ -187,6 +218,7 @@ class FleetHealth(CostHealthMixin):
         except ValueError:
             return
         now = self._clock()
+        provider = scope_family(provider) if kind == 'account' else provider
         with self._lock:
             for benches in (self._benches, self._cached_benches):
                 old_kind, old_until = benches.get(provider, ('', 0.0))
@@ -212,18 +244,42 @@ class FleetHealth(CostHealthMixin):
     async def _bounded(self, operation: Any) -> Any:
         return await asyncio.wait_for(operation, timeout=_timeout())
 
-    def _score_keys(self, provider: str, language: str, bucket: int) -> tuple[str, str]:
-        return live_stt_state.fleet_score_keys(provider, language, bucket)
+    def _score_keys(self, scope: str, language: str, bucket: int) -> tuple[str, str]:
+        return _selection_score_keys(scope, language, bucket)
 
-    def _local_score(self, provider: str, language: str) -> ProviderState:
+    def _local_score(self, scope: str, language: str) -> ProviderState:
         cutoff = self._clock() - SCORE_BUCKET_SECONDS * SCORE_BUCKETS
         with self._lock:
-            events = self._local.get((provider, language), ())
+            events = self._local.get((scope, language), ())
             recent = [success for when, success in events if when >= cutoff]
-            bench, until = self._benches.get(provider, ('', 0.0))
+            bench, until = self._benches.get(scope, ('', 0.0))
         return ProviderState((sum(recent) + 1) / (len(recent) + 2), len(recent), bench or None, until)
 
-    def record(self, provider: str, language: str | None, outcome: str) -> None:
+    def _combined_bench(self, scope: str, now: float) -> tuple[str, float]:
+        """Strongest live deadline: an active family account bench dominates
+        this endpoint's selection bench; an expired one still reports."""
+        family = scope_family(scope)
+        account_until = 0.0
+        selection_until = 0.0
+        for benches in (self._benches, self._cached_benches):
+            kind, until = benches.get(scope, ('', 0.0))
+            if kind == 'account':
+                account_until = max(account_until, until)
+            elif kind == 'selection':
+                selection_until = max(selection_until, until)
+            if scope != family:
+                kind, until = benches.get(family, ('', 0.0))
+                if kind == 'account':
+                    account_until = max(account_until, until)
+        if account_until > now:
+            return 'account', account_until
+        if selection_until:
+            return 'selection', selection_until
+        if account_until:
+            return 'account', account_until
+        return '', 0.0
+
+    def record(self, provider: str, language: str | None, outcome: str, *, endpoint: str | None = None) -> None:
         if provider not in PROVIDERS or outcome not in {'text', 'no_text'}:
             return
         lang = bounded_language(language)
@@ -234,18 +290,25 @@ class FleetHealth(CostHealthMixin):
         if mode() == 'off':
             return
         identity = self._check_identity()
+        scope = scoped_identity(provider, endpoint)
         with self._lock:
-            key = provider, lang
+            key = scope, lang
             if key not in self._local and len(self._local) >= LOCAL_KEYS_CAP:
                 self._local.pop(next(iter(self._local)))
             events = self._local[key]
             events.append((self._clock(), outcome == 'text'))
             while len(events) > LOCAL_EVENTS_CAP:
                 events.popleft()
-        self.schedule(self._write_result(provider, lang, outcome, expected_identity=identity))
+        self.schedule(self._write_result(provider, lang, outcome, endpoint=endpoint, expected_identity=identity))
 
     async def _write_result(
-        self, provider: str, language: str, outcome: str, *, expected_identity: str | None = None
+        self,
+        provider: str,
+        language: str,
+        outcome: str,
+        *,
+        endpoint: str | None = None,
+        expected_identity: str | None = None,
     ) -> None:
         if self._clock() < self._redis_retry_at:
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
@@ -254,11 +317,12 @@ class FleetHealth(CostHealthMixin):
         if expected_identity is not None and identity != expected_identity:
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             return
+        scope = scoped_identity(provider, endpoint)
         bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
-        text_key, no_text_key = self._score_keys(provider, language, bucket)
+        text_key, no_text_key = self._score_keys(scope, language, bucket)
         key = text_key if outcome == 'text' else no_text_key
         states = (
-            (live_stt_state.fleet_state_key(provider), live_stt_state.fleet_probe_key(provider)),
+            (_selection_state_key(scope), _selection_probe_key(scope)),
             (
                 live_stt_state.fleet_state_key(provider, account=True),
                 live_stt_state.fleet_probe_key(provider, account=True),
@@ -343,32 +407,45 @@ class FleetHealth(CostHealthMixin):
                 release()
                 FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
 
-    def quarantine(self, provider: str, kind: str, seconds: float) -> None:
+    def quarantine(self, provider: str, kind: str, seconds: float, *, endpoint: str | None = None) -> None:
         # Account quarantine is a mode-independent hard exclusion: a quota/auth
         # rejection must withdraw the credential on every pod even while the
         # cost-routing kill switch is off. Selection benches stay routing-only.
         if provider not in PROVIDERS or kind not in {'account', 'selection'} or (mode() == 'off' and kind != 'account'):
             return
         self._check_identity()
+        bench_identity = provider if kind == 'account' else scoped_identity(provider, endpoint)
         until = self._clock() + max(1.0, seconds)
         with self._lock:
-            previous_kind, previous_until = self._benches.get(provider, ('', 0.0))
+            previous_kind, previous_until = self._benches.get(bench_identity, ('', 0.0))
             if kind == 'account' or previous_until <= self._clock() or previous_kind != 'account':
-                self._benches[provider] = kind, max(until, previous_until) if kind == previous_kind else until
-            key = provider, kind
-            self._pending_benches[key] = max(until, self._pending_benches.get(key, 0.0))
+                self._benches[bench_identity] = kind, max(until, previous_until) if kind == previous_kind else until
+            key = bench_identity, kind
+            custom_pending = {
+                item for item, item_kind in self._pending_benches if item_kind == 'selection' and '@' in item
+            }
+            admitted = (
+                key in self._pending_benches
+                or kind != 'selection'
+                or '@' not in bench_identity
+                or len(custom_pending) < 16
+            )
+            if admitted:
+                while key not in self._pending_benches and len(self._pending_benches) >= LOCAL_KEYS_CAP:
+                    self._pending_benches.pop(next(iter(self._pending_benches)))
+                self._pending_benches[key] = max(until, self._pending_benches.get(key, 0.0))
         self._drain_pending_benches()
 
     async def _write_bench(
-        self, provider: str, kind: str, until: float, *, expected_identity: str | None = None
+        self, bench_identity: str, kind: str, until: float, *, expected_identity: str | None = None
     ) -> bool:
         if until <= self._clock() or self._clock() < self._redis_retry_at:
             return False
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
             return False
-        selection_key = live_stt_state.fleet_state_key(provider)
-        account_key = live_stt_state.fleet_state_key(provider, account=True)
+        selection_key = _selection_state_key(bench_identity)
+        account_key = live_stt_state.fleet_state_key(scope_family(bench_identity), account=True)
         try:
             result = await self._bounded(
                 self._redis().eval(BENCH_UPDATE, 2, selection_key, account_key, kind, f'{until:.3f}')
@@ -384,7 +461,7 @@ class FleetHealth(CostHealthMixin):
         if isinstance(retained, bytes):
             retained = retained.decode()
         with self._lock:
-            self._merge_bench(provider, retained)
+            self._merge_bench(bench_identity, retained)
         return True
 
     def _account_bench_until(self, provider: str) -> float:
@@ -398,7 +475,7 @@ class FleetHealth(CostHealthMixin):
         )
 
     def _bench_write_done(
-        self, provider: str, kind: str, until: float, identity: str, task: asyncio.Task[bool]
+        self, bench_identity: str, kind: str, until: float, identity: str, task: asyncio.Task[bool]
     ) -> None:
         success = False
         if not task.cancelled():
@@ -409,10 +486,10 @@ class FleetHealth(CostHealthMixin):
                     self._redis_retry_at = self._clock() + 10.0
                 logger.debug('STT fleet bench write will retry', exc_info=True)
         with self._lock:
-            if self._bench_providers_in_flight.get(provider) == identity:
-                self._bench_providers_in_flight.pop(provider, None)
+            if self._bench_providers_in_flight.get(bench_identity) == identity:
+                self._bench_providers_in_flight.pop(bench_identity, None)
             self._writes_in_flight['bench'] -= 1
-            key = provider, kind
+            key = bench_identity, kind
             if success and self._identity == identity and self._pending_benches.get(key, 0.0) <= until:
                 self._pending_benches.pop(key, None)
         if not task.cancelled():
@@ -440,38 +517,41 @@ class FleetHealth(CostHealthMixin):
             if now < self._redis_retry_at:
                 return
             expected_identity = self._check_identity()
-            for (provider, kind), until in sorted(self._pending_benches.items()):
+            for (bench_identity, kind), until in sorted(self._pending_benches.items()):
                 if len(self._bench_providers_in_flight) >= WRITE_IN_FLIGHT_LIMITS['bench']:
                     break
-                if provider in self._bench_providers_in_flight:
+                if bench_identity in self._bench_providers_in_flight:
                     continue
                 if account_only and kind != 'account':
                     continue
-                if kind == 'selection' and self._account_bench_until(provider) > now:
+                if kind == 'selection' and self._account_bench_until(scope_family(bench_identity)) > now:
                     continue
-                self._bench_providers_in_flight[provider] = expected_identity
+                self._bench_providers_in_flight[bench_identity] = expected_identity
                 self._writes_in_flight['bench'] += 1
-                attempts.append((provider, kind, until))
+                attempts.append((bench_identity, kind, until))
 
-        for provider, kind, until in attempts:
+        for bench_identity, kind, until in attempts:
 
             def launch(
-                provider: str = provider, kind: str = kind, until: float = until, identity: str = expected_identity
+                bench_identity: str = bench_identity,
+                kind: str = kind,
+                until: float = until,
+                identity: str = expected_identity,
             ) -> None:
-                coroutine = self._write_bench(provider, kind, until, expected_identity=identity)
+                coroutine = self._write_bench(bench_identity, kind, until, expected_identity=identity)
                 try:
                     task = start_background_task(coroutine, name='live_stt_fleet_bench_write')
                 except RuntimeError:
                     coroutine.close()
                     self._redis_retry_at = self._clock() + 10.0
                     with self._lock:
-                        if self._bench_providers_in_flight.get(provider) == identity:
-                            self._bench_providers_in_flight.pop(provider, None)
+                        if self._bench_providers_in_flight.get(bench_identity) == identity:
+                            self._bench_providers_in_flight.pop(bench_identity, None)
                         self._writes_in_flight['bench'] -= 1
                 else:
                     task.add_done_callback(
-                        lambda task, provider=provider, kind=kind, until=until, identity=identity: self._bench_write_done(
-                            provider, kind, until, identity, task
+                        lambda task, bench_identity=bench_identity, kind=kind, until=until, identity=identity: (
+                            self._bench_write_done(bench_identity, kind, until, identity, task)
                         )
                     )
 
@@ -483,15 +563,18 @@ class FleetHealth(CostHealthMixin):
                 except RuntimeError:
                     self._redis_retry_at = self._clock() + 10.0
                     with self._lock:
-                        self._bench_providers_in_flight.pop(provider, None)
+                        self._bench_providers_in_flight.pop(bench_identity, None)
                         self._writes_in_flight['bench'] -= 1
 
-    def cached_snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
+    def cached_snapshot(
+        self, providers: list[str], language: str | None, *, endpoint: str | None = None
+    ) -> dict[str, ProviderState]:
         """Read only pod memory on connect; keep known benches when scores go stale."""
         self._check_identity()
         providers = [provider for provider in providers if provider in PROVIDERS]
         lang = bounded_language(language)
-        local = {provider: self._local_score(provider, lang) for provider in providers}
+        scopes = {provider: scoped_identity(provider, endpoint) for provider in providers}
+        local = {provider: self._local_score(scopes[provider], lang) for provider in providers}
         if not providers:
             return local
         # Scores and interests are routing state; a shared account quarantine
@@ -499,29 +582,33 @@ class FleetHealth(CostHealthMixin):
         routing_off = mode() == 'off'
         now = self._clock()
         with self._lock:
-            if not routing_off:
+            if routing_off:
+                result: dict[str, ProviderState] = {}
                 for provider in providers:
-                    key = provider, lang
-                    if key not in self._interests and len(self._interests) >= LOCAL_KEYS_CAP:
-                        self._interests.pop(min(self._interests, key=lambda item: self._interests[item]))
-                    self._interests[key] = now
+                    deadlines = [
+                        until
+                        for benches in (self._benches, self._cached_benches)
+                        for kind, until in (benches.get(provider, ('', 0.0)),)
+                        if kind == 'account' and until > now
+                    ]
+                    until = max(deadlines, default=0.0)
+                    result[provider] = ProviderState(0.5, 0, 'account' if until else None, until)
+                return result
+            for provider in providers:
+                key = scopes[provider], lang
+                if key not in self._interests and len(self._interests) >= LOCAL_KEYS_CAP:
+                    self._interests.pop(min(self._interests, key=lambda item: self._interests[item]))
+                self._interests[key] = now
             fresh = (
-                not routing_off
-                and self._cache_at is not None
+                self._cache_at is not None
                 and now - self._cache_at <= CACHE_STALE_SECONDS
                 and now >= self._redis_retry_at
             )
-            result: dict[str, ProviderState] = {}
+            result = {}
             for provider in providers:
-                cached = self._cached_scores.get((provider, lang), local[provider]) if fresh else local[provider]
-                kind, until = self._cached_benches.get(provider, ('', 0.0))
-                fallback = local[provider]
-                if fallback.bench and (
-                    (fallback.bench == 'account' and fallback.bench_until > now and kind != 'account')
-                    or (until <= now and fallback.bench_until > until)
-                    or (fallback.bench == kind and fallback.bench_until > until)
-                ):
-                    kind, until = fallback.bench or '', fallback.bench_until
+                scope = scopes[provider]
+                cached = self._cached_scores.get((scope, lang), local[provider]) if fresh else local[provider]
+                kind, until = self._combined_bench(scope, now)
                 result[provider] = ProviderState(cached.score, cached.samples, kind or None, until)
             return result
 
@@ -553,18 +640,29 @@ class FleetHealth(CostHealthMixin):
                 key: seen for key, seen in self._interests.items() if now - seen <= INTEREST_STALE_SECONDS
             }
             interests = [] if routing_off else sorted(self._interests)
+            selection_scopes = (
+                set()
+                if routing_off
+                else {scope for scope, _lang in interests}
+                | {item for item, kind in self._pending_benches if kind == 'selection'}
+            )
+        identities = sorted(set(PROVIDERS) | selection_scopes)
         bucket = int(now // SCORE_BUCKET_SECONDS)
         keys: list[str] = []
-        for provider, lang in interests:
+        for scope, lang in interests:
             for index in range(SCORE_BUCKETS):
-                keys.extend(self._score_keys(provider, lang, bucket - index))
-        for provider in sorted(PROVIDERS):
+                keys.extend(self._score_keys(scope, lang, bucket - index))
+        for bench_identity in identities:
             if not routing_off:
-                keys.append(live_stt_state.fleet_state_key(provider))
-            keys.append(live_stt_state.fleet_state_key(provider, account=True))
+                keys.append(_selection_state_key(bench_identity))
+            keys.append(live_stt_state.fleet_state_key(scope_family(bench_identity), account=True))
         probe_keys = {
-            (provider, account): live_stt_state.fleet_probe_key(provider, account=account)
-            for provider in PROVIDERS
+            (bench_identity, account): (
+                live_stt_state.fleet_probe_key(scope_family(bench_identity), account=True)
+                if account
+                else _selection_probe_key(bench_identity)
+            )
+            for bench_identity in identities
             for account in (False, True)
         }
         try:
@@ -575,17 +673,17 @@ class FleetHealth(CostHealthMixin):
                 raise ValueError('invalid fleet health read')
             scores: dict[tuple[str, str], ProviderState] = {}
             cursor = 0
-            for provider, lang in interests:
+            for scope, lang in interests:
                 counts = [int(raw or 0) for raw in values[cursor : cursor + SCORE_BUCKETS * 2]]
                 cursor += SCORE_BUCKETS * 2
                 successes = sum(counts[::2])
                 failures = sum(counts[1::2])
                 if successes + failures:
-                    scores[(provider, lang)] = ProviderState(
+                    scores[(scope, lang)] = ProviderState(
                         (successes + 1) / (successes + failures + 2), successes + failures
                     )
             benches: dict[str, tuple[str, float]] = {}
-            for provider in sorted(PROVIDERS):
+            for bench_identity in identities:
                 if routing_off:
                     raw_endpoint, raw_account = None, values[cursor]
                     cursor += 1
@@ -600,11 +698,11 @@ class FleetHealth(CostHealthMixin):
                 account_bench = parsed.get(True)
                 selection_bench = parsed.get(False)
                 if account_bench is not None and account_bench[1] > now:
-                    benches[provider] = account_bench
+                    benches[bench_identity] = account_bench
                 elif selection_bench is not None:
-                    benches[provider] = selection_bench
+                    benches[bench_identity] = selection_bench
                 elif account_bench is not None:
-                    benches[provider] = account_bench
+                    benches[bench_identity] = account_bench
             with self._lock:
                 if self._identity != identity:
                     return
@@ -615,23 +713,23 @@ class FleetHealth(CostHealthMixin):
                     # Off mode loads shared benches only to enforce account
                     # exclusion; probe leases remain cost-routing state.
                     return
-                expired = {provider for provider, (_, until) in benches.items() if until <= self._clock()}
+                expired = {bench_identity for bench_identity, (_, until) in benches.items() if until <= self._clock()}
                 self._probe_ready = {
-                    provider: lease_until
-                    for provider, lease_until in self._probe_ready.items()
-                    if provider in expired and lease_until > self._clock()
+                    bench_identity: lease_until
+                    for bench_identity, lease_until in self._probe_ready.items()
+                    if bench_identity in expired and lease_until > self._clock()
                 }
                 need_lease = expired - self._probe_ready.keys()
                 self._probe_pending.update(need_lease)
             try:
-                for provider in sorted(need_lease):
-                    probe_key = probe_keys[(provider, benches[provider][0] == 'account')]
+                for bench_identity in sorted(need_lease):
+                    probe_key = probe_keys[(bench_identity, benches[bench_identity][0] == 'account')]
                     granted = await self._bounded(self._redis().set(probe_key, '1', ex=10, nx=True))
                     if self._check_identity() != identity:
                         return
                     if granted:
                         with self._lock:
-                            self._probe_ready[provider] = self._clock() + 9.0
+                            self._probe_ready[bench_identity] = self._clock() + 9.0
             finally:
                 with self._lock:
                     if self._identity == identity:
@@ -653,26 +751,27 @@ class FleetHealth(CostHealthMixin):
                 await self.refresh_cost_once()
             await asyncio.sleep(CACHE_REFRESH_SECONDS)
 
-    def try_admit_recovery_probe(self, provider: str) -> bool:
+    def try_admit_recovery_probe(self, provider: str, *, endpoint: str | None = None) -> bool:
         """Consume a background fleet permit, or a jittered pod-local fallback."""
         now = self._clock()
+        scope = scoped_identity(provider, endpoint)
         with self._lock:
             fresh = self._cache_at is not None and now - self._cache_at <= CACHE_STALE_SECONDS
-            shared = fresh and now >= self._redis_retry_at and provider in self._cached_benches
+            shared = fresh and now >= self._redis_retry_at and scope in self._cached_benches
             if shared:
-                if self._probe_ready.get(provider, 0.0) > now:
-                    self._probe_ready.pop(provider)
+                if self._probe_ready.get(scope, 0.0) > now:
+                    self._probe_ready.pop(scope)
                     return True
-                if provider not in self._probe_pending:
+                if scope not in self._probe_pending:
                     return False
-            next_at = self._local_probe_next.get(provider)
-            jitter = self._probe_jitter(provider)
+            next_at = self._local_probe_next.get(scope)
+            jitter = self._probe_jitter(scope)
             if next_at is None:
                 next_at = now + jitter
             if now < next_at:
-                self._local_probe_next[provider] = next_at
+                self._local_probe_next[scope] = next_at
                 return False
-            self._local_probe_next[provider] = now + LOCAL_PROBE_INTERVAL_SECONDS + jitter
+            self._local_probe_next[scope] = now + LOCAL_PROBE_INTERVAL_SECONDS + jitter
             return True
 
 

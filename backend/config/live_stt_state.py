@@ -82,24 +82,29 @@ def cost_lease_key(target, language: str) -> str:
     return f'{COST_PREFIX}:{stage()}:{fingerprint}:lease:{target.id}:{language}'
 
 
-def fleet_prefix(family: str, *, account: bool = False) -> str:
+def fleet_prefix(family: str, *, account: bool = False, endpoint: str | None = None) -> str:
     if account:
         fingerprint = _digest('live-stt-fleet-v2-account', family, family_credential(family))
     else:
-        fingerprint = _digest('live-stt-fleet-v2-endpoint', family, family_endpoint(family), family_credential(family))
+        fingerprint = _digest(
+            'live-stt-fleet-v2-endpoint',
+            family,
+            family_endpoint(family) if endpoint is None else endpoint,
+            family_credential(family),
+        )
     return f'{FLEET_PREFIX}:{stage()}:{fingerprint}'
 
 
-def fleet_state_key(family: str, *, account: bool = False) -> str:
-    return f'{fleet_prefix(family, account=account)}:state:{family}'
+def fleet_state_key(family: str, *, account: bool = False, endpoint: str | None = None) -> str:
+    return f'{fleet_prefix(family, account=account, endpoint=endpoint)}:state:{family}'
 
 
-def fleet_probe_key(family: str, *, account: bool = False) -> str:
-    return f'{fleet_prefix(family, account=account)}:probe:{family}'
+def fleet_probe_key(family: str, *, account: bool = False, endpoint: str | None = None) -> str:
+    return f'{fleet_prefix(family, account=account, endpoint=endpoint)}:probe:{family}'
 
 
-def fleet_score_keys(family: str, language: str, bucket: int) -> tuple[str, str]:
-    stem = f'{fleet_prefix(family)}:score:{family}:{language}:{bucket}'
+def fleet_score_keys(family: str, language: str, bucket: int, *, endpoint: str | None = None) -> tuple[str, str]:
+    stem = f'{fleet_prefix(family, endpoint=endpoint)}:score:{family}:{language}:{bucket}'
     return stem + ':text', stem + ':no_text'
 
 

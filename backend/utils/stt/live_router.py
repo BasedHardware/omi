@@ -6,6 +6,7 @@ from contextvars import ContextVar
 import threading
 import time
 
+from config import live_stt_state
 from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from utils.stt.live_gate import GateState, gate_rate
@@ -16,6 +17,8 @@ from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 
 connecting_target: ContextVar[Target | None] = ContextVar('stt_connecting_target', default=None)
 _target_circuits: dict[str, ProviderCircuitBreaker] = {}
+_target_circuits_lock = threading.Lock()
+_TARGET_CIRCUITS_CAP = 64
 _capacity_until: dict[str, float] = {}
 _capacity_lock = threading.Lock()
 _CAPACITY_COOLDOWN_SECONDS = 5.0
@@ -145,14 +148,23 @@ def engine_matches(target: Target, models: dict[str, str | None] | None) -> bool
     return target.family != 'parakeet' or bool(models and models.get('parakeet') == target.id)
 
 
+def _circuit_identity(target: Target) -> str:
+    return f'{target.family}@{live_stt_state.fleet_prefix(target.family, endpoint=target.endpoint)}'
+
+
 def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None = None) -> ProviderCircuitBreaker:
     if target is None or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None):
         if default is None:
             raise ValueError('Default live target requires its family circuit')
         return default
-    if target.id not in _target_circuits:
-        _target_circuits[target.id] = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
-    return _target_circuits[target.id]
+    identity = _circuit_identity(target)
+    with _target_circuits_lock:
+        circuit = _target_circuits.get(identity)
+        if circuit is None:
+            if len(_target_circuits) >= _TARGET_CIRCUITS_CAP:
+                _target_circuits.pop(next(iter(_target_circuits)))
+            circuit = _target_circuits[identity] = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+    return circuit
 
 
 def select(targets, states, uid, language, *, features=frozenset({'streaming'}), required_languages=(), recovery=None):

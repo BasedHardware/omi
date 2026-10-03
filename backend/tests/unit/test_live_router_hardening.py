@@ -21,7 +21,7 @@ import pytest
 
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
-from utils.stt import live_chain, live_health, live_router, streaming as st
+from utils.stt import live_chain, live_health, live_router, live_session, streaming as st
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState, transition
 from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES
@@ -766,7 +766,9 @@ def test_missing_or_invalid_stage_never_defaults_to_prod(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monkeypatch):
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monkeypatch, recovery):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
@@ -821,7 +823,9 @@ async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monke
 
 
 @pytest.mark.asyncio
-async def test_engine_mismatch_static_retry_still_serves_partial_ramp_cohort(monkeypatch):
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_engine_mismatch_static_retry_still_serves_partial_ramp_cohort(monkeypatch, recovery):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
@@ -1399,3 +1403,318 @@ async def test_off_mode_refresh_reads_account_state_only(monkeypatch):
     assert pod._interests == {}
     state = pod.cached_snapshot(['soniox'], 'en')['soniox']
     assert state.bench == 'account' and state.excluded
+
+
+def _fake_leg_socket(*, endpoint=None, target=None, family='modulate', uid='synthetic', language='en'):
+    raw = SimpleNamespace(is_connection_dead=False, routing_endpoint=endpoint)
+    receiver = SimpleNamespace(host=SimpleNamespace(language=language, request=SimpleNamespace(uid=uid)))
+    session = SimpleNamespace(receiver=receiver)
+    token = live_router.connecting_target.set(target)
+    try:
+        return live_session.LiveLegSocket(raw, None, session, st.STTService(family), 16000, False, False)
+    finally:
+        live_router.connecting_target.reset(token)
+
+
+def test_fleet_endpoint_override_scopes_only_non_account_keys(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
+    endpoint = 'wss://override.invalid/ws'
+    default_state = live_stt_state.fleet_state_key('soniox')
+    scoped = live_stt_state.fleet_state_key('soniox', endpoint=endpoint)
+    assert scoped != default_state and endpoint not in scoped
+    assert live_stt_state.fleet_state_key('soniox', endpoint='wss://other.invalid/ws') != scoped
+    assert live_stt_state.fleet_probe_key('soniox', endpoint=endpoint) != live_stt_state.fleet_probe_key('soniox')
+    assert live_stt_state.fleet_score_keys('soniox', 'en', 3, endpoint=endpoint) != live_stt_state.fleet_score_keys(
+        'soniox', 'en', 3
+    )
+    assert live_stt_state.fleet_state_key('soniox', account=True) == live_stt_state.fleet_state_key(
+        'soniox', account=True, endpoint=endpoint
+    )
+    assert live_stt_state.fleet_prefix('soniox', account=True, endpoint=endpoint) == live_stt_state.fleet_prefix(
+        'soniox', account=True
+    )
+    assert live_stt_state.fleet_state_key('soniox') == default_state
+
+
+@pytest.mark.asyncio
+async def test_leg_transcript_outcome_scopes_custom_endpoint_only(monkeypatch, isolated):
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    monkeypatch.setattr(live_session, 'health', pod)
+    endpoint = 'wss://endpoint-a.invalid/stream'
+    scope = live_health.scoped_identity('modulate', endpoint)
+    scheduled = []
+    monkeypatch.setattr(pod, 'schedule', scheduled.append)
+    leg = _fake_leg_socket(endpoint=endpoint)
+    leg._record_transcript_outcome('text')
+    _fake_leg_socket(endpoint=endpoint)._record_transcript_outcome('no_text')
+    assert set(pod._local) == {(scope, 'en')}
+    assert len(scheduled) == 2
+    for coroutine in scheduled:
+        await coroutine
+    bucket = int(pod._clock() // live_health.SCORE_BUCKET_SECONDS)
+    scoped_text, scoped_no_text = live_stt_state.fleet_score_keys('modulate', 'en', bucket, endpoint=endpoint)
+    default_text, default_no_text = live_stt_state.fleet_score_keys('modulate', 'en', bucket)
+    assert pod._client.data[scoped_text] == '1'
+    assert pod._client.data[scoped_no_text] == '1'
+    assert default_text not in pod._client.data
+    assert default_no_text not in pod._client.data
+    assert live_stt_state.fleet_state_key('modulate', account=True) == live_stt_state.fleet_state_key(
+        'modulate', account=True, endpoint=endpoint
+    )
+    fresh = live_health.FleetHealth(redis_client=pod._client)
+    fresh.cached_snapshot(['modulate'], 'en', endpoint=endpoint)
+    fresh.cached_snapshot(['modulate'], 'en')
+    await fresh.refresh_once()
+    assert fresh._cached_scores[(scope, 'en')].samples == 2
+    custom = fresh.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
+    default = fresh.cached_snapshot(['modulate'], 'en')['modulate']
+    assert custom.samples == 2 and custom.score == pytest.approx(0.5)
+    assert default.samples == 0 and default.score == 0.5
+    sibling = _fake_leg_socket()
+    sibling._record_transcript_outcome('no_text')
+    assert len(scheduled) == 3
+    assert ('modulate', 'en') in pod._local
+    assert pod._local[(scope, 'en')] != pod._local[('modulate', 'en')]
+    await scheduled[2]
+    assert pod._client.data[default_no_text] == '1'
+    assert pod._client.data[scoped_no_text] == '1'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_endpoint_evidence_isolates_siblings_and_default(monkeypatch, isolated, recovery):
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    monkeypatch.setattr(live_session, 'health', pod)
+    endpoint_a, endpoint_b = 'wss://a.invalid/stream', 'wss://b.invalid/stream'
+    _prime_chain(
+        monkeypatch,
+        [
+            {'id': 'modulate-a', 'family': 'modulate', 'cost_per_audio_hour': 0.04, 'endpoint': endpoint_a},
+            {'id': 'modulate-b', 'family': 'modulate', 'cost_per_audio_hour': 0.05, 'endpoint': endpoint_b},
+            {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+        ],
+    )
+    target_a = next(target for target in live_chain.registry() if target.id == 'modulate-a')
+    scope_a = live_health.scoped_identity('modulate', endpoint_a)
+    scope_b = live_health.scoped_identity('modulate', endpoint_b)
+    monkeypatch.setattr(live_chain, 'propose', Mock(return_value=[target_a]))
+
+    async def failing_connect():
+        raise ConnectionError('synthetic connect failure')
+
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.modulate,
+                connect_primary=failing_connect,
+                callbacks={},
+                failed=set(),
+                models=['modulate-velma-2'],
+                routing_uid='synthetic',
+                routing_language='en',
+                routing_models={'modulate': 'modulate-a'},
+            )
+    await _flush_bench_writes(pod)
+    state_a = live_stt_state.fleet_state_key('modulate', endpoint=endpoint_a)
+    assert pod._benches.get(scope_a, ('', 0.0))[0] == 'selection'
+    assert pod._client.data[state_a].startswith('selection:')
+    assert 'modulate' not in pod._benches
+    assert scope_b not in pod._benches
+    assert live_stt_state.fleet_state_key('modulate', endpoint=endpoint_b) not in pod._client.data
+    assert live_stt_state.fleet_state_key('modulate') not in pod._client.data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_endpoint_serving_death_scopes_custom_endpoint_only(monkeypatch, isolated, recovery):
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    monkeypatch.setattr(live_session, 'health', pod)
+    endpoint_a, endpoint_b = 'wss://a.invalid/stream', 'wss://b.invalid/stream'
+    _prime_chain(
+        monkeypatch,
+        [
+            {'id': 'modulate-a', 'family': 'modulate', 'cost_per_audio_hour': 0.04, 'endpoint': endpoint_a},
+            {'id': 'modulate-b', 'family': 'modulate', 'cost_per_audio_hour': 0.05, 'endpoint': endpoint_b},
+            {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+        ],
+    )
+    target_a = next(target for target in live_chain.registry() if target.id == 'modulate-a')
+    scope_a = live_health.scoped_identity('modulate', endpoint_a)
+    scope_b = live_health.scoped_identity('modulate', endpoint_b)
+    leg = _fake_leg_socket(endpoint=endpoint_a, target=target_a)
+    assert leg.record_target_death('modulate_serve_error')
+    await _flush_bench_writes(pod)
+    state_a = live_stt_state.fleet_state_key('modulate', endpoint=endpoint_a)
+    assert pod._benches.get(scope_a, ('', 0.0))[0] == 'selection'
+    assert pod._client.data[state_a].startswith('selection:')
+    assert 'modulate' not in pod._benches
+    assert scope_b not in pod._benches
+    assert live_stt_state.fleet_state_key('modulate', endpoint=endpoint_b) not in pod._client.data
+    assert live_stt_state.fleet_state_key('modulate') not in pod._client.data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recovery', [False, True])
+async def test_account_rejection_protects_siblings_and_default(monkeypatch, isolated, recovery):
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    endpoint_a, endpoint_b = 'wss://a.invalid/stream', 'wss://b.invalid/stream'
+    _prime_chain(
+        monkeypatch,
+        [
+            {'id': 'modulate-a', 'family': 'modulate', 'cost_per_audio_hour': 0.04, 'endpoint': endpoint_a},
+            {'id': 'modulate-b', 'family': 'modulate', 'cost_per_audio_hour': 0.05, 'endpoint': endpoint_b},
+            {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+        ],
+    )
+    target_a = next(target for target in live_chain.registry() if target.id == 'modulate-a')
+    monkeypatch.setattr(live_chain, 'propose', Mock(return_value=[target_a]))
+
+    class AuthReject(Exception):
+        reason = 'auth'
+
+    async def rejecting_connect():
+        raise AuthReject('synthetic auth rejection')
+
+    with pytest.raises(RuntimeError):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=rejecting_connect,
+            callbacks={},
+            failed=set(),
+            models=['modulate-velma-2'],
+            routing_uid='synthetic',
+            routing_language='en',
+            routing_models={'modulate': 'modulate-a'},
+        )
+    await _flush_bench_writes(pod)
+    account_key = live_stt_state.fleet_state_key('modulate', account=True)
+    assert pod._client.data[account_key].startswith('account:')
+    for endpoint in (endpoint_a, endpoint_b, None):
+        state = pod.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
+        assert state.bench == 'account' and state.excluded
+
+
+@pytest.mark.asyncio
+async def test_stale_selection_write_learns_shared_account_bench(monkeypatch, isolated):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    now = [time.time()]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod_a = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    pod_b = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    pod_a.quarantine('modulate', 'account', 1800)
+    await _flush_bench_writes(pod_a)
+    account_key = live_stt_state.fleet_state_key('modulate', account=True)
+    assert redis.data[account_key].startswith('account:')
+    endpoint_a, endpoint_b = 'wss://a.invalid/stream', 'wss://b.invalid/stream'
+    scope_a = live_health.scoped_identity('modulate', endpoint_a)
+    assert await pod_b._write_bench(scope_a, 'selection', now[0] + 120) is True
+    assert pod_b._benches.get('modulate', ('', 0.0))[0] == 'account'
+    assert pod_b._benches['modulate'][1] == pytest.approx(now[0] + 1800, abs=0.001)
+    assert scope_a not in pod_b._benches
+    for endpoint in (endpoint_a, endpoint_b, None):
+        state = pod_b.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
+        assert state.bench == 'account' and state.excluded
+        assert state.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    for endpoint in (endpoint_a, endpoint_b, None):
+        state = pod_b.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
+        assert state.bench == 'account' and state.excluded
+        assert state.score == 0.5 and state.samples == 0
+        assert state.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('warm_mode', ['on', 'shadow'])
+async def test_off_mode_snapshot_is_neutral_and_merges_account_only(monkeypatch, isolated, warm_mode):
+    pod = isolated
+    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
+    monkeypatch.setenv('STT_ROUTING_MODE', warm_mode)
+    now = [time.time()]
+    monkeypatch.setattr(pod, '_clock', lambda: now[0])
+    pod._local[('soniox', 'en')].append((now[0], False))
+    pod._benches['soniox'] = ('selection', now[0] + 600)
+    pod._cached_scores[('soniox', 'en')] = live_health.ProviderState(score=0.1, samples=40)
+    pod._cached_benches['modulate'] = ('selection', now[0] + 600)
+    redis = pod._client
+    redis.data[live_stt_state.fleet_state_key('soniox')] = f'selection:{now[0] + 500:.3f}'
+    redis.data[live_stt_state.fleet_state_key('modulate')] = f'selection:{now[0] + 600:.3f}'
+    redis.data[live_stt_state.fleet_state_key('modulate', account=True)] = f'account:{now[0] + 1800:.3f}'
+    await pod.refresh_once()
+    cached_kind, cached_until = pod._cached_benches['modulate']
+    assert cached_kind == 'account' and cached_until == pytest.approx(now[0] + 1800, abs=0.001)
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    pod._cache_at = now[0] - live_health.CACHE_STALE_SECONDS - 1
+    pod._redis_retry_at = now[0] + 60
+    snapshot = pod.cached_snapshot(['soniox', 'modulate'], 'en')
+    soniox, modulate = snapshot['soniox'], snapshot['modulate']
+    assert soniox.score == 0.5 and soniox.samples == 0
+    assert soniox.bench is None
+    assert pod._benches['soniox'][0] == 'selection'
+    assert modulate.score == 0.5 and modulate.samples == 0
+    assert modulate.bench == 'account' and modulate.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
+    assert modulate.excluded
+
+    connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
+    _, service = await _dial_soniox_only_chain(connect)
+    assert service == st.STTService.soniox and connect.await_count == 1
+
+    monkeypatch.setenv('STT_ROUTING_MODE', warm_mode)
+    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'selection' and state.bench_until == now[0] + 600
+
+
+def test_target_circuit_identity_follows_endpoint_credential_stage_and_family(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    target = _target(id='modulate-a', endpoint='wss://one.invalid/x')
+    circuit = live_router.target_circuit(target)
+    for _ in range(3):
+        circuit.record_failure()
+    assert circuit.state == 'open'
+    rotated = _target(id='modulate-a', endpoint='wss://two.invalid/x')
+    assert live_router.target_circuit(rotated) is not circuit
+    assert live_router.target_circuit(rotated).state == 'closed'
+    assert live_router.target_circuit(_target(id='modulate-a', endpoint='wss://one.invalid/x/')) is not circuit
+    alias = _target(id='modulate-alias', endpoint='wss://one.invalid/x', cost_per_audio_hour=9.9, ramp_percent=1)
+    assert live_router.target_circuit(alias) is circuit
+    assert live_router.target_circuit(target) is circuit
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert live_router.target_circuit(target) is not circuit
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert live_router.target_circuit(target) is not circuit
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    soniox = _target(id='sx', family='soniox', endpoint='wss://one.invalid/x')
+    assert live_router.target_circuit(soniox) is not circuit
+    supplied = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+    assert live_router.target_circuit(None, supplied) is supplied
+    assert live_router.target_circuit(_target(id='modulate-velma-2'), supplied) is supplied
+
+
+def test_target_circuit_cache_is_bounded(monkeypatch):
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    for index in range(70):
+        live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
+    assert len(live_router._target_circuits) == 64

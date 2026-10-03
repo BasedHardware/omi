@@ -48,7 +48,13 @@ with recovery lease keys under the same cost prefix. Fleet keys split two
 recovery probe and score keys digest the family, actual endpoint and
 credential, while the account bench key digests only family and credential, so
 the credential-wide quarantine spans every custom endpoint but survives an
-endpoint rotation that resets selection/score/probe and cost state. The stage
+endpoint rotation that resets selection/score/probe and cost state. Registry
+targets with a custom `endpoint` write and read their own endpoint-scoped
+selection/score/probe partitions — a sibling endpoint's serve deaths, connect
+refusals and transcript outcomes never bench the configured default or other
+siblings, while the credential-wide account bench still protects all of them.
+With `STT_ROUTING_MODE=off` snapshots answer a neutral score and merge only
+family account deadlines, ignoring but not erasing selection state. The stage
 comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod;
 `PROVIDER_MODE=offline` still yields `offline`);
 a changed endpoint, credential or stage starts its scoped state
@@ -317,7 +323,9 @@ with the control arm and the pre-ramp baseline. At small sample sizes these are
 operational gates, not a statistical proof of non-inferiority.
 
 Kill switch: set `STT_ROUTING_ON_PERCENT=0` or `STT_ROUTING_MODE=shadow` (`off`
-also restores static selection; shared account quarantine stays enforced in
+also restores static selection; snapshots go neutral and read only family
+account benches — a stale selection bench cannot shed the chain, and shared
+account quarantine stays enforced in
 every mode, so `off` never reopens a credential another pod withdrew). Apply
 through the coordinator's config PR and
 normal deployment; this is not an instant process-local env mutation.

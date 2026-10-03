@@ -162,7 +162,13 @@ Shared state is namespaced by deployment stage and a hashed endpoint/credential
 identity (`cost-v8` cost and lease keys; `fleet-v2` splits endpoint-scoped
 selection/probe/score keys from a credential-only account bench that survives
 endpoint rotation); changed identity starts its scoped state fresh.
-Per-language freshness is read for every bounded supported language at
+Endpoint attribution goes one level deeper: scores, selection benches and
+probe leases partition by the actual serving endpoint, so evidence from one
+custom registry endpoint never moves its siblings or the configured default,
+while account quarantine stays credential-wide and dominates every sibling.
+While routing is off, connect snapshots report a neutral score and merge only
+family account benches — selection benches and scores are ignored without
+being erased. Per-language freshness is read for every bounded supported language at
 each refresh — an unread language is unknown, not healthy.
 Connect-refusal backoff is separate from account and selection-health benches:
 three target-local 429/connect refusals within 10s cool the target for 2/4/8/10s.

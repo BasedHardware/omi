@@ -435,7 +435,22 @@ Modulate/Soniox use their configured or built-in endpoint and API key. An
 account quarantine therefore spans every custom endpoint sharing one credential,
 while a rotated endpoint starts only endpoint-scoped selection/score/probe and
 cost state fresh — the shared account bench persists until its own expiry or a
-credential change. In-memory views reset on an identity boundary instead of
+credential change. Registry targets carrying their own `endpoint` partition that scope one
+level deeper: transcript outcomes, serve-death and connect-rejection
+selection benches, local scores, interests, pending writes and probe leases
+are partitioned per actual serving endpoint (provider for the configured
+default, `provider@<fleet prefix>` for a custom endpoint), so a sibling
+endpoint's evidence never moves the default or another sibling. Account
+writes and reads stay family-scoped and dominate every sibling's selection
+bench; a snapshot merges the queried endpoint's selection bench with the
+family's strongest live account deadline. Custom target circuits key on the
+same provider+endpoint+credential+stage fingerprint rather than the target
+id, so alias/cost/ramp edits reuse a breaker while an endpoint, credential or
+stage rotation gets a fresh one; the cache is bounded at 64 entries.
+While `STT_ROUTING_MODE=off`, snapshots return a neutral score with zero
+samples and merge only family account benches — local and cached selection
+benches and scores are ignored without being erased, so toggling back on
+retains routing state. In-memory views reset on an identity boundary instead of
 mixing identities, and in-flight writes cannot populate a new identity's
 cache. v7/v1 and older namespaces are never read, migrated or backfilled.
 Raw URLs and credentials never enter Redis paths, logs or metrics.

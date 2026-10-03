@@ -548,7 +548,12 @@ async def connect_configured_chain(
             else:
                 circuit.record_failure()
                 if circuit.state == 'open':
-                    health.quarantine(service.value, 'selection', circuit.account_cooldown_seconds_remaining)
+                    health.quarantine(
+                        service.value,
+                        'selection',
+                        circuit.account_cooldown_seconds_remaining,
+                        endpoint=target.endpoint if target is not None else None,
+                    )
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
@@ -707,8 +712,12 @@ async def connect_configured_chain(
                     callbacks=callbacks,
                     failed=failed,
                     models=models,
-                    failed_targets=failed_targets,
+                    routing_uid=routing_uid,
+                    routing_language=routing_language,
+                    routing_languages=routing_languages,
                     routing_models=routing_models,
+                    failed_targets=failed_targets,
+                    _routing_static=True,
                 )
             reason = normalize_live_stt_reason(
                 error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
@@ -781,7 +790,12 @@ async def connect_configured_chain(
             else:
                 circuit.record_failure()
                 if circuit.state == 'open':
-                    health.quarantine(service.value, 'selection', circuit.account_cooldown_seconds_remaining)
+                    health.quarantine(
+                        service.value,
+                        'selection',
+                        circuit.account_cooldown_seconds_remaining,
+                        endpoint=target.endpoint if target is not None else None,
+                    )
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
