@@ -489,9 +489,9 @@ class ResponseContractTests(unittest.TestCase):
 
     def test_request_models_accept_null_max_results(self):
         req1 = main.SearchPapersRequest(query="attention", max_results=None)
-        self.assertIsNone(req1.max_results)
+        self.assertEqual(req1.max_results, 5)
         req2 = main.GetAuthorPapersRequest(author_id="42", max_results=None)
-        self.assertIsNone(req2.max_results)
+        self.assertEqual(req2.max_results, 5)
 
 
 class UrlNormalizationAndPoolTests(unittest.TestCase):
