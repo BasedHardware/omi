@@ -164,6 +164,14 @@ selection/probe/score keys from a credential-only account bench that survives
 endpoint rotation); changed identity starts its scoped state fresh.
 Per-language freshness is read for every bounded supported language at
 each refresh — an unread language is unknown, not healthy.
+Connect-refusal backoff is separate from account and selection-health benches:
+three target-local 429/connect refusals within 10s cool the target for 2/4/8/10s.
+If backoff suppresses every otherwise-admissible route before any real dial, one
+earliest-cooldown-expiry target still receives a bounded attempt. A due probe
+claims the exclusive probe slot; an early extra attempt does not claim that slot
+or extend/escalate cooldown on refusal. Account, failed-target, capability,
+window admission, and recovery time/attempt exclusions remain hard. The escape
+emits the bounded connect-backoff `escape` event and shared fallback telemetry.
 Global-stage pod cache views (including freshness/unknown state), scoped CAS
 transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
@@ -743,11 +751,31 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 `STT_RETIRED_PROVIDERS` (default `deepgram`). See
 `backend/docs/operational/windowed-live-stt.md` for the alerts.
 
+The new live-STT recovery behavior described below — enlarged replay retention,
+paced prefix replay, the recovery controller, and its metrics — is gated by
+`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code, chart, dev,
+and prod values. The mode is pinned once at session start; in-flight sessions
+and successor legs keep it even if the environment changes, so toggling the
+variable only affects new sessions (or replacement pods). When off, sessions
+run the pre-recovery paths: the 135-second capture cap and legacy reconnect
+budgets, plain `asyncio.Queue` provider send queues without writer pacing, the
+legacy finalize/EOS order, and legacy circuit rejection semantics; the new
+recovery metrics register but stay at zero. When on — intended only for the
+separately enabled canary Deployment — the recovery paths below apply. No
+deployment or enablement is performed by this change. See the rollout gate in
+`backend/docs/operational/windowed-live-stt.md`.
+
 For an allocated windowed-TDT session, listen retains a bounded 90-second
 capture-positioned PCM ring. Delivered window segments advance its finalized
 sample boundary. If the socket dies after accepting audio, the receiver starts
 the replacement provider epoch at the first unfinished sample and replays that
-audio before sending the current unsent chunk. A full ring triggers failover
+audio before sending the current unsent chunk. Replay uses 1x audio-time pacing,
+a 20-second prefix budget, and a 5-second setup bound. A longer unanswered ring
+is cut to its newest 20 seconds with a bounded skipped-seconds metric; this
+explicit cut is not an emitted-text safe trim. Live ingestion continues into a
+bounded 26-second ordered PCM tail, which drains before EOS on departure;
+undelivered teardown cuts are metered. See the replay pacing and latency contract
+in `backend/docs/operational/windowed-live-stt.md`. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
 Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest
@@ -783,7 +811,7 @@ sees no marker and preserves that existing behavior. Deploy listen first, then
 the Parakeet image through the existing `gcp_parakeet.yml` workflow, to avoid
 introducing signalled queue expiry while old listeners remain. Backfill
 requests ignore the header and never carry a deadline.
-A partial replay retains **all un-emitted audio**, including bytes accepted by
+Within the 20-second replay audio budget, a partial replay retains un-emitted audio, including bytes accepted by
 a replacement that dies before returning text, for the next vendor leg. The
 ring continues across downstream providers; emitted capture positions trim it.
 A failed replacement is excluded by its actual provider, including a rejection
@@ -794,8 +822,9 @@ The retained window span bypasses downstream VAD gating and finalize signals
 during replay: speech admitted with window gain cannot be discarded by a
 different downstream VAD decision. Ordinary sends keep their existing gate.
 Each adopted replacement gets 15 seconds of new capture headroom while it
-processes a potentially full source backlog. The finite three-provider suffix
-bounds retention at 135 seconds; stalled un-emitted audio still fails over
+processes a potentially full source backlog. The bounded target-and-time
+recovery controller (unique targets within the shared episode) bounds
+retention at 150 seconds; stalled un-emitted audio still fails over
 before eviction. This ceiling grows from the original 90-second ring only
 while a replacement is handling its replay obligation. As soon as transcript
 progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
@@ -803,7 +832,7 @@ without evicting pending audio, leaving the full 15-second headroom free.
 A later replacement can reserve headroom again.
 The ring survives until session teardown, but emitted text continuously settles
 its contents; healthy continuous speech normally retains only its current tail.
-135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB
+150 seconds of mono PCM16 is 2.4 MB at 8 kHz, 4.8 MB at 16 kHz, or 14.4 MB
 at 48 kHz. With the ordinary 30ms flush floor, owned Python ring objects add
 about 0.565 MB per ring. At 60 sessions/pod and three post-failover sessions,
 the conservative 16 kHz planning allowance for these changes is about 16 MiB of added
@@ -847,8 +876,16 @@ monitor observations therefore cannot repeat an exhausted chain.
 A managed session may make one additional Soniox connection after that leg's
 previous transport loss (`connection_lost` or `send_failed`), only when its
 local circuit is closed and no untried configured Deepgram rescue is available.
-The failed window never re-arms. Rebuilds now have an actual three-attempt
-session budget (two on the legacy path), rather than counting distinct providers.
+The failed window never re-arms. Rebuilds share the bounded target-and-time
+recovery controller rather than counting distinct providers. Each 60s
+episode ends on the first nonempty successor transcript or, for an adopted
+but silent successor, on five continuous seconds of observed-connected dwell
+after adoption; the connected-dwell proof clears only the deadline — pending
+leg settlement still requires real text or the terminal path. A successor
+dying before either proof keeps the original episode's remaining budget;
+one dying after the release opens a fresh 60s episode, and a session is
+bounded to twenty such episodes. The unique-target ledger, dial count, and
+that single Soniox re-entry grant span all of a session's episodes.
 Concurrent last-resort handshakes retain the configured circuit probe limit.
 A session waits at most 12 seconds for an occupied non-account probe slot;
 account benches and window shedding are never forced. At the 300ms default

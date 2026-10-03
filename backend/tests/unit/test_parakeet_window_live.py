@@ -1,6 +1,7 @@
 """Live TDT runs through real admission, socket, VAD and receiver seams; no network."""
 
 import asyncio
+from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -8,8 +9,21 @@ from unittest.mock import AsyncMock
 import httpx
 import numpy as np
 import pytest
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
-from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
+from config.live_stt_recovery import session_recovery_enabled
+from utils.stt.recovery_state import LiveRecoveryController
+
+from utils.stt import (
+    connect_backoff as connect_backoff_module,
+    live_chain,
+    live_router,
+    parakeet_window as window,
+    provider_resilience,
+    soniox as soniox_module,
+    streaming as st,
+    vad_gate,
+)
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.observability.fallback import record_fallback
 from utils.stt.live_metrics import (
@@ -49,6 +63,7 @@ def _mock_post_pacing(monkeypatch, sleep):
 
 @pytest.fixture(autouse=True)
 def runtime(monkeypatch):
+    monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PREFIX_SECONDS', 150.0)
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
@@ -76,6 +91,16 @@ def runtime(monkeypatch):
         )
     monkeypatch.setattr(st, '_deepgram_is_available', lambda: True)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
+    monkeypatch.setattr(soniox_module, '_rate_limit_events', [])
+    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(
+        connect_backoff_module,
+        '_shared',
+        connect_backoff_module.ConnectRefusalBackoff(on_event=live_chain._connect_backoff_event),
+    )
     # Keep the production VAD state machine/remapper; supply a deterministic
     # speech detector (nonzero PCM=speech) instead of downloading a model.
     # Ingest AGC scales the 0x01 marker, so a byte-literal test would drop speech.
@@ -136,6 +161,11 @@ async def _wait_requests(client, count: int) -> None:
         await _REAL_SLEEP(0)
 
 
+@pytest.fixture(autouse=True)
+def _recovery_on(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 def receiver():
     emitted = []
     host = SimpleNamespace(
@@ -151,8 +181,11 @@ def receiver():
         is_multi_channel=False,
         use_custom_stt=False,
     )
+    enabled = session_recovery_enabled(host)
     return SimpleNamespace(
         host=host,
+        recovery_enabled=enabled,
+        recovery=LiveRecoveryController(host) if enabled else None,
         _stt_failed_providers=set(),
         vad_gate=None,
         _enqueue_stt_segments=lambda segments, **kwargs: emitted.extend(segments),
@@ -742,7 +775,11 @@ async def test_real_receiver_initializes_window_and_survives_post_failure(monkey
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
     # Exercise initialize/rebuild directly, without running its background monitor.
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        asyncio.create_task(coro, name=kw.get('name'))
+        if kw.get('name') in {'stt_replay_recovery', 'stt_replay_live_tail'}
+        else coro.close()
+    )
     actual = ListenReceiver(host, [], {})
     client = Client(status=503)
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -792,7 +829,11 @@ async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkey
     host.state.stt_terminal_failure = False
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        asyncio.create_task(coro, name=kw.get('name'))
+        if kw.get('name') in {'stt_replay_recovery', 'stt_replay_live_tail'}
+        else coro.close()
+    )
     actual = ListenReceiver(host, [], {})
     monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
     replayed = []
@@ -897,7 +938,11 @@ async def _receiver_with_racing_window(monkeypatch, client, *, speech_seconds=6,
     host.state.dg_usage_ms_pending = 0
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        asyncio.create_task(coro, name=kw.get('name'))
+        if kw.get('name') in {'stt_replay_recovery', 'stt_replay_live_tail'}
+        else coro.close()
+    )
     actual = ListenReceiver(host, [], {})
     monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
     replayed = []
@@ -999,7 +1044,11 @@ async def _receiver_for_anchor_replay(monkeypatch, client):
     host.state.dg_usage_ms_pending = 0
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        asyncio.create_task(coro, name=kw.get('name'))
+        if kw.get('name') in {'stt_replay_recovery', 'stt_replay_live_tail'}
+        else coro.close()
+    )
     actual = ListenReceiver(host, [], {})
     monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
     replayed = []
@@ -1023,6 +1072,10 @@ async def _flush_capture(actual, pcm, start_sample):
     actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
     actual._stt_buffer_start_sample = start_sample
     await actual._flush_stt_buffer(bytearray(pcm), force=True)
+    if actual._replay_recovery_task is not None:
+        await actual._replay_recovery_task
+    if getattr(actual.stt_socket, '_task', None) is not None:
+        await actual.stt_socket._task
 
 
 async def _wait_replay_anchor(raw, previous):
@@ -1601,6 +1654,7 @@ async def test_blip_followed_by_fast_capture_silence_flushes_below_post_pace(mon
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['replay_ring_cap', 'first_text_deadline'])
 async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch, failure):
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
     client = RacingTextClient()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -2047,6 +2101,8 @@ class LagScenarioClient(ProgressThenHoldClient):
 async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow(monkeypatch, caplog, scenario):
     # Run the real window jobs at deterministic capture steps; no synthetic
     # speech predicate, no real audio/content and no wall-clock waiting.
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
+
     async def parked_pump(_self):
         await asyncio.Future()
 
@@ -2208,6 +2264,7 @@ async def test_no_first_text_cut_is_noop_but_startup_deadline_still_protects_noi
 
 @pytest.mark.asyncio
 async def test_pacing_wait_with_capture_burst_reports_deferred_cut_and_exact_replay(monkeypatch):
+    monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
     client = ProgressThenHoldClient()
     actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
     raw = previous.raw
@@ -2447,6 +2504,10 @@ async def test_pending_window_post_overflow_replays_speech_before_next_chunk(mon
     assert not previous.raw._pump_task.done()  # the real pump is still awaiting the POST
     assert ring.snapshot() == ((0, pcm),)
     await actual._flush_stt_buffer(bytearray(next_speech), force=True)
+    if actual._replay_recovery_task is not None:
+        await actual._replay_recovery_task
+    if getattr(actual.stt_socket, '_task', None) is not None:
+        await actual.stt_socket._task
 
     assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims
     assert previous.raw.death_reason == 'capacity_full'
@@ -2488,6 +2549,10 @@ async def test_completed_window_post_allows_silent_ring_trim_without_failover(mo
     actual.capture_timeline.accept(next_silence, window.time.time(), window.time.monotonic())
     actual._stt_buffer_start_sample = len(pcm) // 2
     await actual._flush_stt_buffer(bytearray(next_silence), force=True)
+    if actual._replay_recovery_task is not None:
+        await actual._replay_recovery_task
+    if getattr(actual.stt_socket, '_task', None) is not None:
+        await actual.stt_socket._task
 
     assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims + 1
     assert actual.stt_socket is previous
@@ -2609,7 +2674,11 @@ async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch)
     host.state.dg_usage_ms_pending = 0
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        asyncio.create_task(coro, name=kw.get('name'))
+        if kw.get('name') in {'stt_replay_recovery', 'stt_replay_live_tail'}
+        else coro.close()
+    )
     actual = ListenReceiver(host, [], {})
     assert await actual.initialize_stt()
     previous = actual.stt_socket
@@ -2620,6 +2689,10 @@ async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch)
         actual.capture_timeline.accept(one_second, window.time.time(), window.time.monotonic())
         actual._stt_buffer_start_sample = second * 16000
         await actual._flush_stt_buffer(bytearray(one_second), force=True)
+        if actual._replay_recovery_task is not None:
+            await actual._replay_recovery_task
+        if getattr(actual.stt_socket, '_task', None) is not None:
+            await actual.stt_socket._task
     assert actual.stt_socket is previous
     assert not previous.is_connection_dead
     assert not previous.raw.has_untranscribed_speech()
@@ -2741,9 +2814,14 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
         assert actual._pending_live_failover is None
         assert not any(e['outcome'] == 'recovered' for e in events)
         exhausted = [e for e in events if e['outcome'] == 'exhausted']
-        assert {'stt_selection', 'stt_live_session'} <= {e['component'] for e in exhausted}
+        assert 'stt_selection' in {e['component'] for e in exhausted}
+        assert any(e['component'] == 'stt_live_session' and e['outcome'] == 'degraded' for e in events)
+        assert not any(e['component'] == 'stt_live_session' for e in exhausted)
         assert any(e['component'] == 'stt_selection' and e['to_mode'] == 'parakeet' for e in exhausted)
-        assert any(e['component'] == 'stt_live_session' and e['to_mode'] == 'parakeet' for e in exhausted)
+        assert any(
+            e['component'] == 'stt_live_session' and e['to_mode'] == 'parakeet' and e['outcome'] == 'degraded'
+            for e in events
+        )
     else:
         recovered = [e for e in events if e['outcome'] == 'recovered']
         assert len(recovered) == 2

@@ -4,6 +4,7 @@ import asyncio
 import json
 
 import pytest
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
@@ -14,6 +15,11 @@ from utils.stt import live_session, live_chain, live_health, live_router
 from utils.stt.live_router import connecting_target
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from tests.unit.test_live_cost_router import MemoryRedis
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class Replacement:
@@ -266,6 +272,7 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
 
 @pytest.mark.asyncio
 async def test_partial_replay_acceptance_without_text_does_not_discard_prefix(monkeypatch):
+    monkeypatch.setattr("utils.stt.replay_delivery.REPLAY_PACKET_BYTES", 1280)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     connect = st.process_audio_modulate
 
@@ -358,6 +365,9 @@ async def test_five_minutes_on_replacement_trim_on_text_and_remain_bounded(monke
 
 @pytest.mark.asyncio
 async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(monkeypatch):
+    from utils.stt import recovery_state
+
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     try:
         assert await actual._failover_stt_socket()
@@ -369,9 +379,13 @@ async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(mo
         await _flush_capture(actual, pcm, 1920 + 104 * 16000)
         assert actual.host.stt_service == st.STTService.soniox
         assert len(legs['soniox']) == 1
-        assert b''.join(legs['soniox'][0].sent) == capture + pcm * 105
-        assert actual._window_ring().ring_seconds == 120
-        assert actual._window_ring().buffered_bytes == len(capture) + 105 * len(pcm)
+        sent = b''.join(legs['soniox'][0].sent)
+        expected_tail = capture + pcm * 105
+        assert sent and expected_tail.endswith(sent)
+        assert len(sent) <= (20 + 26) * len(pcm) + len(pcm)
+        assert actual._window_ring().ring_seconds >= actual._window_ring()._base_ring_seconds
+        assert actual._window_ring().buffered_bytes < len(expected_tail)
+        assert actual._window_ring().capture_bounds[0] > 0
         assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
@@ -414,13 +428,16 @@ async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_
         assert b''.join(legs['soniox'][0].sent) == expected
         legs['soniox'][0].is_connection_dead = True
         legs['soniox'][0].typed_death_reason = 'provider_5xx'
+        ring_before = b''.join(data for _, data in actual._window_ring().snapshot())
         assert await actual._failover_stt_socket()
         assert len(legs['soniox']) == 2
-        assert b''.join(legs['soniox'][1].sent) == expected
-        assert actual._resilient_audio._replayed_samples == len(expected) // 2
+        sent = b''.join(legs['soniox'][1].sent)
+        assert sent and ring_before.endswith(sent)
+        assert actual._resilient_audio._replayed_samples == len(sent) // 2
         legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
         assert base.emitted == []
-        assert actual._window_ring().capture_bounds == (0, 321920)
+        bounds = actual._window_ring().capture_bounds
+        assert bounds[0] > 0 and bounds[1] == 321920
     finally:
         await actual._drain_stt_sockets()
 

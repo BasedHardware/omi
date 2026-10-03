@@ -67,8 +67,11 @@ void main() {
     BleBridge.instance.onDeviceReady(uuid, []);
     final subscription = transport.getCharacteristicStream(serviceUuid, charUuid).listen((_) {});
     addTearDown(subscription.cancel);
-    expect(host.subscribed, hasLength(1),
-        reason: 'missing cached characteristic still has an observable native result');
+    expect(
+      host.subscribed,
+      hasLength(1),
+      reason: 'missing cached characteristic still has an observable native result',
+    );
     host.subscriptionResult!.completeError(StateError('NOT_FOUND'));
     await pumpEventQueue();
     expect(transport.subscriptionFailures, hasLength(1));
@@ -201,7 +204,7 @@ void main() {
       beeAudioCharacteristicUuid,
       fieldyAudioCharacteristicUuid,
       friendPendantAudioCharacteristicUuid,
-      limitlessRxCharUuid
+      limitlessRxCharUuid,
     ]) {
       test('$platform $audio initial failure reaches capture and retries once', () {
         debugDefaultTargetPlatformOverride = platform;
@@ -214,7 +217,7 @@ void main() {
             final errors = <Object>[];
             transport.audioSubscriptionErrors.listen(errors.add);
             BleBridge.instance.onDeviceReady(uuid, [
-              BleService(uuid: serviceUuid, characteristicUuids: [audio])
+              BleService(uuid: serviceUuid, characteristicUuids: [audio]),
             ]);
             transport.getCharacteristicStream(serviceUuid, audio).listen((_) {});
             first.completeError(StateError('CCCD failed'));
@@ -458,8 +461,9 @@ void main() {
       BleBridge.instance.onDeviceReady(uuid, audioServices);
       async.flushMicrotasks();
 
-      final subscribesBeforeWatch =
-          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
+      final subscribesBeforeWatch = hostApi.subscribed
+          .where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase()))
+          .length;
       expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
 
       async.elapse(const Duration(seconds: 4));
@@ -468,6 +472,53 @@ void main() {
         hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length,
         subscribesBeforeWatch + 1,
         reason: 'Bee audio UUID must be recognized so CCCD retry arms',
+      );
+    });
+  });
+
+  test('a held custody gate defers native audio subscribe past the liveness watch and dies with its generation', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final host = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: host);
+
+      final gate = Completer<void>();
+      transport.beforeAudioResubscribe = (_) => gate.future;
+      BleBridge.instance.onDeviceReady(uuid, services);
+      transport.getCharacteristicStream(serviceUuid, charUuid).listen((_) {});
+      async.flushMicrotasks();
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        host.subscribed,
+        isEmpty,
+        reason: 'a held gate must outlive repeated 4s liveness watches with no native audio subscribe',
+      );
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, 'test');
+      async.flushMicrotasks();
+      gate.complete();
+      async.flushMicrotasks();
+      expect(
+        host.subscribed,
+        isEmpty,
+        reason: 'the stale generation gate completing after disconnect must not subscribe the old link',
+      );
+
+      final gate2 = Completer<void>();
+      transport.beforeAudioResubscribe = (_) => gate2.future;
+      BleBridge.instance.onDeviceReady(uuid, services);
+      async.flushMicrotasks();
+      expect(host.subscribed, isEmpty, reason: 'the new physical link waits for its own custody gate');
+      gate2.complete();
+      async.flushMicrotasks();
+      expect(
+        host.subscribed.where((s) => s.endsWith(charUuid.toLowerCase())),
+        hasLength(1),
+        reason: 'exactly one current-generation audio subscribe after the gate completes',
       );
     });
   });
