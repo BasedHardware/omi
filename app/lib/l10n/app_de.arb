@@ -2085,7 +2085,7 @@
     "storageLocationLimitlessPendant": "Limitless Pendant",
     "storageLocationPhone": "Telefon",
     "storageLocationPhoneMemory": "Telefon (Speicher)",
-    "storedOnDevice": "Gespeichert auf {deviceName}",
+    "storedOnDevice": "Speicherort: {deviceName}",
     "transferring": "Übertragung…",
     "transferRequired": "Übertragung erforderlich",
     "downloadingAudioFromSdCard": "Audio von der SD-Karte deines Geräts wird heruntergeladen",

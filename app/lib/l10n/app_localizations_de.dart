@@ -6648,7 +6648,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Gespeichert auf $deviceName';
+    return 'Speicherort: $deviceName';
   }
 
   @override

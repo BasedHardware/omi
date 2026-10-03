@@ -38,6 +38,12 @@ class RequirePlaceholdersKeptTest(unittest.TestCase):
             "{gender, select, male{He} other{They}}", "{gender, select, other{Sie}}", "de", "pronoun"
         )
 
+    def test_quoted_plural_literal_does_not_exempt_with_escaping(self) -> None:
+        english = "'{count, plural, other{item}}' ETA: {time}"
+        with self.assertRaises(l10n.L10nError):
+            l10n.require_placeholders_kept(english, "'{count, plural, other{x}}' ETA", "da", "eta", use_escaping=True)
+        l10n.require_placeholders_kept(english, "'{count, plural, other{x}}' ETA: {time}", "da", "eta", use_escaping=True)
+
 
 class CheckCommandTest(unittest.TestCase):
     def _run_check(self, translated: str) -> int:

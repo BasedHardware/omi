@@ -5788,7 +5788,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Spracováva sa $count nahrávok. Súbory sa potom odstránia z SD karty.';
+    return 'Počet nahrávok na spracovanie: $count. Súbory sa potom odstránia z SD karty.';
   }
 
   @override

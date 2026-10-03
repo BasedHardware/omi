@@ -297,6 +297,15 @@ def require_placeholder_subset(
 _PLURAL_OR_SELECT = re.compile(r"\{\s*\w+\s*,\s*(plural|select)\b")
 
 
+def has_plural_or_select(message: str, use_escaping: bool = False) -> bool:
+    """Whether the parsed message has a plural/select node (quoted literals don't count)."""
+    try:
+        nodes = parse_icu(message, use_escaping=use_escaping)
+    except L10nError:
+        return bool(_PLURAL_OR_SELECT.search(message))
+    return any(isinstance(node, tuple) and node and node[0] in {"plural", "select"} for node in nodes)
+
+
 def require_placeholders_kept(
     english: str, translated: str, locale: str, key: str, use_escaping: bool = False
 ) -> None:
@@ -305,7 +314,7 @@ def require_placeholders_kept(
     Dropping one silently hides runtime data ("ETA" instead of "ETA: 5 min"). Plural/select
     messages are exempt because locales legitimately restructure them.
     """
-    if _PLURAL_OR_SELECT.search(english) or _PLURAL_OR_SELECT.search(translated):
+    if has_plural_or_select(english, use_escaping) or has_plural_or_select(translated, use_escaping):
         return
     dropped = placeholder_names(english, use_escaping=use_escaping) - placeholder_names(
         translated, use_escaping=use_escaping

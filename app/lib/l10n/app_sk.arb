@@ -1794,7 +1794,7 @@
     "processedFilesDeleted": "Spracované súbory odstránené",
     "deviceNotResponding": "Zariadenie neodpovedá. Skúste to prosím znova.",
     "sdCardProcessing": "Spracovanie SD karty",
-    "sdCardProcessingMessage": "Spracováva sa {count} nahrávok. Súbory sa potom odstránia z SD karty.",
+    "sdCardProcessingMessage": "Počet nahrávok na spracovanie: {count}. Súbory sa potom odstránia z SD karty.",
     "process": "Spracovať",
     "processingFailed": "Spracovanie zlyhalo",
     "downloadingFromSdCard": "Sťahovanie z SD karty",
