@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, TypedDict
@@ -45,10 +46,16 @@ DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 # A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
 # re-selected by every reconciler tick on every pod. Without a delay that is one claim
 # transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
+# delay backs off per attempt and saturates at DELETION_WIPE_RETRY_MAX_DELAY.
+# When attempts reach DELETION_WIPE_MAX_ATTEMPTS, it transitions to terminal_failed so
+# dead queues or permanently poisoned records do not burn infinite transactions.
 DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
 DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
-_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
+DELETION_WIPE_MAX_ATTEMPTS = int(os.getenv('DELETION_WIPE_MAX_ATTEMPTS', '10'))
+_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled', 'terminal_failed'})
+_DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES = (
+    frozenset({'pending', 'retrying', 'running', 'failed'}) | _DELETION_WIPE_TERMINAL_STATUSES
+)
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
 ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
@@ -402,7 +409,7 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
                     {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
                 )
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
-            if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
+            if status in _DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES:
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
     transaction.set(
         doc_ref,
@@ -470,13 +477,28 @@ def mark_user_deletion_wipe_completed(uid: str) -> bool:
     )
 
 
-def mark_user_deletion_wipe_failed(uid: str):
+def mark_user_deletion_wipe_failed(uid: str, error: str = ''):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
+    payload: dict[str, Any] = {
+        'wipe_status': 'failed',
+        'wipe_failed_at': datetime.now(timezone.utc),
+        'wipe_attempts': firestore.Increment(1),
+        'wipe_error': str(error or 'unspecified_failure'),
+    }
+    account_deletion_document(uid).set(payload, merge=True)
+
+
+def mark_user_deletion_wipe_terminal_failed(uid: str, reason: str = '', error: str = '') -> None:
+    """Transition an account deletion to terminal failure when retry attempts are exhausted.
+
+    Stops all subsequent reconciliation re-enqueueing and Firestore transaction loops.
+    """
     account_deletion_document(uid).set(
         {
-            'wipe_status': 'failed',
-            'wipe_failed_at': datetime.now(timezone.utc),
-            'wipe_attempts': firestore.Increment(1),
+            'wipe_status': 'terminal_failed',
+            'wipe_terminal_at': datetime.now(timezone.utc),
+            'terminal_reason': str(reason or 'max_attempts_exceeded'),
+            'terminal_error': str(error or 'unknown_failure_detail'),
         },
         merge=True,
     )
@@ -587,7 +609,7 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
         status = (snapshot.to_dict() or {}).get('wipe_status')
-        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+        if status in _DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES:
             return False
 
     transaction.set(
@@ -680,10 +702,19 @@ def get_pending_deletion_wipes(
         if len(result) >= limit:
             break
         data = doc.to_dict()
+        raw_attempts = data.get('wipe_attempts')
+        attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 1
         failed_at = data.get('wipe_failed_at')
         # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
         # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
-        if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
+        # Backoff applies only to retryable records (attempts < DELETION_WIPE_MAX_ATTEMPTS).
+        # Capped records must never be filtered out or delayed by backoff so the reconciler
+        # can immediately transition them to terminal_failed.
+        if (
+            attempts < DELETION_WIPE_MAX_ATTEMPTS
+            and failed_at
+            and failed_at + deletion_wipe_retry_delay(attempts) > now
+        ):
             continue
         result.append(data | {'uid': doc.id})
 
@@ -714,7 +745,12 @@ def get_pending_deletion_wipes(
             if len(result) >= limit:
                 break
             data = doc.to_dict()
-            running_at = data.get('wipe_running_at')
+            running_at = (
+                data.get('wipe_running_at')
+                or data.get('wipe_claimed_at')
+                or data.get('wipe_queued_at')
+                or data.get('wipe_intent_at')
+            )
             if running_at and running_at < running_cutoff:
                 result.append(data | {'uid': doc.id})
 
@@ -794,12 +830,35 @@ def _claim_deletion_wipe_txn(
         # it if it's stale beyond ``running_stale_after`` — the worker almost
         # certainly crashed or the pod was killed mid-execution. A fresh or
         # moderately recent ``running`` marker belongs to a live worker.
-        running_at = data.get('wipe_running_at')
-        if running_at and running_at >= now - running_stale_after:
+        running_at = (
+            data.get('wipe_running_at')
+            or data.get('wipe_claimed_at')
+            or data.get('wipe_queued_at')
+            or data.get('wipe_intent_at')
+        )
+        if not running_at:
+            return None
+        if running_at >= now - running_stale_after:
             return None
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'failed':
+        raw_attempts = data.get('wipe_attempts')
+        attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 0
+        if attempts >= DELETION_WIPE_MAX_ATTEMPTS:
+            transaction.update(
+                doc_ref,
+                {
+                    'wipe_status': 'terminal_failed',
+                    'wipe_terminal_at': now,
+                    'terminal_reason': 'max_attempts_exceeded',
+                    'terminal_error': str(data.get('wipe_error') or f'max attempts ({attempts}) exceeded'),
+                },
+            )
+            return None
+        failed_at = data.get('wipe_failed_at')
+        if failed_at and failed_at + deletion_wipe_retry_delay(attempts if attempts > 0 else 1) > now:
+            return None
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'retrying':
@@ -853,7 +912,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
     if status == 'completed':
         return 'completed'
-    if status in ('cancelled', 'deleting_auth'):
+    if status in _DELETION_WIPE_TERMINAL_STATUSES or status == 'deleting_auth':
         return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')

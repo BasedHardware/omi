@@ -108,7 +108,7 @@ def test_a_poisoned_record_never_shadows_a_ready_one(monkeypatch):
         monkeypatch,
         {
             'failed': [
-                _failed('poisoned', minutes_ago=1, attempts=40),
+                _failed('backing_off', minutes_ago=1, attempts=3),
                 _failed('ready', minutes_ago=1, attempts=1),
             ]
         },
