@@ -17,6 +17,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -220,6 +221,14 @@ class ForceDirectedSimulation3D {
   }
 }
 
+/// Label of the user's own node: their given name, else the localized "You".
+/// The backend's English 'me' / 'the user' labels still identify that node.
+@visibleForTesting
+String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
+  final name = givenName.trim();
+  return name.isNotEmpty ? name : l10n.you;
+}
+
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
@@ -392,8 +401,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final nodes = data['nodes'] as List<dynamic>? ?? [];
     final edges = data['edges'] as List<dynamic>? ?? [];
 
-    final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
+    final userLabel = memoryGraphUserLabel(SharedPreferencesUtil().givenName, context.l10n);
     final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
