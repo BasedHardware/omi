@@ -4935,6 +4935,16 @@ export interface TtsSynthesizeRequest {
   voice_settings?: TtsVoiceSettings | null;
 }
 
+export interface TtsVoice {
+  id: string;
+  name: string;
+}
+
+export interface TtsVoiceCatalog {
+  default_voice_id: string;
+  voices: Array<TtsVoice>;
+}
+
 export interface TtsVoiceSettings {
   similarity_boost?: number | null;
   stability?: number | null;
@@ -5334,6 +5344,12 @@ export interface WrappedStatusResponse {
   result?: Record<string, unknown> | null;
   status: string;
   year?: number;
+}
+
+export interface routers__desktop_tts_updates__TtsSynthesizeRequest {
+  instructions?: string | null;
+  text: string;
+  voice_id?: string | null;
 }
 
 export interface routers__focus_sessions__ScreenActivityRow {
@@ -6040,6 +6056,8 @@ export interface OmiApiSchemas {
   "TriggerRuntimePolicy": TriggerRuntimePolicy;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
+  "TtsVoice": TtsVoice;
+  "TtsVoiceCatalog": TtsVoiceCatalog;
   "TtsVoiceSettings": TtsVoiceSettings;
   "UnapprovedPublicAppResponse": UnapprovedPublicAppResponse;
   "UpdateAIUserProfileRequest": UpdateAIUserProfileRequest;
@@ -6094,6 +6112,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "routers__desktop_tts_updates__TtsSynthesizeRequest": routers__desktop_tts_updates__TtsSynthesizeRequest;
   "routers__focus_sessions__ScreenActivityRow": routers__focus_sessions__ScreenActivityRow;
   "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
@@ -9401,6 +9420,26 @@ export interface OmiApiPaths {
       operationId: "create_outcome_v1_task_intelligence_outcomes_post";
       responses: {
         "200": OutcomeRecord;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/tts/synthesize": {
+    post: {
+      operationId: "tts_synthesize_v1_tts_synthesize_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/tts/voices": {
+    get: {
+      operationId: "list_tts_voices_v1_tts_voices_get";
+      responses: {
+        "200": TtsVoiceCatalog;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17220,6 +17259,25 @@ export async function create_outcome_v1_task_intelligence_outcomes_post(header: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function list_tts_voices_v1_tts_voices_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<TtsVoiceCatalog> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/tts/voices`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_ai_profile_v1_users_ai_profile_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AIUserProfileResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/ai-profile`;
@@ -20229,4 +20287,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 472 client methods generated.
+// Total: 473 client methods generated.
