@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
@@ -45,28 +46,28 @@ enum MobileFeedbackReason {
 }
 
 String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
-  MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
-  MobileFeedbackKind.recordingQuality => 'recording_quality',
-};
+      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+      MobileFeedbackKind.recordingQuality => 'recording_quality',
+    };
 
 String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
-  MobileFeedbackTargetKind.conversation => 'conversation',
-  MobileFeedbackTargetKind.recording => 'recording',
-};
+      MobileFeedbackTargetKind.conversation => 'conversation',
+      MobileFeedbackTargetKind.recording => 'recording',
+    };
 
 String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
-  MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
-  MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
-  MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
-  MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
-  MobileFeedbackReason.summaryOther => 'summary_other',
-  MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
-  MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
-  MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
-  MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
-  MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
-  MobileFeedbackReason.recordingOther => 'recording_other',
-};
+      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+      MobileFeedbackReason.summaryOther => 'summary_other',
+      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+      MobileFeedbackReason.recordingOther => 'recording_other',
+    };
 
 /// Persist explicit, content-free mobile feedback through the idempotent
 /// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
@@ -112,16 +113,15 @@ class MobileFeedbackReceipt {
 
 /// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
 /// accept an override of this shape so tests can observe the request path.
-typedef MobileFeedbackSubmit =
-    Future<MobileFeedbackReceipt?> Function({
-      required MobileFeedbackKind kind,
-      required String targetId,
-      required int value,
-      MobileFeedbackReason? reason,
-      String? correlationId,
-      String? feedbackId,
-      required MobileFeedbackTargetKind targetKind,
-    });
+typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+});
 
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
@@ -357,16 +357,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
-  var response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
+class PeopleListResponse {
+  const PeopleListResponse({required this.people, this.statsTruncated = false});
+
+  final List<Person> people;
+  final bool statsTruncated;
+
+  static PeopleListResponse? fromResponse(http.Response response) {
+    if (response.statusCode != 200) return null;
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
       return Person.fromGenerated(
@@ -376,9 +374,20 @@ Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool inclu
     }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
-    return people;
+    return PeopleListResponse(people: people, statsTruncated: isOmiListTruncated(response));
   }
-  return null;
+}
+
+Future<PeopleListResponse?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
+  var response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  return PeopleListResponse.fromResponse(response);
 }
 
 @visibleForTesting
@@ -966,13 +975,14 @@ Future<String?> exportUserDataToFile(
   Future<void>? abortTrigger,
   AuthSessionSnapshot? authorizationSnapshot,
   AuthService? authService,
-}) => export_user_data.exportUserDataToFile(
-  filePath,
-  onProgress: onProgress,
-  abortTrigger: abortTrigger,
-  authorizationSnapshot: authorizationSnapshot,
-  authService: authService,
-);
+}) =>
+    export_user_data.exportUserDataToFile(
+      filePath,
+      onProgress: onProgress,
+      abortTrigger: abortTrigger,
+      authorizationSnapshot: authorizationSnapshot,
+      authService: authService,
+    );
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');

@@ -12295,4 +12295,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimeiset $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
 }

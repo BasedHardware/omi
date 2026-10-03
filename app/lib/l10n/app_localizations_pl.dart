@@ -12330,4 +12330,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ostatnie $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';
 }

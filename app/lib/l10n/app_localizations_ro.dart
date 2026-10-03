@@ -12346,4 +12346,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimele $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
 }
