@@ -14,32 +14,75 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 Phone safety-WAL uploads may carry the client recording id and audio interval.
 Listen creates a new server recording id and conversation on every silence
-rollover, while the phone tags all WALs with the client id it minted
-(`client_conversation_id`). Every live generation therefore also stores that
-client id as `external_data.recording_origin_id`. Sync binds each VAD segment of
-a recording-id upload on its own to the one generation of that recording whose
-source, client device, lock state and interval (5 s before its start, 60 s
-after its last word) hold the segment; smart-merge donors resolve to their
-survivor. A batch that straddles generations is split across them. A segment
-with no unique generation keeps the phone's `conversation_id` stamp when there
-is one, and otherwise takes the ordinary unbound path, which never adopts a
-live row. `SYNC_LINEAGE_RESOLVE_ENABLED=false` (on backend-listen, Cloud Run
-backend for inline sync, backend-sync and backend-sync-backfill) restores the
-earlier whole-batch binding: one conversation whose recording id equals the
-client id must contain the whole upload, and a miss drops the stamp. See
-`backend/utils/sync/ARCHITECTURE.md`.
+rollover, while the phone tags all WALs with `client_conversation_id`, stored
+on each live generation as `external_data.recording_origin_id`. Sync binds each
+VAD segment to the one generation whose source, device, lock and interval
+(5 s early, 60 s past its last word) hold it; donors resolve to their survivor,
+overlaps bind only when the phone's stamp names one strict canonical row —
+otherwise the segment keeps no target under `ambiguous_pending`, rechecked
+against a fresh lineage read at most three times before the retryable
+failed-segment path — and straddles split. Otherwise a segment keeps the phone's
+`conversation_id` stamp or the unbound path, which never adopts a live row.
+Bound segments lexically repeating a live window drop only when independent
+source-frame evidence proves the repeat — a unique `sync_vad` receipt per
+incoming segment whose touched frames the live row's `origin=live` snapshot
+positively covers — or it is a same-capture exact retry: normalized identical
+text at an identical absolute range or segment id, AND a shared nonempty
+`sync:` scope with the stored line (a scope match alone never authorizes a
+lexical drop); lexical or exact-range text alone never suppresses
+(`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist). All-repeat uploads
+acknowledge without writes or enrichment, and `SYNC_LINEAGE_RESOLVE_ENABLED`
+off restores whole-batch binding. One level earlier, uploads carrying the
+opt-in S1 source-position signal additionally trim source frames covered by a
+committed live transcript proof before VAD/STT (`SYNC_WAL_AUDIO_COVERAGE_ENABLED`,
+default on, same allowlist): only `committed_transcript_v1` envelopes authorize
+trimming and receipt-only snapshots abstain, while the proof's receipt wall
+anchors must independently reproduce the decoded WAL basename clock and
+geometry within 2 s — a negative lifetime check that rejects stale or
+competing reuse of a capture root rather than treating time agreement as
+proof; recall stays conservative and very close cross-socket root resets
+additionally rely on the independent app root-rotation release: kept frames become derivative WAVs under a
+`.coverage/` sibling named by phone-clock offset — a kept interval may also
+carry up to 0.25 s per side of already-received context frames (small bounded
+duplication; non-contiguous captures are never concatenated) — while missing,
+malformed, conflicting or out-of-bounds evidence retains the original audio,
+and an upload without the claim costs no lookup. The lexical receipt matcher
+stays disabled on this production seam — it is invoked with no WAL context
+with which to prove live ranges — so only committed frame proof suppresses
+audio; exact sync-scoped retries at intake remain unchanged, and the bounded
+context margin conservatively preserves repeats. Derivatives are internally
+marked `coverage_trimmed` so the 1 s VAD minimum admits genuinely new
+sub-second slices; unmarked audio keeps the floor unchanged. The live-dedupe switch also gates the lineage
+diagnostics added with it: on, a clean no-row lookup probes the recording id
+once (`id_probe`, ceiling 16), each resolve line counts returned candidates
+only, and stamp-fallback live appends bucket extent growth on `span_delta_bucket`
+(`sync_lineage_append` or `sync_lineage_stamp_append`); off restores the main
+query set and log format — no probe, no stage counts, no stamp-append marker
+or line.
+See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
 empty admits everyone) limits per-segment binding, the pinned live origin, the
 live revision fence and the open-live enrichment deferral to listed owners; any
 other uid behaves exactly as with the kill switch off, and the kill switch wins.
 The listen origin stamp is metadata only and ignores the list, so widening finds
-lineage already stamped. Prod lists one uid on all five services (keep them
-identical; a service without the variable admits everyone); dev leaves it unset.
-Refused eligible uploads log `event=sync_lineage_resolve outcome=not_allowlisted`
-with no ids. The metric comes from backend-sync, which is not scraped, so logs are
-the watch source. Widen only after the 48 h log gates in `ARCHITECTURE.md`, by
-clearing the list on all five services together, then watch 24 h.
+lineage stamped. Prod lists one uid on all five identical services (unset
+admits everyone); dev leaves it unset. Refused eligible uploads log
+`event=sync_lineage_resolve outcome=not_allowlisted` with no ids. The metric
+comes from backend-sync, which is not scraped, so logs are the watch source.
+`SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank on, explicit on-tokens
+on, any unrecognized value including a typo off) additionally requires, inside
+`lineage_resolution_requested` after the kill switch and the allowlist, a
+complete validated S1 upload claim set for the exact uploaded basename set
+under `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Absent, invalid or incomplete claims
+fall back to the pre-lineage whole-batch resolver even for admitted users, and
+a post-decode mapping-count mismatch at the coordinator takes the same route
+before VAD. Turning the gate off broadens eligibility back to the prior
+ungated binding; it is not a lineage kill switch and never widens the
+allowlist or bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Prod declares `true` on
+Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and
+`backend-integration`.
+Widen only after the 48 h log gates in `ARCHITECTURE.md`, then watch 24 h.
 The full API `backend-integration` image also mounts sync and listen routes and carries the same gate. `desktop-backend` has a separate router set with neither site. Deploy renderers reject missing or divergent prod literals and chart drift. Persisted refresh debt from an admitted append survives narrowing without reappending speech; open live rows leave that refresh to finalization. Stage the chart before gated code, drain sync work across mixed writer revisions, and use only a compatible historical Helm release for rollback. See the deployment details in `utils/sync/ARCHITECTURE.md`.
 
 
@@ -48,9 +91,9 @@ row cannot hide behind newer generations; a truncated overlap set proves no
 binding. With lineage enabled, sync defers enrichment for an open live row,
 and fresh live speech advances the revision fence after sync has enriched it.
 Sync preserves a pinned live origin when the WAL begins earlier; pre-pin
-speech is retained but marked unplaced for playback.
-The index must include `finished_at` as well as `started_at` before this query
-can serve. A missing index degrades to the origin-row lookup plus stamp fallback.
+speech is retained but marked unplaced for playback. The index must include
+`finished_at` as well as `started_at` before this query can serve; a missing
+index degrades to the origin-row lookup plus stamp fallback.
 
 The backend-to-Pusher binary protocol accepts only opcodes `100` through `105`.
 Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
@@ -2615,6 +2658,21 @@ counters report receipt attempts. Flag-off omits all new wire and stored fields.
 No new Firestore operations, authoritative replay suppression, scene grouping
 or effects are introduced by this stage. Exact mixed-channel audio and legacy
 uploads remain unsupported.
+
+`LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED` defaults on (typos off), but still
+requires separate `CAPTURE_EVIDENCE_V1_DARK_WRITE` admission. Live transcript
+writes now piggyback only whole source frames covered by the fresh transcript's
+recognized provider word/token intervals (each <=2s, mapped independently, gaps
+never filled), cumulatively acknowledged per generation (512 stored notes,
+512 callback entries inspected), and anchored by receipt wall times plus
+bounded root/epoch high-water history. Proof and speech land in
+one transaction; a span-only segment or invalid/missing word metadata adds no
+new coverage, and when no usable proof remains — receipt or history conflicts,
+bounds overflow, failed commits — the committed-coverage unknown envelope
+persists instead of authorizing suppression. Flag off writes the legacy
+receipt-only snapshot; receipt-only evidence never authorizes audio or lexical
+suppression. The committed-coverage consumer and S1-gated lineage binding are
+not enabled by this producer alone; deploying the producer requires the backend-listen image and matching dev/prod Helm values with `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
 
 ### Translation admission and output truthfulness
 

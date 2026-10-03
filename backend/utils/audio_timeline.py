@@ -32,6 +32,12 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
+from utils.stt.committed_words import (
+    CAPTURE_WORD_RANGES_KEY,
+    PROVIDER_WORD_RANGES_KEY,
+    PROVIDER_WORDS_ABSTAIN_KEY,
+    project_provider_words,
+)
 
 logger = logging.getLogger(__name__)
 _last_shadow_error_log = float('-inf')
@@ -671,6 +677,8 @@ class ProviderEpochTranslator:
         translated: List[Dict] = []
         for original in segments:
             segment = dict(original)
+            word_ranges_supplied = PROVIDER_WORD_RANGES_KEY in segment or PROVIDER_WORDS_ABSTAIN_KEY in segment
+            word_ranges = project_provider_words(segment, self.send_map, self.provider_sample_rate)
             try:
                 start, end = float(cast(Any, segment.get('start'))), float(cast(Any, segment.get('end')))
             except (TypeError, ValueError):
@@ -762,6 +770,8 @@ class ProviderEpochTranslator:
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
+            if word_ranges_supplied:
+                segment[CAPTURE_WORD_RANGES_KEY] = word_ranges
             if self._project_times:
                 segment['audio_capture_run'] = self.send_map.capture_run_start(first_sample)
             translated.append(segment)
