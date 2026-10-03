@@ -7,7 +7,7 @@
     11665
   ],
   "scope_hints": [
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift"
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/"
   ],
   "status": "open"
 }

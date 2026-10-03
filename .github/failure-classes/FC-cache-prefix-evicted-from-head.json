@@ -7,7 +7,7 @@
     11668
   ],
   "scope_hints": [
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift"
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/"
   ],
   "status": "open"
 }

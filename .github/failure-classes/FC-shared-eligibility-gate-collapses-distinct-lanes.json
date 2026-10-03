@@ -5,9 +5,7 @@
   "canonical_prevention": "Route visits by validated facts for planned JIT and keep positive worthiness on the legacy director and ambient nano locallyRelevant gate. Pin both with hermetic tests that zero-worthiness validated facts reach planned admission while ambient cannot purchase nano. The legacy Insight/context-director/JIT proactivity producer was retired on 2026-10-03; its deleted instance guards are historical evidence, not live prevention artifacts. Retained feature instances still require this contract.",
   "evidence_prs": [],
   "scope_hints": [
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityCoordinator.swift",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift"
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/"
   ],
   "status": "open"
 }

@@ -1482,42 +1482,6 @@ class AnalyticsManager {
     )
   }
 
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    if let suggestionIdentity {
-      captureSuggestionAssistantTelemetryForTests(
-        "Notification Hovered",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      )
-    }
-    PostHogManager.shared.notificationHovered(
-      notificationId: notificationId,
-      assistantId: assistantId,
-      suggestionIdentity: suggestionIdentity
-    )
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    if let suggestionIdentity {
-      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      properties["verb"] = verb
-      captureSuggestionAssistantTelemetryForTests(
-        "Suggestion Feedback Recorded",
-        properties: properties
-      )
-    }
-    PostHogManager.shared.suggestionFeedbackRecorded(
-      verb: verb,
-      suggestionIdentity: suggestionIdentity
-    )
-  }
-
   func notificationWillPresent(notificationId: String, title: String) {
     PostHogManager.shared.notificationWillPresent(notificationId: notificationId, title: title)
   }

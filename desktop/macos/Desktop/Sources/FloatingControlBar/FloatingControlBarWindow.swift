@@ -5663,7 +5663,7 @@ class FloatingControlBarManager {
         provenanceLines.append("detail: \(detail)")
       }
       if let provenanceRef = context.provenanceRef, !provenanceRef.isEmpty {
-        provenanceLines.append("provenance_ref: proactive_deliveries/\(provenanceRef)")
+        provenanceLines.append("provenance_ref: \(provenanceRef)")
       }
     }
     if let durableProvenance, !durableProvenance.isEmpty {

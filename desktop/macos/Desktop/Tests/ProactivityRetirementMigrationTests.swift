@@ -27,6 +27,15 @@ final class ProactivityRetirementMigrationTests: XCTestCase {
             (referenceHash, bucketID, subjectKind, subjectID, confidence, source, occurrenceCount, createdAt, updatedAt)
           VALUES ('reference', 'bucket-1', 'task', 'task-1', 0.9, 'fixture', 3, '2026-10-01', '2026-10-02')
           """)
+      try db.execute(
+        sql: """
+          INSERT INTO jit_knowledge_ledger_mirror_members
+            (ownerID, memoryID, itemRevision, status, sourceState, canonicalMemoryID, contentPurged)
+          VALUES ('fixture', 'memory-1', 7, 'active', 'ledger', 'memory-1', 0);
+          INSERT INTO jit_knowledge_ledger_mirror_aliases
+            (ownerID, aliasMemoryID, canonicalMemoryID, sourceMemoryID, reason)
+          VALUES ('fixture', 'alias-1', 'memory-1', 'memory-1', 'fixture')
+          """)
       for table in kept {
         try db.execute(sql: "CREATE TABLE \(table) (id TEXT PRIMARY KEY); INSERT INTO \(table) VALUES ('sentinel')")
       }
@@ -47,6 +56,13 @@ final class ProactivityRetirementMigrationTests: XCTestCase {
       ] {
         XCTAssertTrue(try db.tableExists(table), table)
       }
+      XCTAssertEqual(
+        try Int.fetchOne(
+          db, sql: "SELECT itemRevision FROM jit_knowledge_ledger_mirror_members WHERE memoryID = 'memory-1'"), 7)
+      XCTAssertEqual(
+        try String.fetchOne(
+          db, sql: "SELECT canonicalMemoryID FROM jit_knowledge_ledger_mirror_aliases WHERE aliasMemoryID = 'alias-1'"),
+        "memory-1")
       let binding = try XCTUnwrap(Row.fetchOne(db, sql: "SELECT * FROM subject_bindings"))
       XCTAssertEqual(binding["subjectID"] as String, "task-1")
       XCTAssertEqual(binding["occurrenceCount"] as Int, 3)

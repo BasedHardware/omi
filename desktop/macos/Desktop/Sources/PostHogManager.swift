@@ -1238,28 +1238,6 @@ extension PostHogManager {
       properties: properties)
   }
 
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    var properties: [String: Any] = [
-      "notification_id": notificationId,
-      "assistant_id": assistantId,
-    ]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    track("Notification Hovered", properties: properties)
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    var properties: [String: Any] = ["verb": verb]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    track("Suggestion Feedback Recorded", properties: properties)
-  }
-
   private func notificationProperties(
     notificationId: String,
     title: String,
