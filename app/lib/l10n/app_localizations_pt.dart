@@ -11260,6 +11260,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }

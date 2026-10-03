@@ -11246,6 +11246,9 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ও অন্যরা';
   }

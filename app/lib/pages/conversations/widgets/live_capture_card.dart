@@ -60,6 +60,15 @@ class LiveCaptureCard extends StatelessWidget {
   /// Diameter of the leading source glyph's circle.
   static const double sourceDiameter = 36;
 
+  /// The pill row's fixed width before the status: the source glyph, the live dot, and the two
+  /// gaps around them.
+  static const double _pillFixedBeforeStatus = 16 + 8 + 8 + 8;
+
+  /// What the rest of the row needs after the status: the gap to the preview, the gap to the
+  /// control, and the widest trailing control (the 44pt Pause target; the call chevron and the
+  /// no-control cases are narrower, so reserving this much is always safe).
+  static const double _pillReservedAfterStatus = 8 + 8 + kOmiMinTapTarget;
+
   /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
   /// photos. The live card and the live page use this one rule.
   static bool canPause(BtDevice? device, {required String? source}) {
@@ -147,47 +156,53 @@ class LiveCaptureCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Semantics(
-                label: sourceName,
-                excludeSemantics: true,
-                child: Icon(CaptureSources.icon(source), size: 16, color: OmiColors.textPrimary),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              // Short in English. A longer translation gives up its tail, never the pause.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 168),
-                child: statusText,
-              ),
-              if (preview != null) ...[
-                const SizedBox(width: 8),
-                Expanded(child: _pillPreview(context, preview, problem)),
-              ] else
-                const Spacer(),
-              if (isCall)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary),
-                )
-              else if (onPauseToggle != null) ...[
-                const SizedBox(width: 8),
-                OmiIconButton.filled(
-                  icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
-                  label: paused ? l10n.resume : l10n.pause,
-                  diameter: 36,
-                  fillColor: OmiColors.surface3,
-                  onPressed: onPauseToggle,
+          // Short in English. The status keeps its natural width when it fits and gives up its
+          // tail when it does not — never the pause. A plain Flexible would split the row evenly
+          // (starving an English status that fits) and strand the control away from the trailing
+          // edge on wide screens, so cap it by what is left after the glyphs, the gaps, and the
+          // control. The cap is measured here, outside the Row: a Row sizes its non-flex children
+          // without a main-axis bound, so a LayoutBuilder inside it would see infinity.
+          LayoutBuilder(builder: (context, constraints) {
+            final statusMax =
+                (constraints.maxWidth - _pillFixedBeforeStatus - _pillReservedAfterStatus).clamp(0.0, 168.0);
+            return Row(
+              children: [
+                Semantics(
+                  label: sourceName,
+                  excludeSemantics: true,
+                  child: Icon(CaptureSources.icon(source), size: 16, color: OmiColors.textPrimary),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                ConstrainedBox(constraints: BoxConstraints(maxWidth: statusMax), child: statusText),
+                if (preview != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(child: _pillPreview(context, preview, problem)),
+                ] else
+                  const Spacer(),
+                if (isCall)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary),
+                  )
+                else if (onPauseToggle != null) ...[
+                  const SizedBox(width: 8),
+                  OmiIconButton.filled(
+                    icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
+                    label: paused ? l10n.resume : l10n.pause,
+                    diameter: 36,
+                    fillColor: OmiColors.surface3,
+                    onPressed: onPauseToggle,
+                  ),
+                ],
               ],
-            ],
-          ),
+            );
+          }),
           if (note != null) ...[
             const SizedBox(height: 4),
             Text(

@@ -11239,6 +11239,9 @@ class AppLocalizationsEt extends AppLocalizations {
       'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }

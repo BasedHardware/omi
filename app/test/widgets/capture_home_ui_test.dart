@@ -154,16 +154,20 @@ class _Call extends ChangeNotifier implements PhoneCallProvider {
 }
 
 class _Device extends ChangeNotifier implements DeviceProvider {
-  _Device({this.connected = true, this.paired = true});
+  _Device({this.connected = true, this.paired = true, this.connecting});
   bool connected;
   final bool paired;
+
+  /// Null derives it from [connected]; some tests pin it (a dropped pendant that is not
+  /// reconnecting yet).
+  final bool? connecting;
   static final _pendant = BtDevice(id: 'p', name: 'Omi', type: DeviceType.omi, rssi: -40);
   @override
   BtDevice? get connectedDevice => connected ? _pendant : null;
   @override
   BtDevice? get pairedDevice => paired ? _pendant : null;
   @override
-  bool get isConnecting => !connected;
+  bool get isConnecting => connecting ?? !connected;
   void drop() {
     connected = false;
     notifyListeners();
@@ -339,6 +343,63 @@ void main() {
     });
   });
 
+  group('pill fits small screens and large text', () {
+    Future<void> pumpPill(WidgetTester tester,
+        {required double width, required double textScale, required String status}) async {
+      tester.view.physicalSize = Size(width, 200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildOmiTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: LiveCaptureCard(
+              source: 'omi',
+              status: status,
+              lastLine: 'Keep the pendant flow as it is.',
+              compact: true,
+              onPauseToggle: () {},
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    testWidgets('a long localized status yields before the pause, never overflows', (tester) async {
+      // A fold-cover-class width: after the pill's own padding the row is 266pt, so the old
+      // 168pt status cap alone overflowed it. The cap must shrink to what is left.
+      const status = 'Verbindung wird wiederhergestellt';
+      await pumpPill(tester, width: 280, textScale: 1.0, status: status);
+      expect(tester.takeException(), isNull, reason: 'the pill row must not overflow');
+      expect(tester.getSize(find.text(status)).width, lessThanOrEqualTo(166),
+          reason: 'the status cap yields on a narrow row');
+      final pause = tester.getRect(find.byIcon(Icons.pause_rounded));
+      expect(pause.right, lessThanOrEqualTo(278), reason: 'the pause control stays inside the row');
+
+      await pumpPill(tester, width: 280, textScale: 2.0, status: status);
+      expect(tester.takeException(), isNull, reason: 'large text must not overflow the pill either');
+      expect(tester.getSize(find.text(status)).width, lessThanOrEqualTo(166));
+    });
+
+    testWidgets('an English status that fits keeps its whole width', (tester) async {
+      await pumpPill(tester, width: 296, textScale: 1.0, status: en.listening);
+      expect(tester.takeException(), isNull);
+      // Not split to an even share of the row (which would starve a status that fits):
+      // "Listening" is ~137pt whole at 1.0x.
+      expect(tester.getSize(find.text(en.listening)).width, greaterThan(130));
+      await pumpPill(tester, width: 296, textScale: 2.0, status: en.listening);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('pendant disconnect', () {
     testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
       final device = _Device();
@@ -360,6 +421,26 @@ void main() {
       await tester.tap(find.text(en.disconnected));
       await tester.pumpAndSettle();
       expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+    });
+
+    testWidgets('a dropped pendant that is not reconnecting yet still says what happens next', (tester) async {
+      final device = _Device(connecting: false);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.pendant), device: device);
+      expect(find.text(en.listening), findsOneWidget);
+
+      device.drop();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.idleDeviceConnected), device: device);
+      expect(find.text(en.disconnected), findsOneWidget);
+      // Not a bare "Disconnected": the row keeps its inline reassurance, the sheet keeps the why.
+      expect(find.text(en.capturePendantDisconnectedShort), findsOneWidget);
+      expect(find.textContaining(en.reconnecting), findsNothing);
+      await tester.tap(find.text(en.disconnected));
+      await tester.pumpAndSettle();
+      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      await tester.tap(find.text(en.gotIt));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {

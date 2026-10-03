@@ -208,7 +208,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     return LiveCaptureCard(
       source: _droppedSource!,
       status: l10n.disconnected,
-      detail: reconnecting ? l10n.reconnecting : null,
+      // Reconnecting is its own state; a drop that is not reconnecting yet still says what
+      // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
+      detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
       explanation: l10n.capturePendantDisconnectedDetail,
       compact: true,
       lastLine: provider.segments.lastOrNull?.text,
