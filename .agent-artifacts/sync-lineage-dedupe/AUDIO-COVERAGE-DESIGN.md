@@ -1,5 +1,7 @@
 # Round 3: source-frame audio coverage (2026-10-03)
 
+File:line evidence below was inspected at `628e1d7569`; subsequent main integration can shift line numbers. The source identity protocol, not those wall-clock offsets, is the consumer contract.
+
 ## Decision and release boundary
 
 Do not suppress a WAL using text, `created_at`, wall-clock overlap, a connected socket, or `send()` success. Today's ordinary shipped-client path has no shared frame identity at the server; a server-only rollout cannot meet the measured doubling gate. Implement a dormant server consumer of the EXISTING opt-in S1 source-position signal. Join authenticated same-origin/same-device live receipts to uploaded WAL claims by `(capture_root, clock_epoch, mono channel, rate_hz, source frame ordinal)`, then remove only positively proven live-received frames before VAD/STT. Missing, malformed, conflicting, unsupported, or out-of-bounds evidence retains the original audio. No Flutter changes or S1 runtime enablement in this round.
