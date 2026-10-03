@@ -118,10 +118,8 @@ def _stored_pcm(bucket, uid, chunks):
 
 async def _uncertain_send_run(mp, *, spans, protection, session_module=None, peer=None, storage_peer=None):
     gcs = f.gcs.__wrapped__(mp)
-    if protection != 'standard':
-        mp.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
-        mp.setattr(f.pusher.users_db, 'get_data_protection_level', lambda uid: protection)
     f.pusher_env.__wrapped__(mp)
+    mp.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     if session_module is not None:
         mp.setattr(f, 'ListenPusherSession', session_module.ListenPusherSession)
         mp.setattr(f, 'ListenPusherSessionDeps', session_module.ListenPusherSessionDeps)
@@ -172,6 +170,8 @@ async def _uncertain_send_run(mp, *, spans, protection, session_module=None, pee
         await stack.session._audio_bytes_flush()
         await stack.stop_pusher_server()
         chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+        expected_suffix = '.batch.enc' if protection == 'enhanced' else '.batch.bin'
+        assert all(chunk['path'].endswith(expected_suffix) for chunk in chunks)
         bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
         return _stored_pcm(bucket, f.UID, chunks), chunks, stack
     finally:
