@@ -307,8 +307,13 @@ async def evaluate_mentor_event(uid: str, conversation_id: str, messages: list[d
             integration.mem_db.set_proactive_noti_sent_at(
                 uid, app_id='mentor', ts=ts, ttl=integration.MENTOR_RATE_LIMIT_SECONDS
             )
-            integration.redis_db.set_proactive_noti_sent_at(
-                uid, app_id='mentor', ts=ts, ttl=integration.MENTOR_RATE_LIMIT_SECONDS
+            await run_blocking(
+                db_executor,
+                integration.redis_db.set_proactive_noti_sent_at,
+                uid,
+                app_id='mentor',
+                ts=ts,
+                ttl=integration.MENTOR_RATE_LIMIT_SECONDS,
             )
         return text
     except Exception:
