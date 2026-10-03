@@ -202,7 +202,7 @@ env:
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "1"
+    value: "10"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
