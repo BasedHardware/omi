@@ -6,14 +6,20 @@ the CloudBackupProvider Protocol.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from typing import Optional, Tuple
 import requests
 
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CURRENT_DIR not in sys.path:
+    sys.path.insert(0, _CURRENT_DIR)
+
 try:
-    from .pcloud_provider_contract import BackupUploadResult, CloudBackupProvider
-except ImportError:
-    from pcloud_provider_contract import BackupUploadResult, CloudBackupProvider
+    from .provider_contract import BackupUploadResult, CloudBackupProvider
+except (ImportError, ValueError):
+    from provider_contract import BackupUploadResult, CloudBackupProvider
 
 
 class PCloudClient(CloudBackupProvider):
@@ -42,7 +48,7 @@ class PCloudClient(CloudBackupProvider):
         invalid_chars = r'[<>:"/\\|?*\x00-\x1f]'
         sanitized = re.sub(invalid_chars, "", name)
         sanitized = re.sub(r"\s+", " ", sanitized).strip()
-        if not sanitized:
+        if not sanitized or sanitized in (".", ".."):
             return "Untitled"
         return sanitized[:120]
 
@@ -66,11 +72,25 @@ class PCloudClient(CloudBackupProvider):
     def ensure_folder(
         self, folder_path: str
     ) -> Tuple[Optional[int], Optional[str]]:
-        """Ensures a folder hierarchy exists via pCloud /createfolderifnotexists.
+        """Ensures a folder hierarchy exists via /createfolderifnotexists.
 
+        Sanitizes each path component and rejects relative traversal ('.'/'..').
         Returns (folder_id, error_message).
         """
-        clean_path = f"/{folder_path.strip('/')}"
+        raw_components = [c for c in folder_path.strip().split("/") if c]
+        clean_components: list[str] = []
+        for comp in raw_components:
+            trimmed = comp.strip()
+            if trimmed in (".", ".."):
+                return None, f"Invalid folder path component '{trimmed}'"
+            sanitized = self.sanitize_path(trimmed)
+            if sanitized and sanitized not in (".", ".."):
+                clean_components.append(sanitized)
+
+        if not clean_components:
+            return None, "Folder path contains no valid directory components"
+
+        clean_path = "/" + "/".join(clean_components)
         try:
             resp = requests.post(
                 f"{self.base_url}/createfolderifnotexists",
@@ -94,9 +114,13 @@ class PCloudClient(CloudBackupProvider):
         folder_ref: str | int,
         filename: str,
         content: bytes,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> Tuple[Optional[BackupUploadResult], Optional[str]]:
-        """Uploads file content to the specified folder with conflict handling."""
+        """Uploads file content to the specified folder with idempotent retries.
+
+        Defaults to overwrite=True (renameifexists=0) so backup retries do
+        not accumulate duplicate renamed files.
+        """
         clean_filename = self.sanitize_path(filename)
         params: dict[str, str | int] = {
             "nopartial": 1,
@@ -106,8 +130,11 @@ class PCloudClient(CloudBackupProvider):
             isinstance(folder_ref, str) and folder_ref.isdigit()
         ):
             params["folderid"] = int(folder_ref)
+            folder_prefix = f"folderid:{folder_ref}"
         else:
-            params["path"] = f"/{str(folder_ref).strip('/')}"
+            clean_folder = f"/{str(folder_ref).strip('/')}"
+            params["path"] = clean_folder
+            folder_prefix = clean_folder
 
         files = {"file": (clean_filename, content)}
         try:
@@ -129,11 +156,12 @@ class PCloudClient(CloudBackupProvider):
                     actual_name = meta.get("name", clean_filename)
                     size_bytes = meta.get("size", len(content))
                     modified = str(meta.get("modified", ""))
+                    result_path = f"{folder_prefix.rstrip('/')}/{actual_name}"
                     return (
                         BackupUploadResult(
                             file_id=file_id,
                             filename=actual_name,
-                            path=f"/{actual_name}",
+                            path=result_path,
                             size_bytes=size_bytes,
                             modified_time=modified,
                         ),
