@@ -40,6 +40,7 @@ import {
   warnDegraded,
   type SourceFetchers
 } from './orchestrate'
+import { onBackendSessionChanged } from '../../rewind/screenActivitySync'
 
 /** Credentials the renderer hands the main process to reach the backend.
  *  Now just the shared session — the alias keeps the IPC layer's import stable. */
@@ -84,6 +85,7 @@ let lastAttemptAt: number | null = null
  *  multi-second generation. */
 export function configureAiProfileSession(session: AiProfileSession | null): void {
   setBackendSession(session)
+  onBackendSessionChanged(session)
   if (!session) return
   // Caching the session must never fail because a due-check threw — the IPC
   // handler's whole job is to store credentials.
