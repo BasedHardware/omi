@@ -12346,4 +12346,59 @@ class AppLocalizationsRo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimele $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
+
+  @override
+  String get reprocessingConversationProgress => 'Se reprocesează conversația…';
+
+  @override
+  String get conversationReprocessed => 'Conversație actualizată';
+
+  @override
+  String get loadingTranscript => 'Se încarcă transcrierea…';
+
+  @override
+  String get transcriptLoadFailed => 'Transcrierea nu a putut fi încărcată.';
+
+  @override
+  String get processingConversationProgress => 'Se procesează conversația…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Această conversație nu a putut fi procesată.';
+
+  @override
+  String get waitForReprocessing => 'Așteaptă finalizarea reprocesării.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Vorbitor';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Vocile nu sunt separate între înregistrări.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Despre etichetele vorbitorilor';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.';
+
+  @override
+  String get nameSpeakerTitle => 'Denumiți vorbitorul';
+
+  @override
+  String get playbackPreparingAudio => 'Se pregătește audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Înapoi la curent';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio indisponibil';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio nu a putut fi încărcat';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verificați conexiunea';
 }

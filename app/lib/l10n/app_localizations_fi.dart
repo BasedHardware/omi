@@ -12295,4 +12295,59 @@ class AppLocalizationsFi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimeiset $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
+  String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
+
+  @override
+  String get conversationReprocessed => 'Keskustelu päivitetty';
+
+  @override
+  String get loadingTranscript => 'Ladataan litterointia…';
+
+  @override
+  String get transcriptLoadFailed => 'Litterointia ei voitu ladata.';
+
+  @override
+  String get processingConversationProgress => 'Keskustelua käsitellään…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tätä keskustelua ei voitu käsitellä.';
+
+  @override
+  String get waitForReprocessing => 'Odota, kunnes uudelleenkäsittely on valmis.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Puhuja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Puhujia ei ole eroteltu äänitteiden välillä.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tietoa puhujamerkinnöistä';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei pystynyt erottamaan muita ääniä äänitteiden välillä. Napauta puhujamerkintää nimetäksesi, kuka puhuu.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeä puhuja';
+
+  @override
+  String get playbackPreparingAudio => 'Valmistellaan ääntä…';
+
+  @override
+  String get playbackBackToCurrent => 'Takaisin nykyiseen';
+
+  @override
+  String get playbackAudioUnavailable => 'Ääni ei saatavilla';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ääntä ei voitu ladata';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Tarkista yhteys';
 }

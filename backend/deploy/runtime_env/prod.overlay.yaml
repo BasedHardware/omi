@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -158,7 +161,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '1'
+          value: '10'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -183,6 +186,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -238,7 +244,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '1'
+          value: '10'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -353,6 +359,9 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -474,7 +483,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -606,7 +615,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -714,7 +723,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'

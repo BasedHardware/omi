@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/goals/goals_page.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -45,13 +46,17 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Two goals: one halfway, one just started',
     run: (a) async {
       final goals = GoalsProvider(
-          goalsFetcher: () async => [
-                Goal.fromJson({'id': 'g1', 'title': 'Read 12 books', 'current_value': 6, 'target_value': 12}),
-                Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
-              ]);
+        goalsFetcher: () async => [
+          Goal.fromJson({'id': 'g1', 'title': 'Read 12 books', 'current_value': 6, 'target_value': 12}),
+          Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
+        ],
+      );
       await a.tester.runAsync(goals.init);
-      await a.pump(const GoalsPage(),
-          scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
+      await a.pump(
+        const GoalsPage(),
+        scaffold: false,
+        providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)],
+      );
       await a.shot('Open Settings › Goals');
     },
   ),
@@ -82,7 +87,8 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Signed-in fixture account; the fixture backend serves no plans; opened on a neutral host',
     run: (a) async {
       await a.pumpHost(
-          (context) => showOmiSheet(context: context, padding: EdgeInsets.zero, builder: (_) => _PlansHost()));
+        (context) => showOmiSheet(context: context, padding: EdgeInsets.zero, builder: (_) => _PlansHost()),
+      );
       await a.shot('Open the Plans sheet');
     },
   ),
@@ -153,9 +159,10 @@ final settingsPagesScenarios = <AuditScenario>[
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       messenger.setMockMessageHandler(channel, (_) async => const StandardMethodCodec().encodeSuccessEnvelope(null));
       addTearDown(() => messenger.setMockMessageHandler(channel, null));
-      await a.pump(const PhoneCallSettingsPage(), providers: [
-        ChangeNotifierProvider<PhoneCallProvider>.value(value: _NoNumbersPhoneCallProvider()),
-      ]);
+      await a.pump(
+        const PhoneCallSettingsPage(),
+        providers: [ChangeNotifierProvider<PhoneCallProvider>.value(value: _NoNumbersPhoneCallProvider())],
+      );
       await a.shot('Open Phone Call settings with no verified numbers');
     },
   ),
@@ -217,8 +224,10 @@ final settingsPagesScenarios = <AuditScenario>[
         ..add(auditConversation('pd-2', title: 'Coffee catch-up').toJson());
       final people = _auditPeople();
       await people.refresh();
-      await a.pump(const PersonDetailPage(personId: 'p-maya'),
-          providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.pump(
+        const PersonDetailPage(personId: 'p-maya'),
+        providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)],
+      );
       expect(find.text('Roadmap review'), findsOneWidget);
       await a.shot('Open Maya from People');
       await a.tap(find.byTooltip('Delete person'));
@@ -253,8 +262,10 @@ final settingsPagesScenarios = <AuditScenario>[
     page: 'lib/pages/onboarding/speech_profile_widget.dart (SpeechProfileWidget)',
     state: 'Guided voice controller opened from Settings with a no-op microphone and network',
     run: (a) async {
-      await a.pump(_voiceProfile(GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')),
-          scaffold: false);
+      await a.pump(
+        _voiceProfile(GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')),
+        scaffold: false,
+      );
       await a.shot('Open Voice Profile from Settings: first prompt, progress and Start');
     },
   ),
@@ -277,9 +288,9 @@ final settingsPagesScenarios = <AuditScenario>[
 ];
 
 Widget _voiceProfile(GuidedVoiceController flow) => Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
-      body: SpeechProfileWidget(flowSource: 'settings', controller: flow, goNext: () {}, onSkip: () {}),
-    );
+  appBar: AppBar(leading: const OmiBackButton()),
+  body: SpeechProfileWidget(flowSource: 'settings', controller: flow, goNext: () {}, onSkip: () {}),
+);
 
 class _NoNumbersPhoneCallProvider extends PhoneCallProvider {
   _NoNumbersPhoneCallProvider() : super.forTesting();
@@ -323,8 +334,10 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
   late final _wave = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
   late final _arrow = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
   late final _notes = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-  late final _arrowAnimation =
-      Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
+  late final _arrowAnimation = Tween<double>(
+    begin: 0,
+    end: 10,
+  ).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -336,7 +349,11 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => PlansSheet(
-      waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
+    waveController: _wave,
+    notesController: _notes,
+    arrowController: _arrow,
+    arrowAnimation: _arrowAnimation,
+  );
 }
 
 PeopleProvider _auditPeople() {
@@ -352,70 +369,89 @@ PeopleProvider _auditPeople() {
     Map<String, int> reasons = const {'never_confirmed': 1},
     bool pinned = false,
     int? labelsToConfirm,
-  }) =>
-      Person(
-        id: id,
-        name: name,
-        createdAt: DateTime.utc(2026, 9, 1),
-        updatedAt: DateTime.utc(2026, 9, 1),
-        voiceReadiness: voice,
-        speechSamples: [for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav'],
-        speechSampleTranscripts: [for (var i = 0; i < samples; i++) 'Let us move the review to Thursday'],
-        conversationCount: count,
-        lastHeardAt: daysAgo == null ? null : now.subtract(Duration(days: daysAgo)),
-        talkSeconds: count == null ? null : count * 245.0,
-        confidence: confidence,
-        confidenceReasons: [
-          for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
-        ],
-        pinned: pinned,
-        labelsToConfirm: labelsToConfirm,
-      );
+  }) => Person(
+    id: id,
+    name: name,
+    createdAt: DateTime.utc(2026, 9, 1),
+    updatedAt: DateTime.utc(2026, 9, 1),
+    voiceReadiness: voice,
+    speechSamples: [for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav'],
+    speechSampleTranscripts: [for (var i = 0; i < samples; i++) 'Let us move the review to Thursday'],
+    conversationCount: count,
+    lastHeardAt: daysAgo == null ? null : now.subtract(Duration(days: daysAgo)),
+    talkSeconds: count == null ? null : count * 245.0,
+    confidence: confidence,
+    confidenceReasons: [
+      for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
+    ],
+    pinned: pinned,
+    labelsToConfirm: labelsToConfirm,
+  );
   const confirmed = 'confirmed';
   const likely = 'likely';
   return PeopleProvider(
     setPinned: (_, __) async => true,
     deletePersonById: (_) async => true,
-    loadPeople: () async => [
-      person('p-maya', 'Maya Chen',
+    loadPeople: () async => PeopleListResponse(
+      people: [
+        person(
+          'p-maya',
+          'Maya Chen',
           count: 24,
           daysAgo: 0,
           voice: 'ready',
           samples: 1,
           confidence: confirmed,
           reasons: {'manual_labels': 6, 'voice_ready': 1},
-          pinned: true),
-      person('p-jordan', 'Jordan Lee',
+          pinned: true,
+        ),
+        person(
+          'p-jordan',
+          'Jordan Lee',
           count: 9,
           daysAgo: 1,
           voice: 'ready',
           samples: 2,
           confidence: confirmed,
           reasons: {'manual_labels': 4, 'voice_ready': 1},
-          pinned: true),
-      person('p-because', 'Because', count: 3, daysAgo: 5, reasons: {'auto_unconfirmed': 3, 'never_confirmed': 1}),
-      person('p-sam', 'Sam Okafor',
+          pinned: true,
+        ),
+        person('p-because', 'Because', count: 3, daysAgo: 5, reasons: {'auto_unconfirmed': 3, 'never_confirmed': 1}),
+        person(
+          'p-sam',
+          'Sam Okafor',
           count: 5,
           daysAgo: 7,
           voice: 'ready',
           samples: 1,
           confidence: likely,
           reasons: {'card_picks': 2, 'auto_corrected': 1, 'voice_ready': 1, 'auto_unconfirmed': 3},
-          labelsToConfirm: 1),
-      person('p-alex', 'Alex Rivera',
+          labelsToConfirm: 1,
+        ),
+        person(
+          'p-alex',
+          'Alex Rivera',
           count: 4,
           daysAgo: 9,
           voice: 'ready',
           confidence: likely,
           reasons: {'manual_labels': 1, 'voice_ready': 1},
-          labelsToConfirm: 1),
-      person('p-american', 'American', count: 1, daysAgo: 13, reasons: {'auto_corrected': 1, 'never_confirmed': 1}),
-      person('p-cs', 'Cs', count: 2, daysAgo: 18),
-      person('p-priya', 'Priya Natarajan',
-          count: 2, daysAgo: 31, confidence: likely, reasons: {'manual_labels': 2, 'needs_voice': 1}),
-      person('p-leo', 'Leo', count: 1, daysAgo: 59, reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1}),
-      person('p-ines', 'Inês Moreira', count: 0),
-      person('p-thanks', 'Thanks', count: 0),
-    ],
+          labelsToConfirm: 1,
+        ),
+        person('p-american', 'American', count: 1, daysAgo: 13, reasons: {'auto_corrected': 1, 'never_confirmed': 1}),
+        person('p-cs', 'Cs', count: 2, daysAgo: 18),
+        person(
+          'p-priya',
+          'Priya Natarajan',
+          count: 2,
+          daysAgo: 31,
+          confidence: likely,
+          reasons: {'manual_labels': 2, 'needs_voice': 1},
+        ),
+        person('p-leo', 'Leo', count: 1, daysAgo: 59, reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1}),
+        person('p-ines', 'Inês Moreira', count: 0),
+        person('p-thanks', 'Thanks', count: 0),
+      ],
+    ),
   );
 }

@@ -12321,4 +12321,59 @@ class AppLocalizationsSl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Zadnjih $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
+
+  @override
+  String get reprocessingConversationProgress => 'Ponovna obdelava pogovora…';
+
+  @override
+  String get conversationReprocessed => 'Pogovor posodobljen';
+
+  @override
+  String get loadingTranscript => 'Nalaganje prepisa…';
+
+  @override
+  String get transcriptLoadFailed => 'Prepisa ni bilo mogoče naložiti.';
+
+  @override
+  String get processingConversationProgress => 'Obdelava pogovora…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tega pogovora ni bilo mogoče obdelati.';
+
+  @override
+  String get waitForReprocessing => 'Počakajte, da se ponovna obdelava konča.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Govorec';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Govorci niso ločeni med posnetki.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O oznakah govorcev';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.';
+
+  @override
+  String get nameSpeakerTitle => 'Poimenujte govorca';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravljanje zvoka…';
+
+  @override
+  String get playbackBackToCurrent => 'Nazaj na trenutno';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvok ni na voljo';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvoka ni bilo mogoče naložiti';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Preverite povezavo';
 }

@@ -315,17 +315,17 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             child: content.isEmpty
                 ? _buildNoSummaryForApp(context)
                 : _isEditing
-                    ? _buildEditor(context)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                            ? null
-                            : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                        ? null
+                        : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
           if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
         ],
@@ -393,8 +393,28 @@ class GetAppsWidgets extends StatelessWidget {
       builder: (context, provider, child) {
         final selection = provider.getSummarySelection();
         if (selection.kind == ConversationSummaryKind.empty) {
-          if (provider.conversation.showsSummaryRetry) {
+          final conversation = provider.conversation;
+          // A failed processing pass can be retried the same way as a failed summary.
+          if (conversation.showsSummaryRetry ||
+              (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked)) {
             return const SliverToBoxAdapter(child: SummaryRetryWidget());
+          }
+          // "Generate Summary" would start a second run while one is already producing it.
+          if (provider.isReprocessingOpenConversation) {
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: OmiLoadingState(label: context.l10n.summarizingConversation),
+              ),
+            );
+          }
+          if (conversation.status == ConversationStatus.processing) {
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: OmiLoadingState(label: context.l10n.processingConversationProgress),
+              ),
+            );
           }
           return SliverToBoxAdapter(child: child!);
         }

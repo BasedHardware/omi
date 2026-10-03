@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
@@ -37,14 +38,15 @@ void main() {
 
   test('accepted rename preserves verified sample metadata in provider and cache', () async {
     final person = Person(
-        id: 'voice',
-        name: 'Old',
-        createdAt: DateTime(2026),
-        updatedAt: DateTime(2026),
-        speechSamples: ['sample.wav'],
-        speechSampleTranscripts: ['Synthetic sample'],
-        speechSamplesVersion: 3,
-        colorIdx: 2);
+      id: 'voice',
+      name: 'Old',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      speechSamples: ['sample.wav'],
+      speechSampleTranscripts: ['Synthetic sample'],
+      speechSamplesVersion: 3,
+      colorIdx: 2,
+    );
     SharedPreferencesUtil().cachedPeople = [person];
     final provider = PeopleProvider(renamePerson: (id, name) async => true);
     await provider.updatePersonProvider(person, 'New');
@@ -89,17 +91,19 @@ void main() {
     SharedPreferencesUtil().cachedPeople = [person];
     final provider = PeopleProvider(
       deleteSample: (id, idx) async => true,
-      loadPeople: () async => [
-        Person(
-          id: 'voice',
-          name: 'Alice',
-          createdAt: DateTime(2026),
-          updatedAt: DateTime(2026),
-          speechSamples: ['b.wav'],
-          speechSamplesVersion: 3,
-          voiceReadiness: 'ready',
-        ),
-      ],
+      loadPeople: () async => PeopleListResponse(
+        people: [
+          Person(
+            id: 'voice',
+            name: 'Alice',
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+            speechSamples: ['b.wav'],
+            speechSamplesVersion: 3,
+            voiceReadiness: 'ready',
+          ),
+        ],
+      ),
     );
     provider.people = [
       Person(
@@ -133,17 +137,19 @@ void main() {
       deleteSample: (id, idx) async => true,
       loadPeople: () async {
         optimistic = SharedPreferencesUtil().cachedPeople.single;
-        return [
-          Person(
-            id: 'voice',
-            name: 'Alice',
-            createdAt: DateTime(2026),
-            updatedAt: DateTime(2026),
-            speechSamples: const [],
-            speechSamplesVersion: 3,
-            voiceReadiness: 'not_learned',
-          ),
-        ];
+        return PeopleListResponse(
+          people: [
+            Person(
+              id: 'voice',
+              name: 'Alice',
+              createdAt: DateTime(2026),
+              updatedAt: DateTime(2026),
+              speechSamples: const [],
+              speechSamplesVersion: 3,
+              voiceReadiness: 'not_learned',
+            ),
+          ],
+        );
       },
     );
     provider.people = [

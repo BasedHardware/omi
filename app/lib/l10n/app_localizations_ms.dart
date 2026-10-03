@@ -12322,4 +12322,59 @@ class AppLocalizationsMs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration lepas';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
+
+  @override
+  String get reprocessingConversationProgress => 'Memproses semula perbualan…';
+
+  @override
+  String get conversationReprocessed => 'Perbualan dikemas kini';
+
+  @override
+  String get loadingTranscript => 'Memuatkan transkrip…';
+
+  @override
+  String get transcriptLoadFailed => 'Tidak dapat memuatkan transkrip.';
+
+  @override
+  String get processingConversationProgress => 'Memproses perbualan…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Perbualan ini tidak dapat diproses.';
+
+  @override
+  String get waitForReprocessing => 'Tunggu sehingga pemprosesan semula selesai.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Penceramah';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Pembicara tidak dipisahkan merentasi rakaman.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Perihal Label Pembicara';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi tidak dapat membezakan suara lain merentasi rakaman. Ketik label pembicara untuk menamakan siapa yang bercakap.';
+
+  @override
+  String get nameSpeakerTitle => 'Namakan Pembicara';
+
+  @override
+  String get playbackPreparingAudio => 'Menyediakan Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Kembali ke Semasa';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Tidak Tersedia';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio Tidak Dapat Dimuatkan';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Semak Sambungan';
 }

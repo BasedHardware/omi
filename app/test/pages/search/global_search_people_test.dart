@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
@@ -27,7 +28,11 @@ class _Source extends GlobalSearchSource {
   @override
   Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
       const ConversationSearchResult(
-          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
+        items: [],
+        currentPage: 1,
+        totalPages: 1,
+        outcome: ConversationSearchResultOutcome.success,
+      );
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
@@ -43,12 +48,12 @@ class _Source extends GlobalSearchSource {
 }
 
 Person _person(String id, String name, {String confidence = 'unverified'}) => Person(
-      id: id,
-      name: name,
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      confidence: confidence,
-    );
+  id: id,
+  name: name,
+  createdAt: DateTime(2026, 1, 1),
+  updatedAt: DateTime(2026, 1, 1),
+  confidence: confidence,
+);
 
 void main() {
   setUp(() async {
@@ -56,27 +61,32 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('the People scope hosts the shared list: the search field filters it, no management chrome',
-      (tester) async {
+  testWidgets('the People scope hosts the shared list: the search field filters it, no management chrome', (
+    tester,
+  ) async {
     final people = PeopleProvider(
-      loadPeople: () async => [
-        _person('p-maya', 'Maya Chen', confidence: 'confirmed'),
-        _person('p-because', 'Because'),
-        _person('p-cs', 'Cs'),
-        _person('p-thanks', 'Thanks'),
-      ],
-    );
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<PeopleProvider>.value(value: people),
-        ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: GlobalSearchPage(source: _Source())),
+      loadPeople: () async => PeopleListResponse(
+        people: [
+          _person('p-maya', 'Maya Chen', confidence: 'confirmed'),
+          _person('p-because', 'Because'),
+          _person('p-cs', 'Cs'),
+          _person('p-thanks', 'Thanks'),
+        ],
       ),
-    ));
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+          ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: GlobalSearchPage(source: _Source())),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('search_tile_people')));
@@ -94,7 +104,9 @@ void main() {
     expect(find.byType(Dismissible), findsWidgets);
 
     await tester.enterText(
-        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)), 'cs');
+      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+      'cs',
+    );
     await tester.pumpAndSettle();
     expect(find.text('Cs'), findsOneWidget);
     expect(find.text('Maya Chen'), findsNothing);

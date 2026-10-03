@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
+
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/preferences.dart';
@@ -17,6 +18,8 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/ui.dart';
+
+part 'transcript_playback_scroll.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
@@ -48,6 +51,21 @@ class TranscriptWidget extends StatefulWidget {
   final List<Widget> leadingItems;
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
+
+  /// Playback sync: the line containing the playhead is highlighted, and while
+  /// [followCurrentSegment] the list keeps [followTargetSegmentId] near the top
+  /// third. [playbackFollowRequest] re-triggers the scroll even when the target
+  /// did not change (line tap, scrub, back-to-current).
+  final String? currentSegmentId;
+  final String? followTargetSegmentId;
+  final bool followCurrentSegment;
+  final int playbackFollowRequest;
+
+  /// The reader's gestures: fired once per drag on [onUserScroll], and with the
+  /// topmost partially-visible segment during drags and at ballistic end on
+  /// [onTopVisibleSegmentChanged]. Programmatic scrolls fire neither.
+  final VoidCallback? onUserScroll;
+  final ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged;
 
   /// "Yes" / "Not <name>" under the first line Omi named by voice. Both null hides the question
   /// and leaves only the Likely badge.
@@ -87,6 +105,12 @@ class TranscriptWidget extends StatefulWidget {
     this.onConfirmSpeakerLabel,
     this.onRejectSpeakerLabel,
     this.startedAt,
+    this.currentSegmentId,
+    this.followTargetSegmentId,
+    this.followCurrentSegment = false,
+    this.playbackFollowRequest = 0,
+    this.onUserScroll,
+    this.onTopVisibleSegmentChanged,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -145,6 +169,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // ScrollController to enable proper scrolling
   late final ScrollController _scrollController;
+
+  // Playback-follow state: the last scrolled-to target and the last honoured
+  // follow request, plus the generation that cancels an in-flight locate when
+  // the reader takes the scroll back.
+  String? _lastFollowTargetId;
+  int _lastFollowRequest = -1;
+  int _locateGeneration = 0;
+  bool _userGestureNotified = false;
+  TranscriptSegment? _lastReportedTopSegment;
 
   // Auto-scroll state management
   bool _userHasScrolled = false;
@@ -241,6 +274,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         }
       });
     }
+
+    if (widget.followCurrentSegment && widget.followTargetSegmentId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
   }
 
   void _syncSegmentKeys() {
@@ -270,7 +309,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
+    final contentChanged =
+        widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
@@ -278,6 +318,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
+
+    if (widget.followCurrentSegment &&
+        (widget.followTargetSegmentId != oldWidget.followTargetSegmentId ||
+            widget.playbackFollowRequest != oldWidget.playbackFollowRequest)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
 
     if (widget.searchQuery != oldWidget.searchQuery) {
       _rebuildMatchKeys();
@@ -395,6 +443,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _userHasScrolled = true;
     _readerDragRecovered = true;
     _interruptAutoScroll();
+    _noteUserGesture();
     _driveReaderDrag(dy);
   }
 
@@ -402,6 +451,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     _scrollController.jumpTo((_scrollController.offset - dy).clamp(position.minScrollExtent, position.maxScrollExtent));
+    _reportTopVisibleSegment();
   }
 
   void _endReaderDrag(int pointer) {
@@ -415,6 +465,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (recovered && _isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
       _captureCurrentPosition();
       _isUserScrolling = false;
+      _userGestureEnded();
     }
   }
 
@@ -604,70 +655,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return trackedFollow;
   }
 
-  bool _onUserScroll(UserScrollNotification notification) {
-    if (notification.direction != ScrollDirection.idle) {
-      // User-directed motion (drag or fling momentum) outranks any follow or
-      // pending anchor restore.
-      _pendingAnchorRestore = false;
-      _isUserScrolling = true;
-      _userHasScrolled = true;
-      _readerDragTakenOverByNative = true;
-      _readerDragRecovered = false;
-      _interruptAutoScroll();
-      _captureCurrentPosition();
-    } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
-      _captureCurrentPosition();
-      _isUserScrolling = false;
-    }
-    return false;
-  }
-
-  bool _onScrollStart(ScrollStartNotification notification) {
-    if (notification.depth != 0 || notification.dragDetails == null) return false;
-
-    // Record intent on the first pixel of a pointer drag, before any live
-    // follow can re-grab the scrollable.
-    _pendingAnchorRestore = false;
-    _isUserScrolling = true;
-    _userHasScrolled = true;
-    _readerDragTakenOverByNative = true;
-    _readerDragRecovered = false;
-    _interruptAutoScroll();
-    return false;
-  }
-
-  bool _onScrollUpdate(ScrollUpdateNotification notification) {
-    if (notification.depth != 0 || notification.dragDetails == null) return false;
-
-    // A pointer drag always outranks follow and pending anchor restores.
-    _pendingAnchorRestore = false;
-    _isUserScrolling = true;
-    _userHasScrolled = true;
-    _readerDragTakenOverByNative = true;
-    _readerDragRecovered = false;
-    _interruptAutoScroll();
-    _captureCurrentPosition();
-    return false;
-  }
-
-  bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) return _onScrollStart(notification);
-    if (notification is ScrollUpdateNotification) return _onScrollUpdate(notification);
-    if (notification is UserScrollNotification) return _onUserScroll(notification);
-    return false;
-  }
-
-  bool _onScrollMetrics(ScrollMetricsNotification notification) {
-    if (!widget.followLatest || _isAutoScrolling || _isUserScrolling || _userInterruptedAutoScroll) return false;
-    final shouldFollow = !_userHasScrolled;
-    if (shouldFollow && notification.metrics.extentAfter > 0.5) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToBottomGently(animated: false);
-      });
-    }
-    return false;
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -731,28 +718,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       currentMatchIndex += matches.length;
     }
 
-    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final segmentKey = _segmentKeys[widget.segments[targetSegmentIndex].id];
-
-      final segmentContext = segmentKey?.currentContext;
+    if (targetSegmentIndex >= 0 && targetSegmentIndex < widget.segments.length) {
+      final segment = widget.segments[targetSegmentIndex];
+      final segmentContext = _segmentKeys[segment.id]?.currentContext;
       if (segmentContext != null) {
         _scrollToContext(segmentContext);
         return;
       }
 
-      const itemHeight = 80.0;
-      final headerHeight = widget.topMargin ? 32.0 : 0.0;
-      final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
-
-      _isAutoScrolling = true;
-      _scrollController
-          .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
-          .then((_) {
-        _isAutoScrolling = false;
+      // The match lives in an unbuilt row far away: locate it by paging, then
+      // ensure the matched span itself once the row exists. A reader gesture or
+      // a changed query cancels the follow-up reveal.
+      final query = widget.searchQuery;
+      final resultIndex = widget.currentResultIndex;
+      final future = _locateSegment(segment.id, alignment: 0.35);
+      final generation = _locateGeneration;
+      future.then((_) {
+        if (!mounted) return;
+        if (generation != _locateGeneration) return;
+        if (widget.searchQuery != query || widget.currentResultIndex != resultIndex) return;
+        if (resultIndex < 0 || resultIndex >= _matchKeys.length) return;
+        final matchContext = _matchKeys[resultIndex].currentContext;
+        if (matchContext != null && matchContext.mounted) _scrollToContext(matchContext);
       });
     }
   }
@@ -979,7 +966,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final bool isUser = data.isUser;
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn = previous == null ||
+    final startsTurn =
+        previous == null ||
         previous.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
@@ -1053,10 +1041,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             const SizedBox(width: 4),
                             SpeakerLabelBadge(source: data.speakerLabelSource),
                           ],
-                          if (isTagging) ...[
-                            const SizedBox(width: 6),
-                            const OmiSpinner(size: OmiSpinnerSize.small),
-                          ],
+                          if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],
                       ),
                     ),
@@ -1077,8 +1062,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18,
+                                    ? 6
+                                    : 18,
                               ),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: const Radius.circular(18),
@@ -1184,17 +1169,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn = previous == null ||
-        previous.isUser ||
+    final startsTurn =
+        previous == null ||
+        previous.isUser != data.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
-        previous.speakerLabelSource != data.speakerLabelSource;
+        (data.speakerId == omiSpeakerId && !data.isUser);
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
     final asksToConfirm =
         person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
-    final unnamed = !data.isUser && !isOmi && person == null;
+    final isCurrent = data.id == widget.currentSegmentId;
+    final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
     final seek = widget.onSegmentTap;
@@ -1207,45 +1194,49 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final time = !widget.canDisplaySeconds
         ? null
         : startedAt == null
-            ? OmiDuration.offset(data.start)
-            : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
+        ? OmiDuration.offset(data.start)
+        : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
 
-    final who = Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Flexible(
-          child: _speakerTarget(
-            data,
-            Text(
-              names.forSegment(data, person: person),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: label.copyWith(
-                decoration: unnamed ? TextDecoration.underline : null,
-                decorationStyle: TextDecorationStyle.dotted,
-                decorationColor: labelColor,
+    final who = !startsTurn
+        ? isTagging
+              ? const Row(children: [OmiSpinner(size: OmiSpinnerSize.small)])
+              : const SizedBox.shrink()
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: _speakerTarget(
+                  data,
+                  Text(
+                    names.forSegment(data, person: person),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: label.copyWith(
+                      decoration: unnamed ? TextDecoration.underline : null,
+                      decorationStyle: TextDecorationStyle.dotted,
+                      decorationColor: labelColor,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-        if (startsTurn && person != null && !isTagging) ...[
-          const SizedBox(width: 4),
-          SpeakerLabelBadge(source: data.speakerLabelSource),
-        ],
-        if (time != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            time,
-            style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ],
-        if (isTagging) ...[
-          const SizedBox(width: 6),
-          const OmiSpinner(size: OmiSpinnerSize.small),
-        ],
-      ],
-    );
+              if (startsTurn && person != null && !isTagging) ...[
+                const SizedBox(width: 4),
+                SpeakerLabelBadge(source: data.speakerLabelSource),
+              ],
+              if (time != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  time,
+                  style: label.copyWith(
+                    fontWeight: FontWeight.w400,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+              if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
+            ],
+          );
 
     // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
     // on the words over the line's. A long press still selects.
@@ -1268,7 +1259,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               segmentIdx,
               data.isUser,
               style: OmiType.body.copyWith(
-                color: data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+                color: data.isUser || isCurrent ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
                 letterSpacing: 0.0,
                 height: 1.5,
               ),
@@ -1297,8 +1288,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          who,
-          const SizedBox(height: 3),
+          if (startsTurn || isTagging) ...[who, const SizedBox(height: 3)],
           words,
           if (asksToConfirm)
             Padding(
@@ -1316,6 +1306,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           behavior: HitTestBehavior.opaque,
           onTap: play,
           child: line,
+        ),
+      );
+    }
+    if (isCurrent) {
+      line = Semantics(
+        selected: true,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          child: KeyedSubtree(key: ValueKey('transcript_current_${data.id}'), child: line),
         ),
       );
     }

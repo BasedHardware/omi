@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -50,6 +51,7 @@ class ConversationPromptPrefix:
     # transcript text.  Consumers use this set to validate model-authored
     # evidence references.
     transcript_segment_ids: frozenset[str] = frozenset()
+    has_usable_content: bool = True
 
     @property
     def cache_key(self) -> str:
@@ -67,6 +69,24 @@ class ConversationPromptPrefix:
             {'role': 'system', 'content': SHARED_CONVERSATION_PREAMBLE},
             {'role': 'system', 'content': [context_block]},
         ]
+
+
+def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) -> bool:
+    """True when the compact transcript carries text beyond its structural headers.
+
+    A ``[<segment-id> <cluster>]`` opener only counts as a header when the id is
+    one of the conversation's own segment ids; the same bracketed shape for an
+    unknown id is user text.
+    """
+    if not source_ids:
+        return bool(transcript.strip())
+    id_pattern = '|'.join(re.escape(segment_id) for segment_id in source_ids)
+    header = re.compile(rf'^\[(?:{id_pattern})(?:\s+\S+)?\]')
+    for line in transcript.splitlines():
+        remainder = header.sub('', line, count=1) if line.startswith('[') else line
+        if remainder.strip():
+            return True
+    return False
 
 
 _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
@@ -245,14 +265,15 @@ def build_conversation_prompt_prefix(
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True)
-        if photo_descriptions != 'None':
-            context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
+    photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True) if photos else ''
+    if photo_descriptions and photo_descriptions != 'None':
+        context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
         transcript_segment_ids=source_ids,
+        has_usable_content=_transcript_has_source_content(transcript, source_ids)
+        or bool(photo_descriptions and photo_descriptions != 'None'),
     )

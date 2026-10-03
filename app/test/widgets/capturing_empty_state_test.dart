@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -77,14 +78,17 @@ class _Syncs {
 
 class _QuietCapture extends CaptureProvider {
   _QuietCapture()
-      : super(
-          walService: _WalService(),
-          connectivity: CaptureConnectivityBoundary(
-              initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
-          bleListeners: _NoopBle(),
-          inProgressConversationLoader: () async {},
-          localSegmentStore: LocalSegmentStore.disabled(),
-        );
+    : super(
+        walService: _WalService(),
+        connectivity: CaptureConnectivityBoundary(
+          initiallyConnected: true,
+          changes: const Stream.empty(),
+          isConnected: () => true,
+        ),
+        bleListeners: _NoopBle(),
+        inProgressConversationLoader: () async {},
+        localSegmentStore: LocalSegmentStore.disabled(),
+      );
   @override
   String? get liveCaptureSource => 'omi';
   @override
@@ -126,7 +130,9 @@ Future<void> _pumpCapturingPage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => people)..people = people),
+        ChangeNotifierProvider(
+          create: (_) => PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people,
+        ),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
@@ -167,7 +173,7 @@ void main() {
         translations: [],
         start: 0,
         end: 6,
-      )
+      ),
     ];
     capture.photos = [ConversationPhoto(id: 'photo', base64: '', createdAt: DateTime(2026))];
     capture.suggestionsBySegmentId['seg'] = SpeakerLabelSuggestionEvent(
@@ -184,18 +190,18 @@ void main() {
       connectivity: _StubConnectivityProvider(true),
       people: [Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))],
       page: ConversationCapturingPage(
-          topConversationId: 'live', rejectSpeaker: (_, __, ___, {personId, segmentIds}) => receipt.future),
+        topConversationId: 'live',
+        rejectSpeaker: (_, __, ___, {personId, segmentIds}) => receipt.future,
+      ),
     );
     await tester.tap(find.byKey(const Key('speaker_suggestion_chip')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Someone Else…'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(NameSpeakerBottomSheet), findsNothing);
-    receipt.complete(ApiSuccess(ServerConversation(
-      id: 'live',
-      createdAt: DateTime(2026),
-      structured: Structured('Title', 'Summary'),
-    )));
+    receipt.complete(
+      ApiSuccess(ServerConversation(id: 'live', createdAt: DateTime(2026), structured: Structured('Title', 'Summary'))),
+    );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(NameSpeakerBottomSheet), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -231,14 +237,15 @@ void main() {
     addTearDown(capture.dispose);
     capture.segments = [
       TranscriptSegment(
-          id: 'quiet-segment',
-          text: 'Keep this transcript.',
-          speaker: 'SPEAKER_0',
-          isUser: true,
-          personId: null,
-          start: 0,
-          end: 3,
-          translations: []),
+        id: 'quiet-segment',
+        text: 'Keep this transcript.',
+        speaker: 'SPEAKER_0',
+        isUser: true,
+        personId: null,
+        start: 0,
+        end: 3,
+        translations: [],
+      ),
     ];
     await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
     expect(find.textContaining('Keep this transcript.', findRichText: true), findsOneWidget);

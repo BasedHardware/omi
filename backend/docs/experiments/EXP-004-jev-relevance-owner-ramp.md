@@ -1,7 +1,7 @@
 # EXP-004 — Jev relevance and owner measurement and ramp
 
 **Owner:** dazheng. **Registered:** 2026-09-30. **Review by:** 2026-10-21.
-**Decision:** operational ramp authorized; stage 1 (J=1%) started 2026-10-02.
+**Decision:** operational ramp authorized; stage 2 (J=10%) started 2026-10-03 after stage 1 soaked 24 h from 2026-10-01 22:46Z, with 14 Jev gateway timeouts and no Jev-attributable 5xx.
 
 ## Fixed treatment and cohort assignment
 
@@ -84,13 +84,15 @@ Dev backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
 both shadow percentages 100 on backend-listen, pusher and Cloud Run backend,
-backend-sync and backend-sync-backfill. Stage 1 enables relevance Jev at J=1 on
-those same five hosts while keep-all K=2 remains live; owner-flip flags remain
-absent, UID allowlists remain absent, and caps are unchanged. Keep-all takes
+backend-sync and backend-sync-backfill. Stage 2 enables relevance Jev at J=10 on
+those same five hosts after the stage 1 24 h soak from 2026-10-01 22:46Z,
+which recorded 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all
+K=2 remains live; owner-flip flags remain absent, UID allowlists remain absent,
+and caps are unchanged. Keep-all takes
 precedence on each conversation. Because keep-all and Jev use independent salts,
 their assignments can overlap; non-keep-all conversations in the Jev bucket
-range [2,3) use Jev and the remaining roughly 97% stay on nano. Nano remains the
-large control arm, but this is not a separate matched nano-only cohort. The
+range [2,12) use Jev and the remaining roughly 88% stay on nano. Nano remains
+the large control arm, but this is not a separate matched nano-only cohort. The
 production configuration is in its own removable commit.
 The Firestore TTL policy on collection group `jev_shadow`, field `expire_at`,
 in project `based-hardware` was enabled 2026-10-01 and verified ACTIVE by the
@@ -180,10 +182,12 @@ Owner flip GO requires all of: prod shadow P(user) >= 0.9 share among answered t
 ## Live relevance ramp and coordinator runbook
 
 Ramp by conversation: **1% -> 10% -> 50% -> 100%**, with **24 h soak per
-stage** and K fixed at 2. Stage 1 is live at J=1 with keep-all K=2 on the five
-processing hosts; keep-all wins any overlap, and all remaining conversations
-outside the Jev range use nano. Owner-flip flags and the UID allowlist remain
-absent. The coordinator ships each next env stage in a separate tiny PR. The
+stage** and K fixed at 2. Stage 2 (J=10) started 2026-10-03 after stage 1
+soaked 24 h from 2026-10-01 22:46Z, recording 14 Jev gateway timeouts and no
+Jev-attributable 5xx. It is live with keep-all K=2 on the five processing
+hosts; keep-all wins any overlap, and all remaining conversations outside the
+Jev range use nano. Owner-flip flags and the UID allowlist remain absent. The
+coordinator ships each next env stage in a separate tiny PR. The
 ramp proves operational safety; the keep-all arm remains the engagement evidence.
 The 250-label bar above is not met by this implementation and must not be
 reported as passed. The coordinator's 2026-10-02 decision authorizes this

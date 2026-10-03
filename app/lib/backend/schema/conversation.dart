@@ -152,9 +152,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -518,16 +520,17 @@ class ServerConversation {
     final rawSnippets = json['match_snippets'];
     final snippets = rawSnippets is List
         ? rawSnippets
-            .whereType<Map>()
-            .map((e) => TranscriptMatchSnippet.fromJson(Map<String, dynamic>.from(e)))
-            .toList()
+              .whereType<Map>()
+              .map((e) => TranscriptMatchSnippet.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
         : const <TranscriptMatchSnippet>[];
     return ServerConversation.fromGenerated(
       generated,
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
-      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+      siriVisibilityValid:
+          json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
     );
@@ -561,12 +564,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -578,8 +583,9 @@ class ServerConversation {
       siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
-      speakerResolution:
-          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      speakerResolution: generated.speakerResolution == null
+          ? null
+          : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
       summaryRetryable: generated.summaryRetryable == true,
     );
   }
@@ -698,7 +704,11 @@ class ServerConversation {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments,
+      includeTimestamps: true,
+      unresolved: speakerResolution?.status == 'unavailable',
+    );
     if (maxCount != null && transcript.isNotEmpty) {
       transcript = transcript.substring(max(transcript.length - maxCount, 0));
     }

@@ -12286,4 +12286,59 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
+
+  @override
+  String get reprocessingConversationProgress => 'Đang xử lý lại cuộc trò chuyện…';
+
+  @override
+  String get conversationReprocessed => 'Đã cập nhật cuộc trò chuyện';
+
+  @override
+  String get loadingTranscript => 'Đang tải bản ghi…';
+
+  @override
+  String get transcriptLoadFailed => 'Không thể tải bản ghi.';
+
+  @override
+  String get processingConversationProgress => 'Đang xử lý cuộc trò chuyện…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Không thể xử lý cuộc trò chuyện này.';
+
+  @override
+  String get waitForReprocessing => 'Hãy đợi quá trình xử lý lại hoàn tất.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Người nói';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Người nói không được tách ra giữa các bản ghi.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Giới thiệu về nhãn người nói';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.';
+
+  @override
+  String get nameSpeakerTitle => 'Đặt tên người nói';
+
+  @override
+  String get playbackPreparingAudio => 'Đang chuẩn bị âm thanh…';
+
+  @override
+  String get playbackBackToCurrent => 'Quay lại hiện tại';
+
+  @override
+  String get playbackAudioUnavailable => 'Âm thanh không khả dụng';
+
+  @override
+  String get playbackAudioLoadFailed => 'Không thể tải âm thanh';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
 }

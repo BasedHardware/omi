@@ -12333,4 +12333,59 @@ class AppLocalizationsRu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последние $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
+
+  @override
+  String get reprocessingConversationProgress => 'Повторная обработка разговора…';
+
+  @override
+  String get conversationReprocessed => 'Разговор обновлён';
+
+  @override
+  String get loadingTranscript => 'Загрузка расшифровки…';
+
+  @override
+  String get transcriptLoadFailed => 'Не удалось загрузить расшифровку.';
+
+  @override
+  String get processingConversationProgress => 'Обработка разговора…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не удалось обработать этот разговор.';
+
+  @override
+  String get waitForReprocessing => 'Дождитесь окончания повторной обработки.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Докладчик';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Голоса не разделены между записями.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'О метках говорящих';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не смогла различить остальные голоса в записях. Коснитесь метки говорящего, чтобы назвать, кто говорит.';
+
+  @override
+  String get nameSpeakerTitle => 'Назвать говорящего';
+
+  @override
+  String get playbackPreparingAudio => 'Подготовка аудио…';
+
+  @override
+  String get playbackBackToCurrent => 'К текущему';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудио недоступно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не удалось загрузить аудио';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверьте соединение';
 }

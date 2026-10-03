@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -21,44 +22,44 @@ import '../harness.dart';
 const _page = 'lib/pages/conversations/widgets/speaker_tag_prompt_card.dart (SpeakerTagPromptCard)';
 
 Person _person(String id, String name, {bool pinned = false, String confidence = 'likely'}) => Person(
-      id: id,
-      name: name,
-      createdAt: DateTime.utc(2026, 9, 1),
-      updatedAt: DateTime.utc(2026, 9, 1),
-      voiceReadiness: 'ready',
-      pinned: pinned,
-      confidence: confidence,
-      confidenceReasons: const [GeneratedPersonConfidenceReason(code: 'card_picks', count: 2)],
-    );
+  id: id,
+  name: name,
+  createdAt: DateTime.utc(2026, 9, 1),
+  updatedAt: DateTime.utc(2026, 9, 1),
+  voiceReadiness: 'ready',
+  pinned: pinned,
+  confidence: confidence,
+  confidenceReasons: const [GeneratedPersonConfidenceReason(code: 'card_picks', count: 2)],
+);
 
 GeneratedSpeakerTagPrompt _prompt(String kind) => GeneratedSpeakerTagPrompt(
-      id: 'prompt-$kind',
-      kind: kind,
-      origin: kind == 'confirm_person'
-          ? 'auto_person'
-          : kind == 'owner_check'
-              ? 'auto_user'
-              : 'unnamed',
-      conversationId: 'c1',
-      conversationTitle: 'Kitchen renovation call',
-      conversationStartedAt: DateTime.now().subtract(const Duration(hours: 20)),
-      speakerId: 2,
-      segmentIds: const ['s1'],
-      clipStart: 12,
-      clipEnd: 19,
-      excerpt: kind == 'owner_check'
-          ? 'Honestly I think the second quote was better.'
-          : 'Yeah, he said Thursday works if we sign today.',
-      suggestedPersonId: kind == 'confirm_person' ? 'p-sam' : null,
-      suggestedPersonName: kind == 'confirm_person' ? 'Sam Okafor' : null,
-      candidates: kind == 'identify'
-          ? const [
-              GeneratedSpeakerTagCandidate(personId: 'p-jordan', name: 'Jordan Lee', matchLevel: 2, pinned: true),
-              GeneratedSpeakerTagCandidate(personId: 'p-sam', name: 'Sam Okafor', matchLevel: 2),
-              GeneratedSpeakerTagCandidate(personId: 'p-alex', name: 'Alex Rivera', matchLevel: 1),
-            ]
-          : null,
-    );
+  id: 'prompt-$kind',
+  kind: kind,
+  origin: kind == 'confirm_person'
+      ? 'auto_person'
+      : kind == 'owner_check'
+      ? 'auto_user'
+      : 'unnamed',
+  conversationId: 'c1',
+  conversationTitle: 'Kitchen renovation call',
+  conversationStartedAt: DateTime.now().subtract(const Duration(hours: 20)),
+  speakerId: 2,
+  segmentIds: const ['s1'],
+  clipStart: 12,
+  clipEnd: 19,
+  excerpt: kind == 'owner_check'
+      ? 'Honestly I think the second quote was better.'
+      : 'Yeah, he said Thursday works if we sign today.',
+  suggestedPersonId: kind == 'confirm_person' ? 'p-sam' : null,
+  suggestedPersonName: kind == 'confirm_person' ? 'Sam Okafor' : null,
+  candidates: kind == 'identify'
+      ? const [
+          GeneratedSpeakerTagCandidate(personId: 'p-jordan', name: 'Jordan Lee', matchLevel: 2, pinned: true),
+          GeneratedSpeakerTagCandidate(personId: 'p-sam', name: 'Sam Okafor', matchLevel: 2),
+          GeneratedSpeakerTagCandidate(personId: 'p-alex', name: 'Alex Rivera', matchLevel: 1),
+        ]
+      : null,
+);
 
 /// Seven seconds of a speech-like envelope, so the waveform draws real samples.
 Uint8List _clip() {
@@ -85,13 +86,15 @@ Future<SpeakerTagPromptsProvider> _pumpCard(AuditRun a, String kind, {bool playC
     answeredHold: Duration.zero,
   );
   final people = PeopleProvider(
-    loadPeople: () async => [
-      _person('p-jordan', 'Jordan Lee', pinned: true, confidence: 'confirmed'),
-      _person('p-sam', 'Sam Okafor'),
-      _person('p-alex', 'Alex Rivera'),
-      _person('p-priya', 'Priya Natarajan'),
-      _person('p-because', 'Because', confidence: 'unverified'),
-    ],
+    loadPeople: () async => PeopleListResponse(
+      people: [
+        _person('p-jordan', 'Jordan Lee', pinned: true, confidence: 'confirmed'),
+        _person('p-sam', 'Sam Okafor'),
+        _person('p-alex', 'Alex Rivera'),
+        _person('p-priya', 'Priya Natarajan'),
+        _person('p-because', 'Because', confidence: 'unverified'),
+      ],
+    ),
   );
   await people.setPeople();
   await a.pump(

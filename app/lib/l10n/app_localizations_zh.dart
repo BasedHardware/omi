@@ -12081,4 +12081,58 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '最近 $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
+  String get reprocessingConversationProgress => '正在重新处理对话…';
+
+  @override
+  String get conversationReprocessed => '对话已更新';
+
+  @override
+  String get loadingTranscript => '正在加载转录…';
+
+  @override
+  String get transcriptLoadFailed => '无法加载转录。';
+
+  @override
+  String get processingConversationProgress => '正在处理对话…';
+
+  @override
+  String get conversationProcessingFailedMessage => '无法处理此对话。';
+
+  @override
+  String get waitForReprocessing => '请等待重新处理完成。';
+
+  @override
+  String get unnamedSpeakerLabel => '发言者';
+
+  @override
+  String get unresolvedSpeakersNotice => '说话人未在不同录音间区分开。';
+
+  @override
+  String get unresolvedSpeakersTitle => '关于说话人标签';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omi 无法区分录音中的其他声音。请轻点说话人标签，为正在说话的人命名。';
+
+  @override
+  String get nameSpeakerTitle => '命名说话者';
+
+  @override
+  String get playbackPreparingAudio => '正在准备音频…';
+
+  @override
+  String get playbackBackToCurrent => '回到当前位置';
+
+  @override
+  String get playbackAudioUnavailable => '音频不可用';
+
+  @override
+  String get playbackAudioLoadFailed => '无法加载音频';
+
+  @override
+  String get playbackAudioNetworkFailed => '请检查网络连接';
 }

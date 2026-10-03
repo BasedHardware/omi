@@ -1,6 +1,7 @@
 import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/base_provider.dart';
@@ -9,21 +10,25 @@ import 'package:omi/utils/logger.dart';
 class PeopleProvider extends BaseProvider {
   PeopleProvider({
     Future<bool> Function(String, String)? renamePerson,
-    Future<List<Person>?> Function()? loadPeople,
+    Future<PeopleListResponse?> Function()? loadPeople,
     Future<bool> Function(String, int)? deleteSample,
     Future<bool> Function(String)? deletePersonById,
     Future<bool> Function(String, bool)? setPinned,
-  })  : _deletePersonById = deletePersonById ?? deletePerson,
-        _setPinned = setPinned ?? setPersonPinned,
-        _renamePerson = renamePerson ?? updatePersonName,
-        _loadPeople = loadPeople ?? (() => getAllPeople(includeStats: true)),
-        _deleteSample = deleteSample ?? deletePersonSpeechSample;
-  final Future<List<Person>?> Function() _loadPeople;
+    void Function(ApiFallbackEvent)? fallback,
+  }) : _deletePersonById = deletePersonById ?? deletePerson,
+       _setPinned = setPinned ?? setPersonPinned,
+       _renamePerson = renamePerson ?? updatePersonName,
+       _loadPeople = loadPeople ?? (() => getAllPeople(includeStats: true)),
+       _fallback = fallback ?? recordFallback,
+       _deleteSample = deleteSample ?? deletePersonSpeechSample;
+  final Future<PeopleListResponse?> Function() _loadPeople;
+  final void Function(ApiFallbackEvent) _fallback;
   final Future<bool> Function(String, String) _renamePerson;
   final Future<bool> Function(String, int) _deleteSample;
   final Future<bool> Function(String) _deletePersonById;
   final Future<bool> Function(String, bool) _setPinned;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
+  bool statsTruncated = SharedPreferencesUtil().cachedPeopleStatsTruncated;
   Map<String, List<String>> samplesUrl = {};
 
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -51,6 +56,7 @@ class PeopleProvider extends BaseProvider {
 
   void clearUserData() {
     _confidenceLoaded = false;
+    statsTruncated = false;
     people = [];
     selectedIds.clear();
     selecting = false;
@@ -70,11 +76,16 @@ class PeopleProvider extends BaseProvider {
     loadFailed = value == null;
     if (value != null) {
       _confidenceLoaded = true;
-      people = [
-        ...value,
-        ...people.where((person) => person.id.startsWith('optimistic-person:')),
-      ];
-      SharedPreferencesUtil().cachedPeople = value;
+      final server = value.statsTruncated
+          ? preserveCachedPeopleStats(value.people, SharedPreferencesUtil().cachedPeople)
+          : value.people;
+      people = [...server, ...people.where((person) => person.id.startsWith('optimistic-person:'))];
+      SharedPreferencesUtil().cachedPeople = server;
+      statsTruncated = value.statsTruncated;
+      SharedPreferencesUtil().cachedPeopleStatsTruncated = value.statsTruncated;
+      if (value.statsTruncated) {
+        _fallback(const ApiFallbackEvent(reason: ApiFallbackReason.staleData, outcome: ApiFallbackOutcome.degraded));
+      }
     }
     Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
     notifyListeners();
@@ -125,8 +136,9 @@ class PeopleProvider extends BaseProvider {
 
     people.add(newPerson);
     people.sort((a, b) => a.name.compareTo(b.name));
-    SharedPreferencesUtil().cachedPeople =
-        people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
+    SharedPreferencesUtil().cachedPeople = people
+        .where((person) => !person.id.startsWith('optimistic-person:'))
+        .toList();
 
     loading = false;
     notifyListeners();
@@ -167,10 +179,7 @@ class PeopleProvider extends BaseProvider {
     if (success) {
       people[personIdx].speechSamples!.removeAt(sampleIdx);
       if (people[personIdx].speechSamples!.isEmpty) {
-        people[personIdx] = Person.fromJson({
-          ...people[personIdx].toJson(),
-          'voice_readiness': 'not_learned',
-        });
+        people[personIdx] = Person.fromJson({...people[personIdx].toJson(), 'voice_readiness': 'not_learned'});
       }
       SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
       await setPeople();
@@ -205,8 +214,9 @@ class PeopleProvider extends BaseProvider {
 
   Future<bool> setPinned(String personId, bool pinned) {
     final previous = _pinOperations[personId];
-    final operation =
-        previous == null ? _applyPinned(personId, pinned) : previous.then((_) => _applyPinned(personId, pinned));
+    final operation = previous == null
+        ? _applyPinned(personId, pinned)
+        : previous.then((_) => _applyPinned(personId, pinned));
     _pinOperations[personId] = operation;
     operation.whenComplete(() {
       if (identical(_pinOperations[personId], operation)) _pinOperations.remove(personId);
@@ -234,8 +244,9 @@ class PeopleProvider extends BaseProvider {
       people[current] = before;
       notifyListeners();
     } else if (ok) {
-      SharedPreferencesUtil().cachedPeople =
-          people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
+      SharedPreferencesUtil().cachedPeople = people
+          .where((person) => !person.id.startsWith('optimistic-person:'))
+          .toList();
     }
     return ok;
   }
@@ -244,8 +255,8 @@ class PeopleProvider extends BaseProvider {
   List<Person> get cleanUpCandidates => !_confidenceLoaded
       ? []
       : people
-          .where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:'))
-          .toList();
+            .where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:'))
+            .toList();
 
   // ---- Multi-select ----
 
@@ -264,7 +275,7 @@ class PeopleProvider extends BaseProvider {
   void selectAll(Iterable<String> personIds) {
     final pinned = {
       for (final p in people)
-        if (p.pinned) p.id
+        if (p.pinned) p.id,
     };
     selectedIds.addAll(personIds.where((id) => !pinned.contains(id)));
     notifyListeners();
@@ -294,14 +305,16 @@ class PeopleProvider extends BaseProvider {
   Future<int> deletePeople(List<String> personIds, {bool allowPinned = false}) async {
     allowPinned = allowPinned && personIds.toSet().length == 1;
     personIds = personIds.toSet().where((id) => people.any((p) => p.id == id && (!p.pinned || allowPinned))).toList();
-    final results = await Future.wait(personIds.map((id) async {
-      try {
-        return await _deletePersonById(id);
-      } catch (e) {
-        Logger.debug('Failed to delete person $id: $e');
-        return false;
-      }
-    }));
+    final results = await Future.wait(
+      personIds.map((id) async {
+        try {
+          return await _deletePersonById(id);
+        } catch (e) {
+          Logger.debug('Failed to delete person $id: $e');
+          return false;
+        }
+      }),
+    );
     final deleted = <String>{
       for (final (i, ok) in results.indexed)
         if (ok) personIds[i],
@@ -309,8 +322,9 @@ class PeopleProvider extends BaseProvider {
     people.removeWhere((person) => deleted.contains(person.id));
     selectedIds.removeAll(deleted);
     if (selectedIds.isEmpty) selecting = false;
-    SharedPreferencesUtil().cachedPeople =
-        people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
+    SharedPreferencesUtil().cachedPeople = people
+        .where((person) => !person.id.startsWith('optimistic-person:'))
+        .toList();
     notifyListeners();
     return deleted.length;
   }

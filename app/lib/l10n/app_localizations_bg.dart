@@ -12336,4 +12336,59 @@ class AppLocalizationsBg extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последните $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Бройките може да са непълни.';
+
+  @override
+  String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';
+
+  @override
+  String get conversationReprocessed => 'Разговорът е обновен';
+
+  @override
+  String get loadingTranscript => 'Транскрипцията се зарежда…';
+
+  @override
+  String get transcriptLoadFailed => 'Транскрипцията не можа да се зареди.';
+
+  @override
+  String get processingConversationProgress => 'Разговорът се обработва…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Този разговор не можа да бъде обработен.';
+
+  @override
+  String get waitForReprocessing => 'Изчакайте повторната обработка да приключи.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Говорител';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Говорителите не са разделени в различните записи.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Относно етикетите на говорителите';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не успя да различи другите гласове в записите. Докоснете етикета на говорител, за да посочите кой говори.';
+
+  @override
+  String get nameSpeakerTitle => 'Наименувай говорителя';
+
+  @override
+  String get playbackPreparingAudio => 'Подготвяне на аудиото…';
+
+  @override
+  String get playbackBackToCurrent => 'Обратно към текущото';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудиото е недостъпно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Аудиото не можа да се зареди';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверете връзката';
 }

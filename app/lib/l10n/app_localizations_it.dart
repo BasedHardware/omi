@@ -12360,4 +12360,59 @@ class AppLocalizationsIt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimi $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';
+
+  @override
+  String get reprocessingConversationProgress => 'Rielaborazione della conversazione…';
+
+  @override
+  String get conversationReprocessed => 'Conversazione aggiornata';
+
+  @override
+  String get loadingTranscript => 'Caricamento della trascrizione…';
+
+  @override
+  String get transcriptLoadFailed => 'Impossibile caricare la trascrizione.';
+
+  @override
+  String get processingConversationProgress => 'Elaborazione della conversazione…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Impossibile elaborare questa conversazione.';
+
+  @override
+  String get waitForReprocessing => 'Attendi il termine della rielaborazione.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Relatore';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Le voci non sono separate tra le registrazioni.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Informazioni sulle etichette dei relatori';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi non è riuscito a distinguere le altre voci tra le registrazioni. Tocca un\'etichetta di relatore per dare un nome a chi parla.';
+
+  @override
+  String get nameSpeakerTitle => 'Nomina relatore';
+
+  @override
+  String get playbackPreparingAudio => 'Preparazione dell\'audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Torna all\'attuale';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio non disponibile';
+
+  @override
+  String get playbackAudioLoadFailed => 'Impossibile caricare l\'audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controlla la connessione';
 }
