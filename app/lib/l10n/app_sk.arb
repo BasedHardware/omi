@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Počty môžu byť neúplné.",
     "previousDay": "Predchádzajúci deň",
     "nextDay": "Nasledujúci deň",
-    "noTasksOnDate": "Žiadne úlohy na {date}"
+    "noTasksOnDate": "Žiadne úlohy na {date}",
+    "reprocessingConversationProgress": "Konverzácia sa znova spracúva…",
+    "conversationReprocessed": "Konverzácia aktualizovaná",
+    "loadingTranscript": "Načítava sa prepis…",
+    "transcriptLoadFailed": "Prepis sa nepodarilo načítať.",
+    "processingConversationProgress": "Konverzácia sa spracúva…",
+    "conversationProcessingFailedMessage": "Túto konverzáciu sa nepodarilo spracovať.",
+    "waitForReprocessing": "Počkajte na dokončenie opätovného spracovania.",
+    "unnamedSpeakerLabel": "Hovorca",
+    "unresolvedSpeakersNotice": "Rečníci nie sú oddelení naprieč nahrávkami.",
+    "unresolvedSpeakersTitle": "O popiskoch rečníkov",
+    "unresolvedSpeakersMessage": "Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.",
+    "nameSpeakerTitle": "Pomenovať rečníka",
+    "playbackPreparingAudio": "Pripravuje sa zvuk…",
+    "playbackBackToCurrent": "Späť na aktuálne",
+    "playbackAudioUnavailable": "Zvuk nie je k dispozícii",
+    "playbackAudioLoadFailed": "Zvuk sa nepodarilo načítať",
+    "playbackAudioNetworkFailed": "Skontrolujte pripojenie"
 }

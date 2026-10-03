@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "จำนวนอาจไม่ครบถ้วน",
     "previousDay": "วันก่อนหน้า",
     "nextDay": "วันถัดไป",
-    "noTasksOnDate": "ไม่มีงานในวันที่ {date}"
+    "noTasksOnDate": "ไม่มีงานในวันที่ {date}",
+    "reprocessingConversationProgress": "กำลังประมวลผลการสนทนาอีกครั้ง…",
+    "conversationReprocessed": "อัปเดตการสนทนาแล้ว",
+    "loadingTranscript": "กำลังโหลดถอดความ…",
+    "transcriptLoadFailed": "ไม่สามารถโหลดถอดความได้",
+    "processingConversationProgress": "กำลังประมวลผลการสนทนา…",
+    "conversationProcessingFailedMessage": "ไม่สามารถประมวลผลการสนทนานี้ได้",
+    "waitForReprocessing": "รอให้การประมวลผลอีกครั้งเสร็จสิ้น",
+    "unnamedSpeakerLabel": "ผู้พูด",
+    "unresolvedSpeakersNotice": "ผู้พูดไม่ได้ถูกแยกกันระหว่างการบันทึก",
+    "unresolvedSpeakersTitle": "เกี่ยวกับป้ายกำกับผู้พูด",
+    "unresolvedSpeakersMessage": "Omi ไม่สามารถแยกเสียงอื่น ๆ ออกจากกันระหว่างการบันทึก แตะป้ายกำกับผู้พูดเพื่อตั้งชื่อผู้ที่กำลังพูด",
+    "nameSpeakerTitle": "ตั้งชื่อผู้พูด",
+    "playbackPreparingAudio": "กำลังเตรียมเสียง…",
+    "playbackBackToCurrent": "กลับไปที่ปัจจุบัน",
+    "playbackAudioUnavailable": "เสียงไม่พร้อมใช้งาน",
+    "playbackAudioLoadFailed": "ไม่สามารถโหลดเสียงได้",
+    "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ"
 }

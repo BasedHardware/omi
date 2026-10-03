@@ -19,12 +19,14 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -43,6 +45,7 @@ import 'widgets/audio_download_progress_sheet.dart';
 import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
 import 'widgets/capture_recordings.dart';
+import 'widgets/conversation_activity_strip.dart';
 import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
@@ -129,6 +132,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   // Callback to seek audio to transcript segment (start, end) in wall seconds
   Future<void> Function(double start, double end)? _seekToSegmentCallback;
+
+  // Page-owned playback state: the bar's player reports into it, the transcript
+  // highlights and follows from it.
+  late final ConversationPlaybackController _playbackController;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -218,9 +225,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       index == _transcriptTabIndex ? ConversationTab.transcript : ConversationTab.summary;
 
   static int _indexForTab(ConversationTab tab) => switch (tab) {
-        ConversationTab.transcript => _transcriptTabIndex,
-        ConversationTab.summary => _summaryTabIndex,
-      };
+    ConversationTab.transcript => _transcriptTabIndex,
+    ConversationTab.summary => _summaryTabIndex,
+  };
 
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
@@ -244,12 +251,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   void initState() {
     super.initState();
     unawaited(
-        SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id));
+      SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
+    );
     unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
 
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
     // transcript only once the final summary state is known.
+    _playbackController = ConversationPlaybackController()..updateSegments(widget.conversation.transcriptSegments);
     _createTabController(initialIndex: _indexForTab(widget.initialTab ?? ConversationTab.summary));
     selectedTab = _tabForIndex(_controller!.index);
 
@@ -276,7 +285,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
       await provider.initConversation();
       _recordResultViewed(provider, identityEpoch);
-      if (provider.conversation.appResults.isEmpty) {
+      if (_awaitsTranscript(provider.conversation)) {
+        // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
+        // full conversation and let the Transcript tab say it is loading, or offer Try Again.
+        unawaited(
+          provider.refreshConversation(trackLoad: true).then((_) {
+            if (!mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+            _selectInitialTabIfNeeded(provider.conversation);
+            _recordResultViewed(provider, identityEpoch);
+          }),
+        );
+      } else if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
           // The initial list payload is enough to render the detail page. Fill
@@ -303,6 +322,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     });
   }
+
+  /// A conversation whose lines should exist but are not in the copy the page opened with.
+  static bool _awaitsTranscript(ServerConversation conversation) =>
+      conversation.transcriptSegments.isEmpty &&
+      conversation.photos.isEmpty &&
+      conversation.externalIntegration == null &&
+      !conversation.isLocked &&
+      !conversation.discarded;
 
   void _recordResultViewed(ConversationDetailProvider provider, int identityEpoch) {
     if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
@@ -379,6 +406,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _playbackController.dispose();
     super.dispose();
   }
 
@@ -485,10 +513,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     trackConversationAction(ConversationActionAction.separate, ConversationActionSurface.detailBody);
     final detail = context.read<ConversationDetailProvider>();
     final list = context.read<ConversationProvider>();
-    return _separation.separate(recording.id, reload: () async {
-      await detail.refreshConversation();
-      await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
-    });
+    return _separation.separate(
+      recording.id,
+      reload: () async {
+        await detail.refreshConversation();
+        await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
+      },
+    );
   }
 
   static const _overflowActions = {
@@ -531,9 +562,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (!provider.loadingReprocessConversation) {
-          await provider.reprocessConversation();
+        if (provider.loadingReprocessConversation) break;
+        if (!context.read<ConnectivityProvider>().isConnected) {
+          ConnectivityProvider.showNoInternetDialog(context);
+          break;
         }
+        await provider.reprocessConversation();
         break;
       case 'link_event':
         _handleLinkEvent(context, provider);
@@ -717,6 +751,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to toggle starred status: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToUpdateStarred);
     } finally {
       if (mounted) setState(() => _isTogglingStarred = false);
     }
@@ -765,6 +800,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
     } catch (e) {
       Logger.debug('Failed to share conversation: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
     } finally {
       if (mounted && _isSharing) setState(() => _isSharing = false);
     }
@@ -776,8 +812,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     final conversation = provider.conversation;
     final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
     final summarySelection = provider.getSummarySelection();
-    final summaryApp =
-        summarySelection.isApp ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull : null;
+    final summaryApp = summarySelection.isApp
+        ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull
+        : null;
     // Grouped, with large dividers between groups: how the summary is written, then organising
     // the conversation, then finding and copying its words; developer tools (when on) sit last
     // before Delete. Star and Share live in the top bar.
@@ -798,7 +835,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         PullDownMenuItem(
           title: l10n.reprocessConversation,
           iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap: () => _handleMenuSelection(context, 'reprocess', provider),
+          onTap: provider.loadingReprocessConversation
+              ? null
+              : () => _handleMenuSelection(context, 'reprocess', provider),
         ),
       ],
     ];
@@ -901,10 +940,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     ];
     final groups = [summaryGroup, organizeGroup, wordsGroup, developerGroup, deleteGroup].where((g) => g.isNotEmpty);
     return [
-      for (final (index, group) in groups.indexed) ...[
-        if (index > 0) const PullDownMenuDivider.large(),
-        ...group,
-      ],
+      for (final (index, group) in groups.indexed) ...[if (index > 0) const PullDownMenuDivider.large(), ...group],
     ];
   }
 
@@ -1020,15 +1056,45 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     }
 
     // The bottom bar (and its backdrop) shows once there is something to play or ask about.
-    final hasBar = conversation.transcriptSegments.isNotEmpty ||
+    final hasBar =
+        conversation.transcriptSegments.isNotEmpty ||
         conversation.photos.isNotEmpty ||
         conversation.externalIntegration != null;
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
-        if (error == 'REPROCESS_FAILED') OmiFeedback.error(context, context.l10n.errorProcessingConversation);
+        switch (error) {
+          case 'REPROCESS_FAILED':
+            // The provider is shared: a reprocess started on another conversation can fail after
+            // the reader opened this one. Report only this page's own failure, and retry only it.
+            final failedId = detailProvider.lastFailedReprocessConversationId;
+            if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
+            final appId = detailProvider.lastFailedReprocessAppId;
+            OmiFeedback.error(
+              context,
+              context.l10n.errorProcessingConversation,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () {
+                if (detailProvider.conversationOrNull?.id == failedId) {
+                  detailProvider.reprocessConversation(appId: appId);
+                }
+              },
+            );
+          case 'SEGMENT_EDIT_FAILED':
+          case 'SUMMARY_EDIT_FAILED':
+            OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+        }
       },
-      showInfo: (info) {},
+      showInfo: (info) {
+        switch (info) {
+          case 'REPROCESS_STARTED':
+            OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
+          case 'REPROCESS_SUCCESS':
+            if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
+              OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
+            }
+        }
+      },
       child: Scaffold(
         key: scaffoldKey,
         extendBody: true,
@@ -1057,10 +1123,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   children: [
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
-                    ConversationDetailTabs(
-                      controller: _controller!,
-                      onTap: (_) => _hasExplicitTabSelection = true,
-                    ),
+                    ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
+                    const ConversationActivityStrip(),
                     Expanded(
                       // Each tab owns the page's side margin, so a section can scroll edge to edge
                       // (the Summary tab's screenshot strip) instead of clipping at the margin.
@@ -1068,7 +1132,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         controller: _controller,
                         children: [
                           SummaryTab(
-                            reviewEnabled: !widget.isFromOnboarding &&
+                            reviewEnabled:
+                                !widget.isFromOnboarding &&
                                 widget.initialSeekStart == null &&
                                 selectedTab == ConversationTab.summary &&
                                 !_controller!.indexIsChanging &&
@@ -1094,12 +1159,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                   _controller!.animateTo(_transcriptTabIndex);
                                 }
 
-                                // Seek to segment using callback (start + end for bounded play)
+                                // Seek to segment start; playback keeps running past the segment end.
                                 if (_seekToSegmentCallback != null) {
                                   await _seekToSegmentCallback!(segment.start, segment.end);
-                                  HapticFeedback.lightImpact();
                                 }
                               },
+                              playbackController: _playbackController,
                             ),
                           ),
                         ],
@@ -1133,6 +1198,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                     selectedTab: selectedTab,
                     conversation: conversation,
                     hasSegments: hasBar,
+                    playbackController: _playbackController,
                     onSeekFunctionReady: (seekFunction) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {

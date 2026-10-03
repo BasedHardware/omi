@@ -211,6 +211,11 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - Everyone else is **Speaker N**, N dense per conversation (1, 2, 3… in order of first
   appearance, skipping the owner and Omi). Never a raw id, never a gap. Naming a person does not
   renumber the others. `TranscriptSegment.getDisplaySpeakerId` returns the same N.
+- When the server could not resolve speakers across the conversation (`speaker_resolution.status`
+  is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
+  the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
+  transcript heading omits its speaker count. A saved transcript names each speaker once per turn
+  (consecutive lines from the same voice), so a change of voice is still visible.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

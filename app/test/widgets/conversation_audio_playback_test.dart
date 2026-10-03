@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -16,21 +17,21 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 final _start = DateTime.utc(2026, 9, 24, 9, 39);
 
 AudioFile _file(String id, {double duration = 60, int? startsAfterSeconds}) => AudioFile(
-      id: id,
-      uid: 'u',
-      conversationId: 'c',
-      chunkTimestamps: const [],
-      duration: duration,
-      startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
-    );
+  id: id,
+  uid: 'u',
+  conversationId: 'c',
+  chunkTimestamps: const [],
+  duration: duration,
+  startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
+);
 
 AudioFileUrlInfo _url(String id, String status, {double duration = 60}) => AudioFileUrlInfo(
-      id: id,
-      status: status,
-      signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
-      contentType: status == 'cached' ? 'audio/mpeg' : null,
-      duration: duration,
-    );
+  id: id,
+  status: status,
+  signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
+  contentType: status == 'cached' ? 'audio/mpeg' : null,
+  duration: duration,
+);
 
 /// Stands in for just_audio's native player: every player starts, and loading a source fails the
 /// way AVPlayer reports an expired or refused URL (AVFoundationErrorDomain -11800).
@@ -116,21 +117,17 @@ void main() {
     });
 
     test('parts without start times still play, but transcript taps cannot be placed', () {
-      final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached')]),
-        [_file('a')],
-        conversationStart: _start,
-      );
+      final plan = ConversationPlaybackPlan.resolve(AudioUrlsResponse(files: [_url('a', 'cached')]), [
+        _file('a'),
+      ], conversationStart: _start);
       expect(plan.parts, hasLength(1));
       expect(plan.mapper, isNull);
     });
 
     test('a part with no recorded length takes the URL’s length', () {
-      final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]),
-        [_file('a', duration: 0, startsAfterSeconds: 0)],
-        conversationStart: _start,
-      );
+      final plan = ConversationPlaybackPlan.resolve(AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]), [
+        _file('a', duration: 0, startsAfterSeconds: 0),
+      ], conversationStart: _start);
       expect(plan.duration, const Duration(seconds: 42));
     });
 
@@ -152,7 +149,7 @@ void main() {
 
     Future<ConversationDetailProvider> pumpBar(
       WidgetTester tester,
-      Future<AudioUrlsResponse> Function(String) fetch,
+      Future<ApiResult<AudioUrlsResponse>> Function(String) fetch,
     ) async {
       final conversation = ServerConversation(
         id: 'conv-audio',
@@ -188,19 +185,20 @@ void main() {
       return provider;
     }
 
-    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries',
-        (tester) async {
+    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries', (
+      tester,
+    ) async {
       var fetches = 0;
       await pumpBar(tester, (_) async {
         fetches++;
-        return AudioUrlsResponse(files: []);
+        return ApiSuccess(AudioUrlsResponse(files: []));
       });
 
       await tester.tap(find.bySemanticsLabel('Play'));
       await tester.pump();
       await tester.pump();
       expect(fetches, 1, reason: 'no polling when there is nothing to wait for');
-      expect(find.text('An error occurred. Please try again.'), findsOneWidget);
+      expect(find.text('Audio Unavailable'), findsOneWidget);
       expect(find.bySemanticsLabel('Play'), findsOneWidget, reason: 'it never claims to be playing');
 
       await tester.tap(find.bySemanticsLabel('Play'));
@@ -209,35 +207,36 @@ void main() {
     });
 
     testWidgets('audio that is gone reads as unavailable', (tester) async {
-      await pumpBar(tester, (_) async => AudioUrlsResponse(files: [_url('a', 'unavailable')]));
+      await pumpBar(tester, (_) async => ApiSuccess(AudioUrlsResponse(files: [_url('a', 'unavailable')])));
 
       await tester.tap(find.bySemanticsLabel('Play'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Audio file is not available for playback'), findsOneWidget);
+      expect(find.text('Audio Unavailable'), findsOneWidget);
       expect(find.bySemanticsLabel('Play'), findsOneWidget);
     });
 
-    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play',
-        (tester) async {
+    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play', (
+      tester,
+    ) async {
       final responses = [
         AudioUrlsResponse(files: [_url('a', 'pending')], pollAfterMs: 10),
         AudioUrlsResponse(files: [_url('a', 'cached')]),
       ];
       var fetches = 0;
       _fakeAudioPlatformThatCannotLoad(tester);
-      await pumpBar(tester, (_) async => responses[(fetches++).clamp(0, 1)]);
+      await pumpBar(tester, (_) async => ApiSuccess(responses[(fetches++).clamp(0, 1)]));
 
       await tester.tap(find.bySemanticsLabel('Play'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 20)); // the poll interval the backend asked for
       // just_audio settles a failed load through real platform-channel replies.
-      for (var i = 0; i < 10 && find.byType(SnackBar).evaluate().isEmpty; i++) {
+      for (var i = 0; i < 10 && find.byKey(const Key('detail_audio_retry')).evaluate().isEmpty; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(fetches, 2, reason: 'polled once more while the part was pending');
-      expect(find.text('An error occurred. Please try again.'), findsOneWidget);
+      expect(find.text("Couldn't Load Audio"), findsOneWidget);
       expect(find.bySemanticsLabel('Play'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

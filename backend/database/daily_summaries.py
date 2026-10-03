@@ -15,7 +15,8 @@ users/{uid}/daily_summaries/{summary_id}
     ├── memorable_moments: List[MemorabeMoment]
     ├── stats: DayStats
     ├── tomorrow_focus: str
-    └── overall_sentiment: str
+    ├── overall_sentiment: str
+    └── notification_delivery_completed: bool (push handling acknowledged, including tokenless skip)
 
 users/{uid}/desktop_daily_usage/{date}__{client_device_id}
     ├── date/timezone/client_device_id
@@ -29,7 +30,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
-from ._client import db
+from ._client import db, get_firestore_client
 from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
@@ -207,6 +208,17 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     # where readers key off summary['id'].
     payload: Dict[str, Any] = {**summary_data, 'id': summary_id}
     summary_ref.set(payload)
+
+
+def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestore_client: Any = None) -> None:
+    """Record completed push handling independently of backfill/webhook work.
+
+    Patch only delivery metadata, preserving concurrent edits to the recap.
+    A tokenless recap also completes push handling without sending anything.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    summary_ref = client.collection('users').document(uid).collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref.update({'notification_delivery_completed': True})
 
 
 def delete_daily_summary(uid: str, summary_id: str) -> bool:

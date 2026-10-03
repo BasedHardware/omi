@@ -17,6 +17,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -352,6 +355,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -450,6 +456,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -496,6 +505,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -832,6 +844,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1006,6 +1021,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -1120,6 +1138,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1373,6 +1394,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1579,6 +1603,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -2028,6 +2055,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2361,6 +2391,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
@@ -2438,7 +2471,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2477,6 +2510,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2521,6 +2557,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2554,7 +2593,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2743,6 +2782,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -2916,6 +2958,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
             SCREEN_FRAME_EGRESS_ENABLED:
@@ -3003,7 +3048,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3048,6 +3093,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3247,7 +3295,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3291,6 +3339,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3460,7 +3511,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3508,6 +3559,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout

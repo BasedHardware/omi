@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Kiraan mungkin tidak lengkap.",
     "previousDay": "Hari sebelumnya",
     "nextDay": "Hari berikutnya",
-    "noTasksOnDate": "Tiada tugas pada {date}"
+    "noTasksOnDate": "Tiada tugas pada {date}",
+    "reprocessingConversationProgress": "Memproses semula perbualan…",
+    "conversationReprocessed": "Perbualan dikemas kini",
+    "loadingTranscript": "Memuatkan transkrip…",
+    "transcriptLoadFailed": "Tidak dapat memuatkan transkrip.",
+    "processingConversationProgress": "Memproses perbualan…",
+    "conversationProcessingFailedMessage": "Perbualan ini tidak dapat diproses.",
+    "waitForReprocessing": "Tunggu sehingga pemprosesan semula selesai.",
+    "unnamedSpeakerLabel": "Penceramah",
+    "unresolvedSpeakersNotice": "Pembicara tidak dipisahkan merentasi rakaman.",
+    "unresolvedSpeakersTitle": "Perihal Label Pembicara",
+    "unresolvedSpeakersMessage": "Omi tidak dapat membezakan suara lain merentasi rakaman. Ketik label pembicara untuk menamakan siapa yang bercakap.",
+    "nameSpeakerTitle": "Namakan Pembicara",
+    "playbackPreparingAudio": "Menyediakan Audio…",
+    "playbackBackToCurrent": "Kembali ke Semasa",
+    "playbackAudioUnavailable": "Audio Tidak Tersedia",
+    "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
+    "playbackAudioNetworkFailed": "Semak Sambungan"
 }

@@ -11361,5 +11361,22 @@
     "peopleStatsIncomplete": "Бројеви можда нису потпуни.",
     "previousDay": "Претходни дан",
     "nextDay": "Следећи дан",
-    "noTasksOnDate": "Нема задатака за {date}"
+    "noTasksOnDate": "Нема задатака за {date}",
+    "reprocessingConversationProgress": "Поновна обрада разговора…",
+    "conversationReprocessed": "Разговор је ажуриран",
+    "loadingTranscript": "Учитавање транскрипта…",
+    "transcriptLoadFailed": "Учитавање транскрипта није успело.",
+    "processingConversationProgress": "Обрада разговора…",
+    "conversationProcessingFailedMessage": "Овај разговор није могао да се обради.",
+    "waitForReprocessing": "Сачекајте да се поновна обрада заврши.",
+    "unnamedSpeakerLabel": "Говорник",
+    "unresolvedSpeakersNotice": "Говорници нису одвојени кроз снимке.",
+    "unresolvedSpeakersTitle": "О ознакама говорника",
+    "unresolvedSpeakersMessage": "Omi није могао да разликује остале гласове кроз снимке. Додирните ознаку говорника да именујете ко говори.",
+    "nameSpeakerTitle": "Именуј говорника",
+    "playbackPreparingAudio": "Priprema zvuka…",
+    "playbackBackToCurrent": "Nazad na trenutno",
+    "playbackAudioUnavailable": "Zvuk nije dostupan",
+    "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
+    "playbackAudioNetworkFailed": "Proverite vezu"
 }

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -1283,10 +1283,12 @@ def get_conversation_notes(
     ``rich_context_enabled`` switches to the extended extraction schema and the
     rich instruction blocks; ``meeting_context`` is the rendered BACKGROUND
     CONTEXT block appended to the volatile suffix only. With the flag off all
-    three new arguments must be absent/default and the prompt is byte-identical
-    to the legacy notes prompt.
+    three new arguments must be absent/default and the legacy instruction text
+    and schema are retained. Static instructions are sent as a system message;
+    volatile instructions are sent as a user message so provider wire formats
+    always include user content.
     """
-    if not prefix.context.strip():
+    if not prefix.context.strip() or not (prefix.has_usable_content or (rich_context_enabled and screen_frames)):
         return Structured()
 
     response_language = output_language_code or language_code
@@ -1351,7 +1353,7 @@ def get_conversation_notes(
     cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
     messages = [
         _gpt56_cacheable_system_message(static_instructions, cache_enabled=cache_enabled, formatted=True),
-        SystemMessage(content=volatile_instructions),
+        HumanMessage(content=volatile_instructions),
     ]
     if rich_mode and screen_frames:
         messages.append(screen_frames_message(screen_frames))

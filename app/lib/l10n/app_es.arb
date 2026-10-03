@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Los recuentos pueden estar incompletos.",
     "previousDay": "Día anterior",
     "nextDay": "Día siguiente",
-    "noTasksOnDate": "No hay tareas el {date}"
+    "noTasksOnDate": "No hay tareas el {date}",
+    "reprocessingConversationProgress": "Reprocesando la conversación…",
+    "conversationReprocessed": "Conversación actualizada",
+    "loadingTranscript": "Cargando la transcripción…",
+    "transcriptLoadFailed": "No se pudo cargar la transcripción.",
+    "processingConversationProgress": "Procesando la conversación…",
+    "conversationProcessingFailedMessage": "No se pudo procesar esta conversación.",
+    "waitForReprocessing": "Espera a que termine el reprocesamiento.",
+    "unnamedSpeakerLabel": "Hablante",
+    "unresolvedSpeakersNotice": "Las voces no están separadas entre grabaciones.",
+    "unresolvedSpeakersTitle": "Acerca de las etiquetas de hablante",
+    "unresolvedSpeakersMessage": "Omi no pudo distinguir las demás voces entre las grabaciones. Toca una etiqueta de hablante para nombrar a quién habla.",
+    "nameSpeakerTitle": "Nombrar hablante",
+    "playbackPreparingAudio": "Preparando audio…",
+    "playbackBackToCurrent": "Volver a lo actual",
+    "playbackAudioUnavailable": "Audio no disponible",
+    "playbackAudioLoadFailed": "No se pudo cargar el audio",
+    "playbackAudioNetworkFailed": "Comprueba la conexión"
 }

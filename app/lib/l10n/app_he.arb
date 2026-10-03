@@ -11361,5 +11361,22 @@
     "peopleStatsIncomplete": "הספירות עשויות להיות חלקיות.",
     "previousDay": "היום הקודם",
     "nextDay": "היום הבא",
-    "noTasksOnDate": "אין משימות ב{date}"
+    "noTasksOnDate": "אין משימות ב{date}",
+    "reprocessingConversationProgress": "מעבד מחדש את השיחה…",
+    "conversationReprocessed": "השיחה עודכנה",
+    "loadingTranscript": "טוען תמליל…",
+    "transcriptLoadFailed": "לא ניתן לטעון את התמליל.",
+    "processingConversationProgress": "מעבד את השיחה…",
+    "conversationProcessingFailedMessage": "לא ניתן היה לעבד את השיחה הזו.",
+    "waitForReprocessing": "המתן לסיום העיבוד מחדש.",
+    "unnamedSpeakerLabel": "דובר",
+    "unresolvedSpeakersNotice": "הדוברים אינם מופרדים בין ההקלטות.",
+    "unresolvedSpeakersTitle": "על תוויות הדוברים",
+    "unresolvedSpeakersMessage": "Omi לא הצליח להבדיל בין הקולות האחרים בין ההקלטות. הקשו על תווית דובר כדי לתת שם למי שמדבר.",
+    "nameSpeakerTitle": "תן שם לדובר",
+    "playbackPreparingAudio": "מכין אודיו…",
+    "playbackBackToCurrent": "חזרה לנוכחי",
+    "playbackAudioUnavailable": "האודיו לא זמין",
+    "playbackAudioLoadFailed": "לא ניתן לטעון את האודיו",
+    "playbackAudioNetworkFailed": "בדקו את החיבור"
 }

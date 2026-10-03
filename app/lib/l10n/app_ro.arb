@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Numărătorile pot fi incomplete.",
     "previousDay": "Ziua precedentă",
     "nextDay": "Ziua următoare",
-    "noTasksOnDate": "Nicio sarcină pe {date}"
+    "noTasksOnDate": "Nicio sarcină pe {date}",
+    "reprocessingConversationProgress": "Se reprocesează conversația…",
+    "conversationReprocessed": "Conversație actualizată",
+    "loadingTranscript": "Se încarcă transcrierea…",
+    "transcriptLoadFailed": "Transcrierea nu a putut fi încărcată.",
+    "processingConversationProgress": "Se procesează conversația…",
+    "conversationProcessingFailedMessage": "Această conversație nu a putut fi procesată.",
+    "waitForReprocessing": "Așteaptă finalizarea reprocesării.",
+    "unnamedSpeakerLabel": "Vorbitor",
+    "unresolvedSpeakersNotice": "Vocile nu sunt separate între înregistrări.",
+    "unresolvedSpeakersTitle": "Despre etichetele vorbitorilor",
+    "unresolvedSpeakersMessage": "Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.",
+    "nameSpeakerTitle": "Denumiți vorbitorul",
+    "playbackPreparingAudio": "Se pregătește audio…",
+    "playbackBackToCurrent": "Înapoi la curent",
+    "playbackAudioUnavailable": "Audio indisponibil",
+    "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
+    "playbackAudioNetworkFailed": "Verificați conexiunea"
 }

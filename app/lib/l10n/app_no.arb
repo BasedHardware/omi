@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Antallene kan være ufullstendige.",
     "previousDay": "Forrige dag",
     "nextDay": "Neste dag",
-    "noTasksOnDate": "Ingen oppgaver {date}"
+    "noTasksOnDate": "Ingen oppgaver {date}",
+    "reprocessingConversationProgress": "Behandler samtalen på nytt…",
+    "conversationReprocessed": "Samtalen er oppdatert",
+    "loadingTranscript": "Laster transkripsjon…",
+    "transcriptLoadFailed": "Kunne ikke laste transkripsjonen.",
+    "processingConversationProgress": "Behandler samtalen…",
+    "conversationProcessingFailedMessage": "Denne samtalen kunne ikke behandles.",
+    "waitForReprocessing": "Vent til den nye behandlingen er ferdig.",
+    "unnamedSpeakerLabel": "Taler",
+    "unresolvedSpeakersNotice": "Talerne er ikke adskilt på tvers av opptak.",
+    "unresolvedSpeakersTitle": "Om taleretiketter",
+    "unresolvedSpeakersMessage": "Omi klarte ikke å skille de andre stemmene på tvers av opptakene. Trykk på en taleretikett for å navngi hvem som snakker.",
+    "nameSpeakerTitle": "Navngi taler",
+    "playbackPreparingAudio": "Forbereder lyd…",
+    "playbackBackToCurrent": "Tilbake til gjeldende",
+    "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
+    "playbackAudioLoadFailed": "Kunne ikke laste lyden",
+    "playbackAudioNetworkFailed": "Sjekk tilkoblingen"
 }

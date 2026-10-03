@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة.",
     "previousDay": "اليوم السابق",
     "nextDay": "اليوم التالي",
-    "noTasksOnDate": "لا توجد مهام في {date}"
+    "noTasksOnDate": "لا توجد مهام في {date}",
+    "reprocessingConversationProgress": "جارٍ إعادة معالجة المحادثة…",
+    "conversationReprocessed": "تم تحديث المحادثة",
+    "loadingTranscript": "جارٍ تحميل النص…",
+    "transcriptLoadFailed": "تعذّر تحميل النص.",
+    "processingConversationProgress": "جارٍ معالجة المحادثة…",
+    "conversationProcessingFailedMessage": "تعذّرت معالجة هذه المحادثة.",
+    "waitForReprocessing": "انتظر حتى تنتهي إعادة المعالجة.",
+    "unnamedSpeakerLabel": "المتحدث",
+    "unresolvedSpeakersNotice": "لا يتم الفصل بين المتحدثين عبر التسجيلات.",
+    "unresolvedSpeakersTitle": "حول تسميات المتحدثين",
+    "unresolvedSpeakersMessage": "تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.",
+    "nameSpeakerTitle": "تسمية المتحدث",
+    "playbackPreparingAudio": "جارٍ تجهيز الصوت…",
+    "playbackBackToCurrent": "العودة إلى الحالي",
+    "playbackAudioUnavailable": "الصوت غير متوفر",
+    "playbackAudioLoadFailed": "تعذر تحميل الصوت",
+    "playbackAudioNetworkFailed": "تحقق من الاتصال"
 }

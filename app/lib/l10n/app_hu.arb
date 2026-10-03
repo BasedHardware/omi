@@ -3900,5 +3900,22 @@
     "peopleStatsIncomplete": "A számok hiányosak lehetnek.",
     "previousDay": "Előző nap",
     "nextDay": "Következő nap",
-    "noTasksOnDate": "Nincsenek feladatok ezen a napon: {date}"
+    "noTasksOnDate": "Nincsenek feladatok ezen a napon: {date}",
+    "reprocessingConversationProgress": "A beszélgetés újrafeldolgozása…",
+    "conversationReprocessed": "A beszélgetés frissítve",
+    "loadingTranscript": "Átirat betöltése…",
+    "transcriptLoadFailed": "Nem sikerült betölteni az átiratot.",
+    "processingConversationProgress": "A beszélgetés feldolgozása…",
+    "conversationProcessingFailedMessage": "Ezt a beszélgetést nem sikerült feldolgozni.",
+    "waitForReprocessing": "Várd meg, amíg az újrafeldolgozás befejeződik.",
+    "unnamedSpeakerLabel": "Beszélő",
+    "unresolvedSpeakersNotice": "A beszélők nincsenek elkülönítve a felvételek között.",
+    "unresolvedSpeakersTitle": "A beszélőcímkékről",
+    "unresolvedSpeakersMessage": "Omi nem tudta elkülöníteni a többi hangot a felvételek között. Koppintson egy beszélőcímkére, hogy megnevezze, ki beszél.",
+    "nameSpeakerTitle": "Beszélő elnevezése",
+    "playbackPreparingAudio": "Hang előkészítése…",
+    "playbackBackToCurrent": "Vissza az aktuálishoz",
+    "playbackAudioUnavailable": "A hang nem érhető el",
+    "playbackAudioLoadFailed": "A hang nem tölthető be",
+    "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot"
 }

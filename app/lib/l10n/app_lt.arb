@@ -3804,5 +3804,22 @@
     "peopleStatsIncomplete": "Skaičiai gali būti neišsamūs.",
     "previousDay": "Ankstesnė diena",
     "nextDay": "Kita diena",
-    "noTasksOnDate": "{date} nėra užduočių"
+    "noTasksOnDate": "{date} nėra užduočių",
+    "reprocessingConversationProgress": "Pokalbis apdorojamas iš naujo…",
+    "conversationReprocessed": "Pokalbis atnaujintas",
+    "loadingTranscript": "Įkeliamas nuorašas…",
+    "transcriptLoadFailed": "Nepavyko įkelti nuorašo.",
+    "processingConversationProgress": "Pokalbis apdorojamas…",
+    "conversationProcessingFailedMessage": "Šio pokalbio nepavyko apdoroti.",
+    "waitForReprocessing": "Palaukite, kol bus baigtas pakartotinis apdorojimas.",
+    "unnamedSpeakerLabel": "Kalbėtojas",
+    "unresolvedSpeakersNotice": "Kalbėtojai neatskirti tarp įrašų.",
+    "unresolvedSpeakersTitle": "Apie kalbėtojų žymas",
+    "unresolvedSpeakersMessage": "Omi nepavyko atskirti kitų balsų tarp įrašų. Palieskite kalbėtojo žymą, kad pavadintumėte, kas kalba.",
+    "nameSpeakerTitle": "Pavadinti kalbėtoją",
+    "playbackPreparingAudio": "Ruošiamas garsas…",
+    "playbackBackToCurrent": "Atgal prie dabartinio",
+    "playbackAudioUnavailable": "Garsas nepasiekiamas",
+    "playbackAudioLoadFailed": "Nepavyko įkelti garso",
+    "playbackAudioNetworkFailed": "Patikrinkite ryšį"
 }

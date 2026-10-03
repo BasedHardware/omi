@@ -11361,5 +11361,22 @@
     "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
     "previousDay": "Папярэдні дзень",
     "nextDay": "Наступны дзень",
-    "noTasksOnDate": "Няма задач на {date}"
+    "noTasksOnDate": "Няма задач на {date}",
+    "reprocessingConversationProgress": "Паўторная апрацоўка размовы…",
+    "conversationReprocessed": "Размова абноўлена",
+    "loadingTranscript": "Загрузка транскрыпцыі…",
+    "transcriptLoadFailed": "Не ўдалося загрузіць транскрыпцыю.",
+    "processingConversationProgress": "Апрацоўка размовы…",
+    "conversationProcessingFailedMessage": "Не ўдалося апрацаваць гэту размову.",
+    "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка.",
+    "unnamedSpeakerLabel": "Дыктар",
+    "unresolvedSpeakersNotice": "Спікары не падзелены паміж запісамі.",
+    "unresolvedSpeakersTitle": "Пра пазнакі спікераў",
+    "unresolvedSpeakersMessage": "Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.",
+    "nameSpeakerTitle": "Назваць дыктара",
+    "playbackPreparingAudio": "Падрыхтоўка аўдыё…",
+    "playbackBackToCurrent": "Назад да бягучага",
+    "playbackAudioUnavailable": "Аўдыё недаступнае",
+    "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
+    "playbackAudioNetworkFailed": "Праверце злучэнне"
 }

@@ -11361,5 +11361,22 @@
     "peopleStatsIncomplete": "Бројките може да се нецелосни.",
     "previousDay": "Претходен ден",
     "nextDay": "Следен ден",
-    "noTasksOnDate": "Нема задачи на {date}"
+    "noTasksOnDate": "Нема задачи на {date}",
+    "reprocessingConversationProgress": "Разговорот повторно се обработува…",
+    "conversationReprocessed": "Разговорот е ажуриран",
+    "loadingTranscript": "Се вчитува транскриптот…",
+    "transcriptLoadFailed": "Транскриптот не можеше да се вчита.",
+    "processingConversationProgress": "Разговорот се обработува…",
+    "conversationProcessingFailedMessage": "Овој разговор не можеше да се обработи.",
+    "waitForReprocessing": "Почекајте да заврши повторната обработка.",
+    "unnamedSpeakerLabel": "Говорувач",
+    "unresolvedSpeakersNotice": "Говорниците не се одвоени низ снимките.",
+    "unresolvedSpeakersTitle": "За ознаките на говорници",
+    "unresolvedSpeakersMessage": "Omi не можеше да ги разликува другите гласови низ снимките. Допрете ознака на говорник за да именувате кој зборува.",
+    "nameSpeakerTitle": "Именувај говорник",
+    "playbackPreparingAudio": "Се подготвува аудио…",
+    "playbackBackToCurrent": "Назад кон тековното",
+    "playbackAudioUnavailable": "Аудиото не е достапно",
+    "playbackAudioLoadFailed": "Аудиото не можеше да се вчита",
+    "playbackAudioNetworkFailed": "Проверете ја врската"
 }
