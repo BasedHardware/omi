@@ -179,6 +179,7 @@ def test_empty_capture_is_rule_discarded_before_the_notes_model(stack, processin
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
     monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
     monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
     notes = Mock(side_effect=AssertionError('empty capture reached the notes model'))
     monkeypatch.setattr(processing, 'get_conversation_notes', notes)
     decisions = []

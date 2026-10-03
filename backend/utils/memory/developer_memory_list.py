@@ -63,10 +63,7 @@ def read_developer_memories(
             source_exhausted = True
             break
         scan_offset += len(batch)
-        if allowed is None:
-            matched.extend(batch)
-        else:
-            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
+        matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
         if len(batch) < batch_limit:
             source_exhausted = True
             break

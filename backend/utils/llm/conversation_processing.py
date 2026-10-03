@@ -1283,8 +1283,10 @@ def get_conversation_notes(
     ``rich_context_enabled`` switches to the extended extraction schema and the
     rich instruction blocks; ``meeting_context`` is the rendered BACKGROUND
     CONTEXT block appended to the volatile suffix only. With the flag off all
-    three new arguments must be absent/default and the prompt is byte-identical
-    to the legacy notes prompt.
+    three new arguments must be absent/default and the legacy instruction text
+    and schema are retained. Static instructions are sent as a system message;
+    volatile instructions are sent as a user message so provider wire formats
+    always include user content.
     """
     if not prefix.context.strip() or not (prefix.has_usable_content or (rich_context_enabled and screen_frames)):
         return Structured()

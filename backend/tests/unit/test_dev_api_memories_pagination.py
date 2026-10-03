@@ -449,16 +449,20 @@ def test_grant_denial_is_unchanged(monkeypatch):
     auth_context = developer_module.ProductAuthorizationContext(
         uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
     )
-    developer_module.authorize_memory_external_default_memory_read = MagicMock(
-        return_value=ProductAuthorizationDecision(
-            allowed=False,
-            context=auth_context,
-            db_client=None,
-            read_decision=MemoryReadDecision.USE_MEMORY,
-            reason='key_revoked',
-            observability={'enabled': True},
-            status_code=403,
-        )
+    monkeypatch.setattr(
+        developer_module,
+        'authorize_memory_external_default_memory_read',
+        MagicMock(
+            return_value=ProductAuthorizationDecision(
+                allowed=False,
+                context=auth_context,
+                db_client=None,
+                read_decision=MemoryReadDecision.USE_MEMORY,
+                reason='key_revoked',
+                observability={'enabled': True},
+                status_code=403,
+            )
+        ),
     )
     app = FastAPI()
     app.include_router(developer_router)

@@ -23,6 +23,67 @@ from dependencies import get_uid_with_goals_read
 NOW = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
 
 
+class _FakeGoalDocument:
+    def __init__(self, doc_id, payload):
+        self.id = doc_id
+        self._payload = payload
+
+    def to_dict(self):
+        return dict(self._payload)
+
+
+class _FakeGoalQuery:
+    def __init__(self, documents, stream_error=None):
+        self._documents = documents
+        self._stream_error = stream_error
+        self._limit = None
+
+    def where(self, **kwargs):
+        return self
+
+    def limit(self, limit):
+        self._limit = limit
+        return self
+
+    def stream(self):
+        if self._stream_error is not None:
+
+            def fail():
+                raise self._stream_error
+                yield  # Make this a generator so the failure occurs during fetch iteration.
+
+            return fail()
+        documents = self._documents if self._limit is None else self._documents[: self._limit]
+        return iter(documents)
+
+
+class _FakeGoalUser:
+    def __init__(self, query):
+        self._query = query
+
+    def collection(self, name):
+        assert name == 'goals'
+        return self._query
+
+
+class _FakeGoalUsers:
+    def __init__(self, query):
+        self._query = query
+
+    def document(self, uid):
+        assert uid == 'uid1'
+        return _FakeGoalUser(self._query)
+
+
+class _FakeGoalFirestore:
+    def __init__(self, documents, stream_error=None):
+        self._query = _FakeGoalQuery(documents, stream_error)
+
+    def collection(self, name):
+        assert name == 'users'
+        return _FakeGoalUsers(self._query)
+
+
 @pytest.fixture()
 def client():
     app = FastAPI()
@@ -152,6 +213,77 @@ def test_malformed_row_is_skipped_and_healthy_rows_survive(client, monkeypatch, 
     assert 'bad-row' in warnings[0].getMessage()
     assert 'success_criteria' in warnings[0].getMessage()
     assert 'zzz_marker' not in warnings[0].getMessage()
+
+
+@pytest.mark.parametrize('malformed_criteria', [0, 'private malformed criteria', 987654321])
+@pytest.mark.parametrize(
+    ('include_inactive', 'limit', 'expected_ids'),
+    [
+        (False, 10, ['g-old', 'g-new']),
+        (True, 1, ['g-new']),
+    ],
+)
+def test_real_getter_skips_malformed_storage_row_and_preserves_healthy_rows(
+    client, monkeypatch, caplog, include_inactive, limit, expected_ids, malformed_criteria
+):
+    """Exercise Firestore stream -> DB normalization -> endpoint validation."""
+    documents = [
+        _FakeGoalDocument(
+            'g-broken',
+            {
+                'title': 'private malformed row',
+                'status': 'background',
+                'success_criteria': malformed_criteria,
+                'created_at': NOW.replace(day=3),
+                'updated_at': NOW,
+            },
+        ),
+        _FakeGoalDocument(
+            'g-old',
+            {
+                'title': 'older healthy goal',
+                'status': 'background',
+                'success_criteria': ['old criterion'],
+                'created_at': NOW.replace(day=1),
+                'updated_at': NOW,
+            },
+        ),
+        _FakeGoalDocument(
+            'g-new',
+            {
+                'title': 'newer healthy goal',
+                'status': 'background',
+                'success_criteria': ['new criterion'],
+                'created_at': NOW.replace(day=2),
+                'updated_at': NOW,
+            },
+        ),
+    ]
+    fake_db = _FakeGoalFirestore(documents)
+    monkeypatch.setattr(goals_db_module._client, 'get_firestore_client', lambda: fake_db)
+
+    with caplog.at_level(logging.WARNING, logger='database.goals'):
+        response = client.get(
+            '/v1/dev/user/goals',
+            params={'include_inactive': include_inactive, 'limit': limit},
+        )
+
+    assert response.status_code == 200
+    assert [goal['id'] for goal in response.json()] == expected_ids
+    warnings = [record for record in caplog.records if record.name == 'database.goals']
+    assert warnings
+    assert 'ValueError' in warnings[0].getMessage()
+    assert 'private malformed row' not in warnings[0].getMessage()
+    assert str(malformed_criteria) not in warnings[0].getMessage()
+
+
+def test_real_getter_propagates_firestore_stream_failure(client, monkeypatch):
+    fake_db = _FakeGoalFirestore([], stream_error=RuntimeError('PRIVATE-STREAM-MARKER'))
+    monkeypatch.setattr(goals_db_module._client, 'get_firestore_client', lambda: fake_db)
+
+    response = client.get('/v1/dev/user/goals')
+
+    assert response.status_code == 500
 
 
 def test_database_failure_logs_sanitized_context_and_500s(client, monkeypatch, caplog):

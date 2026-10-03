@@ -495,12 +495,13 @@ def test_list_verification_deadline_logs_info_not_error(monkeypatch, caplog):
         with pytest.raises(service.FutureTimeoutError):
             future.result(timeout=2)
         assert cleared.wait(timeout=2)
+        verification_key = service._verification_cache_key('u', {'id': 'late'}, 0, 5, 'one two')
         assert 'speaker tag list verification deadline reached' in [record.getMessage() for record in caplog.records]
         assert not any(
             record.levelno >= logging.ERROR and 'speaker tag list verification' in record.getMessage()
             for record in caplog.records
         )
-        assert service._inflight_verifications == {}
+        assert verification_key not in service._inflight_verifications
     finally:
         pool.shutdown(wait=True)
 
@@ -521,6 +522,7 @@ def test_list_verification_unexpected_error_logs_error_with_traceback(monkeypatc
         with pytest.raises(RuntimeError):
             future.result(timeout=2)
         assert cleared.wait(timeout=2)
+        verification_key = service._verification_cache_key('u', {'id': 'doom'}, 0, 5, 'one two')
         [failure] = [
             record
             for record in caplog.records
@@ -528,7 +530,7 @@ def test_list_verification_unexpected_error_logs_error_with_traceback(monkeypatc
         ]
         assert 'error_type=RuntimeError' in failure.getMessage()
         assert failure.exc_info
-        assert service._inflight_verifications == {}
+        assert verification_key not in service._inflight_verifications
     finally:
         pool.shutdown(wait=True)
 

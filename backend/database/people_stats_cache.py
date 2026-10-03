@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-import redis
+from database import redis_db
 
 from utils.observability.fallback import record_fallback
 
@@ -47,14 +47,12 @@ def _redis() -> Any:
         host = os.getenv('REDIS_DB_HOST', '').strip()
         if not host:
             return None
-        _bounded_client = redis.Redis(
-            host=host,
-            port=int(os.getenv('REDIS_DB_PORT', '6379')),
-            username='default',
-            password=os.getenv('REDIS_DB_PASSWORD'),
-            socket_connect_timeout=PEOPLE_STATS_REDIS_TIMEOUT_SECONDS,
-            socket_timeout=PEOPLE_STATS_REDIS_TIMEOUT_SECONDS,
-        )
+        try:
+            _bounded_client = redis_db.create_bounded_redis_client(PEOPLE_STATS_REDIS_TIMEOUT_SECONDS)
+        except Exception as exc:
+            logger.warning('people stats Redis client construction failed error_type=%s', type(exc).__name__)
+            _record_uncached()
+            return None
     return _bounded_client
 
 

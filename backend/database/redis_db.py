@@ -19,17 +19,37 @@ from database.api_key_metadata import (
 
 logger = logging.getLogger(__name__)
 
+
 # redis.Redis is untyped under strict Pyright; treat the client as Any at this
 # SDK boundary. Downstream callers narrow results via the adapter pattern.
-_redis_host: Optional[str] = os.getenv('REDIS_DB_HOST')
-_redis_port_env: Optional[str] = os.getenv('REDIS_DB_PORT')
-r: Any = redis.Redis(
-    host=cast(str, _redis_host),
-    port=int(_redis_port_env) if _redis_port_env is not None else 6379,
-    username='default',
-    password=os.getenv('REDIS_DB_PASSWORD'),
-    health_check_interval=30,
-)
+def _redis_connection_kwargs(*, health_check_interval: int = 30) -> dict[str, Any]:
+    """Connection settings shared by the default and bounded Redis clients."""
+    port_env = os.getenv('REDIS_DB_PORT')
+    return {
+        'host': cast(str, os.getenv('REDIS_DB_HOST')),
+        'port': int(port_env) if port_env is not None else 6379,
+        'username': 'default',
+        'password': os.getenv('REDIS_DB_PASSWORD'),
+        'health_check_interval': health_check_interval,
+    }
+
+
+r: Any = redis.Redis(**_redis_connection_kwargs())
+
+
+def create_bounded_redis_client(timeout_seconds: float) -> Any:
+    """Create a client for the shared Redis deployment with bounded socket I/O.
+
+    A few best-effort writer-side caches need stricter timeouts than ``r`` so
+    cache outages cannot hold durable writes open. Keep their connection
+    configuration at this shared boundary so Redis settings and harness
+    overrides stay consistent with the rest of the backend.
+    """
+    kwargs = _redis_connection_kwargs()
+    kwargs['socket_connect_timeout'] = timeout_seconds
+    kwargs['socket_timeout'] = timeout_seconds
+    return redis.Redis(**kwargs)
+
 
 # Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
 # slack, so a jti cannot become reusable while its approval could still be
@@ -744,11 +764,10 @@ async def get_async_redis_client() -> Any:
     if _async_redis_client is None:
         import redis.asyncio as _asyncio_redis
 
+        # Keep the async client's historical health-check default (disabled)
+        # while sharing the same endpoint and credentials as the sync client.
         _async_redis_client = _asyncio_redis.Redis(
-            host=cast(str, _redis_host),
-            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
-            username='default',
-            password=os.getenv('REDIS_DB_PASSWORD'),
+            **_redis_connection_kwargs(health_check_interval=0),
             decode_responses=True,
         )
     return _async_redis_client

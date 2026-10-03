@@ -232,16 +232,19 @@ def _submit_list_verification(
         if existing is not None:
             return existing
         context = contextvars.copy_context()
-        future = speaker_tag_verify_executor.submit(
-            context.run,
-            verified_clip_pcm,
-            uid,
-            conversation,
-            start,
-            end,
-            expected_text,
-            verification_deadline=deadline,
-        )
+
+        def verify_in_context() -> Optional[bytes]:
+            return context.run(
+                verified_clip_pcm,
+                uid,
+                conversation,
+                start,
+                end,
+                expected_text,
+                verification_deadline=deadline,
+            )
+
+        future = speaker_tag_verify_executor.submit(verify_in_context)
         _inflight_verifications[key] = future
 
         def clear(done: Future[Optional[bytes]]) -> None:

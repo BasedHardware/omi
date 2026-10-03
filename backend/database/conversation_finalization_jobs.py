@@ -667,7 +667,8 @@ def create_or_get_finalization_intent(
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
-    invalidate_people_stats_cache(uid)
+    if intent['created']:
+        invalidate_people_stats_cache(uid)
     return intent
 
 

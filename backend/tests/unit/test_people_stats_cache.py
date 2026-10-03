@@ -23,7 +23,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import pytest
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import Aborted, AlreadyExists
 
 import database.conversation_finalization_jobs as finalization_jobs
 import database.conversations as conversations_db
@@ -140,10 +140,25 @@ def test_repeated_route_calls_scan_once_then_serve_the_cache_hit(monkeypatch, fa
 
 def test_cache_hit_is_per_user_and_per_scan_cap(monkeypatch, fake_redis):
     fake, _now = fake_redis
-    rows_a = [_conv('pA') for _ in range(3)]
-    assert collect_people_stats(iter(rows_a), uid='u-a', budget=_budget())['pA']['conversation_count'] == 3
-    other = collect_people_stats(iter([_conv('pB')]), uid='u-b', budget=_budget())
-    assert other['pB']['conversation_count'] == 1
+    first_rows, first_pulled = _pull_counted([_conv('pA') for _ in range(3)])
+    first = collect_people_stats(first_rows, scan_cap=2, uid='u-a', budget=_budget())
+    assert first['pA']['conversation_count'] == 2
+    assert len(first_pulled) == 2
+
+    same_key_rows, same_key_pulled = _pull_counted([_conv('pA')])
+    same_key = collect_people_stats(same_key_rows, scan_cap=2, uid='u-a', budget=_budget())
+    assert same_key == first
+    assert same_key_pulled == []
+
+    other_user_rows, other_user_pulled = _pull_counted([_conv('pB')])
+    other_user = collect_people_stats(other_user_rows, scan_cap=2, uid='u-b', budget=_budget())
+    assert other_user['pB']['conversation_count'] == 1
+    assert len(other_user_pulled) == 1
+
+    other_cap_rows, other_cap_pulled = _pull_counted([_conv('pA') for _ in range(3)])
+    other_cap = collect_people_stats(other_cap_rows, scan_cap=3, uid='u-a', budget=_budget())
+    assert other_cap['pA']['conversation_count'] == 3
+    assert len(other_cap_pulled) == 3
 
 
 def test_route_without_include_stats_performs_no_cache_io(monkeypatch, fake_redis):
@@ -399,6 +414,9 @@ def test_truncated_scan_is_never_stored_and_the_next_call_rescans(monkeypatch, f
 
 def test_invalidation_during_the_scan_retires_the_pending_write(monkeypatch, fake_redis):
     fake, _now = fake_redis
+    initial_generation = people_stats_cache.current_generation(UID)
+    assert initial_generation is not None
+    retired_path = _cache_key(people_stats_cache._entry_path(UID, initial_generation, 1000))
 
     def gen():
         yield _conv('p1')
@@ -408,8 +426,8 @@ def test_invalidation_during_the_scan_retires_the_pending_write(monkeypatch, fak
     stats = collect_people_stats(gen(), uid=UID, budget=_budget())
     assert stats['p1']['conversation_count'] == 1
     generation = _generation(fake)
-    stale_path = _cache_key(people_stats_cache._entry_path(UID, generation, 1000))
-    assert stale_path not in fake._store
+    assert generation != initial_generation
+    assert retired_path not in fake._store
     assert people_stats_cache.read_people_stats_cache(UID, generation, 1000) is None
 
 
@@ -738,6 +756,13 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
     import database.speaker_assignment_effects as effects
     import database.speaker_learning_jobs as learning
 
+    events = []
+
+    def record_invalidation(uid):
+        invalidated.append(uid)
+        events.append(('invalidate', uid))
+
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', record_invalidation)
     current = {'id': 'c1', 'transcript_segments': [{'id': 's0', 'person_id': 'p1'}]}
     monkeypatch.setattr(
         effects,
@@ -745,11 +770,20 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
         lambda client, assign: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
     )
     monkeypatch.setattr(learning, 'extract_learning_receipt_markers', lambda *a, **k: None)
-    monkeypatch.setattr(learning, 'record_speaker_learning_job_events', lambda *a, **k: None)
-    monkeypatch.setattr(conversations_db, 'record_speaker_review', lambda *a, **k: None)
+    monkeypatch.setattr(
+        learning,
+        'record_speaker_learning_job_events',
+        lambda *_a, **_k: events.append(('learning_events', None)),
+    )
+    monkeypatch.setattr(
+        conversations_db,
+        'record_speaker_review',
+        lambda uid, *_a, **_k: events.append(('speaker_review', uid)),
+    )
 
     conversations_db.assign_conversation_speaker('u1', 'c1', person_id='p1', segment_ids=['s0'], firestore_client=store)
     assert invalidated == ['u1']
+    assert events == [('invalidate', 'u1'), ('speaker_review', 'u1'), ('learning_events', None)]
 
 
 def test_update_conversation_segments_invalidates_on_applied_write(writer_env):
@@ -868,10 +902,39 @@ def test_empty_conversation_cleanup_invalidates_after_delete(writer_env, monkeyp
     assert invalidated == (['u1'] if deleted else [])
 
 
-def test_finalization_intent_invalidates_after_contention_retry(writer_env, monkeypatch):
+def test_finalization_intent_retries_contention_and_invalidates_only_on_creation(writer_env, monkeypatch):
     store, invalidated = writer_env
     monkeypatch.setattr(finalization_jobs, 'invalidate_people_stats_cache', lambda uid: invalidated.append(uid))
     store.seed_conv('u1', 'c1', status='in_progress', has_content=True)
+
+    transactional_calls = []
+    original_transactional = finalization_jobs.firestore.transactional
+
+    def fail_first_transactional_attempt(function):
+        decorated = original_transactional(function)
+
+        def invoke(transaction, *args, **kwargs):
+            transactional_calls.append(transaction)
+            if len(transactional_calls) == 1:
+                raise Aborted('synthetic read contention')
+            return decorated(transaction, *args, **kwargs)
+
+        return invoke
+
+    monkeypatch.setattr(finalization_jobs.firestore, 'transactional', fail_first_transactional_attempt)
+    original_retry = finalization_jobs.run_with_transaction_contention_retry
+
+    def retry_without_wait(transaction_factory, operation, **kwargs):
+        return original_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(finalization_jobs, 'run_with_transaction_contention_retry', retry_without_wait)
+
     intent = finalization_jobs.create_or_get_finalization_intent(
         'u1',
         'c1',
@@ -886,8 +949,25 @@ def test_finalization_intent_invalidates_after_contention_retry(writer_env, monk
         firestore_client=store,
     )
     assert intent['created'] is True
+    assert len(transactional_calls) == 2
+    assert transactional_calls[0] is not transactional_calls[1]
     row = store.rows[store.conv_path('u1', 'c1')]
     assert row['status'] == 'processing'
+    assert invalidated == ['u1']
+
+    repeated_intent = finalization_jobs.create_or_get_finalization_intent(
+        'u1',
+        'c1',
+        requires_byok=False,
+        finalization_admission=lambda conv: {
+            'accepted': True,
+            'terminal': False,
+            'reason': '',
+            'fanout_key': 'k1',
+        },
+        firestore_client=store,
+    )
+    assert repeated_intent['created'] is False
     assert invalidated == ['u1']
 
 
@@ -900,12 +980,32 @@ def test_cache_client_bounds_socket_io(monkeypatch):
             built.update(kwargs)
 
     monkeypatch.setattr(people_stats_cache, '_bounded_client', None)
-    monkeypatch.setattr(people_stats_cache.redis, 'Redis', _Recorder)
+    monkeypatch.setattr(redis_db.redis, 'Redis', _Recorder)
     monkeypatch.setenv('REDIS_DB_HOST', 'redis.internal')
+    monkeypatch.setenv('REDIS_DB_PORT', '6380')
+    monkeypatch.setenv('REDIS_DB_PASSWORD', 'cache-secret')
     assert isinstance(people_stats_cache._redis(), _Recorder)
+    assert built['host'] == 'redis.internal'
+    assert built['port'] == 6380
+    assert built['password'] == 'cache-secret'
     assert built['socket_timeout'] == people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS
     assert built['socket_connect_timeout'] == people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS
+    assert built['health_check_interval'] == 30
     assert 0 < people_stats_cache.PEOPLE_STATS_REDIS_TIMEOUT_SECONDS <= 0.5
+
+
+def test_redis_client_construction_failure_fails_open(monkeypatch):
+    monkeypatch.setattr(people_stats_cache, '_bounded_client', None)
+    monkeypatch.setenv('REDIS_DB_HOST', 'redis.internal')
+    monkeypatch.setenv('REDIS_DB_PORT', 'not-a-port')
+    fallback_events = []
+    monkeypatch.setattr(people_stats_cache, 'record_fallback', lambda **kwargs: fallback_events.append(kwargs))
+
+    stats = collect_people_stats(iter([_conv('p1')]), uid=UID, budget=_budget())
+    assert stats['p1']['conversation_count'] == 1
+    people_stats_cache.invalidate_people_stats_cache(UID)
+    assert fallback_events
+    assert all(event['to_mode'] == 'uncached' for event in fallback_events)
 
 
 def test_unconfigured_redis_disables_the_cache_without_error(monkeypatch):

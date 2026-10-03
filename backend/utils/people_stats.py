@@ -100,12 +100,12 @@ def collect_people_stats(
     iterator = iter(conversations)
     try:
         generation = people_stats_cache.current_generation(uid) if uid is not None else None
-        if generation is not None:
+        if uid is not None and generation is not None:
             cached = people_stats_cache.read_people_stats_cache(uid, generation, scan_cap)
             if cached is not None:
                 return cached
         stats = aggregate_people_stats(islice(iterator, scan_cap))
-        if generation is not None and budget is not None and not budget.truncated:
+        if uid is not None and generation is not None and budget is not None and not budget.truncated:
             if people_stats_cache.current_generation(uid) == generation:
                 people_stats_cache.write_people_stats_cache(uid, generation, scan_cap, stats)
         return stats

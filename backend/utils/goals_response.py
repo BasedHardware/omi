@@ -64,7 +64,12 @@ def normalize_goal_response(goal: dict) -> dict:
     normalized['title'] = str(normalized.get('title') or '')
     normalized['desired_outcome'] = str(normalized.get('desired_outcome') or normalized['title'])
     normalized['why_it_matters'] = normalized.get('why_it_matters')
-    normalized['success_criteria'] = list(normalized.get('success_criteria') or [])
+    success_criteria = normalized.get('success_criteria')
+    if success_criteria is None:
+        success_criteria = []
+    elif not isinstance(success_criteria, list):
+        raise ValueError('success_criteria must be a list')
+    normalized['success_criteria'] = list(success_criteria)
     status = normalized.get('status')
     if status not in {'background', 'focused', 'paused', 'achieved', 'abandoned'}:
         status = 'background' if response_bool(normalized.get('is_active', True), True) else 'abandoned'
