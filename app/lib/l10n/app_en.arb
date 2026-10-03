@@ -14676,5 +14676,17 @@
             }
         }
     },
-    "peopleStatsIncomplete": "Counts may be incomplete."
+    "peopleStatsIncomplete": "Counts may be incomplete.",
+    "forYou": "For You",
+    "@forYou": {
+        "description": "Home proactivity feed section title"
+    },
+    "stopThese": "Stop These",
+    "@stopThese": {
+        "description": "Disable the producer of a For You card"
+    },
+    "dismiss": "Dismiss",
+    "@dismiss": {
+        "description": "Hide a For You card"
+    }
 }

@@ -12292,4 +12292,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
+  String get forYou => 'برای شما';
+
+  @override
+  String get stopThese => 'توقف این موارد';
+
+  @override
+  String get dismiss => 'رد کردن';
 }

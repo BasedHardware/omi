@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "Najduži prekid",
     "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspjelih veza {failed}.",
     "diagnosticsLastDuration": "Posljednjih {duration}",
-    "peopleStatsIncomplete": "Brojevi možda nisu potpuni."
+    "peopleStatsIncomplete": "Brojevi možda nisu potpuni.",
+    "forYou": "Za vas",
+    "stopThese": "Zaustavi ovo",
+    "dismiss": "Sakrij"
 }

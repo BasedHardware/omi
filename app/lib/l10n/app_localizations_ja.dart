@@ -12105,4 +12105,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
+  String get forYou => 'あなたへのおすすめ';
+
+  @override
+  String get stopThese => 'この種類を停止';
+
+  @override
+  String get dismiss => '非表示';
 }

@@ -12203,4 +12203,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
+
+  @override
+  String get forYou => 'בשבילך';
+
+  @override
+  String get stopThese => 'הפסקת אלה';
+
+  @override
+  String get dismiss => 'סגירה';
 }

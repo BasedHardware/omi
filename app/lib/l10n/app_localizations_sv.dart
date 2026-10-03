@@ -12299,4 +12299,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
+
+  @override
+  String get forYou => 'För dig';
+
+  @override
+  String get stopThese => 'Stoppa dessa';
+
+  @override
+  String get dismiss => 'Avvisa';
 }

@@ -3836,5 +3836,8 @@
     "diagnosticsLongestGap": "Maior intervalo",
     "diagnosticsSincePairingSummary": "Desde o emparelhamento: {drops} quedas, {failed} falhas de conexão.",
     "diagnosticsLastDuration": "Últimos {duration}",
-    "peopleStatsIncomplete": "As contagens podem estar incompletas."
+    "peopleStatsIncomplete": "As contagens podem estar incompletas.",
+    "forYou": "Para você",
+    "stopThese": "Parar estes",
+    "dismiss": "Dispensar"
 }

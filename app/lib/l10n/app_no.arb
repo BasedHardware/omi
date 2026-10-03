@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Lengste opphold",
     "diagnosticsSincePairingSummary": "Siden kobling: {drops} brudd, {failed} mislykkede tilkoblinger.",
     "diagnosticsLastDuration": "Siste {duration}",
-    "peopleStatsIncomplete": "Antallene kan være ufullstendige."
+    "peopleStatsIncomplete": "Antallene kan være ufullstendige.",
+    "forYou": "For deg",
+    "stopThese": "Stopp disse",
+    "dismiss": "Avvis"
 }

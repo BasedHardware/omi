@@ -12298,4 +12298,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
+  String get forYou => 'Sinulle';
+
+  @override
+  String get stopThese => 'Lopeta nämä';
+
+  @override
+  String get dismiss => 'Hylkää';
 }

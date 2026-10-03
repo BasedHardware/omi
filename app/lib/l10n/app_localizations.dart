@@ -21998,6 +21998,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Counts may be incomplete.'**
   String get peopleStatsIncomplete;
+
+  /// Home proactivity feed section title
+  ///
+  /// In en, this message translates to:
+  /// **'For You'**
+  String get forYou;
+
+  /// Disable the producer of a For You card
+  ///
+  /// In en, this message translates to:
+  /// **'Stop These'**
+  String get stopThese;
+
+  /// Hide a For You card
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get dismiss;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

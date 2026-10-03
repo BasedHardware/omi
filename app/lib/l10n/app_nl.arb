@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Langste onderbreking",
     "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
     "diagnosticsLastDuration": "Laatste {duration}",
-    "peopleStatsIncomplete": "De aantallen zijn mogelijk onvolledig."
+    "peopleStatsIncomplete": "De aantallen zijn mogelijk onvolledig.",
+    "forYou": "Voor jou",
+    "stopThese": "Deze stoppen",
+    "dismiss": "Verbergen"
 }

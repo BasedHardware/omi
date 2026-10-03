@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "நீண்ட இடைவெளி",
     "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
     "diagnosticsLastDuration": "கடந்த {duration}",
-    "peopleStatsIncomplete": "எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்."
+    "peopleStatsIncomplete": "எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.",
+    "forYou": "உங்களுக்காக",
+    "stopThese": "இவற்றை நிறுத்து",
+    "dismiss": "மறை"
 }

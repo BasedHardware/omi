@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "Najdaljši premor",
     "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
-    "peopleStatsIncomplete": "Števila so lahko nepopolna."
+    "peopleStatsIncomplete": "Števila so lahko nepopolna.",
+    "forYou": "Za vas",
+    "stopThese": "Ustavi te",
+    "dismiss": "Skrij"
 }

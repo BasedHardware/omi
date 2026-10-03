@@ -12390,4 +12390,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Die Angaben können unvollständig sein.';
+
+  @override
+  String get forYou => 'Für dich';
+
+  @override
+  String get stopThese => 'Diese stoppen';
+
+  @override
+  String get dismiss => 'Ausblenden';
 }

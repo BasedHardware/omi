@@ -12354,4 +12354,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Бројките може да се нецелосни.';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Запри ги овие';
+
+  @override
+  String get dismiss => 'Сокриј';
 }

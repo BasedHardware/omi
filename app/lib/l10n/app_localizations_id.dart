@@ -12306,4 +12306,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
 }

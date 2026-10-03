@@ -12396,4 +12396,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';
+
+  @override
+  String get forYou => 'Pour vous';
+
+  @override
+  String get stopThese => 'Ne plus recevoir ceci';
+
+  @override
+  String get dismiss => 'Masquer';
 }

@@ -12306,4 +12306,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Бројеви можда нису потпуни.';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Заустави ово';
+
+  @override
+  String get dismiss => 'Сакриј';
 }

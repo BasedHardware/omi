@@ -12395,4 +12395,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
+  String get forYou => 'Para Sa Iyo';
+
+  @override
+  String get stopThese => 'Itigil Ang Mga Ito';
+
+  @override
+  String get dismiss => 'Isara';
 }

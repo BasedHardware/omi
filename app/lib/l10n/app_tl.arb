@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "Pinakamahabang puwang",
     "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
     "diagnosticsLastDuration": "Nakaraang {duration}",
-    "peopleStatsIncomplete": "Maaaring hindi kumpleto ang mga bilang."
+    "peopleStatsIncomplete": "Maaaring hindi kumpleto ang mga bilang.",
+    "forYou": "Para Sa Iyo",
+    "stopThese": "Itigil Ang Mga Ito",
+    "dismiss": "Isara"
 }

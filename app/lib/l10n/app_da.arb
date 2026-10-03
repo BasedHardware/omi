@@ -3843,5 +3843,8 @@
     "diagnosticsLongestGap": "Længste pause",
     "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
     "diagnosticsLastDuration": "Seneste {duration}",
-    "peopleStatsIncomplete": "Antallene kan være ufuldstændige."
+    "peopleStatsIncomplete": "Antallene kan være ufuldstændige.",
+    "forYou": "Til dig",
+    "stopThese": "Stop disse",
+    "dismiss": "Afvis"
 }

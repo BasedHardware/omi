@@ -12298,4 +12298,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
+
+  @override
+  String get forYou => 'Pro vás';
+
+  @override
+  String get stopThese => 'Zastavit tyto';
+
+  @override
+  String get dismiss => 'Skrýt';
 }

@@ -12294,4 +12294,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
+  String get forYou => 'আপনার জন্য';
+
+  @override
+  String get stopThese => 'এগুলো বন্ধ করুন';
+
+  @override
+  String get dismiss => 'সরিয়ে দিন';
 }

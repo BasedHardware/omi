@@ -12109,4 +12109,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
+
+  @override
+  String get forYou => '나를 위한 추천';
+
+  @override
+  String get stopThese => '이 유형 중지';
+
+  @override
+  String get dismiss => '닫기';
 }

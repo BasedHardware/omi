@@ -12378,4 +12378,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
+  String get forYou => 'உங்களுக்காக';
+
+  @override
+  String get stopThese => 'இவற்றை நிறுத்து';
+
+  @override
+  String get dismiss => 'மறை';
 }

@@ -12306,4 +12306,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
+  String get forYou => 'Sizin İçin';
+
+  @override
+  String get stopThese => 'Bunları Durdur';
+
+  @override
+  String get dismiss => 'Gizle';
 }

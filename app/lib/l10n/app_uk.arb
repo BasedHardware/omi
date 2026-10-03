@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
     "diagnosticsLastDuration": "Останні {duration}",
-    "peopleStatsIncomplete": "Підрахунки можуть бути неповними."
+    "peopleStatsIncomplete": "Підрахунки можуть бути неповними.",
+    "forYou": "Для вас",
+    "stopThese": "Вимкнути такі",
+    "dismiss": "Приховати"
 }

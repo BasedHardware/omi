@@ -12345,4 +12345,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
+
+  @override
+  String get forYou => 'మీ కోసం';
+
+  @override
+  String get stopThese => 'వీటిని ఆపండి';
+
+  @override
+  String get dismiss => 'దాచు';
 }

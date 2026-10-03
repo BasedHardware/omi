@@ -195,7 +195,7 @@ void main() {
     ));
     final context = tester.element(find.byKey(const Key('task-link-home')));
 
-    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
+    final firstOpened = await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
         openSettings: () async {},
         taskById: (id) async {
           requested.add(id);
@@ -203,11 +203,12 @@ void main() {
         },
         onTaskOpened: (item) => opened.add(item.id));
 
+    expect(firstOpened, isTrue);
     expect(requested, ['task-150']);
     expect(opened, ['task-150']);
 
     var ownerMatches = true;
-    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
+    final cancelledOpened = await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
         openSettings: () async {},
         canOpen: () => ownerMatches,
         taskById: (id) async {
@@ -215,6 +216,7 @@ void main() {
           return task;
         },
         onTaskOpened: (item) => opened.add(item.id));
+    expect(cancelledOpened, isFalse);
     expect(opened, ['task-150']);
   });
 
@@ -325,4 +327,7 @@ void main() {
 
 final List<String> _opened = [];
 
-Future<void> _record(String route, {bool Function()? canOpen}) async => _opened.add(route);
+Future<bool> _record(String route, {bool Function()? canOpen}) async {
+  _opened.add(route);
+  return true;
+}

@@ -12330,4 +12330,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Los recuentos pueden estar incompletos.';
+
+  @override
+  String get forYou => 'Para ti';
+
+  @override
+  String get stopThese => 'Dejar de recibir esto';
+
+  @override
+  String get dismiss => 'Descartar';
 }

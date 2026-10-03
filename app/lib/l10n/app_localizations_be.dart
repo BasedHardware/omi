@@ -12326,4 +12326,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Спыніць гэта';
+
+  @override
+  String get dismiss => 'Схаваць';
 }

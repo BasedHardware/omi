@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Längste Lücke",
     "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
     "diagnosticsLastDuration": "Letzte {duration}",
-    "peopleStatsIncomplete": "Die Angaben können unvollständig sein."
+    "peopleStatsIncomplete": "Die Angaben können unvollständig sein.",
+    "forYou": "Für dich",
+    "stopThese": "Diese stoppen",
+    "dismiss": "Ausblenden"
 }

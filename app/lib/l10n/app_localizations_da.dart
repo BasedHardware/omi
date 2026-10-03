@@ -12282,4 +12282,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antallene kan være ufuldstændige.';
+
+  @override
+  String get forYou => 'Til dig';
+
+  @override
+  String get stopThese => 'Stop disse';
+
+  @override
+  String get dismiss => 'Afvis';
 }

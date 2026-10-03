@@ -12330,4 +12330,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
+  String get forYou => 'Voor jou';
+
+  @override
+  String get stopThese => 'Deze stoppen';
+
+  @override
+  String get dismiss => 'Verbergen';
 }

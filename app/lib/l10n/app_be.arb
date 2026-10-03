@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
     "diagnosticsLastDuration": "Апошнія {duration}",
-    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай."
+    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
+    "forYou": "Для вас",
+    "stopThese": "Спыніць гэта",
+    "dismiss": "Схаваць"
 }

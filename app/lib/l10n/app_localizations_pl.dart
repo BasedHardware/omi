@@ -12333,4 +12333,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';
+
+  @override
+  String get forYou => 'Dla Ciebie';
+
+  @override
+  String get stopThese => 'Zatrzymaj te';
+
+  @override
+  String get dismiss => 'Ukryj';
 }

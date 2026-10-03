@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
     "diagnosticsLastDuration": "آخر {duration}",
-    "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة."
+    "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة.",
+    "forYou": "من أجلك",
+    "stopThese": "إيقاف هذه",
+    "dismiss": "تجاهل"
 }

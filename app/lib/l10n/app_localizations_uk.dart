@@ -12322,4 +12322,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Вимкнути такі';
+
+  @override
+  String get dismiss => 'Приховати';
 }

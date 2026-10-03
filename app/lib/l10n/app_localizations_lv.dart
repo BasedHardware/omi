@@ -12322,4 +12322,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Apturēt šos';
+
+  @override
+  String get dismiss => 'Paslēpt';
 }

@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
     "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
     "diagnosticsLastDuration": "Τελευταία {duration}",
-    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς."
+    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς.",
+    "forYou": "Για εσάς",
+    "stopThese": "Διακοπή αυτών",
+    "dismiss": "Απόρριψη"
 }

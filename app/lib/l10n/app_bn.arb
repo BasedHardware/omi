@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
     "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
     "diagnosticsLastDuration": "শেষ {duration}",
-    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।"
+    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।",
+    "forYou": "আপনার জন্য",
+    "stopThese": "এগুলো বন্ধ করুন",
+    "dismiss": "সরিয়ে দিন"
 }

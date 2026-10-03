@@ -12316,4 +12316,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Sustabdyti šiuos';
+
+  @override
+  String get dismiss => 'Slėpti';
 }

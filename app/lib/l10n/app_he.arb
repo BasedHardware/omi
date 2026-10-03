@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "הפער הארוך ביותר",
     "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
     "diagnosticsLastDuration": "{duration} אחרונות",
-    "peopleStatsIncomplete": "הספירות עשויות להיות חלקיות."
+    "peopleStatsIncomplete": "הספירות עשויות להיות חלקיות.",
+    "forYou": "בשבילך",
+    "stopThese": "הפסקת אלה",
+    "dismiss": "סגירה"
 }

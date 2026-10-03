@@ -12290,4 +12290,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
+
+  @override
+  String get forYou => 'Pre vás';
+
+  @override
+  String get stopThese => 'Zastaviť tieto';
+
+  @override
+  String get dismiss => 'Skryť';
 }

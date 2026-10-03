@@ -3836,5 +3836,8 @@
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
     "diagnosticsLastDuration": "{duration} terakhir",
-    "peopleStatsIncomplete": "Jumlah mungkin belum lengkap."
+    "peopleStatsIncomplete": "Jumlah mungkin belum lengkap.",
+    "forYou": "Untuk Anda",
+    "stopThese": "Hentikan Ini",
+    "dismiss": "Tutup"
 }

@@ -3836,5 +3836,8 @@
     "diagnosticsLongestGap": "Plus longue interruption",
     "diagnosticsSincePairingSummary": "Depuis l'appairage : {drops} coupures, {failed} échecs de connexion.",
     "diagnosticsLastDuration": "Dernières {duration}",
-    "peopleStatsIncomplete": "Les comptes peuvent être incomplets."
+    "peopleStatsIncomplete": "Les comptes peuvent être incomplets.",
+    "forYou": "Pour vous",
+    "stopThese": "Ne plus recevoir ceci",
+    "dismiss": "Masquer"
 }

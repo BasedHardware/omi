@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Interruzione più lunga",
     "diagnosticsSincePairingSummary": "Dall'associazione: {drops} interruzioni, {failed} connessioni non riuscite.",
     "diagnosticsLastDuration": "Ultimi {duration}",
-    "peopleStatsIncomplete": "I conteggi potrebbero essere incompleti."
+    "peopleStatsIncomplete": "I conteggi potrebbero essere incompleti.",
+    "forYou": "Per te",
+    "stopThese": "Interrompi questi",
+    "dismiss": "Ignora"
 }

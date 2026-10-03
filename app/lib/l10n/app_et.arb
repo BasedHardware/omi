@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
     "diagnosticsLastDuration": "Viimased {duration}",
-    "peopleStatsIncomplete": "Arvud võivad olla puudulikud."
+    "peopleStatsIncomplete": "Arvud võivad olla puudulikud.",
+    "forYou": "Sulle",
+    "stopThese": "Peata need",
+    "dismiss": "Peida"
 }

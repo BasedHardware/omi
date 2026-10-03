@@ -12084,4 +12084,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
+  String get forYou => '为你推荐';
+
+  @override
+  String get stopThese => '停止此类推荐';
+
+  @override
+  String get dismiss => '忽略';
 }

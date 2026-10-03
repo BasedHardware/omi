@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Най-дълго прекъсване",
     "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
     "diagnosticsLastDuration": "Последните {duration}",
-    "peopleStatsIncomplete": "Бройките може да са непълни."
+    "peopleStatsIncomplete": "Бройките може да са непълни.",
+    "forYou": "За вас",
+    "stopThese": "Спри тези",
+    "dismiss": "Скрий"
 }

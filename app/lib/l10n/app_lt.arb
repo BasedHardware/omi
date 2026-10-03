@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Ilgiausia pertrauka",
     "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
     "diagnosticsLastDuration": "Paskutinės {duration}",
-    "peopleStatsIncomplete": "Skaičiai gali būti neišsamūs."
+    "peopleStatsIncomplete": "Skaičiai gali būti neišsamūs.",
+    "forYou": "Jums",
+    "stopThese": "Sustabdyti šiuos",
+    "dismiss": "Slėpti"
 }

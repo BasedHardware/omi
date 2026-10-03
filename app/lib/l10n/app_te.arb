@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "అతి పొడవైన విరామం",
     "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
     "diagnosticsLastDuration": "గత {duration}",
-    "peopleStatsIncomplete": "లెక్కలు అసంపూర్ణంగా ఉండవచ్చు."
+    "peopleStatsIncomplete": "లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.",
+    "forYou": "మీ కోసం",
+    "stopThese": "వీటిని ఆపండి",
+    "dismiss": "దాచు"
 }

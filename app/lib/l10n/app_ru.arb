@@ -3836,5 +3836,8 @@
     "diagnosticsLongestGap": "Самый долгий перерыв",
     "diagnosticsSincePairingSummary": "С момента сопряжения: обрывов — {drops}, неудачных подключений — {failed}.",
     "diagnosticsLastDuration": "Последние {duration}",
-    "peopleStatsIncomplete": "Подсчёты могут быть неполными."
+    "peopleStatsIncomplete": "Подсчёты могут быть неполными.",
+    "forYou": "Для вас",
+    "stopThese": "Отключить такие",
+    "dismiss": "Скрыть"
 }

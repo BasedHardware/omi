@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Najdlhší výpadok",
     "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
     "diagnosticsLastDuration": "Posledných {duration}",
-    "peopleStatsIncomplete": "Počty môžu byť neúplné."
+    "peopleStatsIncomplete": "Počty môžu byť neúplné.",
+    "forYou": "Pre vás",
+    "stopThese": "Zastaviť tieto",
+    "dismiss": "Skryť"
 }

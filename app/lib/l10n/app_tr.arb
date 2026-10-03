@@ -3836,5 +3836,8 @@
     "diagnosticsLongestGap": "En uzun kesinti",
     "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
     "diagnosticsLastDuration": "Son {duration}",
-    "peopleStatsIncomplete": "Sayımlar eksik olabilir."
+    "peopleStatsIncomplete": "Sayımlar eksik olabilir.",
+    "forYou": "Sizin İçin",
+    "stopThese": "Bunları Durdur",
+    "dismiss": "Gizle"
 }

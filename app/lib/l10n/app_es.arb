@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Interrupción más larga",
     "diagnosticsSincePairingSummary": "Desde el emparejamiento: {drops} cortes, {failed} conexiones fallidas.",
     "diagnosticsLastDuration": "Últimos {duration}",
-    "peopleStatsIncomplete": "Los recuentos pueden estar incompletos."
+    "peopleStatsIncomplete": "Los recuentos pueden estar incompletos.",
+    "forYou": "Para ti",
+    "stopThese": "Dejar de recibir esto",
+    "dismiss": "Descartar"
 }

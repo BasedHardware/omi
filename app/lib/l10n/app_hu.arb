@@ -3897,5 +3897,8 @@
     "diagnosticsLongestGap": "Leghosszabb kiesés",
     "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
     "diagnosticsLastDuration": "Utolsó {duration}",
-    "peopleStatsIncomplete": "A számok hiányosak lehetnek."
+    "peopleStatsIncomplete": "A számok hiányosak lehetnek.",
+    "forYou": "Önnek",
+    "stopThese": "Ezek leállítása",
+    "dismiss": "Elrejtés"
 }

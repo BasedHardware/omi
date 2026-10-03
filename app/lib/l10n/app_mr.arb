@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
     "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
     "diagnosticsLastDuration": "गेले {duration}",
-    "peopleStatsIncomplete": "मोजणी अपूर्ण असू शकते."
+    "peopleStatsIncomplete": "मोजणी अपूर्ण असू शकते.",
+    "forYou": "तुमच्यासाठी",
+    "stopThese": "हे थांबवा",
+    "dismiss": "लपवा"
 }

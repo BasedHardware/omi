@@ -12301,4 +12301,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'मोजणी अपूर्ण असू शकते.';
+
+  @override
+  String get forYou => 'तुमच्यासाठी';
+
+  @override
+  String get stopThese => 'हे थांबवा';
+
+  @override
+  String get dismiss => 'लपवा';
 }

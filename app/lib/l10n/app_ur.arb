@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "طویل ترین وقفہ",
     "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
     "diagnosticsLastDuration": "پچھلے {duration}",
-    "peopleStatsIncomplete": "گنتی نامکمل ہو سکتی ہے۔"
+    "peopleStatsIncomplete": "گنتی نامکمل ہو سکتی ہے۔",
+    "forYou": "آپ کے لیے",
+    "stopThese": "یہ روکیں",
+    "dismiss": "چھپائیں"
 }

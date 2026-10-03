@@ -12289,4 +12289,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
+
+  @override
+  String get forYou => 'Dành Cho Bạn';
+
+  @override
+  String get stopThese => 'Dừng Loại Này';
+
+  @override
+  String get dismiss => 'Ẩn';
 }

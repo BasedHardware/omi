@@ -3801,5 +3801,8 @@
     "diagnosticsLongestGap": "Jurang terpanjang",
     "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
     "diagnosticsLastDuration": "{duration} lepas",
-    "peopleStatsIncomplete": "Kiraan mungkin tidak lengkap."
+    "peopleStatsIncomplete": "Kiraan mungkin tidak lengkap.",
+    "forYou": "Untuk Anda",
+    "stopThese": "Hentikan Ini",
+    "dismiss": "Tutup"
 }

@@ -12364,4 +12364,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
+
+  @override
+  String get forYou => 'Per a tu';
+
+  @override
+  String get stopThese => 'Atura aquests';
+
+  @override
+  String get dismiss => 'Descarta';
 }

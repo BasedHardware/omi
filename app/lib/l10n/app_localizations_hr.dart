@@ -12330,4 +12330,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Zaustavi ovo';
+
+  @override
+  String get dismiss => 'Sakrij';
 }

@@ -90,7 +90,11 @@ void main() {
         appBuild: () => '1',
         platform: () => 'ios',
       );
-      Future<void> opener(String route, {bool Function()? canOpen}) async => opened.add(route);
+      Future<bool> opener(String route, {bool Function()? canOpen}) async {
+        opened.add(route);
+        return true;
+      }
+
       HomeNavigation.register(opener);
       addTearDown(() {
         HomeNavigation.unregister(opener);
@@ -113,7 +117,11 @@ void main() {
 
     testWidgets('a mismatched typed payload opens nothing', (tester) async {
       final opened = <String>[];
-      Future<void> opener(String route, {bool Function()? canOpen}) async => opened.add(route);
+      Future<bool> opener(String route, {bool Function()? canOpen}) async {
+        opened.add(route);
+        return true;
+      }
+
       HomeNavigation.register(opener);
       addTearDown(() => HomeNavigation.unregister(opener));
 

@@ -12294,4 +12294,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antallene kan være ufullstendige.';
+
+  @override
+  String get forYou => 'For deg';
+
+  @override
+  String get stopThese => 'Stopp disse';
+
+  @override
+  String get dismiss => 'Avvis';
 }

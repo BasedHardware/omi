@@ -74,7 +74,7 @@ class HomeDeepLink {
 /// of doing nothing (nav #18). [openSettings] shows the Settings sheet and resolves when it closes.
 /// [openSearch] shows the search overlay, with a query when the link carries one.
 /// Resolves once the destination is on screen (pushed), not when it is closed.
-Future<void> openHomeDeepLink(
+Future<bool> openHomeDeepLink(
   BuildContext context,
   HomeDeepLink link, {
   required Future<void> Function() openSettings,
@@ -86,7 +86,7 @@ Future<void> openHomeDeepLink(
   void Function()? onItemUnavailable,
   bool Function()? canOpen,
 }) async {
-  if (canOpen != null && !canOpen()) return;
+  if (canOpen != null && !canOpen()) return false;
   final id = link.id;
   switch (link.alias) {
     case 'conversations':
@@ -94,41 +94,43 @@ Future<void> openHomeDeepLink(
     case 'action-items':
       context.read<HomeProvider>().setIndex(HomeProvider.tasksTab);
     case 'memory':
-      if (id == null) return;
+      if (id == null) return false;
       final provider = context.read<MemoriesProvider>();
       final memory = await (memoryById?.call(id) ?? _resolveIndexedMemoryById(id));
-      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return false;
       if (memory == null) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
         } else {
           OmiFeedback.info(context, context.l10n.somethingWentWrong);
         }
+        return false;
       } else if (onMemoryOpened != null) {
         onMemoryOpened(memory);
       } else {
         unawaited(showMemoryQuickEditSheet(context, memory, provider, readOnly: true));
       }
     case 'task':
-      if (id == null) return;
+      if (id == null) return false;
       final ActionItemWithMetadata? task;
       if (taskById != null) {
         task = await taskById(id);
       } else {
         final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid == null) return;
+        if (uid == null) return false;
         final result = await action_items_api.ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '').getById(id);
         task = FirebaseAuth.instance.currentUser?.uid == uid && result is ApiSuccess<ActionItemWithMetadata>
             ? result.data
             : null;
       }
-      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return false;
       if (task == null || !siriTaskIsIndexable(task, DateTime.now())) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
         } else {
           OmiFeedback.info(context, context.l10n.somethingWentWrong);
         }
+        return false;
       } else if (onTaskOpened != null) {
         onTaskOpened(task);
       } else {
@@ -140,17 +142,17 @@ Future<void> openHomeDeepLink(
       // Pushed, not awaited: the overlay is on screen when this resolves.
       unawaited(openSearch?.call(query: query.isEmpty ? null : query));
     case 'apps':
-      if (id == null) return;
+      if (id == null) return false;
       final app = await context.read<AppProvider>().getAppFromId(id);
-      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return false;
       if (app == null) {
         OmiFeedback.info(context, context.l10n.appNotFoundOrRemoved);
-        return;
+        return false;
       }
       unawaited(routeToPage(context, AppDetailPage(app: app)));
     case 'chat':
       await _prepareChat(context, id);
-      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return false;
       unawaited(
         openChatSheet(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])),
       );
@@ -163,22 +165,22 @@ Future<void> openHomeDeepLink(
     case 'facts':
       unawaited(routeToPage(context, const MemoriesPage()));
     case 'conversation':
-      if (id == null) return;
+      if (id == null) return false;
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+      if (uid == null) return false;
       final conversation = await getConversationById(id);
-      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return false;
       if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
         Logger.debug('Conversation not found: $id');
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
-        return;
+        return false;
       }
       unawaited(routeToPage(
         context,
         ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
       ));
     case 'daily-summary':
-      if (id == null) return;
+      if (id == null) return false;
       PlatformManager.instance.analytics.dailySummaryNotificationOpened(
         summaryId: id,
         date: '', // Not in the link; the detail page loads it.
@@ -188,8 +190,9 @@ Future<void> openHomeDeepLink(
       unawaited(routeToPage(context, const Wrapped2025Page()));
     default:
       // `action-items` only selects its tab; unknown aliases open Home.
-      return;
+      return false;
   }
+  return true;
 }
 
 /// The backend has no memory-by-id read endpoint. Walk its owner-wide All

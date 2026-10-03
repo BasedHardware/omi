@@ -12324,4 +12324,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Ustavi te';
+
+  @override
+  String get dismiss => 'Skrij';
 }

@@ -12336,4 +12336,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Отключить такие';
+
+  @override
+  String get dismiss => 'Скрыть';
 }

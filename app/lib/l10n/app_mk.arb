@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "Најдолг прекин",
     "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
     "diagnosticsLastDuration": "Последните {duration}",
-    "peopleStatsIncomplete": "Бројките може да се нецелосни."
+    "peopleStatsIncomplete": "Бројките може да се нецелосни.",
+    "forYou": "За вас",
+    "stopThese": "Запри ги овие",
+    "dismiss": "Сокриј"
 }

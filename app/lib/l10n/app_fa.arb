@@ -11358,5 +11358,8 @@
     "diagnosticsLongestGap": "طولانی‌ترین وقفه",
     "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
     "diagnosticsLastDuration": "{duration} گذشته",
-    "peopleStatsIncomplete": "شمارش‌ها ممکن است ناقص باشند."
+    "peopleStatsIncomplete": "شمارش‌ها ممکن است ناقص باشند.",
+    "forYou": "برای شما",
+    "stopThese": "توقف این موارد",
+    "dismiss": "رد کردن"
 }

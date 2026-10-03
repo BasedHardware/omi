@@ -12339,4 +12339,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Бройките може да са непълни.';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Спри тези';
+
+  @override
+  String get dismiss => 'Скрий';
 }
