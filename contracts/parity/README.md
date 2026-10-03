@@ -17,6 +17,7 @@ cross-platform decision instead of a single-platform drive-by.
 
 | File                               | Rule under contract                                                                                                          |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `proactivity_v2.json` | Generated feed/outcome decode, mentor conversation and follow-up action-item targets, identity-only mentor push |
 | `task_due_buckets.json`            | Task due-date bucketing (Today / Tomorrow / Later / No deadline, and the overdue handling models)                            |
 | `day_keys.json`                    | Local-calendar-day identity of a UTC instant (conversation day grouping)                                                     |
 | `wire_action_item.json`            | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
