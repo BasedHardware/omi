@@ -554,8 +554,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     );
   }
 
-  /// Fixed −100…−40 dBm over the last [_rssiWindowSecs], newest sample at the right edge. The axis
-  /// labels sit on their grid lines inside the plot, so none float outside it.
+  /// Fixed −100…−40 dBm over the last [_rssiWindowSecs], newest sample at the right edge, with the
+  /// axis labels on the left level with their grid lines.
   LineChartData _buildLineChartData() {
     final latest = _rssiPoints.last.time;
     final spots = [
@@ -568,33 +568,29 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     ];
     final color = _rssiColor(_rssiPoints.last.rssi);
 
-    HorizontalLine gridLine(double y, Alignment labelAlignment) => HorizontalLine(
-          y: y,
-          color: OmiColors.textPrimary.withValues(alpha: 0.06),
-          strokeWidth: 1,
-          label: HorizontalLineLabel(
-            show: true,
-            alignment: labelAlignment,
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            style: _axisStyle,
-            labelResolver: (line) => '${line.y.toInt()}',
-          ),
-        );
-
     return LineChartData(
-      gridData: const FlGridData(show: false),
-      titlesData: const FlTitlesData(show: false),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        horizontalInterval: 20,
+        getDrawingHorizontalLine: (value) =>
+            FlLine(color: OmiColors.textPrimary.withValues(alpha: 0.06), strokeWidth: 1),
+      ),
+      titlesData: FlTitlesData(
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 36,
+            interval: 20,
+            getTitlesWidget: (value, meta) => Text('${value.toInt()}', style: _axisStyle),
+          ),
+        ),
+      ),
       borderData: FlBorderData(show: false),
       clipData: const FlClipData.all(),
-      extraLinesData: ExtraLinesData(
-        extraLinesOnTop: false,
-        horizontalLines: [
-          gridLine(_rssiMax, Alignment.bottomLeft),
-          gridLine(-60, Alignment.topLeft),
-          gridLine(-80, Alignment.topLeft),
-          gridLine(_rssiMin, Alignment.topLeft),
-        ],
-      ),
       minY: _rssiMin,
       maxY: _rssiMax,
       minX: -_rssiWindowSecs.toDouble(),
