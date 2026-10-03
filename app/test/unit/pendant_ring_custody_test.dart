@@ -42,9 +42,13 @@ Uint8List liveMark(int ringId, int ringSeq, int liveIndex) {
 }
 
 RingInfo v1Info({int readSeq = 0, int writeSeq = 20, int caps = 0x0F, int ringId = 7}) =>
-    RingProtocol.parseInfoNotification(
-      infoPayload(readSeq: readSeq, writeSeq: writeSeq, caps: caps, contractVersion: 1, ringId: ringId),
-    )!;
+    RingProtocol.parseInfoNotification(infoPayload(
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      caps: caps,
+      contractVersion: 1,
+      ringId: ringId,
+    ))!;
 
 void main() {
   group('RingProtocol INFO capability extension', () {
@@ -108,8 +112,7 @@ void main() {
       const ringId = 0x8000000000000001 | 0; // high bit set: wraps negative on VM
       final bd = ByteData(8)..setUint64(0, ringId, Endian.big);
       final info = RingProtocol.parseInfoNotification(
-        infoPayload(caps: 0x0F, contractVersion: 1, ringId: bd.getUint64(0, Endian.big)),
-      );
+          infoPayload(caps: 0x0F, contractVersion: 1, ringId: bd.getUint64(0, Endian.big)));
       expect(info!.ringId, equals(ringId));
       expect(info.capRingId, isTrue);
     });
@@ -222,41 +225,29 @@ void main() {
 
     test('reconnect with the same ring id replays the durable frontier before read', () async {
       await custody.beginConnection('dev', 1, info());
-      await custody.recordDurableRingRange('dev', 1, 42, 0, 10, [
-        const CustodyWalRef(fileName: 'a.bin', bytes: 100, frames: 10),
-      ]);
+      await custody.recordDurableRingRange(
+          'dev', 1, 42, 0, 10, [const CustodyWalRef(fileName: 'a.bin', bytes: 100, frames: 10)]);
       custody.endConnection('dev', 1);
 
       final replayed = <int>[];
-      await custody.beginConnection(
-        'dev',
-        2,
-        info(),
-        replayAdvance: (seq) async {
-          replayed.add(seq);
-          return 0;
-        },
-      );
+      await custody.beginConnection('dev', 2, info(), replayAdvance: (seq) async {
+        replayed.add(seq);
+        return 0;
+      });
       expect(replayed, [10]);
     });
 
     test('a changed ring id discards the stale checkpoint — zero replay', () async {
       await custody.beginConnection('dev', 1, info(ringId: 42));
-      await custody.recordDurableRingRange('dev', 1, 42, 0, 10, [
-        const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
-      ]);
+      await custody
+          .recordDurableRingRange('dev', 1, 42, 0, 10, [const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1)]);
       custody.endConnection('dev', 1);
 
       var replayed = false;
-      await custody.beginConnection(
-        'dev',
-        2,
-        info(ringId: 77),
-        replayAdvance: (seq) async {
-          replayed = true;
-          return 0;
-        },
-      );
+      await custody.beginConnection('dev', 2, info(ringId: 77), replayAdvance: (seq) async {
+        replayed = true;
+        return 0;
+      });
       expect(replayed, isFalse);
     });
 
@@ -264,21 +255,15 @@ void main() {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final c1 = PendantRingCustody(store: store, walValidator: (_) async => true);
       await c1.beginConnection('dev', 1, info());
-      await c1.recordDurableRingRange('dev', 1, 42, 0, 12, [
-        const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
-      ]);
+      await c1
+          .recordDurableRingRange('dev', 1, 42, 0, 12, [const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1)]);
 
       final c2 = PendantRingCustody(store: store, walValidator: (_) async => true);
       final replayed = <int>[];
-      await c2.beginConnection(
-        'dev',
-        9,
-        info(),
-        replayAdvance: (seq) async {
-          replayed.add(seq);
-          return 0;
-        },
-      );
+      await c2.beginConnection('dev', 9, info(), replayAdvance: (seq) async {
+        replayed.add(seq);
+        return 0;
+      });
       expect(replayed, [12]);
     });
 
@@ -295,19 +280,13 @@ void main() {
       }
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 20, 100))!);
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        100,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 10, frames: 10, liveRingId: 42),
-      );
+          'dev', 1, 0, 100, const CustodyWalRef(fileName: 'w.bin', bytes: 10, frames: 10, liveRingId: 42));
 
       expect(await custody.isDurableLiveRecord('dev', 42, 15), isTrue);
       expect(await custody.isDurableLiveRecord('dev', 42, 20), isFalse);
       expect(custody.advanceTarget('dev', 1), isNull); // [0,10) still unproven
-      await custody.recordDurableRingRange('dev', 1, 42, 0, 10, [
-        const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1),
-      ]);
+      await custody
+          .recordDurableRingRange('dev', 1, 42, 0, 10, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
       expect(custody.advanceTarget('dev', 1), 20);
     });
 
@@ -321,15 +300,9 @@ void main() {
       custody.observeLiveFrame('dev', 1, 51, 0); // gap at 50
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 20, 60))!);
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        60,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
-      await custody.recordDurableRingRange('dev', 1, 42, 0, 10, [
-        const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1),
-      ]);
+          'dev', 1, 0, 60, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
+      await custody
+          .recordDurableRingRange('dev', 1, 42, 0, 10, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
       expect(custody.advanceTarget('dev', 1), 10); // ring-read range only; live range not proven
       expect(await custody.isDurableLiveRecord('dev', 42, 15), isFalse);
     });
@@ -343,12 +316,7 @@ void main() {
       }
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 8, 10))!);
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        10,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
+          'dev', 1, 0, 10, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
       expect(await custody.isDurableLiveRecord('dev', 42, 6), isFalse);
     });
 
@@ -358,9 +326,8 @@ void main() {
 
     test('advance target never exceeds the INFO write_seq', () async {
       await custody.beginConnection('dev', 1, info(writeSeq: 15));
-      await custody.recordDurableRingRange('dev', 1, 42, 0, 30, [
-        const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
-      ]);
+      await custody
+          .recordDurableRingRange('dev', 1, 42, 0, 30, [const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1)]);
       expect(custody.advanceTarget('dev', 1), 15);
     });
 
@@ -379,26 +346,15 @@ void main() {
       c.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 5, 0))!);
       c.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 6, 9))!);
       await c.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        10,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
+          'dev', 1, 0, 10, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
 
       expect(await c.validatedAdvanceTarget('dev', 1, 42), 6);
 
       live.remove('w.bin');
-      expect(
-        await c.validatedAdvanceTarget('dev', 1, 42),
-        isNull,
-        reason: 'a missing proof file invalidates its range and refuses the advance this round',
-      );
-      expect(
-        await c.validatedAdvanceTarget('dev', 1, 42),
-        5,
-        reason: 'the repaired frontier covers only the durable ring prefix — never past it',
-      );
+      expect(await c.validatedAdvanceTarget('dev', 1, 42), isNull,
+          reason: 'a missing proof file invalidates its range and refuses the advance this round');
+      expect(await c.validatedAdvanceTarget('dev', 1, 42), 5,
+          reason: 'the repaired frontier covers only the durable ring prefix — never past it');
       expect(await c.isDurableLiveRecord('dev', 42, 5), isFalse);
     });
 
@@ -419,22 +375,15 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       // A new proof for (5,10] lands while validation is still in flight; its
       // WAL does not exist on disk, so it can never be part of this release.
-      await c.recordDurableRingRange('dev', 1, 42, 5, 10, [
-        const CustodyWalRef(fileName: 'b.bin', bytes: 1, frames: 1),
-      ]);
+      await c
+          .recordDurableRingRange('dev', 1, 42, 5, 10, [const CustodyWalRef(fileName: 'b.bin', bytes: 1, frames: 1)]);
       gate.complete();
 
       expect(await first, 5, reason: 'release is capped at the validated target, never extended');
-      expect(
-        await c.validatedAdvanceTarget('dev', 1, 42),
-        isNull,
-        reason: 'the missing WAL invalidates its range and refuses this round',
-      );
-      expect(
-        await c.validatedAdvanceTarget('dev', 1, 42),
-        5,
-        reason: 'the repaired frontier covers only the still-provable prefix',
-      );
+      expect(await c.validatedAdvanceTarget('dev', 1, 42), isNull,
+          reason: 'the missing WAL invalidates its range and refuses this round');
+      expect(await c.validatedAdvanceTarget('dev', 1, 42), 5,
+          reason: 'the repaired frontier covers only the still-provable prefix');
     });
 
     test('isDurableLiveRecord returns false when the incarnation changes during validation', () async {
@@ -454,22 +403,14 @@ void main() {
       c.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 1, 0))!);
       c.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 2, 9))!);
       await c.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        10,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
+          'dev', 1, 0, 10, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
 
       final pending = c.isDurableLiveRecord('dev', 42, 1);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       c.noteInfo('dev', 1, info(ringId: 43));
       gate.complete();
-      expect(
-        await pending,
-        isFalse,
-        reason: 'a re-anchored incarnation must not trust a proof validated under the old ring',
-      );
+      expect(await pending, isFalse,
+          reason: 'a re-anchored incarnation must not trust a proof validated under the old ring');
     });
 
     test('marks spaced one record apart stay provable across a u16 counter wrap', () async {
@@ -483,12 +424,7 @@ void main() {
         custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, r, (r * 20) & 0xFFFF))!);
       }
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        20,
-        66000,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
+          'dev', 1, 20, 66000, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
       expect(await custody.isDurableLiveRecord('dev', 42, 3200), isTrue);
     });
 
@@ -501,12 +437,7 @@ void main() {
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 1, 5))!);
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 2, 10))!);
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        65541,
-        65546,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
+          'dev', 1, 65541, 65546, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
       expect(await custody.isDurableLiveRecord('dev', 42, 1), isFalse);
       expect(await custody.validatedAdvanceTarget('dev', 1, 42), isNull);
     });
@@ -520,22 +451,11 @@ void main() {
       }
       custody.observeLiveMark('dev', 1, RingProtocol.parseLiveMarkNotification(liveMark(42, 400, 10))!);
       await custody.recordDurableLiveFrames(
-        'dev',
-        1,
-        0,
-        10,
-        const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
-      );
-      expect(
-        await custody.isDurableLiveRecord('dev', 42, 5),
-        isFalse,
-        reason: 'seq gap 400 * 220 exceeds the u16 window — the delta-10 index cannot anchor a boundary',
-      );
-      expect(
-        await custody.validatedAdvanceTarget('dev', 1, 42),
-        isNull,
-        reason: 'no release to 400 — keep both copies',
-      );
+          'dev', 1, 0, 10, const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42));
+      expect(await custody.isDurableLiveRecord('dev', 42, 5), isFalse,
+          reason: 'seq gap 400 * 220 exceeds the u16 window — the delta-10 index cannot anchor a boundary');
+      expect(await custody.validatedAdvanceTarget('dev', 1, 42), isNull,
+          reason: 'no release to 400 — keep both copies');
     });
 
     test('nothing persists without CAP_RING_ID', () async {
@@ -544,15 +464,10 @@ void main() {
       await custody.recordDurableRingRange('dev', 1, 0, 0, 10, []); // no-op: ring_id mismatch (null != 0)
       custody.endConnection('dev', 1);
       var replayed = false;
-      await custody.beginConnection(
-        'dev',
-        2,
-        legacy,
-        replayAdvance: (seq) async {
-          replayed = true;
-          return 0;
-        },
-      );
+      await custody.beginConnection('dev', 2, legacy, replayAdvance: (seq) async {
+        replayed = true;
+        return 0;
+      });
       expect(replayed, isFalse);
       expect(await tmp.list().toList(), isEmpty);
     });

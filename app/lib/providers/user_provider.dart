@@ -44,9 +44,9 @@ class UserProvider with ChangeNotifier {
     Future<bool?> Function()? privateCloudSyncFetcher,
     Future<bool> Function(bool value)? privateCloudSyncSetter,
     Future<Map<String, dynamic>?> Function()? trainingDataFetcher,
-  }) : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
-       _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled,
-       _trainingDataFetcher = trainingDataFetcher ?? getTrainingDataOptIn;
+  })  : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
+        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled,
+        _trainingDataFetcher = trainingDataFetcher ?? getTrainingDataOptIn;
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;

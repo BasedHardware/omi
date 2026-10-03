@@ -231,13 +231,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
   int get needsAttentionWalsCount => _countWhere(
-    (s) =>
-        s == WalSyncDisplayState.failed ||
-        s == WalSyncDisplayState.corrupted ||
-        s == WalSyncDisplayState.outsideRecoveryWindow ||
-        s == WalSyncDisplayState.unsupportedAudio ||
-        s == WalSyncDisplayState.uploadRejected,
-  );
+        (s) =>
+            s == WalSyncDisplayState.failed ||
+            s == WalSyncDisplayState.corrupted ||
+            s == WalSyncDisplayState.outsideRecoveryWindow ||
+            s == WalSyncDisplayState.unsupportedAudio ||
+            s == WalSyncDisplayState.uploadRejected,
+      );
 
   /// Durable HTTP refusals that automatic connectivity wakes must never retry.
   /// The Auto Sync Needs Attention chip renders this count through
@@ -396,14 +396,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
     @visibleForTesting SyncTransferKeepAlive? keepAlive,
     @visibleForTesting CaptureWedgeMonitor? captureWedgeMonitor,
-  }) : _walServiceOverride = walService,
-       _uploadGate = uploadGate ?? SyncUploadGate.instance,
-       _startBackgroundSync = startBackgroundSync,
-       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
-       _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance,
-       _captureWedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+  })  : _walServiceOverride = walService,
+        _uploadGate = uploadGate ?? SyncUploadGate.instance,
+        _startBackgroundSync = startBackgroundSync,
+        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
+        _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance,
+        _captureWedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -590,9 +590,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation)) return;
     _allWals = wals;
     Logger.debug('SyncProvider: Loaded ${_allWals.length} WALs (${missingWals.length} missing)');
-    final pendingLocal = _allWals
-        .where((wal) => wal.storage == WalStorage.disk && wal.status == WalStatus.miss)
-        .toList();
+    final pendingLocal =
+        _allWals.where((wal) => wal.storage == WalStorage.disk && wal.status == WalStatus.miss).toList();
     DateTime? oldestPendingAt;
     if (pendingLocal.isNotEmpty) {
       final oldestSeconds = pendingLocal.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);

@@ -100,13 +100,9 @@ void main() {
   });
 
   testWidgets('preview shows a compact skeleton while loading', (tester) async {
-    await tester.pumpWidget(
-      _app(
-        const Scaffold(
-          body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: _neverLoads),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_app(const Scaffold(
+      body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: _neverLoads),
+    )));
     await tester.pump();
 
     expect(find.byKey(const ValueKey('memories_mind_map_loading')), findsOneWidget);
@@ -123,9 +119,9 @@ void main() {
       return {'nodes': [], 'edges': []};
     }
 
-    await tester.pumpWidget(
-      _app(Scaffold(body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: load))),
-    );
+    await tester.pumpWidget(_app(Scaffold(
+      body: MemoryGraphPage(embedded: true, preview: true, trackOpenEvent: false, loadGraph: load),
+    )));
     await tester.pumpAndSettle();
 
     final l10n = AppLocalizations.of(tester.element(find.byType(MemoryGraphPage)));

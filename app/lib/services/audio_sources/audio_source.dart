@@ -17,18 +17,17 @@ class WalFrame {
   final int? liveOrdinal;
   final int? liveRingId;
 
-  WalFrame({
-    required this.payload,
-    required this.syncKey,
-    this.captureRoot,
-    this.sourceFramePosition,
-    this.sourceClockEpoch,
-    this.connectionEpoch,
-    this.livePacketCounter,
-    this.liveFragmentIndex,
-    this.liveOrdinal,
-    this.liveRingId,
-  });
+  WalFrame(
+      {required this.payload,
+      required this.syncKey,
+      this.captureRoot,
+      this.sourceFramePosition,
+      this.sourceClockEpoch,
+      this.connectionEpoch,
+      this.livePacketCounter,
+      this.liveFragmentIndex,
+      this.liveOrdinal,
+      this.liveRingId});
 }
 
 /// Key for matching WAL frames during sync.

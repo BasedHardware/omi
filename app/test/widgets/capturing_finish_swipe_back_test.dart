@@ -73,17 +73,17 @@ class _Syncs {
 /// A hermetic capture whose finish resolves when the test says so.
 class _ControlledCapture extends CaptureProvider {
   _ControlledCapture(this._finish)
-    : super(
-        walService: _WalService(),
-        connectivity: CaptureConnectivityBoundary(
-          initiallyConnected: true,
-          changes: const Stream.empty(),
-          isConnected: () => true,
-        ),
-        bleListeners: _NoopBle(),
-        inProgressConversationLoader: () async {},
-        localSegmentStore: LocalSegmentStore.disabled(),
-      );
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+            initiallyConnected: true,
+            changes: const Stream.empty(),
+            isConnected: () => true,
+          ),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
 
   final Future<void> _finish;
 
@@ -138,9 +138,8 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
     ),
   );
   unawaited(
-    Navigator.of(
-      tester.element(find.text('home')),
-    ).push(omiPageRoute(builder: (_) => const ConversationCapturingPage())),
+    Navigator.of(tester.element(find.text('home')))
+        .push(omiPageRoute(builder: (_) => const ConversationCapturingPage())),
   );
   await tester.pumpAndSettle();
   expect(find.byType(ConversationCapturingPage), findsOneWidget);

@@ -27,7 +27,11 @@ void main() {
   test('handled multipart connection failure does not also escape to the zone', () async {
     final uncaught = await _captureUncaught(() async {
       await expectLater(
-        makeMultipartApiCall(url: 'https://upload.invalid/audio', files: const [], onUploadProgress: (_, __, ___) {}),
+        makeMultipartApiCall(
+          url: 'https://upload.invalid/audio',
+          files: const [],
+          onUploadProgress: (_, __, ___) {},
+        ),
         throwsA(isA<SocketException>().having((error) => error.message, 'message', 'Connection refused')),
       );
     });

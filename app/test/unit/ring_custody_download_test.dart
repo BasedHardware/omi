@@ -154,16 +154,16 @@ List<int> _done(int status, int nextSeq) {
 }
 
 RingInfo _info({int readSeq = 5, int writeSeq = 6, int caps = 0, int? ringId}) => RingInfo(
-  readSeq: readSeq,
-  writeSeq: writeSeq,
-  capacityPackets: 100,
-  droppedPackets: 0,
-  packetSize: 444,
-  advertisedCaps: caps,
-  contractVersion: caps == 0 ? 0 : 1,
-  ringId: ringId,
-  infoBytes: caps == 0 ? 31 : 41,
-);
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 100,
+      droppedPackets: 0,
+      packetSize: 444,
+      advertisedCaps: caps,
+      contractVersion: caps == 0 ? 0 : 1,
+      ringId: ringId,
+      infoBytes: caps == 0 ? 31 : 41,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -192,14 +192,12 @@ void main() {
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
     final sync = RingStorageSyncImpl(_Listener())
       ..testConnection = card
-      ..testCustody = PendantRingCustody(
-        walValidator: (ref) async {
-          final path = await Wal.getFilePath(ref.fileName);
-          if (path == null) return false;
-          final f = File(path);
-          return f.existsSync() && await f.length() == ref.bytes;
-        },
-      )
+      ..testCustody = PendantRingCustody(walValidator: (ref) async {
+        final path = await Wal.getFilePath(ref.fileName);
+        if (path == null) return false;
+        final f = File(path);
+        return f.existsSync() && await f.length() == ref.bytes;
+      })
       ..testWals = [wal];
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
@@ -207,14 +205,14 @@ void main() {
   }
 
   Wal ringWal({int records = 1}) => Wal(
-    timerStart: 1000,
-    codec: BleAudioCodec.opus,
-    seconds: 60,
-    status: WalStatus.miss,
-    storage: WalStorage.sdcard,
-    device: 'devkit-1',
-    storageTotalBytes: records * 444,
-  );
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'devkit-1',
+        storageTotalBytes: records * 444,
+      );
 
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {
     final card = _FakeRingDevice(ringInfo: _info());
@@ -238,43 +236,36 @@ void main() {
     await sync.stop();
   });
 
-  test(
-    'CAP_APP_ACK_RECLAIM: incremental advance fires on each durable chunk, scoped to the read-proof ring id',
-    () async {
-      final card = _FakeRingDevice(
-        ringInfo: _info(writeSeq: 68, caps: RingProtocol.capMaskV1, ringId: 42),
-        caps: RingProtocol.capMaskV1,
-      );
-      final local = _FakeLocalSync();
-      final wal = ringWal(records: 63);
-      final sync = syncWith(local, card, wal);
+  test('CAP_APP_ACK_RECLAIM: incremental advance fires on each durable chunk, scoped to the read-proof ring id',
+      () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 68, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync();
+    final wal = ringWal(records: 63);
+    final sync = syncWith(local, card, wal);
 
-      final future = sync.syncWal(wal: wal);
-      await Future.delayed(const Duration(milliseconds: 50));
-      card.emit(_readBegin(5, 63));
-      for (var i = 0; i < 61; i++) {
-        card.emit(_record(frameSizes: List.filled(100, 1)));
-      }
-      await Future.delayed(const Duration(milliseconds: 300));
-      final incrementalCount = card.advances.length;
-      for (var i = 0; i < 2; i++) {
-        card.emit(_record(frameSizes: List.filled(100, 1)));
-      }
-      card.emit(_done(0, 68));
-      await future;
+    final future = sync.syncWal(wal: wal);
+    await Future.delayed(const Duration(milliseconds: 50));
+    card.emit(_readBegin(5, 63));
+    for (var i = 0; i < 61; i++) {
+      card.emit(_record(frameSizes: List.filled(100, 1)));
+    }
+    await Future.delayed(const Duration(milliseconds: 300));
+    final incrementalCount = card.advances.length;
+    for (var i = 0; i < 2; i++) {
+      card.emit(_record(frameSizes: List.filled(100, 1)));
+    }
+    card.emit(_done(0, 68));
+    await future;
 
-      expect(
-        incrementalCount,
-        greaterThanOrEqualTo(1),
-        reason: 'a mid-transfer incremental advance must fire under CAP_APP_ACK_RECLAIM',
-      );
-      expect(card.advances.last.seq, 68);
-      expect(card.advances.every((a) => a.ringId == 42), isTrue);
-      expect(wal.status, WalStatus.synced);
-      await card.controller.close();
-      await sync.stop();
-    },
-  );
+    expect(incrementalCount, greaterThanOrEqualTo(1),
+        reason: 'a mid-transfer incremental advance must fire under CAP_APP_ACK_RECLAIM');
+    expect(card.advances.last.seq, 68);
+    expect(card.advances.every((a) => a.ringId == 42), isTrue);
+    expect(wal.status, WalStatus.synced);
+    await card.controller.close();
+    await sync.stop();
+  });
 
   test('ACK 10 is benign only when a fresh INFO on the same ring confirms read_seq covers the target', () async {
     final card = _FakeRingDevice(ringInfo: _info());
@@ -319,10 +310,8 @@ void main() {
   });
 
   test('ACK 11 ring-id mismatch fails closed — no completion, no fallback', () async {
-    final card = _FakeRingDevice(
-      ringInfo: _info(caps: RingProtocol.capMaskV1, ringId: 42),
-      caps: RingProtocol.capMaskV1,
-    );
+    final card =
+        _FakeRingDevice(ringInfo: _info(caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
     card.ackStatus = RingProtocol.ackRingIdMismatch;
     final local = _FakeLocalSync();
     final wal = ringWal();
