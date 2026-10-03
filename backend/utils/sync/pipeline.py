@@ -16,7 +16,6 @@ import os
 import shutil
 import threading
 import time
-import wave
 import uuid
 from collections import deque
 from functools import partial
@@ -76,7 +75,7 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from utils.capture_evidence import bounded_envelope, decoded_frame_map, unknown_envelope
+from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
@@ -146,6 +145,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
+from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
 from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync.recording_lineage import (
     fallback_segment_targets,
@@ -156,6 +156,7 @@ from utils.sync.recording_lineage import (
     lineage_partial_result,
 )
 from utils.sync.bridge import finish_sync_segment
+
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentSuperseded,
@@ -1976,6 +1977,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
+        coverage_suppressed_all = False
         wav_paths = []
         decoded_frames: dict[str, list[int]] = {}
         source_frame_maps: dict[str, dict] = {}
@@ -2097,26 +2099,24 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     failure_key='invalid_audio',
                 )
                 return
-
-            if capture_evidence_dark_write_enabled() and capture_evidence_claims:
-                for wav_path in wav_paths:
-                    claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
-                    if (
-                        claim is None
-                        or (claim['codec'] == 'pcm16' and '_pcm16_' not in wav_path)
-                        or (claim['codec'] == 'opus' and '_opus_' not in wav_path)
-                    ):
-                        continue
-                    with wave.open(wav_path, 'rb') as decoded_wav:
-                        mapping = decoded_frame_map(
-                            claim,
-                            decoded_frames.get(wav_path, []),
-                            wav_rate_hz=decoded_wav.getframerate(),
-                            wav_channels=decoded_wav.getnchannels(),
-                        )
-                    if mapping is not None:
-                        source_frame_maps[wav_path] = mapping
-
+            try:
+                wav_paths, source_frame_maps, coverage_suppressed_all = await apply_sync_wal_audio_coverage(
+                    uid,
+                    source,
+                    should_lock,
+                    client_device_id,
+                    recording_session_id,
+                    capture_evidence_claims,
+                    wav_paths,
+                    decoded_frames,
+                    run_blocking=run_blocking,
+                    db_executor=db_executor,
+                    storage_executor=storage_executor,
+                    cleanup_files=_cleanup_files,
+                )
+            except asyncio.CancelledError:
+                preserve_retry_material = True
+                raise
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -2216,13 +2216,16 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
 
             if total_segments == 0:
+                empty_outcome = (
+                    TranscriptionOutcome.SUCCESS if coverage_suppressed_all else TranscriptionOutcome.EXPECTED_SILENCE
+                )
                 empty_result = {
                     'new_memories': [],
                     'updated_memories': [],
                     'failed_segments': 0,
                     'total_segments': 0,
                     'errors': [],
-                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'outcome': empty_outcome.value,
                     'provider': 'unknown',
                     'model': 'unknown',
                     'lane': sync_lane,
@@ -2251,7 +2254,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 if ledger_fence_active:
                     await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
                 await _record_sync_job_outcome_async(
-                    TranscriptionOutcome.EXPECTED_SILENCE,
+                    empty_outcome,
                     provider='unknown',
                     model='unknown',
                     lane=sync_lane,

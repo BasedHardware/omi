@@ -363,6 +363,7 @@ def _load_lineage(
     finished_after: datetime,
     *,
     on_module: Any = None,
+    include_capture_evidence: bool = False,
 ) -> tuple[list[dict[str, Any]], Optional[float], bool]:
     """Lineage rows, an incomplete-overlap marker, and whether the lookup degraded."""
     # Import on use, like recording_session_target: pipeline.py loads this module
@@ -372,6 +373,7 @@ def _load_lineage(
     if on_module is not None:
         on_module(lineage_db)
 
+    projection = {'include_capture_evidence': True} if include_capture_evidence else {}
     degraded = False
     try:
         rows = lineage_db.get_recording_generations(
@@ -381,6 +383,7 @@ def _load_lineage(
             finished_after=finished_after,
             limit=GENERATION_LIMIT,
             firestore_client=firestore_client,
+            **projection,
         )
     except Exception as exc:
         # E.g. the composite index is still building: keep the origin-row read,
@@ -400,13 +403,33 @@ def _load_lineage(
         # bound to R itself is findable. A truncated overlap set already proves
         # no target, so another read cannot make that plan decidable.
         legacy = lineage_db.get_origin_generation(
-            uid, origin_id, limit=ORIGIN_ROW_LIMIT, firestore_client=firestore_client
+            uid, origin_id, limit=ORIGIN_ROW_LIMIT, firestore_client=firestore_client, **projection
         )
         if len(legacy) > ORIGIN_ROW_LIMIT:
             return rows, math.inf, degraded
         known = {row.get('id') for row in rows}
         rows += [row for row in legacy if row.get('id') not in known]
     return rows, truncated_before, degraded
+
+
+def load_lineage(
+    uid: str,
+    origin_id: str,
+    started_before: datetime,
+    firestore_client: Any,
+    finished_after: datetime,
+    *,
+    include_capture_evidence: bool = False,
+) -> tuple[list[dict[str, Any]], Optional[float], bool]:
+    """Public read seam for consumers of the bounded lineage lookup (e.g. WAL audio coverage)."""
+    return _load_lineage(
+        uid,
+        origin_id,
+        started_before,
+        firestore_client,
+        finished_after,
+        include_capture_evidence=include_capture_evidence,
+    )
 
 
 def _id_probe(

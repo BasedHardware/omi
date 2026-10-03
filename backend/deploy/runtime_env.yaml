@@ -880,6 +880,9 @@ environments:
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1127,6 +1130,9 @@ environments:
               value: 'true'
               category: rollout
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -1385,6 +1391,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1592,6 +1601,9 @@ environments:
               value: 'true'
               category: rollout
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -2803,6 +2815,9 @@ environments:
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3069,6 +3084,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3315,6 +3333,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3533,6 +3554,9 @@ environments:
               value: 'true'
               category: rollout
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:

@@ -24,7 +24,13 @@ segment, and straddles split. Otherwise a segment keeps the phone's
 Bound segments lexically repeating a live window drop
 (`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist); all-repeat uploads
 acknowledge without writes or enrichment, and `SYNC_LINEAGE_RESOLVE_ENABLED`
-off restores whole-batch binding. A clean no-row lookup probes the recording id
+off restores whole-batch binding. One level earlier, uploads carrying the
+opt-in S1 source-position signal additionally trim source frames the live
+socket positively received before VAD/STT (`SYNC_WAL_AUDIO_COVERAGE_ENABLED`,
+default on, same allowlist): kept frames become derivative WAVs under a
+`.coverage/` sibling named by phone-clock offset, while missing, malformed,
+conflicting or out-of-bounds evidence retains the original audio, and an
+upload without the claim costs no lookup. A clean no-row lookup probes the recording id
 once (`id_probe`, ceiling 16) and each resolve line counts returned candidates
 only; stamp-fallback live appends bucket extent growth on `span_delta_bucket`
 (`sync_lineage_append`, or `sync_lineage_stamp_append` while dedupe is off).
