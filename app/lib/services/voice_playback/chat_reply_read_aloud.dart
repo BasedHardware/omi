@@ -30,11 +30,8 @@ class _OmiVoicePlaybackSpeaker implements ChatReplySpeaker {
 }
 
 class ChatReplyReadAloud {
-  ChatReplyReadAloud({
-    ChatReplySpeaker? speaker,
-    bool Function()? isEnabled,
-    String Function()? playbackId,
-  })  : _speaker = speaker ?? _OmiVoicePlaybackSpeaker(OmiVoicePlaybackService.instance),
+  ChatReplyReadAloud({ChatReplySpeaker? speaker, bool Function()? isEnabled, String Function()? playbackId})
+      : _speaker = speaker ?? _OmiVoicePlaybackSpeaker(OmiVoicePlaybackService.instance),
         _isEnabled = isEnabled ?? (() => SharedPreferencesUtil().readChatRepliesAloud),
         _playbackId = playbackId ?? (() => 'chat:${const Uuid().v4()}');
 
@@ -97,9 +94,6 @@ class ChatReplyReadAloud {
     final id = _ownedPlaybackId;
     if (id == null) return;
     _ownedPlaybackId = null;
-    await _speaker.interruptResponse(
-      messageId: id,
-      source: VoiceReplyPlaybackInterruptSource.none,
-    );
+    await _speaker.interruptResponse(messageId: id, source: VoiceReplyPlaybackInterruptSource.none);
   }
 }

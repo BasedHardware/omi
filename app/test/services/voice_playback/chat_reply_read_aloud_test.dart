@@ -60,11 +60,7 @@ void main() {
 
   test('toggle off is silent — nothing reaches the speaker', () async {
     final speaker = _FakeSpeaker();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => false,
-      playbackId: () => 'chat:test',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => false, playbackId: () => 'chat:test');
     coordinator.active = true;
     await coordinator.readFinalReply('A complete reply.', generation: coordinator.generation);
     expect(speaker.calls, isEmpty);
@@ -72,11 +68,7 @@ void main() {
 
   test('enabled + active speaks the final reply exactly once', () async {
     final speaker = _FakeSpeaker();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:test',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:test');
     coordinator.active = true;
     await coordinator.readFinalReply('A complete reply.', generation: coordinator.generation);
     await coordinator.readFinalReply('A complete reply.', generation: coordinator.generation);
@@ -92,11 +84,7 @@ void main() {
 
   test('a stale generation loses: newQuery invalidates a reply mid-begin', () async {
     final speaker = _FakeSpeaker()..beginGate = Completer<void>();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:stale',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:stale');
     coordinator.active = true;
     final gen = coordinator.generation;
     final pending = coordinator.readFinalReply('Late reply.', generation: gen);
@@ -126,11 +114,7 @@ void main() {
 
   test('revoke (sign-out / reset) invalidates pending and in-flight playback', () async {
     final speaker = _FakeSpeaker();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:revoke',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:revoke');
     coordinator.active = true;
     await coordinator.readFinalReply('Reply.', generation: coordinator.generation);
     coordinator.revoke();
@@ -142,11 +126,7 @@ void main() {
 
   test('owned cancel leaves other lifecycles alone', () async {
     final speaker = _FakeSpeaker();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:owned',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:owned');
     coordinator.active = true;
     await coordinator.readFinalReply('Reply.', generation: coordinator.generation);
     await coordinator.cancel();
@@ -163,11 +143,7 @@ void main() {
 
   test('concurrent finals for one generation begin exactly once', () async {
     final speaker = _FakeSpeaker();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:once',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:once');
     coordinator.active = true;
     final gen = coordinator.generation;
     await Future.wait([
@@ -180,11 +156,7 @@ void main() {
 
   test('a begin failure is best-effort — no throw, no update, id released', () async {
     final speaker = _FakeSpeaker()..beginError = StateError('tts down');
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:fail',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:fail');
     coordinator.active = true;
     await coordinator.readFinalReply('Reply.', generation: coordinator.generation);
     expect(speaker.calls, ['begin:chat:fail']);
@@ -193,11 +165,7 @@ void main() {
 
   test('cancel revokes pending work and generation, not just the owned id', () async {
     final speaker = _FakeSpeaker()..beginGate = Completer<void>();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => true,
-      playbackId: () => 'chat:cancel',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => true, playbackId: () => 'chat:cancel');
     coordinator.active = true;
     final gen = coordinator.generation;
     final pending = coordinator.readFinalReply('Reply.', generation: gen);
@@ -212,11 +180,7 @@ void main() {
   test('toggling preference off mid-begin prevents the update', () async {
     var enabled = true;
     final speaker = _FakeSpeaker()..beginGate = Completer<void>();
-    final coordinator = ChatReplyReadAloud(
-      speaker: speaker,
-      isEnabled: () => enabled,
-      playbackId: () => 'chat:toggle',
-    );
+    final coordinator = ChatReplyReadAloud(speaker: speaker, isEnabled: () => enabled, playbackId: () => 'chat:toggle');
     coordinator.active = true;
     final gen = coordinator.generation;
     final pending = coordinator.readFinalReply('Reply.', generation: gen);

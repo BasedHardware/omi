@@ -12104,6 +12104,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get peopleStatsIncomplete => '统计可能不完整。';
 
   @override
+  String get previousDay => '前一天';
+
+  @override
+  String get nextDay => '后一天';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date 没有任务';
+  }
+
+  @override
   String get reprocessingConversationProgress => '正在重新处理对话…';
 
   @override

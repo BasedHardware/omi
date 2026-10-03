@@ -12,12 +12,15 @@ always runs on returned conversations so clients get evidence even for summary h
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import unicodedata
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,10 @@ logger = logging.getLogger(__name__)
 # can still extract lexical snippets after a semantic transcript hit.
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 _MAX_SNIPPET_CHARS = 2000
+
+TRANSCRIPT_EMBED_TIMEOUT_SECONDS = 5.0
+TRANSCRIPT_CHUNK_TIMEOUT_SECONDS = 5.0
+TRANSCRIPT_SEARCH_TIMEOUT_SECONDS = 8.0
 
 
 def _normalize_text(value: str) -> str:
@@ -169,7 +176,7 @@ def merge_summary_and_transcript_ids(
     return out
 
 
-def search_transcript_conversation_ids(
+async def search_transcript_conversation_ids(
     uid: str,
     query: str,
     *,
@@ -177,6 +184,7 @@ def search_transcript_conversation_ids(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     search_transcript_chunks: Callable[..., Any],
+    embed_query: Callable[[str], Awaitable[List[float]]],
 ) -> List[str]:
     """Fail-open transcript-chunk → conversation ids (empty when index off / errors)."""
     limit = max(1, min(int(limit or 10), 250))
@@ -184,9 +192,24 @@ def search_transcript_conversation_ids(
         return []
     transcript_ids: List[str] = []
     try:
-        # Over-fetch chunks so multiple hits in one conversation still leave room for others.
-        chunk_limit = min(max(limit * 3, limit), 60)
-        rows_raw: Any = search_transcript_chunks(uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at)
+        async with asyncio.timeout(TRANSCRIPT_SEARCH_TIMEOUT_SECONDS):
+            vector = await asyncio.wait_for(embed_query(query), timeout=TRANSCRIPT_EMBED_TIMEOUT_SECONDS)
+            # Over-fetch chunks so multiple hits in one conversation still leave room for others.
+            chunk_limit = min(max(limit * 3, limit), 60)
+            rows_raw: Any = await asyncio.wait_for(
+                run_blocking(
+                    db_executor,
+                    search_transcript_chunks,
+                    uid,
+                    query,
+                    limit=chunk_limit,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    query_vector=vector,
+                    timeout_seconds=TRANSCRIPT_CHUNK_TIMEOUT_SECONDS,
+                ),
+                timeout=TRANSCRIPT_CHUNK_TIMEOUT_SECONDS,
+            )
         rows: List[Any] = rows_raw if isinstance(rows_raw, list) else []
         for row in rows:
             if not isinstance(row, dict):
@@ -199,6 +222,14 @@ def search_transcript_conversation_ids(
             "conversation search: transcript chunk search failed uid=%s: %s",
             uid,
             sanitize(str(e)),
+        )
+        record_fallback(
+            component='other',
+            from_mode='none',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+            log=logger,
         )
     return merge_summary_and_transcript_ids(transcript_ids, [], limit)
 

@@ -12297,6 +12297,17 @@ class AppLocalizationsHi extends AppLocalizations {
   String get peopleStatsIncomplete => 'गिनती अधूरी हो सकती है।';
 
   @override
+  String get previousDay => 'पिछला दिन';
+
+  @override
+  String get nextDay => 'अगला दिन';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date को कोई कार्य नहीं';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'बातचीत फिर से प्रोसेस हो रही है…';
 
   @override

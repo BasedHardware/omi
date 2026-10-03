@@ -12416,6 +12416,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';
 
   @override
+  String get previousDay => 'Jour précédent';
+
+  @override
+  String get nextDay => 'Jour suivant';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Aucune tâche le $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Retraitement de la conversation…';
 
   @override

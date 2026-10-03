@@ -205,6 +205,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                           if (widget.showMindMap && provider.searchQuery.isEmpty && provider.memories.isNotEmpty)
                             SliverToBoxAdapter(child: MemoryMindMapPreview(loadGraph: widget.loadGraph)),
                           SliverToBoxAdapter(child: _buildHeader(provider, loading: false)),
+                          if (provider.showPartialLoadError)
+                            SliverToBoxAdapter(
+                              child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
+                            ),
                           if (provider.memoryBeliefEnabled &&
                               provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))

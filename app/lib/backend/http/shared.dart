@@ -82,9 +82,7 @@ Future<String> getAuthHeader({
         return 'Bearer $token';
       case AuthTokenMissingToken():
         if (expireTerminalSession) {
-          await service.expireSession(
-            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
-          );
+          await service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken));
         }
         throw AuthTokenUnavailableException(refreshResult);
       case AuthTokenTerminalFailure(:final code):

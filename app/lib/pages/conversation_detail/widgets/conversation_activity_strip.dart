@@ -17,11 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// [pollInterval] (at most [maxPolls] times) so the result replaces the strip without the reader
 /// leaving and coming back.
 class ConversationActivityStrip extends StatefulWidget {
-  const ConversationActivityStrip({
-    super.key,
-    this.pollInterval = const Duration(seconds: 5),
-    this.maxPolls = 36,
-  });
+  const ConversationActivityStrip({super.key, this.pollInterval = const Duration(seconds: 5), this.maxPolls = 36});
 
   final Duration pollInterval;
   final int maxPolls;

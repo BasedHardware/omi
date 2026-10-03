@@ -218,7 +218,10 @@ getTranscriptWidget(
   ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
 }) {
   if (conversationCreating) {
-    return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
+    return const Padding(
+      padding: EdgeInsets.only(top: 80),
+      child: Center(child: OmiSpinner()),
+    );
   }
 
   final bool showPhotos = photos.isNotEmpty;
