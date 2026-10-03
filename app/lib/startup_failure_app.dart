@@ -57,10 +57,10 @@ class StartupFailureApp extends StatelessWidget {
   bool get _isConfiguration => error is StartupConfigurationError;
 
   static Uri _supportUri(AppLocalizations l10n) => Uri(
-    scheme: 'mailto',
-    path: kStartupSupportEmail,
-    query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
-  );
+        scheme: 'mailto',
+        path: kStartupSupportEmail,
+        query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
+      );
 
   static AppLocalizations _strings() {
     try {
@@ -94,7 +94,9 @@ class StartupFailureApp extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        ExcludeSemantics(child: Icon(Icons.error_outline, size: 40, color: OmiColors.textTertiary)),
+                        ExcludeSemantics(
+                          child: Icon(Icons.error_outline, size: 40, color: OmiColors.textTertiary),
+                        ),
                         const SizedBox(height: OmiSpacing.md),
                         Semantics(
                           header: true,
@@ -174,11 +176,8 @@ class _ErrorDetailsState extends State<_ErrorDetails> {
                   Text(widget.label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                   const SizedBox(width: OmiSpacing.xxs),
                   ExcludeSemantics(
-                    child: Icon(
-                      _open ? Icons.expand_less : Icons.expand_more,
-                      size: 18,
-                      color: OmiColors.textSecondary,
-                    ),
+                    child:
+                        Icon(_open ? Icons.expand_less : Icons.expand_more, size: 18, color: OmiColors.textSecondary),
                   ),
                 ],
               ),

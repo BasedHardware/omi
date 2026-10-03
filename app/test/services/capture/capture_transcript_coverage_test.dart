@@ -56,30 +56,26 @@ void main() {
   }
 
   TranscriptSegment segment(String conversationId, int index, (double, double) span) => TranscriptSegment(
-    id: '$conversationId-s$index',
-    text: 'words',
-    speaker: 'SPEAKER_00',
-    isUser: false,
-    personId: null,
-    start: span.$1,
-    end: span.$2,
-    translations: [],
-  );
+        id: '$conversationId-s$index',
+        text: 'words',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: span.$1,
+        end: span.$2,
+        translations: [],
+      );
 
   /// A conversation whose saved transcript has one segment per [spans] entry, in seconds from [startedAt].
-  ServerConversation conversation(
-    String id,
-    DateTime startedAt,
-    List<(double, double)> spans, {
-    DateTime? createdAt,
-    bool hasStart = true,
-  }) => ServerConversation(
-    id: id,
-    createdAt: createdAt ?? startedAt,
-    startedAt: hasStart ? startedAt : null,
-    structured: Structured('fixture', 'fixture'),
-    transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
-  );
+  ServerConversation conversation(String id, DateTime startedAt, List<(double, double)> spans,
+          {DateTime? createdAt, bool hasStart = true}) =>
+      ServerConversation(
+        id: id,
+        createdAt: createdAt ?? startedAt,
+        startedAt: hasStart ? startedAt : null,
+        structured: Structured('fixture', 'fixture'),
+        transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
+      );
 
   /// Streams the pendant for [seconds] while the server sends [spans] as live segments of conversation
   /// [id], each two seconds after it ends, as transcription does. When [anchorEstimates] is given it
@@ -133,7 +129,7 @@ void main() {
     }
     final wals = await world.wal.syncs.phone.getAllWals();
     final state = [
-      for (final wal in wals) '${wal.timerStart}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}',
+      for (final wal in wals) '${wal.timerStart}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}'
     ];
     fail('WALs never reached "$expectation": ${state.join('; ')}');
   }
@@ -171,14 +167,13 @@ void main() {
 
   /// Names of the audio files physically on disk.
   Set<String> audioFilesOnDisk() => {
-    for (final entity in directory.listSync())
-      if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
-  };
+        for (final entity in directory.listSync())
+          if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
+      };
 
   /// WAL statuses persisted in the durable index, by WAL id.
-  Future<Map<String, WalStatus>> persistedStatuses() async => {
-    for (final wal in await WalFileManager.loadWals()) wal.id: wal.status,
-  };
+  Future<Map<String, WalStatus>> persistedStatuses() async =>
+      {for (final wal in await WalFileManager.loadWals()) wal.id: wal.status};
 
   /// Waits until every stamped WAL is judged, then splits them: covered copies
   /// retained-synced vs uncovered copies still miss and marked for repair.
@@ -187,11 +182,9 @@ void main() {
       'every stamped copy judged: covered retained-synced, holes miss and marked',
       (wals) =>
           wals.isNotEmpty &&
-          wals.every(
-            (wal) =>
-                (wal.status == WalStatus.synced && wal.syncedAt > 0 && !wal.keptForTranscriptRecovery) ||
-                (wal.status == WalStatus.miss && wal.keptForTranscriptRecovery),
-          ),
+          wals.every((wal) =>
+              (wal.status == WalStatus.synced && wal.syncedAt > 0 && !wal.keptForTranscriptRecovery) ||
+              (wal.status == WalStatus.miss && wal.keptForTranscriptRecovery)),
     );
     return (
       wals.where((wal) => wal.status == WalStatus.synced).toList(),
@@ -206,17 +199,11 @@ void main() {
     final expectedNames = expected.map((wal) => wal.getFileName()).toList();
     final filesBefore = audioFilesOnDisk();
     await recoveryPass();
-    expect(
-      world.uploads.attempts.expand((attempt) => attempt.fileNames),
-      unorderedEquals(expectedNames),
-      reason: 'recovery uploads exactly the uncovered copies, once each',
-    );
+    expect(world.uploads.attempts.expand((attempt) => attempt.fileNames), unorderedEquals(expectedNames),
+        reason: 'recovery uploads exactly the uncovered copies, once each');
     if (expectedNames.isNotEmpty) {
-      expect(
-        world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(),
-        {convId},
-        reason: 'the recovery upload keeps the conversation linkage of the stamped copies',
-      );
+      expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {convId},
+          reason: 'the recovery upload keeps the conversation linkage of the stamped copies');
     }
     final expectedIds = expected.map((wal) => wal.id).toSet();
     await walsReach(
@@ -228,11 +215,8 @@ void main() {
     final attempts = world.uploads.attempts.length;
     await recoveryPass();
     expect(world.uploads.attempts, hasLength(attempts), reason: 'a second recovery pass finds nothing left to repair');
-    expect(
-      audioFilesOnDisk(),
-      containsAll(filesBefore),
-      reason: 'every copy — covered or repaired — stays on disk in synced retention',
-    );
+    expect(audioFilesOnDisk(), containsAll(filesBefore),
+        reason: 'every copy — covered or repaired — stays on disk in synced retention');
   }
 
   /// Fail-closed expectation: coverage could not be judged, so every stamped copy stays miss and
@@ -298,15 +282,13 @@ void main() {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamWithLiveSegments(link, 202, 'c1', fullSpans, anchorEstimates: anchorEstimates);
-    await serverCloses(
-      conversation(
-        'c1',
-        origin.add(serverSkew),
-        fullSpans,
-        hasStart: hasStart,
-        createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
-      ),
-    );
+    await serverCloses(conversation(
+      'c1',
+      origin.add(serverSkew),
+      fullSpans,
+      hasStart: hasStart,
+      createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
+    ));
     final covered = await walsReach(
       'every stamped copy covered and retained-synced',
       (wals) =>
@@ -338,15 +320,13 @@ void main() {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, seconds);
-    await serverCloses(
-      conversation(
-        'c1',
-        origin.add(serverSkew),
-        spans,
-        hasStart: hasStart,
-        createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
-      ),
-    );
+    await serverCloses(conversation(
+      'c1',
+      origin.add(serverSkew),
+      spans,
+      hasStart: hasStart,
+      createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
+    ));
     final (covered, hole) = await judgedWals();
     return (origin, covered, hole);
   }
@@ -369,29 +349,19 @@ void main() {
     // The fixture delivers each saved segment exactly end+2s after it ends, so every anchor estimate
     // is origin+2 and the median anchor lands there; the utterance pauses then fall inside the 30s
     // pause tolerance and every WAL is covered.
-    expect(
-      anchorEstimates.toSet(),
-      {originSeconds + 2},
-      reason: 'each live segment arrives exactly 2s after it ends, so the median anchor is origin+2',
-    );
+    expect(anchorEstimates.toSet(), {originSeconds + 2},
+        reason: 'each live segment arrives exactly 2s after it ends, so the median anchor is origin+2');
     expect(offsetsOf(covered, origin), [0, 60, 135]);
-    expect(
-      world.uploads.attempts,
-      isEmpty,
-      reason: 'coverage the saved transcript proves suppresses the repair upload entirely',
-    );
+    expect(world.uploads.attempts, isEmpty,
+        reason: 'coverage the saved transcript proves suppresses the repair upload entirely');
     final retainedNames = audioFilesOnDisk();
-    expect(
-      retainedNames,
-      unorderedEquals([for (final wal in covered) wal.getFileName()]),
-      reason: 'every covered copy is retained in synced retention under its own name, not deleted',
-    );
+    expect(retainedNames, unorderedEquals([for (final wal in covered) wal.getFileName()]),
+        reason: 'every covered copy is retained in synced retention under its own name, not deleted');
     await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'even a forced recovery pass finds nothing to repair');
     expect(audioFilesOnDisk(), retainedNames);
-    expect(await persistedStatuses(), {
-      for (final wal in covered) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees every covered copy is synced');
+    expect(await persistedStatuses(), {for (final wal in covered) wal.id: WalStatus.synced},
+        reason: 'the durable index agrees every covered copy is synced');
     await telemetryReaches(() => world.coverageEvents.any((event) => event['phase'] == 'confirmation'));
     final confirmation = world.coverageEvents.lastWhere((event) => event['phase'] == 'confirmation');
     expect(confirmation['retained_covered_count'], covered.length);
@@ -402,29 +372,26 @@ void main() {
   test('pendant: an interior transcript gap keeps only the uncovered copies for repair', () async {
     // The saved transcript loses the utterances between seconds 86 and 131 — a 45-second hole past
     // the pause tolerance — so the WAL covering that hole stays miss-marked and recovers.
-    final (origin, covered, hole) = await judgedReplay(
-      202,
-      fullSpans.where((span) => span.$2 <= 86 || span.$1 >= 131).toList(),
-    );
+    final (origin, covered, hole) =
+        await judgedReplay(202, fullSpans.where((span) => span.$2 <= 86 || span.$1 >= 131).toList());
     expect(offsetsOf(hole, origin), [60], reason: 'only the WAL crossing the 86..131 hole remains miss');
     expect(offsetsOf(covered, origin), [0, 135]);
-    expect(
-      audioFilesOnDisk(),
-      hasLength(covered.length + hole.length),
-      reason: 'covered copies are retained, not deleted; hole copies stay for repair',
-    );
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length),
+        reason: 'covered copies are retained, not deleted; hole copies stay for repair');
     await expectRecoveryUploads('c1', hole);
-    expect(await persistedStatuses(), {
-      for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced
+        },
+        reason: 'the durable index agrees');
   });
 
   test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
     // The saved transcript never mentions the opening; its first anchored utterance lands 36 s in — past the pause tolerance.
     final (origin, covered, hole) = await judgedReplay(202, fullSpans.where((span) => span.$1 >= 34).toList());
-    expect(offsetsOf(hole, origin), [
-      0,
-    ], reason: 'the opening the transcript reaches only after 36s is kept for repair');
+    expect(offsetsOf(hole, origin), [0],
+        reason: 'the opening the transcript reaches only after 36s is kept for repair');
     expect(offsetsOf(covered, origin), [60, 135]);
     await expectRecoveryUploads('c1', hole);
   });
@@ -468,11 +435,9 @@ void main() {
 
     final (covered, hole) = await judgedWals();
     final talkStartSeconds = talkStart.millisecondsSinceEpoch ~/ 1000;
-    expect(
-      hole.every((wal) => wal.timerStart < talkStartSeconds || wal.timerStart + wal.seconds > talkStartSeconds),
-      isTrue,
-      reason: 'the pre-start copies and the boundary-straddling copy fail closed — no silence is inferred',
-    );
+    expect(hole.every((wal) => wal.timerStart < talkStartSeconds || wal.timerStart + wal.seconds > talkStartSeconds),
+        isTrue,
+        reason: 'the pre-start copies and the boundary-straddling copy fail closed — no silence is inferred');
     expect(hole.any((wal) => wal.timerStart < talkStartSeconds), isTrue);
     expect(covered, isNotEmpty, reason: 'the covered talk copy is retained-synced');
     expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
@@ -515,9 +480,8 @@ void main() {
   test('pendant: a conversation with no live arrivals and no start time still covers via the session start', () async {
     // An old row without started_at and no live anchor; the session-start fallback anchors the
     // spans, and their five-second pauses fall inside the tolerance.
-    final (_, covered, hole) = await plainJudgedReplay(140, [
-      for (var t = 1.0; t < 130; t += 20) (t, t + 15),
-    ], hasStart: false);
+    final (_, covered, hole) =
+        await plainJudgedReplay(140, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)], hasStart: false);
     expect(hole, isEmpty);
     expect(covered, isNotEmpty);
     await expectRecoveryUploads('c1', hole);
@@ -550,9 +514,8 @@ void main() {
     final link = await connectPendant();
     await streamPendant(link, 140);
 
-    world.controller.onMessageEventReceived(
-      ConversationProcessingStartedEvent(memory: conversation('c1', origin, [(1, 100)])),
-    );
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', origin, [(1, 100)])));
     await settleFiles();
     await world.elapse(const Duration(seconds: 31));
     await settleFiles();
@@ -584,17 +547,14 @@ void main() {
     world.controller.onMessageEventReceived(ConversationEvent(memory: memory, messages: []));
     await settleFiles();
 
+    expect(phone.testWals.map((wal) => wal.conversationId), everyElement(isNull),
+        reason: 'a stale finalize must not stamp the successor account data');
+    expect(phone.testWals.every((wal) => identical(wal, successorWals.single)), isTrue,
+        reason: 'a stale confirmation must not mutate the successor inventory');
     expect(
-      phone.testWals.map((wal) => wal.conversationId),
-      everyElement(isNull),
-      reason: 'a stale finalize must not stamp the successor account data',
+      world.coverageEvents.any((event) => event['phase'] == 'confirmation' && event['kept_count'] != 0),
+      isFalse,
     );
-    expect(
-      phone.testWals.every((wal) => identical(wal, successorWals.single)),
-      isTrue,
-      reason: 'a stale confirmation must not mutate the successor inventory',
-    );
-    expect(world.coverageEvents.any((event) => event['phase'] == 'confirmation' && event['kept_count'] != 0), isFalse);
   });
 
   test('pendant: retained-covered copies age out under auto-remove', () async {
@@ -626,10 +586,7 @@ void main() {
 
     expect(removed, 0);
     expect(audioFilesOnDisk(), hasLength(covered.length));
-    expect(
-      await WalFileManager.loadWals(),
-      hasLength(covered.length),
-      reason: 'the durable index keeps the retained copies too',
-    );
+    expect(await WalFileManager.loadWals(), hasLength(covered.length),
+        reason: 'the durable index keeps the retained copies too');
   });
 }

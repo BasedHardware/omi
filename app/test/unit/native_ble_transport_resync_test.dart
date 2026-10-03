@@ -67,11 +67,8 @@ void main() {
     BleBridge.instance.onDeviceReady(uuid, []);
     final subscription = transport.getCharacteristicStream(serviceUuid, charUuid).listen((_) {});
     addTearDown(subscription.cancel);
-    expect(
-      host.subscribed,
-      hasLength(1),
-      reason: 'missing cached characteristic still has an observable native result',
-    );
+    expect(host.subscribed, hasLength(1),
+        reason: 'missing cached characteristic still has an observable native result');
     host.subscriptionResult!.completeError(StateError('NOT_FOUND'));
     await pumpEventQueue();
     expect(transport.subscriptionFailures, hasLength(1));
@@ -204,7 +201,7 @@ void main() {
       beeAudioCharacteristicUuid,
       fieldyAudioCharacteristicUuid,
       friendPendantAudioCharacteristicUuid,
-      limitlessRxCharUuid,
+      limitlessRxCharUuid
     ]) {
       test('$platform $audio initial failure reaches capture and retries once', () {
         debugDefaultTargetPlatformOverride = platform;
@@ -217,7 +214,7 @@ void main() {
             final errors = <Object>[];
             transport.audioSubscriptionErrors.listen(errors.add);
             BleBridge.instance.onDeviceReady(uuid, [
-              BleService(uuid: serviceUuid, characteristicUuids: [audio]),
+              BleService(uuid: serviceUuid, characteristicUuids: [audio])
             ]);
             transport.getCharacteristicStream(serviceUuid, audio).listen((_) {});
             first.completeError(StateError('CCCD failed'));
@@ -461,9 +458,8 @@ void main() {
       BleBridge.instance.onDeviceReady(uuid, audioServices);
       async.flushMicrotasks();
 
-      final subscribesBeforeWatch = hostApi.subscribed
-          .where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase()))
-          .length;
+      final subscribesBeforeWatch =
+          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
       expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
 
       async.elapse(const Duration(seconds: 4));

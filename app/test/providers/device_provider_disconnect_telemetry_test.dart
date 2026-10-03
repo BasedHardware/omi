@@ -61,7 +61,10 @@ BtDevice _device(String id) => BtDevice(id: id, name: 'Omi', type: DeviceType.om
 /// constants, satisfying `FirebaseCrashlyticsPlatform.instanceFor`'s assertion.
 class _CrashlyticsCapableFirebaseCore implements TestFirebaseCoreHostApi {
   @override
-  Future<PigeonInitializeResponse> initializeApp(String appName, PigeonFirebaseOptions initializeAppRequest) async {
+  Future<PigeonInitializeResponse> initializeApp(
+    String appName,
+    PigeonFirebaseOptions initializeAppRequest,
+  ) async {
     return PigeonInitializeResponse(
       name: appName,
       options: initializeAppRequest,
@@ -140,11 +143,7 @@ void main() {
       bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
         disconnectHistory: [
           _persistedEvent(
-            timestamp: now - 3600 * 1000,
-            reason: 'clean_disconnect',
-            reasonCode: 0,
-            appState: 'foreground',
-          ),
+              timestamp: now - 3600 * 1000, reason: 'clean_disconnect', reasonCode: 0, appState: 'foreground'),
           _persistedEvent(timestamp: now - 1000, reason: 'gatt_error_25', reasonCode: 25, appState: 'inactive'),
         ],
         reconnectionCount: 3,
@@ -198,7 +197,9 @@ void main() {
     final analytics = _RecordingAdapter();
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
-    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('native channel unavailable'));
+    final provider = DeviceProvider(
+      bleDiagnosticsLoader: (_) async => throw StateError('native channel unavailable'),
+    );
     addTearDown(provider.dispose);
     provider.pairedDevice = _device('AA:AA:AA:AA:AA:11');
 

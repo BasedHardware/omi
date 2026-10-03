@@ -29,13 +29,13 @@ const _transcript = 'lib/pages/conversation_detail/widgets/transcript_tab.dart (
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
 
 Person _person(String id, String name, {String voice = 'learned'}) => Person(
-  id: id,
-  name: name,
-  createdAt: DateTime.utc(2026, 9, 1),
-  updatedAt: DateTime.utc(2026, 9, 1),
-  voiceReadiness: voice == 'learned' ? 'ready' : 'not_learned',
-  voiceLearningState: voice,
-);
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+      voiceReadiness: voice == 'learned' ? 'ready' : 'not_learned',
+      voiceLearningState: voice,
+    );
 
 TranscriptSegment _line(int index, String text, int speaker, {bool isUser = false, String? personId, String? source}) =>
     TranscriptSegment(
@@ -111,16 +111,12 @@ final _earlier = [
   ),
 ];
 
-ServerConversation _unnamedConversation(String id) => auditConversation(
-  id,
-  title: 'Catching up over lunch',
-  segments: [
-    _line(0, 'I have been playing out every weekend since July.', 1),
-    _line(1, 'That is a lot of weekends.', 0, isUser: true, source: 'auto'),
-    _line(2, 'Six gigs since my birthday, and one of them was a festival slot.', 1),
-    _line(3, 'The label manager set most of them up.', 1),
-  ],
-);
+ServerConversation _unnamedConversation(String id) => auditConversation(id, title: 'Catching up over lunch', segments: [
+      _line(0, 'I have been playing out every weekend since July.', 1),
+      _line(1, 'That is a lot of weekends.', 0, isUser: true, source: 'auto'),
+      _line(2, 'Six gigs since my birthday, and one of them was a festival slot.', 1),
+      _line(3, 'The label manager set most of them up.', 1),
+    ]);
 
 /// The detail transcript opens at its last line; the label states start at the first.
 Future<void> _scrollToTop(AuditRun a) async {
@@ -158,17 +154,13 @@ final speakerLabelScenarios = <AuditScenario>[
     page: _transcript,
     state: 'Maya labeled by the user, Jordan and the owner matched by voice, one unnamed speaker',
     run: (a) async {
-      final conversation = auditConversation(
-        'labels',
-        title: 'Catching up over lunch',
-        segments: [
-          _line(0, 'I have been playing out every weekend since July.', 1, personId: 'p-maya', source: 'manual'),
-          _line(1, 'That is a lot of weekends.', 0, isUser: true, source: 'auto'),
-          _line(2, 'The festival is the one I really want to play.', 2, personId: 'p-jordan', source: 'auto'),
-          _line(3, 'The label has been pushing for it all year.', 2, personId: 'p-jordan', source: 'auto'),
-          _line(4, 'Table for three?', 3),
-        ],
-      );
+      final conversation = auditConversation('labels', title: 'Catching up over lunch', segments: [
+        _line(0, 'I have been playing out every weekend since July.', 1, personId: 'p-maya', source: 'manual'),
+        _line(1, 'That is a lot of weekends.', 0, isUser: true, source: 'auto'),
+        _line(2, 'The festival is the one I really want to play.', 2, personId: 'p-jordan', source: 'auto'),
+        _line(3, 'The label has been pushing for it all year.', 2, personId: 'p-jordan', source: 'auto'),
+        _line(4, 'Table for three?', 3),
+      ]);
       await _pumpTranscript(a, conversation);
       await _scrollToTop(a);
       expect(find.byKey(const Key('speaker_label_confirmed')), findsOneWidget);
@@ -200,18 +192,14 @@ final speakerLabelScenarios = <AuditScenario>[
       await _pumpTranscript(a, _unnamedConversation('outcome'), outcome: outcome);
       await _tagFirstSpeakerAsMaya(a);
       expect(find.byKey(const Key('speaker_tag_outcome_voice_pending')), findsOneWidget);
-      await a.shot(
-        'Tag Speaker 1 as Maya Chen: the card says what the tag did while the voice is learned',
-        step: 'learning',
-      );
+      await a.shot('Tag Speaker 1 as Maya Chen: the card says what the tag did while the voice is learned',
+          step: 'learning');
 
       await a.tester.pump(const Duration(seconds: 3));
       await a.settle();
       expect(find.byKey(const Key('speaker_tag_outcome_voice_learned')), findsOneWidget);
-      await a.shot(
-        'A few seconds later: voice learned, and the same voice is in two earlier conversations',
-        step: 'learned',
-      );
+      await a.shot('A few seconds later: voice learned, and the same voice is in two earlier conversations',
+          step: 'learned');
 
       await a.tap(find.byKey(const Key('speaker_tag_outcome_review')));
       await a.shot('Tap Review: one answer per earlier conversation', step: 'review');
@@ -243,17 +231,12 @@ final speakerLabelScenarios = <AuditScenario>[
     state: 'The pendant records; Maya was labeled in the previous conversation of the same recording',
     run: (a) async {
       final people = await a.tester.runAsync(_people);
-      await a.pump(
-        const ConversationCapturingPage(),
-        scaffold: false,
-        providers: [
-          ChangeNotifierProvider<CaptureProvider>.value(value: _CarriedCaptureProvider()),
-          ChangeNotifierProvider<PeopleProvider>.value(value: people!),
-          ChangeNotifierProvider<DeviceProvider>.value(
-            value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant),
-          ),
-        ],
-      );
+      await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
+        ChangeNotifierProvider<CaptureProvider>.value(value: _CarriedCaptureProvider()),
+        ChangeNotifierProvider<PeopleProvider>.value(value: people!),
+        ChangeNotifierProvider<DeviceProvider>.value(
+            value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
+      ]);
       expect(find.byKey(const Key('carried_speaker_banner')), findsOneWidget);
       await a.shot('A new conversation starts on the same recording: Maya is still Maya, with Change');
     },

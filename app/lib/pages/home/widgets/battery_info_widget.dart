@@ -393,15 +393,18 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                   ? Container(
                       width: 18,
                       height: 18,
-                      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: _stopGlyphRadius),
+                      decoration: BoxDecoration(
+                        color: OmiColors.textPrimary,
+                        borderRadius: _stopGlyphRadius,
+                      ),
                     )
                   : isInitialising
-                  ? const OmiSpinner(size: OmiSpinnerSize.small)
-                  : Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                    ),
+                      ? const OmiSpinner(size: OmiSpinnerSize.small)
+                      : Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                        ),
             ),
           ),
         );
@@ -409,42 +412,39 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         return SizedBox(
           width: 62,
           height: 62,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              circle,
-              if (canShowOptions)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Semantics(
-                    button: true,
-                    label: l10n.moreWaysToRecord,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _showRecordOptions(context),
-                      // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
-                      // does not hit-test outside its bounds, and 44pt would cover the circle's
-                      // centre). Screen readers also get the options as the circle's long-press action.
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: OmiColors.surface3,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: OmiColors.surface0, width: 2),
-                          ),
-                          child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
+          child: Stack(clipBehavior: Clip.none, children: [
+            circle,
+            if (canShowOptions)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Semantics(
+                  button: true,
+                  label: l10n.moreWaysToRecord,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showRecordOptions(context),
+                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
+                    // does not hit-test outside its bounds, and 44pt would cover the circle's
+                    // centre). Screen readers also get the options as the circle's long-press action.
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: OmiColors.surface3,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: OmiColors.surface0, width: 2),
                         ),
+                        child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
                       ),
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ]),
         );
       },
     );
@@ -612,9 +612,7 @@ class _BatteryGlyphPainter extends CustomPainter {
     if (fraction <= 0) return;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(inner.left, inner.top, inner.width * fraction, inner.height),
-        const Radius.circular(1),
-      ),
+          Rect.fromLTWH(inner.left, inner.top, inner.width * fraction, inner.height), const Radius.circular(1)),
       Paint()..color = critical ? OmiColors.danger : OmiColors.textPrimary,
     );
   }

@@ -270,8 +270,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final contentChanged =
-        widget.contentVersion != oldWidget.contentVersion ||
+    final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
@@ -748,13 +747,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _isAutoScrolling = true;
       _scrollController
           .animateTo(
-            targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOutCubic,
-          )
+        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      )
           .then((_) {
-            _isAutoScrolling = false;
-          });
+        _isAutoScrolling = false;
+      });
     }
   }
 
@@ -980,8 +979,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final bool isUser = data.isUser;
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn =
-        previous == null ||
+    final startsTurn = previous == null ||
         previous.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
@@ -1055,7 +1053,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             const SizedBox(width: 4),
                             SpeakerLabelBadge(source: data.speakerLabelSource),
                           ],
-                          if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
+                          if (isTagging) ...[
+                            const SizedBox(width: 6),
+                            const OmiSpinner(size: OmiSpinnerSize.small),
+                          ],
                         ],
                       ),
                     ),
@@ -1076,8 +1077,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                    ? 6
-                                    : 18,
+                                        ? 6
+                                        : 18,
                               ),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: const Radius.circular(18),
@@ -1183,8 +1184,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn =
-        previous == null ||
+    final startsTurn = previous == null ||
         previous.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
@@ -1207,8 +1207,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final time = !widget.canDisplaySeconds
         ? null
         : startedAt == null
-        ? OmiDuration.offset(data.start)
-        : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
+            ? OmiDuration.offset(data.start)
+            : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
 
     final who = Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -1240,7 +1240,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         ],
-        if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
+        if (isTagging) ...[
+          const SizedBox(width: 6),
+          const OmiSpinner(size: OmiSpinnerSize.small),
+        ],
       ],
     );
 

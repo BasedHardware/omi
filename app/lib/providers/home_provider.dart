@@ -338,10 +338,8 @@ class HomeProvider extends ChangeNotifier {
   Future setUserPeople() async {
     final response = await getAllPeople();
     if (response != null) {
-      SharedPreferencesUtil().cachedPeople = preserveCachedPeopleStats(
-        response.people,
-        SharedPreferencesUtil().cachedPeople,
-      );
+      SharedPreferencesUtil().cachedPeople =
+          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
     }
     notifyListeners();
   }

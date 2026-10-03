@@ -42,9 +42,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  }) : position = initialPosition,
-       velocity = v.Vector3.zero(),
-       force = v.Vector3.zero();
+  })  : position = initialPosition,
+        velocity = v.Vector3.zero(),
+        force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -675,9 +675,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     if (_error != null) {
       return SafeArea(
-        child: SingleChildScrollView(
-          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
-        ),
+        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
       );
     }
 
@@ -1032,11 +1030,8 @@ class GraphPainter3D extends CustomPainter {
         radius * 1.2,
         [
           (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
-          Color.lerp(
-            OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
-            node.baseColor,
-            0.5,
-          )!.withValues(alpha: p.alpha),
+          Color.lerp(OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white, node.baseColor, 0.5)!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -1050,9 +1045,8 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
-              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
-            ),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
+                .withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),
@@ -1060,12 +1054,8 @@ class GraphPainter3D extends CustomPainter {
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
         if (OmiColors.active == OmiPalette.light) {
-          final labelRect = Rect.fromLTWH(
-            centerOffset.dx - tp.width / 2 - 4,
-            centerOffset.dy + radius,
-            tp.width + 8,
-            tp.height + 6,
-          );
+          final labelRect =
+              Rect.fromLTWH(centerOffset.dx - tp.width / 2 - 4, centerOffset.dy + radius, tp.width + 8, tp.height + 6);
           canvas.drawRRect(
             RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
@@ -1109,11 +1099,8 @@ class MemoryGraphSkeleton extends StatefulWidget {
 }
 
 class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-    value: 1,
-  );
+  late final AnimationController _pulse =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100), value: 1);
   bool _started = false;
 
   @override
