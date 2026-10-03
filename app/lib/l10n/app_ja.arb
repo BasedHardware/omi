@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "最長の途切れ",
     "diagnosticsSincePairingSummary": "ペアリング以降: 切断 {drops} 回、接続の失敗 {failed} 回。",
     "diagnosticsLastDuration": "直近{duration}",
-    "peopleStatsIncomplete": "集計が不完全な場合があります。"
+    "peopleStatsIncomplete": "集計が不完全な場合があります。",
+    "reprocessingConversationProgress": "会話を再処理しています…",
+    "conversationReprocessed": "会話を更新しました",
+    "loadingTranscript": "文字起こしを読み込んでいます…",
+    "transcriptLoadFailed": "文字起こしを読み込めませんでした。",
+    "processingConversationProgress": "会話を処理しています…",
+    "conversationProcessingFailedMessage": "この会話を処理できませんでした。",
+    "waitForReprocessing": "再処理が終わるまでお待ちください。",
+    "unnamedSpeakerLabel": "話者",
+    "unresolvedSpeakersNotice": "話者は録音間で分離されていません。",
+    "unresolvedSpeakersTitle": "話者ラベルについて",
+    "unresolvedSpeakersMessage": "Omiは録音間で他の声を区別できませんでした。話者ラベルをタップして、話している人の名前を付けてください。",
+    "nameSpeakerTitle": "話者に名前を付ける",
+    "playbackPreparingAudio": "音声を準備中…",
+    "playbackBackToCurrent": "現在の位置に戻る",
+    "playbackAudioUnavailable": "音声を利用できません",
+    "playbackAudioLoadFailed": "音声を読み込めませんでした",
+    "playbackAudioNetworkFailed": "接続を確認してください"
 }

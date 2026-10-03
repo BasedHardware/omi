@@ -12331,4 +12331,56 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
+
+  @override
+  String get reprocessingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationReprocessed => 'ಸಂಭಾಷಣೆಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get loadingTranscript => 'ಪ್ರತಿಲೇಖನ ಲೋಡ್ ಆಗುತ್ತಿದೆ…';
+
+  @override
+  String get transcriptLoadFailed => 'ಪ್ರತಿಲೇಖನವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get processingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ಈ ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get waitForReprocessing => 'ಮರುಸಂಸ್ಕರಣೆ ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ.';
+
+  @override
+  String get unnamedSpeakerLabel => 'ವಕ್ತಾ';
+
+  @override
+  String get unresolvedSpeakersNotice => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳ ಉದ್ದಕ್ಕೂ ಸ್ಪೀಕರ್‌ಗಳು ಬೇರ್ಪಡಿಸಲಾಗಿಲ್ಲ.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'ಸ್ಪೀಕರ್ ಲೇಬಲ್‌ಗಳ ಬಗ್ಗೆ';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಲ್ಲಿ ಇತರ ಧ್ವನಿಗಳನ್ನು Omi ಗುರುತಿಸಲಾಗಲಿಲ್ಲ. ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ ಎಂದು ಹೆಸರಿಸಲು ಸ್ಪೀಕರ್ ಲೇಬಲ್ ಒತ್ತಿರಿ.';
+
+  @override
+  String get nameSpeakerTitle => 'ವಕ್ತಾವನ್ನು ಹೆಸರಿಸಿ';
+
+  @override
+  String get playbackPreparingAudio => 'ಆಡಿಯೋ ಸಿದ್ಧಗೊಳ್ಳುತ್ತಿದೆ…';
+
+  @override
+  String get playbackBackToCurrent => 'ಪ್ರಸ್ತುತಕ್ಕೆ ಹಿಂತಿರುಗಿ';
+
+  @override
+  String get playbackAudioUnavailable => 'ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get playbackAudioLoadFailed => 'ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ';
 }

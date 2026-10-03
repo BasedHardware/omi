@@ -10,6 +10,9 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/components/omi_spinner.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -163,7 +166,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Speaker ?'), findsNWidgets(2));
+      expect(find.text('Speaker'), findsNWidgets(2));
+      expect(find.text('Speaker ?'), findsNothing);
       expect(find.text('Speaker 1'), findsNothing);
       expect(find.text('Speaker 2'), findsNothing);
     });
@@ -703,6 +707,368 @@ void main() {
 
       final footer = tester.widget<SizedBox>(find.byKey(const ValueKey('transcript_bottom_spacing')));
       expect(footer.height, 120);
+    });
+  });
+
+  group('Saved detail lines from one voice', () {
+    TranscriptSegment line(
+      String id,
+      int speakerId,
+      String text,
+      double start, {
+      bool isUser = false,
+      String? personId,
+      String? source,
+    }) =>
+        TranscriptSegment(
+          id: id,
+          text: text,
+          speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+          speakerId: speakerId,
+          isUser: isUser,
+          personId: personId,
+          start: start,
+          end: start + 5,
+          translations: const [],
+          speakerLabelSource: source,
+        );
+
+    List<TranscriptSegment> voicesFixture() => [
+          line('a1', 3, 'First thing they said.', 0),
+          line('a2', 3, 'Still the same voice.', 10),
+          line('b1', 4, 'Another voice replies.', 20),
+          line('a3', 3, 'The first voice again.', 30),
+        ];
+
+    Finder speakerNameLabels() => find.byWidgetPredicate(
+          (widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''),
+        );
+
+    Future<void> pumpDetail(
+      WidgetTester tester,
+      List<TranscriptSegment> segments, {
+      bool unresolved = false,
+      List<String> tagging = const [],
+      void Function(TranscriptSegment)? onSegmentTap,
+      void Function(int)? onEditSegmentText,
+      void Function(String, int)? editSegment,
+      void Function(TranscriptSegment)? onConfirmSpeakerLabel,
+      void Function(TranscriptSegment)? onRejectSpeakerLabel,
+    }) =>
+        tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: TranscriptWidget(
+                segments: segments,
+                isConversationDetail: true,
+                unresolvedSpeakers: unresolved,
+                taggingSegmentIds: tagging,
+                onSegmentTap: onSegmentTap,
+                onEditSegmentText: onEditSegmentText,
+                editSegment: editSegment,
+                onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+                onRejectSpeakerLabel: onRejectSpeakerLabel,
+              ),
+            ),
+          ),
+        );
+
+    group('unresolved', () {
+      testWidgets('render a name row once per turn, not once per line', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(speakerNameLabels(), findsNWidgets(3));
+      });
+
+      testWidgets('name rows are the neutral "Speaker", never "Speaker ?" or a number', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Speaker'), findsNWidgets(3));
+        expect(find.text('Speaker ?'), findsNothing);
+        expect(find.text('Speaker 1'), findsNothing);
+      });
+
+      testWidgets('show the time where a turn starts, not on its continuation', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:20'), findsOneWidget);
+        expect(find.text('0:30'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('every line still seeks in order and double-tap edits without seeking', (tester) async {
+        await setupSharedPreferences();
+        final segments = voicesFixture();
+        final played = <TranscriptSegment>[];
+        final edited = <int>[];
+        await pumpDetail(
+          tester,
+          segments,
+          unresolved: true,
+          onSegmentTap: played.add,
+          onEditSegmentText: edited.add,
+        );
+        await tester.pumpAndSettle();
+
+        for (final segment in segments) {
+          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
+          await tester.tap(find.text(segment.text, findRichText: true));
+          await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        }
+        expect(played, segments);
+        expect(played.asMap().entries.every((entry) => identical(entry.value, segments[entry.key])), isTrue);
+
+        final a2 = find.text('Still the same voice.', findRichText: true);
+        await tester.tap(a2);
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(a2);
+        await tester.pumpAndSettle();
+        expect(edited, [1]);
+        expect(played, segments);
+      });
+
+      testWidgets('a continuation keeps selection area and long press does not seek or edit', (tester) async {
+        await setupSharedPreferences();
+        final played = <TranscriptSegment>[];
+        final edited = <int>[];
+        await pumpDetail(
+          tester,
+          voicesFixture(),
+          unresolved: true,
+          onSegmentTap: played.add,
+          onEditSegmentText: edited.add,
+        );
+        await tester.pumpAndSettle();
+
+        final words = find.text('Still the same voice.', findRichText: true);
+        expect(find.ancestor(of: words, matching: find.byType(SelectionArea)), findsOneWidget);
+        await tester.longPress(words);
+        await tester.pump();
+        await tester.pump(kDoubleTapTimeout);
+        expect(played, isEmpty);
+        expect(edited, isEmpty);
+      });
+
+      testWidgets('a continuation line keeps its tagging spinner without name or time', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true, tagging: ['a2']);
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        expect(find.byType(OmiSpinner), findsOneWidget);
+        expect(speakerNameLabels(), findsNWidgets(3));
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('unresolved name rows carry the dotted underline affordance', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        final labels = tester.widgetList<Text>(speakerNameLabels()).toList();
+        expect(labels, hasLength(3));
+        expect(labels.every((label) => label.style?.decoration == TextDecoration.underline), isTrue);
+      });
+
+      testWidgets('tapping a turn-first label opens naming for that segment', (tester) async {
+        await setupSharedPreferences();
+        final tagged = <(String, int)>[];
+        await pumpDetail(
+          tester,
+          voicesFixture(),
+          unresolved: true,
+          editSegment: (id, speakerId) => tagged.add((id, speakerId)),
+        );
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(speakerNameLabels().at(i));
+          await tester.pumpAndSettle();
+        }
+        expect(tagged, [('a1', 3), ('b1', 4), ('a3', 3)]);
+      });
+    });
+
+    group('resolved', () {
+      testWidgets('group consecutive lines of one voice into one name row', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Speaker 1'), findsNWidgets(2));
+        expect(find.text('Speaker 2'), findsOneWidget);
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:20'), findsOneWidget);
+        expect(find.text('0:30'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('consecutive owner lines group into one "You" row', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, [
+          line('u1', 0, 'I start.', 0, isUser: true),
+          line('u2', 0, 'I keep going.', 10, isUser: true),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('You'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('a changed isUser or personId starts a new name row', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+            {
+              'id': 'p2',
+              'name': 'Ben',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        await pumpDetail(tester, [
+          line('own', 0, 'Mine.', 0, isUser: true),
+          line('same-id-other', 0, 'Not me.', 10),
+        ]);
+        await tester.pumpAndSettle();
+        expect(find.text('You'), findsOneWidget);
+        expect(find.text('Speaker 1'), findsOneWidget);
+
+        await pumpDetail(tester, [
+          line('ada', 5, 'Ada speaks.', 0, personId: 'p1', source: 'manual'),
+          line('ben', 5, 'Ben speaks.', 10, personId: 'p2', source: 'manual'),
+        ]);
+        await tester.pumpAndSettle();
+        expect(find.text('Ada'), findsOneWidget);
+        expect(find.text('Ben'), findsOneWidget);
+      });
+
+      testWidgets('a changed label source alone does not start a new name row', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        await pumpDetail(tester, [
+          line('a1', 5, 'First labelled line.', 0, personId: 'p1', source: 'manual'),
+          line('a2', 5, 'Second labelled line.', 10, personId: 'p1', source: 'auto'),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ada'), findsOneWidget);
+      });
+
+      testWidgets('a continuation keeps its likely-speaker confirmation on the first auto line', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        final segments = [
+          line('m1', 5, 'Ada manual line.', 0, personId: 'p1', source: 'manual'),
+          line('a2', 5, 'Ada auto line.', 10, personId: 'p1', source: 'auto'),
+          line('a3', 5, 'Ada auto again.', 20, personId: 'p1', source: 'auto'),
+        ];
+        final confirmed = <TranscriptSegment>[];
+        final rejected = <TranscriptSegment>[];
+        final played = <TranscriptSegment>[];
+        await pumpDetail(
+          tester,
+          segments,
+          onConfirmSpeakerLabel: confirmed.add,
+          onRejectSpeakerLabel: rejected.add,
+          onSegmentTap: played.add,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ada'), findsOneWidget);
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+        expect(find.text('0:20'), findsNothing);
+
+        final confirmBadge = find.byType(SpeakerLikelyConfirm);
+        expect(confirmBadge, findsOneWidget);
+        expect(
+          find.descendant(of: find.byKey(const ValueKey('transcript-segment-a2')), matching: confirmBadge),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const Key('speaker_likely_yes')));
+        await tester.pumpAndSettle();
+        expect(confirmed, hasLength(1));
+        expect(identical(confirmed.single, segments[1]), isTrue);
+
+        await tester.tap(find.byKey(const Key('speaker_likely_not')));
+        await tester.pumpAndSettle();
+        expect(rejected, hasLength(1));
+        expect(identical(rejected.single, segments[1]), isTrue);
+
+        expect(played, isEmpty);
+        for (final segment in segments) {
+          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
+          expect(find.text(segment.text, findRichText: true), findsOneWidget);
+        }
+      });
+
+      testWidgets('consecutive Omi lines do not group', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, [
+          line('o1', omiSpeakerId, 'Omi first.', 0),
+          line('o2', omiSpeakerId, 'Omi second.', 10),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Omi'), findsNWidgets(2));
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:10'), findsOneWidget);
+      });
+    });
+
+    testWidgets('the live bubble transcript still names every line', (tester) async {
+      await setupSharedPreferences();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: TranscriptWidget(
+              segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker 1'), findsNWidgets(2));
     });
   });
 }

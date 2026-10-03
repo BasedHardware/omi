@@ -189,12 +189,14 @@ class TranscriptSegment {
     List<Person>? people,
     String? ownerName,
     List<TranscriptSegment>? numberingSegments,
+    bool unresolved = false,
   }) {
     final names = SpeakerNames.forSegments(
       numberingSegments ?? segments,
       people: people ?? SharedPreferencesUtil().cachedPeople,
       ownerName: ownerName ?? SharedPreferencesUtil().givenName,
       l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+      unresolved: unresolved,
     );
     final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);

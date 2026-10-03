@@ -65,7 +65,7 @@ class SpeakerNames {
   /// "Speaker N" for a diarized [speakerId], with N from [ordinalFor].
   String anonymousName(int speakerId) {
     if (speakerId == omiSpeakerId) return _l10n.omiAppName;
-    if (_unresolved) return _l10n.speakerWithId('?');
+    if (_unresolved) return _l10n.unnamedSpeakerLabel;
     return _l10n.speakerWithId('${ordinalFor(speakerId)}');
   }
 
