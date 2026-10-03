@@ -558,7 +558,12 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
-    logger.info('daily_summary_job_summary complete=%s %s', completed_all, stats.as_log())
+    logger.info(
+        'daily_summary_job_summary complete=%s %s cohort_utc=%s',
+        completed_all,
+        stats.as_log(),
+        cohort_utc.isoformat(),
+    )
     if failures:
         return DailySummaryCronOutcome(
             ok=False,
@@ -598,8 +603,8 @@ async def _query_daily_summary_chunks(selector: Any, timezone_chunks: List[List[
 
 def _reduce_daily_summary_chunks(
     chunk_results: List[Any], target_hour: int
-) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
-    users: List[Tuple[str, List[str], Any]] = []
+) -> Tuple[List[Tuple[str, Optional[List[str]], Any]], Optional[BaseException], bool]:
+    users: List[Tuple[str, Optional[List[str]], Any]] = []
     chunk_errors: List[BaseException] = []
     every_chunk_read = True
     for chunk_index, chunk in enumerate(chunk_results):
@@ -616,7 +621,7 @@ def _reduce_daily_summary_chunks(
 
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
-) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+) -> Tuple[List[Tuple[str, Optional[List[str]], Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
 
     Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
