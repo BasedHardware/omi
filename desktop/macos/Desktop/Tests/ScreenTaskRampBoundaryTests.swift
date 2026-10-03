@@ -112,14 +112,14 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     for _ in 0..<1000 where coordinator.assistant(withIdentifier: spy.spyIdentifier) == nil { await Task.yield() }
     XCTAssertNotNil(coordinator.assistant(withIdentifier: spy.spyIdentifier))
     _ = await coordinator.checkContextSwitch(
-      newApp: "Messages", newWindowTitle: "synthetic chat", bucketsEnabled: false)
+      newApp: "Messages", newWindowTitle: "synthetic chat")
     let captured = CapturedFrame(
       jpegData: Data([42]), appName: "Messages", windowTitle: "synthetic chat",
       frameNumber: 2, taskBinding: binding)
     coordinator.trackFrame(captured)
     // Distribution is suppressed: analyze(frame:) is never called for this capture.
     _ = await coordinator.checkContextSwitch(
-      newApp: "Synthetic editor", newWindowTitle: "document", bucketsEnabled: false)
+      newApp: "Synthetic editor", newWindowTitle: "document")
     let received = await spy.received
     XCTAssertEqual(received?.taskBinding?.authorization, original)
     XCTAssertEqual(received?.jpegData, Data([42]))
