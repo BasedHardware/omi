@@ -85,9 +85,11 @@ class DeviceHealthTelemetry {
         final elapsed = (ts - priorTs) / 3600000;
         final drop = ((previousBattery['level'] as num?) ?? 0) - ((point['level'] as num?) ?? 0);
         // Unknown flags still count as drain, but an explicitly charging
-        // endpoint on either side excludes the interval.
+        // endpoint on either side excludes the interval. The previous day's
+        // last sample still anchors the first interval of the day so a drain
+        // window crossing midnight is counted by this day's rollup.
         final draining = point['charging'] != true && previousBattery['charging'] != true;
-        if (priorTs >= start && priorTs < end && elapsed > 0 && elapsed <= 2 && drop > 0 && draining) {
+        if (elapsed > 0 && elapsed <= 2 && drop > 0 && draining) {
           drainLevels += drop.toInt();
           drainHours += elapsed;
         }

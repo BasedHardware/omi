@@ -115,6 +115,19 @@ void main() {
     }
   });
 
+  test('a drain window crossing midnight is counted once, by the later day', () {
+    final day = DateTime(2026, 9, 28);
+    final start = day.millisecondsSinceEpoch;
+    final battery = [
+      {'ts': start - 5 * 60 * 1000, 'level': 80}, // 23:55 the previous day.
+      {'ts': start + 5 * 60 * 1000, 'level': 78}, // 00:05 this day.
+    ];
+    final laterDay = DeviceHealthTelemetry.rollup({'battery_history_v2': battery}, day);
+    expect(laterDay['drain_percent_per_hour'], closeTo(12, 0.00001));
+    final earlierDay = DeviceHealthTelemetry.rollup({'battery_history_v2': battery}, DateTime(2026, 9, 27));
+    expect(earlierDay['drain_percent_per_hour'], 0);
+  });
+
   test('cliffs require consecutive in-day points and retain the largest pair gap', () {
     final day = DateTime(2026, 9, 27);
     final start = day.millisecondsSinceEpoch;
