@@ -54,6 +54,7 @@ enum DesktopHomeSignedInStartup {
 
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
+    ProactivityFeedConsumer.shared.start()
 
     if let barState = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: barState)

@@ -435,7 +435,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
     notificationID: UUID = UUID(),
-    onInteraction: ((NotificationInteraction) -> Void)? = nil
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil,
+    onDropped: (() -> Void)? = nil
   ) {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -444,6 +446,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      onDropped?()
       return
     }
     prepareOwnerScopedState(for: authorizationSnapshot)
@@ -463,6 +466,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       && UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey)
     {
       log("NotificationService: suppressing duplicate screen capture reset notification")
+      onDropped?()
       return
     }
 
@@ -478,6 +482,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // to bypass this, matching the frequency gate below.
     if respectFrequency && !Self.areNotificationsEnabled() {
       log("NotificationService: suppressing \(assistantId) notification because notifications are disabled")
+      onDropped?()
       return
     }
 
@@ -497,6 +502,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
     {
       log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
+      onDropped?()
       return
     }
 
@@ -515,11 +521,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     {
       log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
+      onDropped?()
       return
     }
 
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       log("NotificationService: owner changed before notification presentation")
+      onDropped?()
       return
     }
 
@@ -567,8 +575,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         screenshotData: screenshotData,
         isPersistent: isPersistent,
         onPresented: recordPresentation,
+        onDropped: onDropped,
         notificationID: notificationID,
-        onInteraction: onInteraction
+        onInteraction: onInteraction,
+        expiresAt: expiresAt
       )
       switch presentation {
       case .presented:
@@ -587,6 +597,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       case .windowUnavailable:
         break
       }
+    }
+
+    // V2 receipts require a mounted card. Native enqueue success is not render evidence.
+    if assistantId == "proactivity_v2" {
+      if !floatingBarMayDeliver && !floatingBarQueued { onDropped?() }
+      return
     }
 
     // Default path: floating-bar card (including temp-show when the bar is disabled).

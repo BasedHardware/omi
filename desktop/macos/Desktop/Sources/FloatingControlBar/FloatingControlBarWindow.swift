@@ -3735,7 +3735,8 @@ class FloatingControlBarManager {
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil,
     notificationID: UUID = UUID(),
-    onInteraction: ((NotificationInteraction) -> Void)? = nil
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -3755,6 +3756,7 @@ class FloatingControlBarManager {
       kind: kind,
       id: notificationID,
       onInteraction: onInteraction,
+      expiresAt: expiresAt,
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
@@ -4490,7 +4492,7 @@ class FloatingControlBarManager {
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
       else { return }
     }
-    notification.onInteraction?(.opened)
+    if notification.kind != .proactivityV2 { notification.onInteraction?(.opened) }
     DesktopUsageDailyReporter.shared.recordProactiveCardActed()
 
     AnalyticsManager.shared.notificationClicked(
@@ -4505,7 +4507,7 @@ class FloatingControlBarManager {
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
     switch notification.action {
     case .openProactivityItem(let target):
-      ProactivityNotificationAdapter.open(target)
+      ProactivityNotificationAdapter.open(target) { notification.onInteraction?(.opened) }
       return
     case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
@@ -4559,13 +4561,22 @@ class FloatingControlBarManager {
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
 
+  func notificationDidRender(_ notification: FloatingBarNotification) {
+    guard window?.isVisible == true, window?.state.currentNotification?.id == notification.id,
+      notification.ownerID == RuntimeOwnerIdentity.currentOwnerId(),
+      notification.expiresAt.map({ $0 > Date() }) ?? true
+    else { return }
+    notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onPresented()
+  }
+
   @discardableResult
   private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
   {
     guard
       let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      notification.ownerID == authorizationSnapshot.ownerID
+      notification.ownerID == authorizationSnapshot.ownerID,
+      notification.expiresAt.map({ $0 > Date() }) ?? true
     else {
       notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
       notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
@@ -4620,8 +4631,7 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
-    let callbacks = notificationPresentationCallbacks.removeValue(forKey: notification.id)
-    callbacks?.onPresented()
+    if notification.kind != .proactivityV2 { notificationDidRender(notification) }
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }

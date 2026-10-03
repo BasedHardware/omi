@@ -1229,7 +1229,9 @@ struct FloatingControlBarView: View {
         // Reserve space so text never runs under the overlaid action buttons.
         // Wider for actionable (task) notifications that also show Execute.
         Color.clear
-          .frame(width: notification.assistantId == "task" ? 96 : 40, height: 20)
+          .frame(
+            width: notification.kind == .proactivityV2 ? 112 : (notification.assistantId == "task" ? 96 : 40),
+            height: 20)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md + 2)
@@ -1237,8 +1239,13 @@ struct FloatingControlBarView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .onAppear { FloatingControlBarManager.shared.notificationDidRender(notification) }
+    .onChange(of: notification.id) { _, _ in FloatingControlBarManager.shared.notificationDidRender(notification) }
     .overlay(alignment: .topTrailing) {
       HStack(spacing: OmiSpacing.xs) {
+        if notification.kind == .proactivityV2 {
+          ProactivityCardFeedback(onInteraction: notification.onInteraction).id(notification.id)
+        }
         // Execute is only meaningful for actionable notifications (tasks).
         // Focus / Insight (tips) / other passive notifications are
         // informational — spawning an agent there made no sense.

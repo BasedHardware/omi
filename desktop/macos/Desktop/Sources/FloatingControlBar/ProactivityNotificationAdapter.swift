@@ -40,10 +40,30 @@ enum ProactivityNotificationAdapter {
       ))
   }
 
-  static func open(_ target: ProactivityNotificationTarget) {
+  static func open(_ target: ProactivityNotificationTarget, onOpened: @escaping () -> Void = {}) {
     switch target {
     case .conversation(let id): MeetingSummaryShareActions.openSummary(conversationID: id)
     case .actionItem(let id): ChatFirstShellNavigation.shared.open(focus: .task(id: id))
+    }
+    let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    Task { @MainActor in
+      for _ in 0..<100 {
+        guard let snapshot, RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) else { return }
+        let opened: Bool
+        switch target {
+        case .conversation(let id): opened = ConversationDetailAutomationState.shared.openConversationId == id
+        case .actionItem(let id):
+          let navigation = ChatFirstShellNavigation.shared
+          opened =
+            navigation.visibleRoute == .tasks && navigation.focusedEntityID == id
+            && navigation.isFocusedEntityAcknowledged
+        }
+        if opened {
+          onOpened()
+          return
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+      }
     }
   }
 
@@ -51,20 +71,26 @@ enum ProactivityNotificationAdapter {
     _ item: OmiAPI.ProactivityFeedItem,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     hasBeenPresented: (_ itemID: String) -> Bool,
+    channel: String = "feed",
+    expiresAt: Date? = nil,
+    onDropped: @escaping () -> Void = {},
     onOutcome: @escaping (_ itemID: String, _ request: OmiAPI.ProactivityOutcomeRequest) -> Void
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       let target = target(for: item), !hasBeenPresented(item.id)
-    else { return }
+    else {
+      onDropped()
+      return
+    }
     var emitted = Set<String>()
     func emit(_ action: String) {
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      guard action != "timeout", RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
         emitted.insert(action).inserted
       else { return }
       onOutcome(
         item.id,
         .init(
-          action: action, channel: "push",
+          action: action, channel: channel,
           eventId: identity(ownerID: authorizationSnapshot.ownerID, itemID: item.id, event: action).uuidString
             .lowercased(),
           surface: "macos"))
@@ -80,6 +106,6 @@ enum ProactivityNotificationAdapter {
       authorizationSnapshot: authorizationSnapshot,
       onPresented: { emit("shown") },
       notificationID: identity(ownerID: authorizationSnapshot.ownerID, itemID: item.id),
-      onInteraction: { emit($0.rawValue) })
+      onInteraction: { emit($0.rawValue) }, expiresAt: expiresAt, onDropped: onDropped)
   }
 }

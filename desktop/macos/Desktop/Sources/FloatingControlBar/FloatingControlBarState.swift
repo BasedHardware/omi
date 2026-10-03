@@ -252,11 +252,14 @@ enum NotificationInteraction: String {
   case opened
   case dismissed
   case timeout
+  case thumbsUp = "thumbs_up"
+  case thumbsDown = "thumbs_down"
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
   let id: UUID
+  let expiresAt: Date?
   let onInteraction: ((NotificationInteraction) -> Void)?
   /// Immutable owner provenance captured before the workflow that produced
   /// this notification crossed an async boundary.
@@ -285,6 +288,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     kind: ProactiveNotificationKind,
     id: UUID = UUID(),
     onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
@@ -293,6 +297,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   ) {
     self.id = id
     self.onInteraction = onInteraction
+    self.expiresAt = expiresAt
     self.ownerID = ownerID
     self.title = title
     self.message = message
