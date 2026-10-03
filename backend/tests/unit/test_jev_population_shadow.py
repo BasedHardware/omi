@@ -458,7 +458,7 @@ def test_redis_client_errors_fail_closed(harness, monkeypatch, failure):
     elif failure == 'close':
         client.__exit__.side_effect = RuntimeError(SENTINEL)
     deadline = time.monotonic() + (2.5 if failure != 'expired' else -1)
-    assert shadow._admit('relevance', 'u', 'c', 'sha', 'version', deadline) == 'redis_unavailable'
+    assert shadow.admit_shadow('relevance', 'u', 'c', 'sha', 'version', deadline) == 'redis_unavailable'
     assert not harness[1]
     if failure == 'expired':
         constructor.assert_not_called()
@@ -603,15 +603,15 @@ def test_fenced_store_write_records_dropped_not_ok(harness, monkeypatch):
 def test_owner_selection_is_order_independent_and_hash_sampled(harness, monkeypatch, percent):
     monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_PERCENT', percent)
     contents = [f'Synthetic candidate {i}' for i in range(30)]
-    identities = [shadow._sha(content) for content in contents]
+    identities = [shadow.shadow_hash(content) for content in contents]
     selected, eligible_count = shadow.select_owner_shadow_indices('conv', identities)
     reversed_contents = list(reversed(contents))
     reordered, _ = shadow.select_owner_shadow_indices('conv', list(reversed(identities)))
     assert {contents[i] for i in selected} == {reversed_contents[i] for i in reordered}
     eligible = sorted(
-        (shadow.uid_bucket(f'conv\0{shadow._sha(content)}', 'owner-shadow-v1'), i)
+        (shadow.uid_bucket(f'conv\0{shadow.shadow_hash(content)}', 'owner-shadow-v1'), i)
         for i, content in enumerate(contents)
-        if shadow._in_cohort('owner', 'conv', shadow._sha(content))
+        if shadow._in_cohort('owner', 'conv', shadow.shadow_hash(content))
     )
     assert selected == [i for _, i in eligible[: shadow.MAX_OWNER_SHADOWS_PER_CONVERSATION]]
     if percent == '100':
@@ -632,7 +632,9 @@ def test_selected_owner_burst_has_capacity_and_position_metadata(harness, monkey
 
     monkeypatch.setattr(shadow, 'submit_with_context', enqueue)
     contents = [f'Synthetic candidate {i}' for i in range(20)]
-    selected, eligible_count = shadow.select_owner_shadow_indices('synthetic-conv', [shadow._sha(c) for c in contents])
+    selected, eligible_count = shadow.select_owner_shadow_indices(
+        'synthetic-conv', [shadow.shadow_hash(c) for c in contents]
+    )
     for i in selected:
         owner(
             candidate_content=contents[i],
@@ -691,7 +693,7 @@ def test_late_commit_after_timeout_is_one_valid_idempotent_measurement(harness, 
     assert (
         record_id
         == hashlib.sha256(
-            f'relevance|synthetic-conv|{shadow._sha(f"User: {SENTINEL}")}|{shadow.relevance_jev.QUESTION_VERSION}'.encode()
+            f'relevance|synthetic-conv|{shadow.shadow_hash(f"User: {SENTINEL}")}|{shadow.relevance_jev.QUESTION_VERSION}'.encode()
         ).hexdigest()[:32]
     )
     # Even a replay with changed scores cannot overwrite the first measurement
@@ -732,11 +734,11 @@ def test_shadow_store_read_before_write_and_replay_preserve_first_payload(monkey
 
 def test_duplicate_owner_candidates_do_not_consume_selection_cap(harness):
     contents = [f'Synthetic {i}' for i in range(20)]
-    identities = [shadow._sha(content) for content in contents]
+    identities = [shadow.shadow_hash(content) for content in contents]
     selected, eligible_count = shadow.select_owner_shadow_indices('conv', identities)
     duplicated = [content for content in contents for _ in range(3)]
     duplicate_selected, duplicate_count = shadow.select_owner_shadow_indices(
-        'conv', [shadow._sha(c) for c in duplicated]
+        'conv', [shadow.shadow_hash(c) for c in duplicated]
     )
     assert eligible_count == duplicate_count == 20
     assert {contents[i] for i in selected} == {duplicated[i] for i in duplicate_selected}
@@ -776,7 +778,7 @@ def test_concurrent_retry_commit_loser_is_deduped_not_failed(harness, monkeypatc
     monkeypatch.setattr(store.firestore, 'transactional', FIRESTORE_TRANSACTIONAL)
     monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
     monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
-    monkeypatch.setattr(shadow, '_admit', lambda *args: 'admitted')
+    monkeypatch.setattr(shadow, 'admit_shadow', lambda *args: 'admitted')
     reads = threading.Barrier(2)
     lock = threading.Lock()
     persisted = {}

@@ -88,7 +88,7 @@ def submit_mentor_shadow(uid: str, state: str, observed: dict[str, Any]) -> None
     """No IO on the mentor thread; overload drops measurement rather than work."""
     acquired = False
     try:
-        from utils.conversations.jev_shadow import _sha
+        from utils.conversations.jev_shadow import shadow_hash
         from utils.executors import get_jev_shadow_executor, submit_with_context
         from utils.metrics import record_jev_shadow_outcome
 
@@ -105,7 +105,7 @@ def submit_mentor_shadow(uid: str, state: str, observed: dict[str, Any]) -> None
             'lane': 'mentor',
             'env_stage': stage if stage in {'dev', 'prod'} else 'other',
             'evaluation_id': evaluation_id,
-            'uid_hash': _sha(uid),
+            'uid_hash': shadow_hash(uid),
             'question_version': QUESTION_VERSION,
             'state_chars': len(state),
         }
@@ -128,7 +128,7 @@ def _run(uid: str, evaluation_id: str, state: str, record: dict[str, Any], deadl
     started = deadline - DEADLINE_SECONDS
     try:
         from database.jev_shadow import write_jev_shadow
-        from utils.conversations.jev_shadow import _admit, _sha
+        from utils.conversations.jev_shadow import admit_shadow, shadow_hash
         from utils.llm.jev_client import ask_jev
         from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 
@@ -137,7 +137,7 @@ def _run(uid: str, evaluation_id: str, state: str, record: dict[str, Any], deadl
         if time.monotonic() >= deadline:
             record_jev_shadow_outcome('mentor', 'timeout')
             return
-        admission = _admit('mentor', uid, evaluation_id, '', QUESTION_VERSION, deadline)
+        admission = admit_shadow('mentor', uid, evaluation_id, '', QUESTION_VERSION, deadline)
         if admission != 'admitted':
             record_jev_shadow_outcome('mentor', admission)
             return
@@ -182,7 +182,7 @@ def _run(uid: str, evaluation_id: str, state: str, record: dict[str, Any], deadl
             shadow_latency_ms=round((time.monotonic() - started) * 1000, 2),
         )
         # Reuse EXP-004's ID convention, deletion fence, first-write-wins and TTL.
-        record_id = _sha(f'mentor|{evaluation_id}||{QUESTION_VERSION}')[:32]
+        record_id = shadow_hash(f'mentor|{evaluation_id}||{QUESTION_VERSION}')[:32]
         persisted = write_jev_shadow(uid, record_id, record, deadline=deadline)
         record_jev_shadow_outcome(
             'mentor', 'deduped' if persisted == 'deduped' else outcome if persisted else 'dropped'

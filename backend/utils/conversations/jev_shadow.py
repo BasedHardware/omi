@@ -56,7 +56,7 @@ return 1
 """
 
 
-def _sha(value: str) -> str:
+def shadow_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
@@ -95,7 +95,7 @@ def _get_shadow_redis(deadline: float) -> Any:
     )
 
 
-def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str, deadline: float) -> str:
+def admit_shadow(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str, deadline: float) -> str:
     try:
         if lane == 'mentor':
             cap = int(os.getenv('MENTOR_JEV_SHADOW_DAILY_CAP', str(MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT)))
@@ -111,7 +111,7 @@ def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version
         return 'cap'
     now = datetime.now(timezone.utc)
     ttl = 86400 - (now.hour * 3600 + now.minute * 60 + now.second) + 60
-    fingerprint = _sha(f'{uid}\0{conversation_id}\0{content_sha}\0{version}')
+    fingerprint = shadow_hash(f'{uid}\0{conversation_id}\0{content_sha}\0{version}')
     try:
         with _get_shadow_redis(deadline) as client:
             result = client.eval(
@@ -175,7 +175,7 @@ def _run(
         if time.monotonic() >= deadline:
             record_jev_shadow_outcome(lane, 'timeout')
             return
-        admission = _admit(lane, uid, conversation_id, content_sha, record['question_version'], deadline)
+        admission = admit_shadow(lane, uid, conversation_id, content_sha, record['question_version'], deadline)
         if admission != 'admitted':
             record_jev_shadow_outcome(lane, admission)
             return
@@ -232,7 +232,7 @@ def _run(
             for option in expected:
                 record[f'p_{option}'] = answers.choice_probability(owner_jev.QUESTION_NAME, option)
             OWNER_JEV_SHADOW_SCORE.observe(record['p_user'])
-        record_id = _sha(f'{lane}|{conversation_id}|{content_sha}|{record["question_version"]}')[:32]
+        record_id = shadow_hash(f'{lane}|{conversation_id}|{content_sha}|{record["question_version"]}')[:32]
         persisted = write_jev_shadow(uid, record_id, record, deadline=deadline)
         if persisted == 'deduped':
             record_jev_shadow_outcome(lane, 'deduped')
@@ -281,7 +281,7 @@ def submit_relevance_shadow(
             'relevance',
             uid,
             conversation_id,
-            _sha(transcript_copy),
+            shadow_hash(transcript_copy),
             relevance_jev.relevance_state(transcript_copy),
             None,
             {
@@ -314,7 +314,7 @@ def owner_shadow_identity(
     pipeline_subject_entity_id: str | None,
 ) -> str:
     """Hash the complete scoring state/questions and original subject metadata; never persist text."""
-    return _sha(
+    return shadow_hash(
         json.dumps(
             [candidate_content, state, user_name, pipeline_subject_kind, pipeline_subject_entity_id], ensure_ascii=False
         )
@@ -375,7 +375,7 @@ def submit_owner_shadow(
             {
                 'lane': 'owner',
                 'conversation_id': conversation_id,
-                'candidate_sha': _sha(candidate_content),
+                'candidate_sha': shadow_hash(candidate_content),
                 'scoring_sha': scoring_sha,
                 'question_version': owner_jev.QUESTION_VERSION,
                 'pipeline_subject_kind': (
