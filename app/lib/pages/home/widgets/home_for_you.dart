@@ -126,7 +126,7 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: OmiSpacing.xs, bottom: OmiSpacing.md),
+            padding: const EdgeInsets.only(bottom: OmiSpacing.md),
             child: Semantics(header: true, child: Text(context.l10n.forYou, style: OmiType.headline)),
           ),
           for (final item in items)

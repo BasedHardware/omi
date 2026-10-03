@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { ProactivityFeedConsumer } from './feedConsumer'
+import { setProactivityWakeupHandler } from '../ipc/omiListen'
 import { getSessionEpoch, onSessionChange } from '../assistants/core/session'
 import { hideProactivityToast } from '../insight/toastWindow'
 import type { ProactivityTarget } from '../../renderer/src/lib/omiApi.generated'
@@ -32,6 +33,7 @@ export function registerProactivityConsumer(mainWindow: () => BrowserWindow | nu
       })
     }
   )
+  setProactivityWakeupHandler((ownerID, payload) => consumer.handleListenEvent(ownerID, payload))
   ipcMain.on('proactivity:target-rendered', (event, target: ProactivityTarget) => {
     if (
       event.sender.id !== mainWindow()?.webContents.id ||

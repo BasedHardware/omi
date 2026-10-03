@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_for_you.dart';
@@ -43,6 +45,37 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('For You and Daily Recaps headers share the Home section inset', (tester) async {
+    final h = OutcomeHarness();
+    addTearDown(h.outbox.dispose);
+    await h.bind();
+    await tester.pumpWidget(MaterialApp(
+      theme: buildOmiTheme(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+          body: SingleChildScrollView(
+              child: HomeDailyRecaps(
+        outbox: h.outbox,
+        load: () async => (
+          items: [
+            DailySummary(
+                id: 'recap',
+                date: '2026-10-03',
+                createdAt: DateTime.utc(2026, 10, 3),
+                headline: 'Synthetic recap',
+                overview: 'Fixture',
+                stats: DayStats(totalConversations: 1, actionItemsCount: 1))
+          ],
+          ok: true
+        ),
+        loadFeed: (_) async => ApiSuccess(feedResponse(items: [feedItem()])),
+      ))),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('For You')).dx, tester.getTopLeft(find.text('Daily Recaps')).dx);
+  });
 
   testWidgets('populated renders neutral card; visible shown only once across refresh', (tester) async {
     final h = OutcomeHarness();

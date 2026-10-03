@@ -97,7 +97,8 @@ Minimal spine extensions:
 
 Both registry rows retain provisional G1 targets, estimates, >=200-delivery kill
 rules and push policy. New indexes and the callback queue must be provisioned by
-the integration owner before enablement. Hermetic verification is not rollout or
+the coordinator before enablement; the complete host/index/TTL/queue/flag checklist
+is in `CONTRACT.md` under Enablement prerequisites. Hermetic verification is not rollout or
 notification-quality acceptance; real benchmark/client acceptance remains gated.
 
 ## Live usefulness aggregate readout

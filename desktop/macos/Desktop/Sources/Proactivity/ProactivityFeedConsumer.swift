@@ -12,6 +12,7 @@ final class ProactivityFeedConsumer {
   private var pendingPresentations = Set<String>()
   private var lastAttempt = Date.distantPast
   private var started = false
+  private var pushRefreshPending = false
   private let journalURL: URL
 
   init(journalURL: URL? = nil) {
@@ -51,13 +52,32 @@ final class ProactivityFeedConsumer {
     authorization = nil
     pendingPresentations.removeAll()
     lastAttempt = .distantPast
+    pushRefreshPending = false
+  }
+
+  static func isListenWakeup(_ payload: [String: Any]) -> Bool {
+    let type = payload["type"] as? String
+    let v2 =
+      type == "proactivity_v2"
+      || (type == "proactive_message" && payload["notification_type"] as? String == "proactivity_v2")
+    guard v2, let itemID = payload["item_id"] as? String, !itemID.isEmpty,
+      let targetID = payload["target_id"] as? String, !targetID.isEmpty,
+      let kind = payload["target_kind"] as? String
+    else { return false }
+    return kind == "conversation" || kind == "action_item"
+  }
+
+  func handleListenEvent(_ payload: [String: Any]) {
+    guard Self.isListenWakeup(payload) else { return }
+    pushRefreshPending = true
+    refresh()
   }
 
   /// Push/listen wakeups fetch the authoritative feed; push copy never bypasses receipts.
   func refresh() {
     guard AccountCutoverControlManager.shared.isProductShellAdmitted,
       let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(), work == nil,
-      Date().timeIntervalSince(lastAttempt) >= 30
+      pushRefreshPending || Date().timeIntervalSince(lastAttempt) >= 30
     else { return }
     if authorization != snapshot {
       if authorization != nil { purgeForOwnerTransition() }
@@ -70,10 +90,14 @@ final class ProactivityFeedConsumer {
       }
     }
     lastAttempt = Date()
+    pushRefreshPending = false
     work = Task { [weak self] in
       guard let self else { return }
       await poll(snapshot)
-      if authorization == snapshot { work = nil }
+      if authorization == snapshot {
+        work = nil
+        if pushRefreshPending { refresh() }
+      }
     }
   }
 

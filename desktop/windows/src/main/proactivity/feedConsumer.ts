@@ -20,6 +20,7 @@ export class ProactivityFeedConsumer {
   private owner: string | null = null
   private busy: number | null = null
   private lastAttempt = 0
+  private pushRefreshPending = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryDelay = 30_000
   private nextOutcomeAttempt = 0
@@ -46,6 +47,26 @@ export class ProactivityFeedConsumer {
       this.retryDelay = 30_000
     }
     this.busy = null
+    this.pushRefreshPending = false
+    void this.refresh()
+  }
+
+  handleListenEvent(ownerID: string, payload: Record<string, unknown>): void {
+    const v2 =
+      payload.type === 'proactivity_v2' ||
+      (payload.type === 'proactive_message' && payload.notification_type === 'proactivity_v2')
+    if (
+      !v2 ||
+      !ownerID ||
+      tokenUid(getBackendSession()?.token ?? '') !== ownerID ||
+      typeof payload.item_id !== 'string' ||
+      !payload.item_id ||
+      typeof payload.target_id !== 'string' ||
+      !payload.target_id ||
+      !['conversation', 'action_item'].includes(String(payload.target_kind))
+    )
+      return
+    this.pushRefreshPending = true
     void this.refresh()
   }
 
@@ -67,12 +88,15 @@ export class ProactivityFeedConsumer {
       if (outcomesOnly) this.scheduleOutboxRetry()
       return
     }
-    if (!outcomesOnly && Date.now() - this.lastAttempt < 30_000) return
+    if (!outcomesOnly && !this.pushRefreshPending && Date.now() - this.lastAttempt < 30_000) return
     const original = getBackendSession()
     const owner = original && tokenUid(original.token)
     if (!owner) return
     this.busy = epoch
-    if (!outcomesOnly) this.lastAttempt = Date.now()
+    if (!outcomesOnly) {
+      this.lastAttempt = Date.now()
+      this.pushRefreshPending = false
+    }
     const current = (): boolean =>
       getSessionEpoch() === epoch && tokenUid(getBackendSession()?.token ?? '') === owner
     try {
@@ -143,7 +167,10 @@ export class ProactivityFeedConsumer {
       console.warn('[proactivity] request deferred for retry')
     } finally {
       if (this.busy === epoch) this.busy = null
-      if (current()) this.scheduleOutboxRetry()
+      if (current()) {
+        this.scheduleOutboxRetry()
+        if (this.pushRefreshPending) void this.refresh()
+      }
     }
   }
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProactivityFeedItem } from '../../renderer/src/lib/omiApi.generated'
 const state = vi.hoisted(() => ({ epoch: 1, notify: vi.fn() }))
@@ -30,6 +32,22 @@ beforeEach(() => {
   state.notify.mockReset().mockReturnValue(true)
 })
 describe('v2 shared-toast adapter', () => {
+  it('renders both producer fixtures and opens their canonical target', async () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(process.cwd(), '../../contracts/parity/proactivity_v2.json'), 'utf8')
+    )
+    for (const producerItem of fixture.producer_items as ProactivityFeedItem[]) {
+      const ctx = context()
+      expect(presentProactivityNotification(producerItem, ctx)).toBe(true)
+      const hooks = state.notify.mock.calls.at(-1)![2].deliveryHooks
+      hooks.onPresented()
+      hooks.onOpened()
+      await Promise.resolve()
+      expect(ctx.openTarget).toHaveBeenCalledWith(producerItem.target)
+      expect(ctx.onOutcome.mock.calls.map((call) => call[1].action)).toEqual(['shown', 'opened'])
+    }
+  })
+
   it('reports actual presentation once and opens the typed target', async () => {
     const ctx = context()
     expect(presentProactivityNotification(item, ctx)).toBe(true)

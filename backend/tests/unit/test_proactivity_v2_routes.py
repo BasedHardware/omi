@@ -75,3 +75,55 @@ def test_timeout_first_id_conflicts_over_real_outcome_route(store, monkeypatch):
         assert not client.post(url, json=body).json()['recorded']
         conflict = client.post(url, json=dict(body, action='opened'))
         assert conflict.status_code == 409 and conflict.json()['detail'] == 'event_conflict'
+
+
+def test_shared_producer_targets_and_push_match_public_wire():
+    import json
+    from pathlib import Path
+    from models.proactivity import ProactivityFeedItem
+
+    fixture = json.loads((Path(__file__).parents[3] / 'contracts/parity/proactivity_v2.json').read_text())
+    items = [ProactivityFeedItem(**item) for item in fixture['producer_items']]
+    assert [(i.producer, i.target.kind) for i in items] == [
+        ('conversation_mentor_v2', 'conversation'),
+        ('commitment_followup', 'action_item'),
+    ]
+    mentor = items[0]
+    assert (
+        routes.proactivity.push_payload(
+            dict(
+                item_id=mentor.id, source_kind=mentor.target.kind, source_id=mentor.target.id, producer=mentor.producer
+            )
+        )
+        == fixture['mentor_push']
+    )
+
+
+@pytest.mark.asyncio
+async def test_push_wakeup_obeys_admission_and_never_counts_exposure(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from utils.notification_dispatch import NotificationDispatchOutcome, NotificationDispatchStatus
+
+    service = routes.proactivity
+    item = dict(uid='u', item_id='item', producer='conversation_mentor_v2', source_kind='conversation', source_id='c')
+    monkeypatch.setattr(service, 'ensure_admitted', AsyncMock())
+    monkeypatch.setattr(service, '_push_preferences', Mock())
+    monkeypatch.setattr(service.ledger, 'claim_push', Mock(return_value=item))
+    validate = Mock()
+    monkeypatch.setattr(service.ledger, 'validate_push', validate)
+    finish = Mock()
+    monkeypatch.setattr(service.ledger, 'finish_push', finish)
+    wakeup = Mock()
+    monkeypatch.setattr(service, '_publish_listen_wakeup', wakeup)
+    dispatch = AsyncMock(return_value=NotificationDispatchOutcome(NotificationDispatchStatus.DISPATCHED, delivered=1))
+    monkeypatch.setattr(service, 'dispatch_notification_async', dispatch)
+    await service.push_item(item=item)
+    wakeup.assert_called_once_with('u', service.push_payload(item))
+    assert dispatch.call_args.args[0].data == service.push_payload(item)
+    finish.assert_called_once_with(uid='u', item_id='item', status='accepted')
+    validate.side_effect = service.ProactivityDenied('disabled')
+    wakeup.reset_mock()
+    dispatch.reset_mock()
+    await service.push_item(item=item)
+    wakeup.assert_not_called()
+    dispatch.assert_not_called()

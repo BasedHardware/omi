@@ -518,6 +518,81 @@ metrics labels cannot. No source content, titles, bodies, source IDs, prompts,
 credentials or freeform exception text in analytics. Telemetry delivery failure
 never refunds spend. Money/outcome truth is Firestore, not analytics arrival.
 
+## Enablement prerequisites
+
+This section is the deployment checklist for the integrated spine, producers and
+clients. The PR provisions no cloud resources, changes no live flags and enables
+no cohort. Keep v2 off until the coordinator verifies all of these prerequisites.
+
+### Customer-data Firestore indexes and retention
+
+Deploy the generated `firestore.indexes.json` to the customer-data project used
+by `get_customer_firestore_client()` on every participating host. Wait for READY;
+file presence or a green query fake is not evidence of a deployed index. The
+registry `backend/database/firestore_index_registry.py` owns these five indexes:
+
+| Registry name | Scope | Ordered fields (A ascending, D descending) |
+| --- | --- | --- |
+| `proactivity_feed_state_created` | collection `proactivity_items` | state A, created_at D, __name__ D |
+| `proactivity_producer_cohort` | collection group `proactivity_items` | producer A, created_at A, acted_count A, charged_micro_usd A, delivered_count A, negative_count A, unknown_count A, __name__ A |
+| `proactivity_followup_source_outcomes` | collection `proactivity_items` | source_id A, producer A, state A, created_at D, __name__ D |
+| `proactivity_mentor_delivered_history` | collection `proactivity_items` | producer A, state A, delivered A, delivered_at D, __name__ D |
+| `proactivity_mentor_recent_outcomes` | collection `proactivity_items` | producer A, state A, created_at D, __name__ D |
+
+Enable Firestore TTL on `expires_at` for collection groups `proactivity_items`
+and `proactivity_budget_days`; both write 90-day retention timestamps. TTL
+policies are separate deployed resources, not implied by the index manifest.
+Do not add TTL to producer controls/preferences or monetary corruption latches;
+keep the existing gateway-attempt retention policy. The 24-hour first-exposure
+limit and 30-day delivered-feed window are enforced in code, independently of TTL.
+
+### One-shot commitment queue and authenticated callback
+
+Provision a Cloud Tasks HTTP queue in `SYNC_TASKS_PROJECT` / `SYNC_TASKS_LOCATION`.
+Set `COMMITMENT_FOLLOWUP_TASKS_QUEUE` to its queue ID,
+`COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` to the exact deployed HTTPS URL ending in
+`/v1/commitment-followup-jobs/run`, and `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` to a
+dedicated OIDC service-account email. The URL is also the token audience; the
+handler checks this exact audience and identity, with no public-auth bypass.
+Grant enqueue permission on the queue and act-as on that service account to each
+enqueuing runtime. Permit the Cloud Tasks service agent to mint its OIDC token,
+and grant the configured invoker access to the target service (Cloud Run Invoker
+when hosted on Cloud Run). Verify task headers, identity and retry delivery against
+the deployed handler before enabling a cohort. Use bounded dispatch/concurrency
+and retry settings; duplicate named tasks and callbacks are idempotent. No cron is
+needed: due dates beyond 30 days use deterministic 28-day hops without model work.
+Initial enqueue failure preserves the canonical task; stale/closed/deleted task
+revisions cannot publish a follow-up. Missing queue bindings keep scheduling off.
+
+### Environment and flags on every host
+
+| Host / role | Required bindings before cohort enablement |
+| --- | --- |
+| Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; `POSTHOG_PROJECT_API_KEY` (or `POSTHOG_API_KEY`) and matching `POSTHOG_HOST`; integrated routes and registry. |
+| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=v2` only on the explicitly selected rollout; working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
+| Task create/update/reminder hosts and commitment callback worker | All five queue/project/location bindings above, plus the same PostHog, customer-data and gateway bindings on the worker. Propagate enqueue bindings to every host that invokes reminder scheduling, not just the callback host. |
+| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **`MENTOR_PIPELINE=v2` for mentor admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
+| Mobile, macOS, Windows | Updated generated clients and consumers, ordinary authenticated backend routing, existing notification preferences/permissions. No local flag or UID bypass grants server admission. Live listen sockets carry identity-only v2 wakeups; all desktop content is fetched through the feed. Offline sockets catch up through foreground/active polling. |
+
+Create the PostHog **`proactivity_v2`** boolean flag in the same project used by
+these server/gateway clients, initially **disabled / zero-percent**. Its registry
+entry is a declaration, not creation or enablement. Absent, unknown or failed flag
+resolution denies v2 generation and push; do not use a user-ID bypass. Verify all
+hosts resolve the same bounded cohort before increasing exposure. No creation or
+flag update is performed by this PR.
+
+The rollout defaults remain off: `proactivity_v2` absent/false,
+`MENTOR_PIPELINE=legacy`, and empty commitment queue bindings. Producer registry
+rows are enabled behind those gates, not globally active switches. Once v2 is
+explicitly enabled, the mentor draft-usefulness judge defaults to **shadow**;
+this is an internal measurement mode, not a rollout flag. Its prefilter is disabled,
+safety escalation suppresses, follow-ups remain feed-only, and mentor push remains
+subject to opt-in, quiet hours, durable ceilings and health. Do not describe every
+internal configuration value as false. Follow-up enablement also requires the
+coordinator's baseline/quality gates and client card-to-target acceptance. Legacy
+mentor push routing remains unchanged; v2 generic pushes retain `/chat/mentor` for
+released clients while v2 feed cards target the source conversation.
+
 ## 10. Migration, compatibility and rollback
 
 1. Coordinator reviews this contract; only then resume spine implementation.
@@ -723,5 +798,5 @@ An optional internal publication `source_guard` checks the follow-up's observed
 open status/due revision inside the existing transaction; it never writes tasks.
 Producer history/outcomes use three declared serving indexes. The existing
 client-local reminder scheduling boundary also enqueues one-shot Cloud Tasks due
-wakes; no polling cron is added. Details, deployment prerequisites and remaining
-coordinator decisions are in `PRODUCERS.md`.
+wakes; no polling cron is added. Producer details and remaining coordinator decisions are in `PRODUCERS.md`;
+the integrated deployment checklist is the Enablement prerequisites section above.

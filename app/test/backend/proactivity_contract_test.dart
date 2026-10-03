@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
+import 'package:omi/services/proactivity/proactivity_push.dart';
 
 void main() {
   final fixture =
@@ -18,6 +19,15 @@ void main() {
     expect(DateTime.parse(feed.items.single.createdAt).toUtc(), DateTime.utc(2026, 10, 3, 12));
     final outcome = GeneratedProactivityOutcomeResponse.fromJson(fixture['outcome'] as Map<String, dynamic>);
     expect(outcome.acted24h, isTrue);
+  });
+
+  test('producer fixtures route mentor to conversation and follow-up to task', () {
+    final items = (fixture['producer_items'] as List)
+        .map((item) => GeneratedProactivityFeedItem.fromJson(item as Map<String, dynamic>))
+        .toList();
+    expect(items.map((item) => proactivityTargetRoute(item.target)),
+        ['/conversation/synthetic-conversation', '/task/synthetic-task']);
+    expect(ProactivityPush.matches(fixture['mentor_push'] as Map<String, dynamic>), isTrue);
   });
 
   test('null required feed fields are rejected', () {

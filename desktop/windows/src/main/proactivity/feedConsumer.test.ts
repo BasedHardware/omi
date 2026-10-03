@@ -54,6 +54,43 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true })
 })
 describe('feed consumer transport and owner boundary', () => {
+  it('refreshes on owner-matched v2 wakeups even inside the foreground debounce', async () => {
+    const consumer = new ProactivityFeedConsumer(file, async () => true)
+    await consumer.refresh()
+    const event = {
+      type: 'proactivity_v2',
+      item_id: 'item',
+      target_kind: 'conversation',
+      target_id: 'c'
+    }
+    consumer.handleListenEvent('b', event)
+    consumer.handleListenEvent('a', { type: 'proactive_message', app_id: 'mentor' })
+    expect(state.feed).toHaveBeenCalledTimes(1)
+    consumer.handleListenEvent('a', event)
+    await vi.runAllTicks()
+    expect(state.feed).toHaveBeenCalledTimes(2)
+  })
+  it('coalesces a v2 wakeup received during a pending feed request', async () => {
+    let finish!: (value: typeof response) => void
+    state.feed.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const consumer = new ProactivityFeedConsumer(file, async () => true)
+    const poll = consumer.refresh()
+    consumer.handleListenEvent('a', {
+      type: 'proactivity_v2',
+      item_id: 'item',
+      target_kind: 'conversation',
+      target_id: 'c'
+    })
+    finish(response)
+    await poll
+    expect(state.feed).toHaveBeenCalledTimes(2)
+  })
+
   it('retries a failed durable outcome and never shows the item again after relaunch', async () => {
     const first = new ProactivityFeedConsumer(file, async () => true)
     await first.refresh()

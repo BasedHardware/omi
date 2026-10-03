@@ -220,6 +220,23 @@ def push_payload(item: dict[str, Any]) -> dict[str, str]:
     return data
 
 
+def _publish_listen_wakeup(uid: str, payload: dict[str, str]) -> None:
+    from database import redis_db
+
+    try:
+        redis_db.r.publish(redis_db.PROACTIVE_MESSAGE_CHANNEL, json.dumps(dict(payload, uid=uid)))
+    except Exception:
+        # Feed polling and FCM remain available; a wakeup is never exposure.
+        record_fallback(
+            component='other',
+            from_mode='proactivity_listen',
+            to_mode='feed_poll',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
+
+
 async def push_item(*, item: dict[str, Any]) -> None:
     uid, producer = item['uid'], item['producer']
     await ensure_admitted(uid, producer)
@@ -229,6 +246,7 @@ async def push_item(*, item: dict[str, Any]) -> None:
         await ensure_admitted(uid, producer)
         await run_blocking(db_executor, _push_preferences, uid)
         await run_blocking(db_executor, ledger.validate_push, uid=uid, item_id=item['item_id'])
+        await run_blocking(db_executor, _publish_listen_wakeup, uid, push_payload(claimed))
         outcome = await dispatch_notification_async(
             NotificationIntent(
                 user_id=uid,
