@@ -12259,4 +12259,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de esta voz';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Preparando audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Volver a lo actual';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio no disponible';
+
+  @override
+  String get playbackAudioLoadFailed => 'No se pudo cargar el audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Comprueba la conexión';
 }

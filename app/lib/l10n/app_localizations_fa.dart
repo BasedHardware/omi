@@ -12222,4 +12222,19 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get playbackPreparingAudio => 'در حال آماده‌سازی صدا…';
+
+  @override
+  String get playbackBackToCurrent => 'بازگشت به مورد فعلی';
+
+  @override
+  String get playbackAudioUnavailable => 'صدا در دسترس نیست';
+
+  @override
+  String get playbackAudioLoadFailed => 'بارگیری صدا ممکن نشد';
+
+  @override
+  String get playbackAudioNetworkFailed => 'اتصال را بررسی کنید';
 }

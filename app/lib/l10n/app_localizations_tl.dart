@@ -12327,4 +12327,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Inihahanda ang Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Bumalik sa Kasalukuyan';
+
+  @override
+  String get playbackAudioUnavailable => 'Hindi Magagamit ang Audio';
+
+  @override
+  String get playbackAudioLoadFailed => 'Hindi Ma-load ang Audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
 }

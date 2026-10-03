@@ -12262,4 +12262,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Audio wordt voorbereid…';
+
+  @override
+  String get playbackBackToCurrent => 'Terug naar huidige';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio niet beschikbaar';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio kon niet worden geladen';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controleer verbinding';
 }

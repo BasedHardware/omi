@@ -12006,4 +12006,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => '正在准备音频…';
+
+  @override
+  String get playbackBackToCurrent => '回到当前位置';
+
+  @override
+  String get playbackAudioUnavailable => '音频不可用';
+
+  @override
+  String get playbackAudioLoadFailed => '无法加载音频';
+
+  @override
+  String get playbackAudioNetworkFailed => '请检查网络连接';
 }

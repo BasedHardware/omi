@@ -12031,4 +12031,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => '오디오 준비 중…';
+
+  @override
+  String get playbackBackToCurrent => '현재 위치로 돌아가기';
+
+  @override
+  String get playbackAudioUnavailable => '오디오를 사용할 수 없음';
+
+  @override
+  String get playbackAudioLoadFailed => '오디오를 불러올 수 없음';
+
+  @override
+  String get playbackAudioNetworkFailed => '연결 확인';
 }

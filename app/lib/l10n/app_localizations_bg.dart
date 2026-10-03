@@ -12268,4 +12268,19 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Подготвяне на аудиото…';
+
+  @override
+  String get playbackBackToCurrent => 'Обратно към текущото';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудиото е недостъпно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Аудиото не можа да се зареди';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверете връзката';
 }

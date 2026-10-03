@@ -12235,4 +12235,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Ses hazırlanıyor…';
+
+  @override
+  String get playbackBackToCurrent => 'Geçerliye Dön';
+
+  @override
+  String get playbackAudioUnavailable => 'Ses Kullanılamıyor';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ses Yüklenemedi';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
 }

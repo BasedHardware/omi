@@ -12232,4 +12232,19 @@ class AppLocalizationsMr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'या आवाजाचे $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'ऑडिओ तयार होत आहे…';
+
+  @override
+  String get playbackBackToCurrent => 'वर्तमानावर परत जा';
+
+  @override
+  String get playbackAudioUnavailable => 'ऑडिओ उपलब्ध नाही';
+
+  @override
+  String get playbackAudioLoadFailed => 'ऑडिओ लोड होऊ शकला नाही';
+
+  @override
+  String get playbackAudioNetworkFailed => 'कनेक्शन तपासा';
 }

@@ -12269,4 +12269,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Hang előkészítése…';
+
+  @override
+  String get playbackBackToCurrent => 'Vissza az aktuálishoz';
+
+  @override
+  String get playbackAudioUnavailable => 'A hang nem érhető el';
+
+  @override
+  String get playbackAudioLoadFailed => 'A hang nem tölthető be';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
 }

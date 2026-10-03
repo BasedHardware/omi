@@ -12221,4 +12221,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Heli ettevalmistamine…';
+
+  @override
+  String get playbackBackToCurrent => 'Tagasi praeguse juurde';
+
+  @override
+  String get playbackAudioUnavailable => 'Heli pole saadaval';
+
+  @override
+  String get playbackAudioLoadFailed => 'Heli ei õnnestunud laadida';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
 }

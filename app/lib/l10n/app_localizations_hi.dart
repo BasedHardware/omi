@@ -12205,4 +12205,19 @@ class AppLocalizationsHi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'ऑडियो तैयार हो रहा है…';
+
+  @override
+  String get playbackBackToCurrent => 'वर्तमान पर वापस जाएँ';
+
+  @override
+  String get playbackAudioUnavailable => 'ऑडियो उपलब्ध नहीं है';
+
+  @override
+  String get playbackAudioLoadFailed => 'ऑडियो लोड नहीं हो सका';
+
+  @override
+  String get playbackAudioNetworkFailed => 'कनेक्शन जाँचें';
 }

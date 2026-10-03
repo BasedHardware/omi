@@ -12261,4 +12261,19 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'ಆಡಿಯೋ ಸಿದ್ಧಗೊಳ್ಳುತ್ತಿದೆ…';
+
+  @override
+  String get playbackBackToCurrent => 'ಪ್ರಸ್ತುತಕ್ಕೆ ಹಿಂತಿರುಗಿ';
+
+  @override
+  String get playbackAudioUnavailable => 'ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get playbackAudioLoadFailed => 'ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ';
 }

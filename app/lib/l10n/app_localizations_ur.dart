@@ -12234,4 +12234,19 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'آڈیو تیار ہو رہا ہے…';
+
+  @override
+  String get playbackBackToCurrent => 'موجودہ پر واپس جائیں';
+
+  @override
+  String get playbackAudioUnavailable => 'آڈیو دستیاب نہیں';
+
+  @override
+  String get playbackAudioLoadFailed => 'آڈیو لوڈ نہیں ہو سکا';
+
+  @override
+  String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
 }

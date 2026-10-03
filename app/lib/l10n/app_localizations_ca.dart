@@ -12292,4 +12292,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get playbackPreparingAudio => 'S\'està preparant l\'àudio…';
+
+  @override
+  String get playbackBackToCurrent => 'Torna a l\'actual';
+
+  @override
+  String get playbackAudioUnavailable => 'Àudio no disponible';
+
+  @override
+  String get playbackAudioLoadFailed => 'No s\'ha pogut carregar l\'àudio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Comprova la connexió';
 }

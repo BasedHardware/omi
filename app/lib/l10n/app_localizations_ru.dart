@@ -12263,4 +12263,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Подготовка аудио…';
+
+  @override
+  String get playbackBackToCurrent => 'К текущему';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудио недоступно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не удалось загрузить аудио';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверьте соединение';
 }

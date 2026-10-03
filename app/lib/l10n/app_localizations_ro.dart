@@ -12277,4 +12277,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Se pregătește audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Înapoi la curent';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio indisponibil';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio nu a putut fi încărcat';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verificați conexiunea';
 }

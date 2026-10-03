@@ -12256,4 +12256,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Menyediakan Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Kembali ke Semasa';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Tidak Tersedia';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio Tidak Dapat Dimuatkan';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Semak Sambungan';
 }

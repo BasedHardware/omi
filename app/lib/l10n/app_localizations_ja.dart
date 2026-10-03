@@ -12027,4 +12027,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get playbackPreparingAudio => '音声を準備中…';
+
+  @override
+  String get playbackBackToCurrent => '現在の位置に戻る';
+
+  @override
+  String get playbackAudioUnavailable => '音声を利用できません';
+
+  @override
+  String get playbackAudioLoadFailed => '音声を読み込めませんでした';
+
+  @override
+  String get playbackAudioNetworkFailed => '接続を確認してください';
 }

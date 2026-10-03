@@ -12248,4 +12248,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Підготовка аудіо…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад до поточного';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудіо недоступне';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не вдалося завантажити аудіо';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
 }

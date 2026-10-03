@@ -12216,4 +12216,19 @@ class AppLocalizationsSk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
+
+  @override
+  String get playbackPreparingAudio => 'Pripravuje sa zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Späť na aktuálne';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nie je k dispozícii';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk sa nepodarilo načítať';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
 }

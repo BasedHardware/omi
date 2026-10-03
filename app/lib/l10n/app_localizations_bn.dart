@@ -12222,4 +12222,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get playbackPreparingAudio => 'অডিও প্রস্তুত হচ্ছে…';
+
+  @override
+  String get playbackBackToCurrent => 'বর্তমানে ফিরে যান';
+
+  @override
+  String get playbackAudioUnavailable => 'অডিও উপলব্ধ নয়';
+
+  @override
+  String get playbackAudioLoadFailed => 'অডিও লোড করা যায়নি';
+
+  @override
+  String get playbackAudioNetworkFailed => 'সংযোগ পরীক্ষা করুন';
 }
