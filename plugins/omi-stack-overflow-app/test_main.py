@@ -409,7 +409,7 @@ class ToolEndpointsTests(unittest.TestCase):
         loop = asyncio.new_event_loop()
         try:
             resp = loop.run_until_complete(main.get_question({"question_id": 123}))
-            self.assertIn("Rate limit exceeded", resp.error)
+            self.assertEqual(resp.error, "Stack Exchange question request failed.")
         finally:
             loop.close()
 
