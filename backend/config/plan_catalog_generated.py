@@ -25,8 +25,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'dfb358c0edaffd0279229da3f31fb49ba35fea66c9ecc98141e579eee008ab20'
-CATALOG_REVISION: Final = 3
+CATALOG_SHA256: Final = '514305d8cefd586a40e12f46b90f62dd3615d71fd33e29ca4b5fc9d2cd22ca26'
+CATALOG_REVISION: Final = 4
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 3,
+  "catalog_revision": 4,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",

@@ -88,7 +88,7 @@ def test_concurrent_instances_cannot_exceed_shared_daily_cap():
     client.close()
 
 
-def test_feed_pagination_and_source_purge():
+def test_feed_pagination_and_source_purge(monkeypatch):
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
         pytest.fail('A loopback FIRESTORE_EMULATOR_HOST is required')
@@ -128,7 +128,11 @@ def test_feed_pagination_and_source_purge():
     second, _, _ = ledger.list_feed(uid=uid, limit=2, cursor=cursor, firestore_client=client, now=now)
     assert more and len(first) == 2 and len(second) == 1
     assert len({item['item_id'] for item in first + second}) == 3
-    source.delete()
+    from database import action_items
+
+    monkeypatch.setattr(action_items, 'db', client)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: None)
+    assert action_items.delete_action_item(uid, 'synthetic')
     assert ledger.list_feed(uid=uid, firestore_client=client, now=now)[0] == []
     ledger.purge_source_items(uid=uid, source_kind='action_item', source_id='synthetic', firestore_client=client)
     for item in items:

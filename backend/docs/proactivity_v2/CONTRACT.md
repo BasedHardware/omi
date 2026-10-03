@@ -553,7 +553,7 @@ Phase 1 changes **only this file**. Phase 2 spine additions:
 - `backend/tests/unit/test_proactivity_v2_metrics.py`
 - `backend/tests/integration/test_proactivity_v2_budget_emulator.py` — real contention and source purge proof
 - `contracts/parity/proactivity_v2.json`
-- `app/lib/backend/http/proactivity.dart` — transport adapter only, no card
+- `app/lib/backend/http/api/notifications.dart` — transport adapter added to existing notification API module, no card
 - `app/lib/backend/schema/gen/proactivity_wire.g.dart` — generated
 - `app/test/backend/proactivity_contract_test.dart`
 - `desktop/macos/Desktop/Tests/ProactivityWireTests.swift`
@@ -666,3 +666,9 @@ Canonical deletion hooks call `purge_source_items` after deleting the source, wi
 Server completion of a feed-only follow-up requires an existing confirmed exposure; an independently completed task cannot manufacture exposure or value credit. The canonical API may retry its deterministic server event after confirmation.
 
 Validation-driven file addition: `backend/scripts/support/find_stripe_entitlement_mismatches.py` defers the Firestore import until its executable entrypoint, so reading catalog-derived constants does not load the cloud SDK inside a fast unit test. The support scanner behavior is unchanged and is not invoked against any account data.
+
+Gate-driven placement adjustment: the Flutter transport lives in the existing reachable notification API module, avoiding a new unreachable module before the producer/UI lanes integrate. Wire shape and API class are unchanged. Existing Firestore registry and canonical deletion modules receive narrow additions; line-count declarations explain reuse instead of introducing parallel registries or an unrelated split.
+
+The existing `backend/tests/unit/test_delete_conversation_cascade.py` fake now recognizes the empty proactive-item cleanup query. Actual matching-item cleanup is tested through the canonical action-item delete API against the emulator.
+
+`app/changelog/unreleased/20261003-proactivity-v2-spine.json` records this internal-only transport change; this build adds no client card or enabled user-facing flow.

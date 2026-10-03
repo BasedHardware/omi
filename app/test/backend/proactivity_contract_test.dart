@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/http/proactivity.dart';
+import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
 
 void main() {
