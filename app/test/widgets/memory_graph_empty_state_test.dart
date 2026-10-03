@@ -40,6 +40,12 @@ void main() {
       expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('en'))), 'You');
     });
 
+    test('only backend labels and the given name identify the user node', () {
+      expect(memoryGraphKnownUserLabels(''), {'me', 'the user'});
+      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'ana'});
+      expect(memoryGraphKnownUserLabels('').contains('tú'), isFalse);
+    });
+
     test('uses the given name when one is set', () {
       expect(memoryGraphUserLabel(' Ana ', lookupAppLocalizations(const Locale('es'))), 'Ana');
     });

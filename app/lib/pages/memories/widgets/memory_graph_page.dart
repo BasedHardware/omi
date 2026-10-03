@@ -229,6 +229,15 @@ String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
   return name.isNotEmpty ? name : l10n.you;
 }
 
+/// Lowercased graph labels that identify the user's own node: the backend's English labels
+/// plus the given name. The localized display fallback is not one of them, so a concept
+/// node that happens to read "tú" or "you" stays a concept.
+@visibleForTesting
+Set<String> memoryGraphKnownUserLabels(String givenName) {
+  final name = givenName.trim().toLowerCase();
+  return {'me', 'the user', if (name.isNotEmpty) name};
+}
+
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
@@ -401,8 +410,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final nodes = data['nodes'] as List<dynamic>? ?? [];
     final edges = data['edges'] as List<dynamic>? ?? [];
 
-    final userLabel = memoryGraphUserLabel(SharedPreferencesUtil().givenName, context.l10n);
-    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
+    final givenName = SharedPreferencesUtil().givenName;
+    final userLabel = memoryGraphUserLabel(givenName, context.l10n);
+    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
       final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
