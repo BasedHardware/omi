@@ -1,7 +1,10 @@
 from typing import Any, Optional, cast
 from urllib.parse import urlparse
+import logging
 
 from database._client import get_firestore_client
+
+logger = logging.getLogger(__name__)
 
 # Keep the default live until the stable-promotion workflow has published the
 # static repair page. Operators can point an active recovery policy at that
@@ -9,6 +12,7 @@ from database._client import get_firestore_client
 # clients to a not-yet-published route.
 DEFAULT_DESKTOP_DOWNLOAD_URL = "https://api.omi.me/v2/desktop/download/latest?channel=stable"
 VALID_DESKTOP_UPDATE_SEVERITIES = {"none", "banner", "required"}
+VALID_PLATFORMS = {"macos", "windows", "linux"}
 
 
 def _as_int(value: Any) -> Optional[int]:
@@ -18,8 +22,8 @@ def _as_int(value: Any) -> Optional[int]:
         return value
     if isinstance(value, str):
         try:
-            return int(value)
-        except ValueError:
+            return int(value.strip())
+        except (ValueError, AttributeError):
             return None
     return None
 
@@ -48,8 +52,11 @@ def _as_download_url(value: Any) -> Optional[str]:
     candidate = _as_string(value)
     if candidate is None:
         return None
-    parsed = urlparse(candidate)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+    try:
+        parsed = urlparse(candidate)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            return None
+    except Exception:
         return None
     return candidate
 
@@ -66,10 +73,14 @@ def default_desktop_update_policy() -> dict[str, Any]:
         "cta_text": "Download latest",
         "download_url": DEFAULT_DESKTOP_DOWNLOAD_URL,
         "can_dismiss": True,
+        "platforms": [],
     }
 
 
-def _normalize_policy(data: dict[str, Any]) -> dict[str, Any]:
+def _normalize_policy(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        return default_desktop_update_policy()
+
     policy = default_desktop_update_policy()
 
     severity = _as_string(data.get("severity")) or "none"
@@ -97,25 +108,32 @@ def _normalize_policy(data: dict[str, Any]) -> dict[str, Any]:
     return policy
 
 
-def _applies_to_platform(policy: dict[str, Any], platform: str) -> bool:
+def _applies_to_platform(policy: dict[str, Any], platform: Any) -> bool:
+    if not isinstance(platform, str):
+        return False
+    normalized_platform = platform.strip().lower()
     raw_platforms = policy.get("platforms")
     platforms: list[object] = cast(list[object], raw_platforms) if isinstance(raw_platforms, list) else []
     if not platforms:
         return True
-    return platform in [p for p in platforms if isinstance(p, str)]
+    return normalized_platform in [p.lower() for p in platforms if isinstance(p, str)]
 
 
 def get_desktop_update_policy(
     current_build: Optional[int], platform: str = "macos", *, firestore_client: Any = None
 ) -> dict[str, Any]:
-    client: Any = firestore_client if firestore_client is not None else get_firestore_client()
-    doc = client.collection("desktop_update_policy").document("current").get()
-    if not getattr(doc, "exists", False):
+    try:
+        client: Any = firestore_client if firestore_client is not None else get_firestore_client()
+        doc = client.collection("desktop_update_policy").document("current").get()
+        if not getattr(doc, "exists", False):
+            return default_desktop_update_policy()
+
+        raw_doc: object = doc.to_dict()
+        policy = _normalize_policy(raw_doc)
+    except Exception as e:
+        logger.warning(f"Error fetching desktop update policy, falling back to default: {e}")
         return default_desktop_update_policy()
 
-    raw_doc: object = doc.to_dict()
-    raw: dict[str, Any] = cast(dict[str, Any], raw_doc) if isinstance(raw_doc, dict) else {}
-    policy = _normalize_policy(raw)
     if not _applies_to_platform(policy, platform):
         return default_desktop_update_policy()
 
