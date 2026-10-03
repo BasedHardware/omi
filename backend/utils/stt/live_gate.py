@@ -197,7 +197,7 @@ def transition(
         else:
             uid, count, failures = users[index]
             if count >= 3:
-                return state
+                return _promote_trial(state, now)
             users[index] = (uid, count + 1, failures + int(failed))
         state = replace(state, trial_users=tuple(users))
     if witness is not None and witness not in state.witnesses and len(state.witnesses) < 4:
@@ -221,9 +221,6 @@ def transition(
         for old, increments in zip(state.evidence, _increments(gate))
     )
     n, failures = state.n + 1, state.failures + int(failed)
-    breadth = {5: 10, 25: 20}.get(state.stage)
-    dwell = {5: 300.0, 25: 600.0}.get(state.stage, 0.0)
-    trial_ready = breadth is None or (len(state.trial_users) >= breadth and now - state.trial_started_at >= dwell)
     user_rate = (
         sum(failures * 2 > count for _, count, failures in state.trial_users) / len(state.trial_users)
         if state.trial_users
@@ -251,14 +248,10 @@ def transition(
             strikes=strikes,
             generation=state.generation + 1,
         )
-    if required and n >= required and user_rate <= gate and trial_ready:
-        return GateState(
-            threshold=gate,
-            stage=25 if state.stage == 5 else 100,
-            strikes=state.strikes,
-            generation=state.generation + 1,
-            trial_started_at=now,
-        )
+    if required:
+        promoted = _promote_trial(replace(state, n=n, failures=failures, evidence=evidence), now)
+        if promoted.stage != state.stage:
+            return promoted
     if required and n >= 4 * required:
         # A new bounded user-vote window, with the same share and strike history.
         return replace(
@@ -279,6 +272,30 @@ def transition(
         evidence=evidence,
         strikes=0 if n >= 1024 and failures / n <= gate else state.strikes,
     )
+
+
+def _promote_trial(state: GateState, now: float) -> GateState:
+    """Promote a trial stage purely from already-admitted evidence and dwell."""
+    required = {5: 30, 25: 60}.get(state.stage)
+    if required is None or not state.trial_users:
+        return state
+    breadth = {5: 10, 25: 20}[state.stage]
+    dwell = {5: 300.0, 25: 600.0}[state.stage]
+    user_rate = sum(failures * 2 > count for _, count, failures in state.trial_users) / len(state.trial_users)
+    if (
+        state.n >= required
+        and len(state.trial_users) >= breadth
+        and now - state.trial_started_at >= dwell
+        and user_rate <= gate_rate()
+    ):
+        return GateState(
+            threshold=state.threshold,
+            stage=25 if state.stage == 5 else 100,
+            strikes=state.strikes,
+            generation=state.generation + 1,
+            trial_started_at=now,
+        )
+    return state
 
 
 def begin_trial(state: GateState, now: float) -> GateState:

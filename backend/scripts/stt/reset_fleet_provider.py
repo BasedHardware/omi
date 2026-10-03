@@ -27,6 +27,13 @@ def main() -> int:
     parser.add_argument('provider', choices=PROVIDERS)
     parser.add_argument('--execute', action='store_true', help='delete only the named provider state after review')
     args = parser.parse_args()
+    if live_stt_state.stage() == 'unknown':
+        parser.error('OMI_ENV_STAGE must be one of local, offline, dev, prod')
+    if args.provider == 'parakeet':
+        if not live_stt_state.family_endpoint('parakeet'):
+            parser.error('HOSTED_PARAKEET_API_URL is required for parakeet')
+    elif not live_stt_state.family_credential(args.provider):
+        parser.error(f'credential env is required for {args.provider}')
     if not os.getenv('REDIS_DB_HOST'):
         parser.error('REDIS_DB_HOST is required')
     client = redis.Redis(
@@ -41,6 +48,8 @@ def main() -> int:
     keys: list[bytes | str] = [
         live_stt_state.fleet_state_key(args.provider),
         live_stt_state.fleet_probe_key(args.provider),
+        live_stt_state.fleet_state_key(args.provider, account=True),
+        live_stt_state.fleet_probe_key(args.provider, account=True),
     ]
     # The score prefix is provider-anchored; collect before deleting so an
     # unexpected cardinality cannot cause a partial reset.

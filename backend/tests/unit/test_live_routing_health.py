@@ -142,6 +142,7 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
         def __init__(self):
             self.active = 0
             self.maximum = 0
+            self.eval_started = asyncio.Event()
 
         def pipeline(self, *, transaction):
             assert transaction is False
@@ -164,6 +165,10 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
         async def set(self, *_args, **_kwargs):
             await asyncio.sleep(1)
 
+        async def eval(self, *_args, **_kwargs):
+            self.eval_started.set()
+            await asyncio.Event().wait()
+
     redis = BlackholeRedis()
     health = live_health.FleetHealth(redis_client=redis)
     for _ in range(1000):
@@ -182,6 +187,7 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
     while any(health._writes_in_flight.values()) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.01)
     assert health._writes_in_flight == {'result': 0, 'bench': 0}
+    assert redis.eval_started.is_set()
     assert ('soniox', 'account') in health._pending_benches  # Redis timed out; deadline is retained.
     assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1000
 
@@ -195,7 +201,8 @@ async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
         def __init__(self):
             self.writes = []
 
-        async def eval(self, _script, _numkeys, key, kind, until):
+        async def eval(self, _script, _numkeys, selection_key, account_key, kind, until):
+            key = account_key if kind == 'account' else selection_key
             value = f'{kind}:{until}'
             self.writes.append((key, value))
             if len(self.writes) <= live_health.WRITE_IN_FLIGHT_LIMITS['bench']:
@@ -231,7 +238,7 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
         def __init__(self):
             self.writes = 0
 
-        async def eval(self, _script, _numkeys, key, kind, until):
+        async def eval(self, _script, _numkeys, _selection_key, _account_key, kind, until):
             self.writes += 1
             if self.writes == 1:
                 raise ConnectionError('Redis unavailable')

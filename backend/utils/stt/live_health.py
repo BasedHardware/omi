@@ -37,32 +37,30 @@ LOCAL_KEYS_CAP = 256
 WRITE_IN_FLIGHT_LIMITS = {'result': 8, 'bench': 4}
 
 BENCH_UPDATE = """
-local raw = redis.call('GET', KEYS[1])
+local endpoint = redis.call('GET', KEYS[1]) or ''
+local account = redis.call('GET', KEYS[2]) or ''
 local t = redis.call('TIME')
 local now = t[1] + t[2] / 1000000
+local function deadline(raw, kind)
+  local sep = raw:find(':', 1, true)
+  if not sep or raw:sub(1, sep - 1) ~= kind then return 0 end
+  return tonumber(raw:sub(sep + 1)) or 0
+end
+local account_until = deadline(account, 'account')
 local incoming = tonumber(ARGV[2])
-if raw == false then raw = '' end
 if incoming == nil or incoming <= now then
-  return {raw, '0'}
+  return {account_until > now and account or endpoint, '0'}
 end
-local kind, deadline = '', 0
-local sep = raw:find(':', 1, true)
-if sep then
-  kind = raw:sub(1, sep - 1)
-  deadline = tonumber(raw:sub(sep + 1)) or 0
+if ARGV[1] == 'selection' and account_until > now then
+  return {account, '0'}
 end
-if kind == 'account' and deadline > now and ARGV[1] ~= 'account' then
-  return {raw, '0'}
-end
-local retained = incoming
-if kind == ARGV[1] then
-  retained = math.max(deadline, incoming)
-  if deadline >= incoming then
-    return {raw, '0'}
-  end
-end
+local key = ARGV[1] == 'account' and KEYS[2] or KEYS[1]
+local raw = ARGV[1] == 'account' and account or endpoint
+local until_at = deadline(raw, ARGV[1])
+if until_at >= incoming then return {raw, '0'} end
+local retained = math.max(until_at, incoming)
 local value = ARGV[1] .. ':' .. string.format('%.3f', retained)
-redis.call('SET', KEYS[1], value, 'EX', math.ceil(retained - now) + 300)
+redis.call('SET', key, value, 'EX', math.ceil(retained - now) + 300)
 return {value, '1'}
 """
 
@@ -259,23 +257,39 @@ class FleetHealth(CostHealthMixin):
         bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
         text_key, no_text_key = self._score_keys(provider, language, bucket)
         key = text_key if outcome == 'text' else no_text_key
-        state_key = live_stt_state.fleet_state_key(provider)
-        probe_key = live_stt_state.fleet_probe_key(provider)
+        states = (
+            (live_stt_state.fleet_state_key(provider), live_stt_state.fleet_probe_key(provider)),
+            (
+                live_stt_state.fleet_state_key(provider, account=True),
+                live_stt_state.fleet_probe_key(provider, account=True),
+            ),
+        )
         try:
-            clear_bench = None
+            expired: list[tuple[str, str, str]] = []
             if outcome == 'text':
-                raw = await self._bounded(self._redis().get(state_key))
-                if raw:
-                    try:
-                        clear_bench = str(raw) if float(str(raw).split(':', 1)[1]) <= self._clock() else None
-                    except (IndexError, ValueError):
-                        clear_bench = None
+                for state_key, probe_key in states:
+                    raw = await self._bounded(self._redis().get(state_key))
+                    if self._check_identity() != identity:
+                        FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+                        return
+                    if raw:
+                        try:
+                            if float(str(raw).split(':', 1)[1]) <= self._clock():
+                                expired.append((state_key, probe_key, str(raw)))
+                        except (IndexError, ValueError):
+                            pass
             pipe = self._redis().pipeline(transaction=False)
             pipe.incr(key)
             pipe.expire(key, SCORE_BUCKET_SECONDS * (SCORE_BUCKETS + 1))
             await self._bounded(pipe.execute())
-            if clear_bench is not None:
+            if self._check_identity() != identity:
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+                return
+            for state_key, probe_key, clear_bench in expired:
                 await self._bounded(self._redis().eval(BENCH_CLEANUP, 2, state_key, probe_key, clear_bench))
+                if self._check_identity() != identity:
+                    FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+                    return
         except Exception:
             if self._check_identity() == identity:
                 self._redis_retry_at = self._clock() + 10.0
@@ -350,9 +364,12 @@ class FleetHealth(CostHealthMixin):
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
             return False
-        key = live_stt_state.fleet_state_key(provider)
+        selection_key = live_stt_state.fleet_state_key(provider)
+        account_key = live_stt_state.fleet_state_key(provider, account=True)
         try:
-            result = await self._bounded(self._redis().eval(BENCH_UPDATE, 1, key, kind, f'{until:.3f}'))
+            result = await self._bounded(
+                self._redis().eval(BENCH_UPDATE, 2, selection_key, account_key, kind, f'{until:.3f}')
+            )
         except Exception:
             if self._check_identity() == identity:
                 self._redis_retry_at = self._clock() + 10.0
@@ -531,7 +548,12 @@ class FleetHealth(CostHealthMixin):
                 keys.extend(self._score_keys(provider, lang, bucket - index))
         for provider in sorted(PROVIDERS):
             keys.append(live_stt_state.fleet_state_key(provider))
-        probe_keys = {provider: live_stt_state.fleet_probe_key(provider) for provider in PROVIDERS}
+            keys.append(live_stt_state.fleet_state_key(provider, account=True))
+        probe_keys = {
+            (provider, account): live_stt_state.fleet_probe_key(provider, account=account)
+            for provider in PROVIDERS
+            for account in (False, True)
+        }
         try:
             values = await self._bounded(self._redis().mget(keys))
             if self._check_identity() != identity:
@@ -551,11 +573,21 @@ class FleetHealth(CostHealthMixin):
                     )
             benches: dict[str, tuple[str, float]] = {}
             for provider in sorted(PROVIDERS):
-                raw_state = values[cursor]
-                cursor += 1
-                state = str(raw_state or '').split(':', 1)
-                if len(state) == 2 and state[0] in {'account', 'selection'}:
-                    benches[provider] = state[0], float(state[1])
+                raw_endpoint, raw_account = values[cursor], values[cursor + 1]
+                cursor += 2
+                parsed = {}
+                for account_flag, raw_state in ((False, raw_endpoint), (True, raw_account)):
+                    state = str(raw_state or '').split(':', 1)
+                    if len(state) == 2 and state[0] == ('account' if account_flag else 'selection'):
+                        parsed[account_flag] = state[0], float(state[1])
+                account_bench = parsed.get(True)
+                selection_bench = parsed.get(False)
+                if account_bench is not None and account_bench[1] > now:
+                    benches[provider] = account_bench
+                elif selection_bench is not None:
+                    benches[provider] = selection_bench
+                elif account_bench is not None:
+                    benches[provider] = account_bench
             with self._lock:
                 if self._identity != identity:
                     return
@@ -572,7 +604,8 @@ class FleetHealth(CostHealthMixin):
                 self._probe_pending.update(need_lease)
             try:
                 for provider in sorted(need_lease):
-                    granted = await self._bounded(self._redis().set(probe_keys[provider], '1', ex=10, nx=True))
+                    probe_key = probe_keys[(provider, benches[provider][0] == 'account')]
+                    granted = await self._bounded(self._redis().set(probe_key, '1', ex=10, nx=True))
                     if self._check_identity() != identity:
                         return
                     if granted:

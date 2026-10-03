@@ -378,7 +378,10 @@ capped at three admitted success/failure outcomes per trial window, so one
 repeated caller can neither fill the sample nor be a majority. Promotion also
 requires the majority-failure fraction across trial users at or under the gate;
 broad failures (at least four majority-failing users) re-bench, and anonymous
-simulation outcomes cannot promote because breadth cannot be proven. Held
+simulation outcomes cannot promote because breadth cannot be proven. A witness
+whose three-outcome cap is already spent admits nothing new, but its return
+still re-evaluates the frozen cohort: once dwell has elapsed it promotes from
+the admitted evidence and the vote is counted `user_cap`, not `applied`. Held
 windows reset at 120/240 admitted outcomes. Re-entry remains 5 → 25 → 100 with
 shared leases, generation fences and a 300-second initial cooldown doubling to
 four hours.
@@ -417,16 +420,22 @@ traffic breadth. Read admitted shared votes when diagnosing detection speed.
 ### Fleet state and operational limits
 
 `live_cost_health.py` stores target/global and bounded-language state under
-`omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<language>` and fleet
-bench/probe/score state under `omi:live-stt:fleet-v2:<stage>:<32-hex
-credential-family identity>`. `config/live_stt_state.py` owns the key helpers:
-`stage` comes from `OMI_ENV_STAGE` (`prod|dev|local|offline`, else `unknown`,
-never defaulted to prod) and the digest is a domain-separated SHA-256 of the
-actual serving endpoint plus the family credential — Parakeet uses
-`HOSTED_PARAKEET_API_URL`, Modulate/Soniox their configured or built-in
-endpoint and API key. An account quarantine therefore spans every custom
-endpoint sharing one credential, while a changed endpoint, credential or stage
-starts with fresh state; in-memory views reset on that boundary instead of
+`omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<language>`; recovery
+leases sit under the same cost prefix, never under the fleet namespace. Fleet
+state splits two `omi:live-stt:fleet-v2:<stage>:<32-hex identity>` scopes:
+endpoint scope (SHA-256 of `live-stt-fleet-v2-endpoint`, family, actual serving
+endpoint and family credential) owns selection benches, recovery probes and
+score buckets, and account scope (SHA-256 of `live-stt-fleet-v2-account`,
+family and credential) owns the credential-wide account quarantine.
+`config/live_stt_state.py` owns the key helpers: `stage` comes from
+`OMI_ENV_STAGE` (`prod|dev|local|offline`, else `unknown`, never defaulted to
+prod; an unrecognized stage still yields `offline` when
+`PROVIDER_MODE=offline`). Parakeet's endpoint is `HOSTED_PARAKEET_API_URL`,
+Modulate/Soniox use their configured or built-in endpoint and API key. An
+account quarantine therefore spans every custom endpoint sharing one credential,
+while a rotated endpoint starts only endpoint-scoped selection/score/probe and
+cost state fresh — the shared account bench persists until its own expiry or a
+credential change. In-memory views reset on an identity boundary instead of
 mixing identities, and in-flight writes cannot populate a new identity's
 cache. v7/v1 and older namespaces are never read, migrated or backfilled.
 Raw URLs and credentials never enter Redis paths, logs or metrics.
@@ -435,13 +444,17 @@ pods. Connect reads a cached snapshot, with Redis refresh/result work in bounded
 background tasks under the existing 75 ms deadline. Redis failure retains local
 evidence and known benches; no pod privately restarts a trial. Local benches
 reconcile before staged recovery, and generation fences reject stale completions.
-Fleet bench writes are a single Lua update: a live account quarantine rejects a
-stale selection write, same-kind writes keep the longest deadline, and the
-returned retained value merges back into the writing pod's local view so a
-stale pod immediately learns a stronger quarantine. Expired cleanup is a
-compare-delete that re-reads the observed value and its deadline inside the
-script before removing state and probe together — a bench renewed between the
-text read and the delete survives.
+Fleet bench writes are one Lua update over both state keys: a live account
+quarantine rejects a selection write and is never shortened, each kind keeps
+the longest deadline on its own key, a selection write never expands an
+account fault domain, and the returned retained value merges back into the
+writing pod's local view so a stale pod immediately learns a stronger
+quarantine. Refresh reads both state keys and prefers an active account bench,
+then the endpoint selection, then the expired account for its probe lease.
+Expired cleanup is a compare-delete per namespace that re-reads the observed
+value and its deadline inside the script before removing that namespace's
+state and probe together — a bench renewed between the text read and the
+delete survives, and an expired account cleanup never touches endpoint state.
 Each off-connect refresh reads every registry target across the closed bounded
 language vocabulary (Modulate ∪ Parakeet supported languages plus `other`,
 capped at 16 targets) plus `all`, not only live interests. Freshness is tracked

@@ -511,6 +511,7 @@ async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(m
         ),
     )
     actual, _, previous, legs, capture = await setup_chain(monkeypatch)
+    await pod.refresh_cost_once()
     selected = []
 
     async def connect(callback, *args, **kwargs):

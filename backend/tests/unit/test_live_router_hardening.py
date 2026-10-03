@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_TARGETS, Target
+from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
 from utils.stt import live_chain, live_health, live_router, streaming as st
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState, transition
@@ -78,7 +78,7 @@ class MemoryRedis:
 
     async def eval(self, script, _numkeys, *args):
         if script is live_health.BENCH_UPDATE:
-            return self._bench_update(args[0], args[1], float(args[2]))
+            return self._bench_update(args[0], args[1], args[2], float(args[3]))
         if script is live_health.BENCH_CLEANUP:
             return self._bench_cleanup(args[0], args[1], args[2])
         key, expected, new, _ttl = args
@@ -87,20 +87,32 @@ class MemoryRedis:
         self.data[key] = new
         return 1
 
-    def _bench_update(self, key, kind, incoming):
-        raw = self.data.get(key, '')
+    @staticmethod
+    def _bench_deadline(raw, kind):
+        head, _, tail = raw.partition(':')
+        if head != kind:
+            return 0.0
+        try:
+            return float(tail)
+        except ValueError:
+            return 0.0
+
+    def _bench_update(self, endpoint_key, account_key, kind, incoming):
+        endpoint = self.data.get(endpoint_key, '')
+        account = self.data.get(account_key, '')
         now = self.clock()
+        account_until = self._bench_deadline(account, 'account')
         if incoming <= now:
+            return [account if account_until > now else endpoint, '0']
+        if kind == 'selection' and account_until > now:
+            return [account, '0']
+        key = account_key if kind == 'account' else endpoint_key
+        raw = account if kind == 'account' else endpoint
+        until_at = self._bench_deadline(raw, kind)
+        if until_at >= incoming:
             return [raw, '0']
-        current_kind, _, raw_until = raw.partition(':')
-        deadline = float(raw_until) if raw_until else 0.0
-        if current_kind == 'account' and deadline > now and kind != 'account':
-            return [raw, '0']
-        if current_kind == kind:
-            if deadline >= incoming:
-                return [raw, '0']
-            incoming = max(deadline, incoming)
-        value = f'{kind}:{incoming:.3f}'
+        retained = max(until_at, incoming)
+        value = f'{kind}:{retained:.3f}'
         self.data[key] = value
         return [value, '1']
 
@@ -208,7 +220,7 @@ async def test_stale_pod_cannot_replace_or_shorten_account_bench():
     redis = MemoryRedis(clock=lambda: 1000.0)
     pod_a = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=redis)
     pod_b = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=redis)
-    key = live_stt_state.fleet_state_key('soniox')
+    key = live_stt_state.fleet_state_key('soniox', account=True)
     assert await pod_a._write_bench('soniox', 'account', 2800.0)
     await pod_b._write_bench('soniox', 'selection', 1030.0)
     assert redis.data[key] == 'account:2800.000'
@@ -218,8 +230,8 @@ async def test_stale_pod_cannot_replace_or_shorten_account_bench():
 
 @pytest.mark.asyncio
 async def test_text_cleanup_delete_cannot_remove_a_renewed_bench():
-    state_key = live_stt_state.fleet_state_key('soniox')
-    probe_key = live_stt_state.fleet_probe_key('soniox')
+    state_key = live_stt_state.fleet_state_key('soniox', account=True)
+    probe_key = live_stt_state.fleet_probe_key('soniox', account=True)
 
     class RenewingRedis(MemoryRedis):
         async def get(self, key):
@@ -230,7 +242,7 @@ async def test_text_cleanup_delete_cannot_remove_a_renewed_bench():
             return value
 
     redis = RenewingRedis(clock=lambda: 1000.0)
-    redis.data[state_key] = 'selection:900.000'
+    redis.data[state_key] = 'account:900.000'
     pod = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=redis)
     await pod._write_result('soniox', 'en', 'text')
     assert redis.data[state_key] == 'account:1900.000'
@@ -661,6 +673,67 @@ def test_endpoint_edit_resets_views_but_keeps_in_flight_bench(monkeypatch):
     assert 'soniox' not in pod._bench_providers_in_flight
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pause_on', ['get', 'exec'])
+async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(monkeypatch, pause_on):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
+    monkeypatch.setenv('SONIOX_WS_URL', 'wss://old.invalid/ws')
+    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
+
+    class PausedRedis(MemoryRedis):
+        def __init__(self, clock=None):
+            super().__init__(clock=clock)
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self._paused = False
+
+        async def _maybe_pause(self, point):
+            if pause_on == point and not self._paused:
+                self._paused = True
+                self.started.set()
+                await self.release.wait()
+
+        async def get(self, key):
+            await self._maybe_pause('get')
+            return await super().get(key)
+
+        def pipeline(self, *, transaction=False):
+            redis = self
+
+            class Pipe(MemoryPipeline):
+                async def execute(self):
+                    await redis._maybe_pause('exec')
+                    return await super().execute()
+
+            return Pipe(self)
+
+    redis = PausedRedis(clock=lambda: 1000.0)
+    old_prefix = live_stt_state.fleet_prefix('soniox')
+    account_state = live_stt_state.fleet_state_key('soniox', account=True)
+    account_probe = live_stt_state.fleet_probe_key('soniox', account=True)
+    redis.data[account_state] = 'account:900.000'
+    redis.data[account_probe] = '1'
+    pod = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=redis)
+    task = asyncio.create_task(pod._write_result('soniox', 'en', 'text'))
+    await asyncio.wait_for(redis.started.wait(), 1)
+    monkeypatch.setenv('SONIOX_WS_URL', 'wss://new.invalid/ws')
+    new_prefix = live_stt_state.fleet_prefix('soniox')
+    assert new_prefix != old_prefix
+    redis.release.set()
+    await task
+    assert redis.data[account_state] == 'account:900.000'
+    assert redis.data[account_probe] == '1'
+    assert not any(key.startswith(new_prefix) for key in redis.data)
+    written = [key for key in redis.data if key not in (account_state, account_probe)]
+    if pause_on == 'get':
+        assert not written
+    else:
+        assert written and all(key.startswith(old_prefix) for key in written)
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1
+    assert not pod._local and not pod._benches and not pod._cached_benches
+
+
 def test_identity_keys_preserve_exact_wire_endpoint(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
@@ -692,6 +765,113 @@ def test_missing_or_invalid_stage_never_defaults_to_prod(monkeypatch):
     assert live_stt_state.stage() == 'prod'
 
 
+@pytest.mark.asyncio
+async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [
+                {
+                    'id': 'modulate-next',
+                    'family': 'modulate',
+                    'cost_per_audio_hour': 0.05,
+                    'endpoint': 'wss://example.invalid/stream',
+                },
+                {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055, 'languages': ['en']},
+                {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754},
+            ]
+        ),
+    )
+    monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: _circuit())
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    chosen = next(target for target in live_chain.registry() if target.id == 'modulate-next')
+    propose_mock = Mock(return_value=[chosen])
+    monkeypatch.setattr(live_chain, 'propose', propose_mock)
+    seen_targets = []
+
+    async def modulate_connect():
+        seen_targets.append(live_router.connecting_target.get())
+        return SimpleNamespace(
+            is_connection_dead=False,
+            routing_model='modulate-velma-2',
+            routing_endpoint='wss://elsewhere.invalid/stream',
+            routing_target='modulate-other',
+        )
+
+    async def soniox_connect():
+        seen_targets.append(live_router.connecting_target.get())
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=modulate_connect,
+        callbacks={st.STTService.soniox: soniox_connect},
+        failed=set(),
+        models=['modulate', 'soniox'],
+        routing_uid='cohort',
+        routing_language='en',
+        routing_languages=('en', 'hi'),
+        routing_models={'modulate': 'modulate-next', 'soniox': 'soniox'},
+    )
+    assert service == st.STTService.soniox
+    assert seen_targets[0] is chosen and seen_targets[1] is None
+    assert propose_mock.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_engine_mismatch_static_retry_still_serves_partial_ramp_cohort(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [
+                {
+                    'id': 'modulate-next',
+                    'family': 'modulate',
+                    'cost_per_audio_hour': 0.05,
+                    'endpoint': 'wss://example.invalid/stream',
+                },
+                {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055, 'ramp_percent': 25},
+            ]
+        ),
+    )
+    monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: _circuit())
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    chosen = next(target for target in live_chain.registry() if target.id == 'modulate-next')
+    propose_mock = Mock(return_value=[chosen])
+    monkeypatch.setattr(live_chain, 'propose', propose_mock)
+    uid = next(uid for uid in map(str, range(2000)) if assigned(uid, 'modulate-velma-2', 25))
+    seen_targets = []
+
+    async def modulate_connect():
+        seen_targets.append(live_router.connecting_target.get())
+        if live_router.connecting_target.get() is not None:
+            return SimpleNamespace(
+                is_connection_dead=False,
+                routing_model='modulate-velma-2',
+                routing_endpoint='wss://elsewhere.invalid/stream',
+                routing_target='modulate-other',
+            )
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=modulate_connect,
+        callbacks={},
+        failed=set(),
+        models=['modulate'],
+        routing_uid=uid,
+        routing_language='en',
+        routing_models={'modulate': 'modulate-next'},
+    )
+    assert service == st.STTService.modulate
+    assert seen_targets[0] is chosen and seen_targets[1] is None
+    assert propose_mock.call_count == 1
+
+
 def test_reset_fleet_provider_help_needs_no_redis():
     script = Path(__file__).resolve().parents[2] / 'scripts' / 'stt' / 'reset_fleet_provider.py'
     result = subprocess.run([sys.executable, str(script), '--help'], capture_output=True, text=True, timeout=30)
@@ -715,11 +895,12 @@ def test_reset_fleet_provider_dry_run_uses_namespaced_keys(monkeypatch, capsys):
 
     monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
     monkeypatch.setattr(module, 'redis', SimpleNamespace(Redis=lambda **_kw: FakeRedis()))
     monkeypatch.setattr(sys, 'argv', ['reset_fleet_provider.py', 'soniox'])
     assert module.main() == 0
     assert 'omi:live-stt:fleet-v2:dev:' in scanned[0]
-    assert 'matching_keys=2' in capsys.readouterr().out
+    assert 'matching_keys=4' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('stage,required,breadth,dwell', [(5, 30, 10, 300), (25, 60, 20, 600)])
@@ -856,7 +1037,7 @@ async def test_fleet_refresh_mid_await_never_publishes_under_new_identity(monkey
 
     redis = SwitchRedis(clock=lambda: 1000.0)
     if paused_op == 'set':
-        redis.data[live_stt_state.fleet_state_key('soniox')] = 'account:500.000'
+        redis.data[live_stt_state.fleet_state_key('soniox', account=True)] = 'account:500.000'
     pod = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=redis)
     pod._check_identity()
     task = asyncio.create_task(pod.refresh_once())
@@ -930,3 +1111,187 @@ async def test_static_parakeet_without_engine_context_uses_legacy_rnnt(monkeypat
             routing_models={'parakeet': 'parakeet-window'},
         )
     assert denied.await_count == 0
+
+
+def test_fleet_keys_separate_endpoint_state_from_shared_account(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
+    monkeypatch.delenv('SONIOX_WS_URL', raising=False)
+    endpoint_state = live_stt_state.fleet_state_key('soniox')
+    endpoint_probe = live_stt_state.fleet_probe_key('soniox')
+    endpoint_scores = live_stt_state.fleet_score_keys('soniox', 'en', 7)
+    account_state = live_stt_state.fleet_state_key('soniox', account=True)
+    assert endpoint_state != account_state
+    monkeypatch.setenv('SONIOX_WS_URL', 'wss://rotated.invalid/transcribe')
+    assert live_stt_state.fleet_state_key('soniox') != endpoint_state
+    assert live_stt_state.fleet_probe_key('soniox') != endpoint_probe
+    assert live_stt_state.fleet_score_keys('soniox', 'en', 7) != endpoint_scores
+    assert live_stt_state.fleet_state_key('soniox', account=True) == account_state
+
+
+@pytest.mark.asyncio
+async def test_selection_and_account_benches_retain_both_deadlines():
+    now = [1000.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    endpoint_key = live_stt_state.fleet_state_key('soniox')
+    account_key = live_stt_state.fleet_state_key('soniox', account=True)
+    assert await pod._write_bench('soniox', 'selection', 2800.0)
+    assert await pod._write_bench('soniox', 'account', 1030.0)
+    assert redis.data[endpoint_key] == 'selection:2800.000'
+    assert redis.data[account_key] == 'account:1030.000'
+    await pod._write_bench('soniox', 'selection', 2900.0)
+    assert redis.data[endpoint_key] == 'selection:2800.000'
+    await pod._write_bench('soniox', 'account', 1010.0)
+    assert redis.data[account_key] == 'account:1030.000'
+
+
+@pytest.mark.asyncio
+async def test_active_account_dominates_then_expired_account_yields_to_selection(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    now = [1000.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    redis.data[live_stt_state.fleet_state_key('soniox')] = 'selection:1800.000'
+    redis.data[live_stt_state.fleet_state_key('soniox', account=True)] = 'account:1030.000'
+    pod.cached_snapshot(['soniox'], 'en')
+    await pod.refresh_once()
+    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'account' and state.bench_until == 1030.0
+    now[0] = 1031.0
+    await pod.refresh_once()
+    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'selection' and state.bench_until == 1800.0
+
+
+@pytest.mark.asyncio
+async def test_expired_account_cleanup_never_deletes_active_selection_state():
+    now = [1000.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    endpoint_key = live_stt_state.fleet_state_key('soniox')
+    account_key = live_stt_state.fleet_state_key('soniox', account=True)
+    account_probe = live_stt_state.fleet_probe_key('soniox', account=True)
+    redis.data[endpoint_key] = 'selection:1800.000'
+    redis.data[account_key] = 'account:900.000'
+    redis.data[account_probe] = '1'
+    await pod._write_result('soniox', 'en', 'text')
+    assert account_key not in redis.data and account_probe not in redis.data
+    assert redis.data[endpoint_key] == 'selection:1800.000'
+
+
+@pytest.mark.asyncio
+async def test_endpoint_rotation_keeps_credential_shared_account_bench(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
+    monkeypatch.delenv('SONIOX_WS_URL', raising=False)
+    now = [1000.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    pod.cached_snapshot(['soniox'], 'en')
+    await pod.refresh_once()
+    assert await pod._write_bench('soniox', 'account', 1800.0)
+    monkeypatch.setenv('SONIOX_WS_URL', 'wss://rotated.invalid/transcribe')
+    await pod.refresh_once()
+    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.bench == 'account' and state.bench_until == 1800.0
+
+
+@pytest.mark.parametrize('stage,required,breadth,dwell', [(5, 30, 10, 300.0), (25, 60, 20, 600.0)])
+@pytest.mark.parametrize('failed', [False, True])
+def test_capped_witness_promotes_trial_only_once_dwell_elapses(stage, required, breadth, dwell, failed):
+    start = 1000.0
+    capped = f'{0:016x}'
+    state = GateState(stage=stage, generation=1, trial_started_at=start)
+    for user in range(breadth):
+        for _ in range(3):
+            state = transition(state, False, start + 10, witness=f'{user:016x}')
+    assert state.stage == stage and state.n == required
+    before = transition(state, failed, start + dwell - 1, witness=capped)
+    assert before == state
+    promoted = transition(state, failed, start + dwell, witness=capped)
+    assert promoted.stage == (25 if stage == 5 else 100)
+    assert promoted.generation == state.generation + 1 and promoted.trial_started_at == start + dwell
+    shallow = GateState(stage=stage, generation=1, trial_started_at=start)
+    for user in range(breadth - 3):
+        for _ in range(3):
+            shallow = transition(shallow, False, start + 10, witness=f'{user:016x}')
+    assert shallow.n < required
+    assert transition(shallow, failed, start + dwell, witness='f' * 16).stage == stage
+    solo = GateState(stage=stage, generation=1, trial_started_at=start)
+    for _ in range(3):
+        solo = transition(solo, False, start + 10, witness='a' * 16)
+    for extra in range(8):
+        solo = transition(solo, failed, start + dwell + extra, witness='a' * 16)
+    assert solo.stage == stage and solo.n <= 3
+
+
+@pytest.mark.asyncio
+async def test_capped_witness_clock_promotion_counts_user_cap_vote(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [1700.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    soniox = DEFAULT_TARGETS[2]
+    key = live_stt_state.cost_key(soniox, 'all')
+    users = tuple((f'{index:016x}', 3, 0) for index in range(10))
+    redis.data[key] = json.dumps(
+        GateState(stage=5, generation=1, trial_started_at=1500.0, n=30, trial_users=users).encode()
+    )
+    applied = COST_VOTES.labels(target='soniox', scope='global', result='applied')._value.get()
+    capped = COST_VOTES.labels(target='soniox', scope='global', result='user_cap')._value.get()
+    now[0] = 1800.0
+    await pod._write_cost_result('soniox', 'en', False, None, '0' * 16)
+    state = GateState.decode(json.loads(redis.data[key]))
+    assert state.stage == 25 and state.trial_started_at == 1800.0 and state.generation == 2
+    assert COST_VOTES.labels(target='soniox', scope='global', result='user_cap')._value.get() == capped + 1
+    assert COST_VOTES.labels(target='soniox', scope='global', result='applied')._value.get() == applied
+
+
+def _reset_module():
+    script = Path(__file__).resolve().parents[2] / 'scripts' / 'stt' / 'reset_fleet_provider.py'
+    spec = importlib.util.spec_from_file_location('reset_fleet_provider', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_reset_fleet_provider_rejects_unknown_stage_before_redis(monkeypatch):
+    module = _reset_module()
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('PROVIDER_MODE', raising=False)
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
+    monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
+    monkeypatch.setattr(
+        module, 'redis', SimpleNamespace(Redis=lambda **_kw: (_ for _ in ()).throw(AssertionError('no client')))
+    )
+    monkeypatch.setattr(sys, 'argv', ['reset_fleet_provider.py', 'soniox'])
+    with pytest.raises(SystemExit):
+        module.main()
+
+
+def test_reset_fleet_provider_rejects_missing_credential_before_redis(monkeypatch):
+    module = _reset_module()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('SONIOX_API_KEY', raising=False)
+    monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
+    monkeypatch.setattr(
+        module, 'redis', SimpleNamespace(Redis=lambda **_kw: (_ for _ in ()).throw(AssertionError('no client')))
+    )
+    monkeypatch.setattr(sys, 'argv', ['reset_fleet_provider.py', 'soniox'])
+    with pytest.raises(SystemExit):
+        module.main()
+
+
+def test_reset_fleet_provider_rejects_parakeet_without_endpoint_before_redis(monkeypatch):
+    module = _reset_module()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
+    monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
+    monkeypatch.setattr(
+        module, 'redis', SimpleNamespace(Redis=lambda **_kw: (_ for _ in ()).throw(AssertionError('no client')))
+    )
+    monkeypatch.setattr(sys, 'argv', ['reset_fleet_provider.py', 'parakeet'])
+    with pytest.raises(SystemExit):
+        module.main()

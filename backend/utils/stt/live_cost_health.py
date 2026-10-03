@@ -465,7 +465,9 @@ class CostHealthMixin(ABC):
                         result = 'generation'
                         return state
                     updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
-                    if updated.stage == state.stage and updated.n == state.n and updated.failures == state.failures:
+                    if state.stage in (5, 25) and {user[0]: user[1] for user in state.trial_users}.get(witness, 0) >= 3:
+                        result = 'user_cap'
+                    elif updated.stage == state.stage and updated.n == state.n and updated.failures == state.failures:
                         if state.stage == 0:
                             result = 'stage'
                         elif state.stage in (5, 25):

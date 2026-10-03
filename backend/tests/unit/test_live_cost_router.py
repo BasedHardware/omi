@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 import random
 import time
 from contextlib import suppress
@@ -143,41 +144,72 @@ class MemoryRedis:
         self.data = {}
         self.leases = []
         self.ttls = {}
+        self.expires_at = {}
         self.clock = clock or (lambda: 1000)
+
+    def _expire_keys(self):
+        now = self.clock()
+        for key in [key for key, deadline in self.expires_at.items() if deadline <= now]:
+            self.expires_at.pop(key, None)
+            self.data.pop(key, None)
 
     async def time(self):
         return (int(self.clock()), 0)
 
     async def get(self, key):
+        self._expire_keys()
         return self.data.get(key)
 
     async def mget(self, keys):
+        self._expire_keys()
         return [self.data.get(key) for key in keys]
 
-    async def set(self, key, value, nx=False, **kwargs):
+    async def set(self, key, value, nx=False, ex=None, **kwargs):
+        self._expire_keys()
         if nx and key in self.data:
             return False
         self.data[key] = value
+        self.expires_at.pop(key, None)
+        if ex:
+            self.expires_at[key] = self.clock() + ex
         self.leases.append(key)
         return True
 
+    @staticmethod
+    def _bench_deadline(raw, kind):
+        head, _, tail = raw.partition(':')
+        if head != kind:
+            return 0.0
+        try:
+            return float(tail)
+        except ValueError:
+            return 0.0
+
+    def _bench_update(self, endpoint_key, account_key, kind, incoming):
+        self._expire_keys()
+        endpoint = self.data.get(endpoint_key, '')
+        account = self.data.get(account_key, '')
+        now = self.clock()
+        account_until = self._bench_deadline(account, 'account')
+        if incoming <= now:
+            return [account if account_until > now else endpoint, '0']
+        if kind == 'selection' and account_until > now:
+            return [account, '0']
+        key = account_key if kind == 'account' else endpoint_key
+        raw = account if kind == 'account' else endpoint
+        until_at = self._bench_deadline(raw, kind)
+        if until_at >= incoming:
+            return [raw, '0']
+        retained = max(until_at, incoming)
+        value = f'{kind}:{retained:.3f}'
+        self.data[key] = value
+        self.expires_at[key] = now + math.ceil(retained - now) + 300
+        return [value, '1']
+
     async def eval(self, script, _numkeys, *args):
+        self._expire_keys()
         if script is live_health.BENCH_UPDATE:
-            key, kind, incoming = args[0], args[1], float(args[2])
-            raw = self.data.get(key, '')
-            if incoming <= self.clock():
-                return [raw, '0']
-            current_kind, _, raw_until = raw.partition(':')
-            deadline = float(raw_until) if raw_until else 0.0
-            if current_kind == 'account' and deadline > self.clock() and kind != 'account':
-                return [raw, '0']
-            if current_kind == kind:
-                if deadline >= incoming:
-                    return [raw, '0']
-                incoming = max(deadline, incoming)
-            value = f'{kind}:{incoming:.3f}'
-            self.data[key] = value
-            return [value, '1']
+            return self._bench_update(args[0], args[1], args[2], float(args[3]))
         if script is live_health.BENCH_CLEANUP:
             state_key, probe_key, expected = args
             if self.data.get(state_key, '') != expected:
@@ -187,11 +219,16 @@ class MemoryRedis:
                 return 0
             self.data.pop(state_key, None)
             self.data.pop(probe_key, None)
+            self.expires_at.pop(state_key, None)
+            self.expires_at.pop(probe_key, None)
             return 1
         key, expected, new, ttl = args
         if self.data.get(key, '') != expected:
             return 0
         self.data[key] = new
+        self.expires_at.pop(key, None)
+        if int(ttl) > 0:
+            self.expires_at[key] = self.clock() + int(ttl)
         self.ttls[key] = ttl
         return 1
 
@@ -215,16 +252,51 @@ class MemoryRedis:
                 return self
 
             async def execute(self):
+                redis._expire_keys()
                 for op in self.ops:
                     if op[0] == 'incr':
                         redis.data[op[1]] = str(int(redis.data.get(op[1]) or 0) + 1)
+                    elif op[0] == 'expire':
+                        redis.expires_at[op[1]] = redis.clock() + op[2]
                     elif op[0] == 'delete':
                         for key in op[1]:
                             redis.data.pop(key, None)
+                            redis.expires_at.pop(key, None)
                 self.ops.clear()
                 return []
 
         return Pipe()
+
+
+@pytest.mark.asyncio
+async def test_memory_redis_ttl_expiry_set_reset_and_persist():
+    now = [0.0]
+    redis = MemoryRedis(clock=lambda: now[0])
+    score_ttl = live_health.SCORE_BUCKET_SECONDS * (live_health.SCORE_BUCKETS + 1)
+    pipe = redis.pipeline()
+    pipe.incr('score')
+    pipe.expire('score', score_ttl)
+    await pipe.execute()
+    assert redis.expires_at['score'] == score_ttl
+    now[0] = score_ttl - 1
+    assert await redis.get('score') == '1'
+    now[0] = score_ttl
+    assert await redis.get('score') is None
+    assert await redis.mget(['score']) == [None]
+    await redis.set('bench', 'selection:100.000', ex=10)
+    await redis.set('bench', 'selection:200.000')
+    now[0] = score_ttl + 20
+    assert await redis.get('bench') == 'selection:200.000'
+    await redis.set('cost', 'healthy', ex=900)
+    await redis.eval('cas', 1, 'cost', 'healthy', 'promoted', 0)
+    now[0] = score_ttl + 20 + 1000
+    assert await redis.get('cost') == 'promoted'
+    await redis.set('expired', 'x', ex=1)
+    now[0] += 2
+    pipe = redis.pipeline()
+    pipe.incr('expired')
+    await pipe.execute()
+    assert redis.data['expired'] == '1'
 
 
 def seed_cost_interest(pod, targets, *languages):

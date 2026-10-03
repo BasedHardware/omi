@@ -43,11 +43,15 @@ wrong classification, and neither proves Redis persistence. Redis drop counters 
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
 State uses `omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<bounded-language>`
-and fleet score/bench/probe/lease keys under
-`omi:live-stt:fleet-v2:<stage>:<32-hex credential-family identity>`. The stage
-comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod);
-the identity digest is a SHA-256 of the actual serving endpoint plus the family
-credential, so a changed endpoint, credential or stage starts from fresh state
+with recovery lease keys under the same cost prefix. Fleet keys split two
+`omi:live-stt:fleet-v2:<stage>:<32-hex identity>` scopes: selection bench,
+recovery probe and score keys digest the family, actual endpoint and
+credential, while the account bench key digests only family and credential, so
+the credential-wide quarantine spans every custom endpoint but survives an
+endpoint rotation that resets selection/score/probe and cost state. The stage
+comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod;
+`PROVIDER_MODE=offline` still yields `offline`);
+a changed endpoint, credential or stage starts its scoped state
 with no migration or backfill of older namespaces, which are never read. Raw
 URLs and keys never appear in Redis paths, logs or metrics. A pod's in-memory
 health views reset when that identity changes. Do not

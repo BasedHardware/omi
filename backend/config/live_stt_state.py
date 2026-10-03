@@ -53,7 +53,7 @@ def family_credential(family: str) -> str:
     return os.getenv(env, '') if env else ''
 
 
-def _configured_endpoint(family: str) -> str:
+def family_endpoint(family: str) -> str:
     if family == 'parakeet':
         return os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
     if family == 'deepgram':
@@ -69,7 +69,7 @@ def target_endpoint(target) -> str:
     endpoint = getattr(target, 'endpoint', None)
     if endpoint:
         return endpoint
-    return _configured_endpoint(target.family)
+    return family_endpoint(target.family)
 
 
 def cost_key(target, language: str) -> str:
@@ -82,17 +82,20 @@ def cost_lease_key(target, language: str) -> str:
     return f'{COST_PREFIX}:{stage()}:{fingerprint}:lease:{target.id}:{language}'
 
 
-def fleet_prefix(family: str) -> str:
-    fingerprint = _digest('live-stt-fleet-v2', family, family_credential(family))
+def fleet_prefix(family: str, *, account: bool = False) -> str:
+    if account:
+        fingerprint = _digest('live-stt-fleet-v2-account', family, family_credential(family))
+    else:
+        fingerprint = _digest('live-stt-fleet-v2-endpoint', family, family_endpoint(family), family_credential(family))
     return f'{FLEET_PREFIX}:{stage()}:{fingerprint}'
 
 
-def fleet_state_key(family: str) -> str:
-    return f'{fleet_prefix(family)}:state:{family}'
+def fleet_state_key(family: str, *, account: bool = False) -> str:
+    return f'{fleet_prefix(family, account=account)}:state:{family}'
 
 
-def fleet_probe_key(family: str) -> str:
-    return f'{fleet_prefix(family)}:probe:{family}'
+def fleet_probe_key(family: str, *, account: bool = False) -> str:
+    return f'{fleet_prefix(family, account=account)}:probe:{family}'
 
 
 def fleet_score_keys(family: str, language: str, bucket: int) -> tuple[str, str]:
@@ -105,7 +108,7 @@ def state_identity(targets=()) -> str:
     parts = [stage()]
     for family in FAMILIES:
         parts.append(_digest('credential', family, family_credential(family)))
-        parts.append(_digest('endpoint', family, _configured_endpoint(family)))
+        parts.append(_digest('endpoint', family, family_endpoint(family)))
     for target in sorted(targets, key=lambda entry: entry.id):
         parts.append(_digest('target', target.id, target.family, target_endpoint(target)))
     return _digest('live-stt-state', *parts)

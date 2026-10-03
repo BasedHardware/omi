@@ -122,6 +122,7 @@ async def connect_configured_chain(
     routing_languages: tuple[str, ...] = (),
     routing_models: dict[str, str | None] | None = None,
     failed_targets: set[str] | None = None,
+    _routing_static: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -206,7 +207,7 @@ async def connect_configured_chain(
         ):
             configured_candidates.append(service)
     routes = [(service, None) for service in configured_candidates]
-    if mode != 'off' and routing_uid:
+    if mode != 'off' and routing_uid and not _routing_static:
         try:
             canary = routing_on(routing_uid)
             last_resorts = []
@@ -417,8 +418,12 @@ async def connect_configured_chain(
                     callbacks=callbacks,
                     failed=failed,
                     models=models,
-                    failed_targets=failed_targets,
+                    routing_uid=routing_uid,
+                    routing_language=routing_language,
+                    routing_languages=routing_languages,
                     routing_models=routing_models,
+                    failed_targets=failed_targets,
+                    _routing_static=True,
                 )
             reason = normalize_live_stt_reason(
                 error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'

@@ -159,8 +159,10 @@ legs honor capacity signals and a five-second process-local cooldown after
 candidate is capacity-blocked, one least-recently-refused candidate may dial
 through its normal circuit/admission gate so a sole recovered target can serve.
 Shared state is namespaced by deployment stage and a hashed endpoint/credential
-identity (`cost-v8` cost keys, `fleet-v2` fleet keys); changed identity starts
-fresh. Per-language freshness is read for every bounded supported language at
+identity (`cost-v8` cost and lease keys; `fleet-v2` splits endpoint-scoped
+selection/probe/score keys from a credential-only account bench that survives
+endpoint rotation); changed identity starts its scoped state fresh.
+Per-language freshness is read for every bounded supported language at
 each refresh — an unread language is unknown, not healthy.
 Global-stage pod cache views (including freshness/unknown state), scoped CAS
 transition metrics, classified outcome counters and static/proposed pairs are
