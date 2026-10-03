@@ -41,7 +41,6 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
-  case recordInterjectFeedback = "record_interject_feedback"
   case pointClick = "point_click"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
@@ -56,8 +55,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:69a17e53d566273c677a179aebfc296c102071ca4777762a0c4828baa5536023"
-  static let chatFirstManifestDigest = "sha256:96c0b6520763d162fa86820839f0d0fd83db3c25fe8b9823245b0258cc289d3d"
+  static let manifestDigest = "sha256:a291cdb7e65c521f6b2cb49eed2441a2861df8f4b1a09d9b6dc092c5476519e4"
+  static let chatFirstManifestDigest = "sha256:7991a812ba3838b4dcbc793ed761888763c330b22a7194bc4a704416423149c1"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -105,7 +104,6 @@ enum GeneratedToolExecutors {
     .webSearch: .realtimeHub,
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
-    .recordInterjectFeedback: .realtimeHub,
     .pointClick: .realtimeHub,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,

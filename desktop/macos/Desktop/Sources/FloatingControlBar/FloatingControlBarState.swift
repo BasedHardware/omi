@@ -332,10 +332,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published var requiresHoverReset: Bool = false
   @Published var currentNotification: FloatingBarNotification? = nil
   /// Visible while PTT is live inside the 60s card-context window.
-  @Published var interjectReplyingToTitle: String? = nil
-  /// Same hover signal the Interject dismiss timer pauses on. Notch hover
+  /// Same hover signal the notification dismiss timer pauses on. Notch hover
   /// never sets `isHoveringBar`; insight teasers key off this instead.
-  @Published var interjectBarHovering: Bool = false
 
   /// Onboarding-only: pulse a glowing border on the bar so first-run users
   /// notice it. Cleared automatically once they start typing.

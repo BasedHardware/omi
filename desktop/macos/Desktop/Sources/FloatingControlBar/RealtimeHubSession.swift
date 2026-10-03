@@ -149,7 +149,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private var pendingVideo: [(b64: String, mime: String, turnID: VoiceTurnID?)] = []
   /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
-  /// Per-turn Interject / trusted instruction. OpenAI applies it on the next
+  /// Per-turn trusted instruction. OpenAI applies it on the next
   /// `response.create`; Gemini flushes it as text inside the activity window.
   /// Not a durable conversation item — abandon and stop drop it.
   private var pendingTrustedTurnInstruction: String?
@@ -790,7 +790,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.flushPendingVideoIntoTurn()
         self.flushPendingTextInputs()
         // Flush a parked trusted instruction inside this window, before a
-        // pending commit can close it. Interject's MainActor retry is too late
+        // pending commit can close it. A MainActor retry is too late
         // for that race.
         self.flushTrustedTurnInstructionIfPossible()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")

@@ -2,10 +2,10 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class InterjectDisplayTimerTests: XCTestCase {
+final class NotificationDisplayTimerTests: XCTestCase {
   func testPauseFreezesRemainingAndResumeContinues() {
     let start = Date(timeIntervalSince1970: 1_000)
-    var timer = InterjectDisplayTimer.start(duration: 10, now: start)
+    var timer = NotificationDisplayTimer.start(duration: 10, now: start)
 
     XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(3)), 7)
     XCTAssertFalse(timer.isPaused)
@@ -23,14 +23,14 @@ final class InterjectDisplayTimerTests: XCTestCase {
 
   func testPausedTimerIsNeverExpired() {
     let start = Date(timeIntervalSince1970: 1_000)
-    var timer = InterjectDisplayTimer.start(duration: 2, now: start)
+    var timer = NotificationDisplayTimer.start(duration: 2, now: start)
     timer.pause(now: start.addingTimeInterval(1))
     XCTAssertFalse(timer.isExpired(at: start.addingTimeInterval(60)))
   }
 
   func testDoublePauseOrResumeIsIdempotent() {
     let start = Date(timeIntervalSince1970: 1_000)
-    var timer = InterjectDisplayTimer.start(duration: 6, now: start)
+    var timer = NotificationDisplayTimer.start(duration: 6, now: start)
     timer.pause(now: start.addingTimeInterval(2))
     timer.pause(now: start.addingTimeInterval(4))
     XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(4)), 4)

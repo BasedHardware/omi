@@ -654,12 +654,6 @@ struct FloatingControlBarView: View {
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
 
-          if InterjectFeature.isEnabled {
-            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
-              .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(.white.opacity(0.45))
-              .lineLimit(1)
-          }
         }
 
         Spacer(minLength: OmiSpacing.xs)
@@ -1131,7 +1125,7 @@ struct FloatingControlBarView: View {
   }
 
   private func handleBarHover(_ hovering: Bool) {
-    FloatingControlBarManager.shared.interjectBarHoverChanged(hovering)
+    FloatingControlBarManager.shared.notificationBarHoverChanged(hovering)
     if state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
       let showsHoverChrome = hovering && !state.isVoicePresentationActive
@@ -1227,10 +1221,8 @@ struct FloatingControlBarView: View {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         FloatingBarNotificationCardLead(
           copy: copy,
-          messageLineLimit: interjectInsightTeaserLimit(notification),
-          footer: InterjectFeature.isEnabled
-            ? InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens)
-            : nil
+          messageLineLimit: 3,
+          footer: nil
         )
         Spacer(minLength: 0)
 
@@ -1527,13 +1519,6 @@ struct FloatingControlBarView: View {
         .scaledFont(size: 12, weight: .semibold)
         .foregroundColor(.white)
 
-      if let title = state.interjectReplyingToTitle, InterjectFeature.isEnabled {
-        Text(InterjectReplyHint.listeningChip(title: title))
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(.white.opacity(0.72))
-          .lineLimit(1)
-      }
-
       // Locked mode is a mode the user has to be able to see at a glance: a bare glyph
       // read as decoration, and gating it on an empty hint hid it for most of the turn.
       // Restores the pre-2b416572c0 badge, always shown while locked.
@@ -1547,15 +1532,6 @@ struct FloatingControlBarView: View {
           .cornerRadius(4)
       }
     }
-  }
-
-  private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
-    FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
-      kindIsInsight: InterjectFeature.isEnabled && notification.kind == .insight,
-      isHovering: isHovering,
-      interjectBarHovering: state.interjectBarHovering,
-      interjectPTTHoldActive: state.interjectReplyingToTitle != nil
-    )
   }
 
   private var floatingChatProvider: ChatProvider? {

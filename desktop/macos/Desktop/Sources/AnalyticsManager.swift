@@ -1462,15 +1462,11 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
-      if let attention {
-        properties["attention"] = attention.rawValue
-      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1482,8 +1478,7 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
-      suggestionIdentity: suggestionIdentity,
-      attention: attention
+      suggestionIdentity: suggestionIdentity
     )
   }
 
@@ -1507,13 +1502,11 @@ class AnalyticsManager {
 
   func suggestionFeedbackRecorded(
     verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["verb"] = verb
-      appendInterjectFeedbackProvenance(provenance, to: &properties)
       captureSuggestionAssistantTelemetryForTests(
         "Suggestion Feedback Recorded",
         properties: properties
@@ -1521,23 +1514,8 @@ class AnalyticsManager {
     }
     PostHogManager.shared.suggestionFeedbackRecorded(
       verb: verb,
-      suggestionIdentity: suggestionIdentity,
-      provenance: provenance
+      suggestionIdentity: suggestionIdentity
     )
-  }
-
-  private func appendInterjectFeedbackProvenance(
-    _ provenance: InterjectFeedbackProvenance?,
-    to properties: inout [String: Any]
-  ) {
-    guard let provenance else { return }
-    // Owner identity remains in the local owner fence and is never sent as an
-    // analytics property. The opaque delivery/candidate joins are enough to
-    // correlate the event with the bounded JIT receipt.
-    properties["feedback_lane"] = provenance.lane
-    properties["feedback_delivery_id"] = provenance.deliveryID
-    properties["feedback_candidate_id"] = provenance.candidateID
-    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

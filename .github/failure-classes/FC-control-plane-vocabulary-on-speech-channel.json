@@ -11,7 +11,7 @@
   ],
   "status": "open",
   "canonical_prevention_artifact": [
-    "desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift",
-    "desktop/macos/Desktop/Tests/InterjectVoiceFeedbackRoutingTests.swift"
+    "desktop/macos/Desktop/Sources/FloatingControlBar/LegacyReplyTokenSanitizer.swift",
+    "desktop/macos/Desktop/Tests/LegacyReplyTokenSanitizerTests.swift"
   ]
 }

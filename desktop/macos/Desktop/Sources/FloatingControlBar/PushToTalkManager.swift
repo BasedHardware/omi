@@ -717,7 +717,7 @@ class PushToTalkManager: ObservableObject {
       break
 
     case .pendingLockDecision:
-      stopListening(endInterjectHold: false)
+      stopListening()
       enterLockedListening()
 
     case .lockedRecording:
@@ -836,7 +836,6 @@ class PushToTalkManager: ObservableObject {
       micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = captureTurnScreenEvidence()
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     log("PushToTalkManager: started listening (mode=\(mode))")
@@ -894,7 +893,6 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
     log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
@@ -906,10 +904,7 @@ class PushToTalkManager: ObservableObject {
     updateBarState()
   }
 
-  private func stopListening(endInterjectHold: Bool = true) {
-    if endInterjectHold {
-      FloatingControlBarManager.shared.interjectPushToTalkDidCancel()
-    }
+  private func stopListening() {
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     {
@@ -1358,7 +1353,6 @@ class PushToTalkManager: ObservableObject {
   }
 
   func finalize() {
-    FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
     guard phase?.isRecording == true else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.publish(.finalize(turnID: turnID))

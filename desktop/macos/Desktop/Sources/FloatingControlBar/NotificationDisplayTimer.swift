@@ -2,18 +2,18 @@ import Foundation
 
 /// Pause/resume remaining-time tracker for a presented card.
 ///
-/// Hover and PTT pause; releasing them resumes from the leftover duration.
+/// Hover pauses; leaving resumes from the leftover duration.
 /// The manager sleeps ``remaining(at:)`` and dismisses only when this reports
 /// expiry while unpaused.
-struct InterjectDisplayTimer: Equatable, Sendable {
+struct NotificationDisplayTimer: Equatable, Sendable {
   var duration: TimeInterval
   private var remainingWhenPaused: TimeInterval
   private var runningSince: Date?
 
   var isPaused: Bool { runningSince == nil }
 
-  static func start(duration: TimeInterval, now: Date) -> InterjectDisplayTimer {
-    InterjectDisplayTimer(
+  static func start(duration: TimeInterval, now: Date) -> NotificationDisplayTimer {
+    NotificationDisplayTimer(
       duration: duration,
       remainingWhenPaused: duration,
       runningSince: now
