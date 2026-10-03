@@ -95,20 +95,15 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.recordingDetails),
-        actions: [
-          OmiIconButton(
-            icon: const Icon(Icons.more_horiz),
-            label: context.l10n.moreOptions,
-            onPressed: () => _showOptionsMenu(context),
-          ),
-          const SizedBox(width: OmiSpacing.xxs),
-        ],
-      ),
-      backgroundColor: OmiColors.surface0,
+    return OmiGroupedPage(
+      title: context.l10n.recordingDetails,
+      actions: [
+        OmiIconButton.filled(
+          icon: const OmiLineIcon(OmiLineGlyph.more, size: 20),
+          label: context.l10n.moreOptions,
+          onPressed: () => _showOptionsMenu(context),
+        ),
+      ],
       body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
   }
@@ -133,7 +128,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final storageLabel =
         isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
-    final storageColor = isFlashPage ? Colors.teal : OmiColors.textSecondary;
 
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
@@ -167,32 +161,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   const SizedBox(height: 4),
                   Text(
                     OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: Colors.grey.shade400,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                    style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                   ),
                   const SizedBox(height: 8),
                   // Storage notice
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: storageColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(storageIcon, color: storageColor, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          context.l10n.storedOnDevice(storageLabel),
-                          style: TextStyle(color: storageColor, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _InfoPill(icon: storageIcon, label: context.l10n.storedOnDevice(storageLabel)),
                 ],
               ),
             ),
@@ -209,7 +182,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       Container(
                         width: 120,
                         height: 120,
-                        decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                          color: OmiColors.iconTile,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: OmiColors.groupedBorder),
+                        ),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
@@ -223,18 +200,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       // Status text
                       Text(
                         isTransferring ? context.l10n.transferring : context.l10n.transferRequired,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.titleLarge!.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
+                        style: OmiType.title2,
                       ),
                       const SizedBox(height: 12),
                       Text(
                         isTransferring
                             ? context.l10n.downloadingAudioFromSdCard
                             : context.l10n.transferRequiredDescription,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, fontSize: 14),
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
 
@@ -242,11 +215,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       if (isTransferring) ...[
                         const SizedBox(height: 32),
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: OmiRadius.pillAll,
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
-                            backgroundColor: Colors.grey.shade800,
-                            color: OmiColors.accent,
+                            backgroundColor: OmiColors.surface3,
+                            color: OmiColors.textPrimary,
                             minHeight: 6,
                           ),
                         ),
@@ -256,13 +229,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           children: [
                             Text(
                               '${(transferProgress * 100).toInt()}%',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                              style:
+                                  OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                             ),
                             if (transferSpeedKBps != null && transferSpeedKBps > 0) ...[
                               const SizedBox(width: 16),
                               Text(
                                 '${transferSpeedKBps.toStringAsFixed(1)} KB/s',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                                style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                               ),
                             ],
                           ],
@@ -271,7 +245,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           const SizedBox(height: 8),
                           Text(
                             context.l10n.etaLabel(_formatTransferEta(transferEtaSeconds)),
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                           ),
                         ],
                       ],
@@ -324,32 +298,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   const SizedBox(height: 4),
                   Text(
                     OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: Colors.grey.shade400,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                    style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                   ),
                   const SizedBox(height: 8),
                   // Privacy notice
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.security, color: Colors.grey.shade400, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          context.l10n.privateAndSecureOnDevice,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _InfoPill(icon: Icons.lock_outline, label: context.l10n.privateAndSecureOnDevice),
                 ],
               ),
             ),
@@ -403,8 +356,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         ? FontAwesomeIcons.hourglass
                         : (isPlaying ? FontAwesomeIcons.pause : FontAwesomeIcons.play),
                     size: 80,
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                    iconColor: Colors.white,
+                    backgroundColor: OmiColors.accent,
+                    iconColor: OmiColors.onAccent,
                     onPressed: playbackState.canPlayOrShare && !playbackState.isProcessing
                         ? () => _handlePlayPause(context.read<SyncProvider>())
                         : null,
@@ -441,12 +394,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: backgroundColor ?? Theme.of(context).colorScheme.surface,
+        color: backgroundColor ?? OmiColors.iconTile,
         shape: BoxShape.circle,
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? OmiColors.textPrimary, size: size * 0.4),
       ),
     );
   }
@@ -648,5 +601,40 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+}
+
+/// A quiet fact under the recording's date ("Private and secure on your device", where it is
+/// stored): neutral like the rest of Settings.
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+      decoration: BoxDecoration(
+        color: OmiColors.iconTile,
+        borderRadius: OmiRadius.pillAll,
+        border: Border.all(color: OmiColors.groupedBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: OmiColors.textSecondary, size: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

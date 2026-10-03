@@ -4,7 +4,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -143,45 +142,45 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.permissions)),
+    return OmiGroupedPage(
+      title: context.l10n.permissions,
       body: _isLoading
           ? const OmiLoadingState()
           : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
+              padding: OmiGroupedPage.padding,
               children: [
                 OmiSettingsGroup(
                   footer: context.l10n.permissionsPageDescription,
                   children: [
                     _buildPermissionRow(
-                      icon: FontAwesomeIcons.solidBell,
                       title: context.l10n.notifications,
+                      glyph: OmiLineGlyph.bell,
                       isGranted: _notificationsGranted,
                       onTap: () =>
                           _handlePermissionTap(Permission.notification, _notificationsGranted, 'notifications'),
                     ),
                     _buildPermissionRow(
-                      icon: FontAwesomeIcons.locationArrow,
                       title: context.l10n.location,
+                      glyph: OmiLineGlyph.location,
                       isGranted: _locationGranted,
                       onTap: _handleLocationTap,
                     ),
                     _buildPermissionRow(
-                      icon: FontAwesomeIcons.bluetooth,
                       title: context.l10n.bluetooth,
+                      glyph: OmiLineGlyph.bluetooth,
                       isGranted: _bluetoothGranted,
                       onTap: _handleBluetoothTap,
                     ),
                     _buildPermissionRow(
-                      icon: FontAwesomeIcons.microphone,
                       title: context.l10n.microphone,
+                      glyph: OmiLineGlyph.microphone,
                       isGranted: _microphoneGranted,
                       onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
                     ),
                     if (Platform.isAndroid)
                       _buildPermissionRow(
-                        icon: FontAwesomeIcons.batteryFull,
                         title: context.l10n.backgroundActivity,
+                        glyph: OmiLineGlyph.broadcast,
                         isGranted: _backgroundGranted,
                         onTap: _handleBackgroundTap,
                       ),
@@ -193,13 +192,13 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   }
 
   Widget _buildPermissionRow({
-    required FaIconData icon,
     required String title,
+    required OmiLineGlyph glyph,
     required bool isGranted,
     required VoidCallback onTap,
   }) {
     return OmiSettingsRow(
-      leading: FaIcon(icon),
+      leading: OmiSettingsIconTile(glyph),
       title: title,
       onTap: onTap,
       showChevron: true,

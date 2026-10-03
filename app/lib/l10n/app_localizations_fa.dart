@@ -3776,6 +3776,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsHeader => 'تنظیمات';
 
   @override
+  String get settingsSectionRecording => 'ضبط';
+
+  @override
+  String get settingsSectionSupport => 'پشتیبانی';
+
+  @override
   String get plansAndBilling => 'طرح‌ها و صورت‌حساب';
 
   @override

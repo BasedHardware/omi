@@ -2226,10 +2226,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get appLanguage => 'Језик апликације';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЈС АПЛИКАЦИЈЕ';
+  String get appInterfaceSectionTitle => 'Интерфејс апликације';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ГОВОР И ПРЕПОЗНАВАЊЕ';
+  String get speechTranscriptionSectionTitle => 'Говор и препознавање';
 
   @override
   String get languageSettingsHelperText =>
@@ -3779,6 +3779,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get settingsHeader => 'ПОСТАВКЕ';
 
   @override
+  String get settingsSectionRecording => 'Снимање';
+
+  @override
+  String get settingsSectionSupport => 'Подршка';
+
+  @override
   String get plansAndBilling => 'Планови и наплате';
 
   @override
@@ -4379,7 +4385,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get saveKeyWarning => 'Сачувај овај кључ сада! Нећеш моћи да га видиш поново.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЉУЧ';
+  String get yourApiKey => 'Ваш API кључ';
 
   @override
   String get tapToCopy => 'Додирни да копираш';
@@ -4394,13 +4400,13 @@ class AppLocalizationsSr extends AppLocalizations {
   String get accessDataProgrammatically => 'Приступи својим подацима програмски';
 
   @override
-  String get keyNameLabel => 'ИМЕ КЉУЧА';
+  String get keyNameLabel => 'Име кључа';
 
   @override
   String get keyNamePlaceholder => 'нпр., Моја интеграција апликације';
 
   @override
-  String get permissionsLabel => 'ДОЗВОЛЕ';
+  String get permissionsLabel => 'Дозволе';
 
   @override
   String get permissionsInfoNote => 'R = Читај, W = Напиши. Подразумева се само читање ако ничего нису означено.';
@@ -8483,7 +8489,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get tipAutoSync => 'Снимци се синхронизују аутоматски';
 
   @override
-  String get storageSection => 'СКЛАДИШТЕ';
+  String get storageSection => 'Складиште';
 
   @override
   String get permissions => 'Дозволе';

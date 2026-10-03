@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/components/omi_settings.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
 /// controls use the smaller of the two so a row of them still fits a phone-width app bar.
@@ -74,6 +75,8 @@ class OmiIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    // On a page in the Settings look ([OmiGroupedScope]) the circle defaults to the icon-tile colour.
+    final fillColor = this.fillColor ?? (OmiGroupedScope.of(context) ? OmiColors.iconTile : null);
     var glyphColor = color ?? (isDestructive ? OmiColors.danger : OmiColors.textPrimary);
     if (!enabled) glyphColor = glyphColor.withValues(alpha: 0.38);
 

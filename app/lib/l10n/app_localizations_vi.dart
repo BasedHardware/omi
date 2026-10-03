@@ -2230,10 +2230,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appLanguage => 'Ngôn ngữ ứng dụng';
 
   @override
-  String get appInterfaceSectionTitle => 'GIAO DIỆN ỨNG DỤNG';
+  String get appInterfaceSectionTitle => 'Giao diện ứng dụng';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GIỌNG NÓI & PHIÊN ÂM';
+  String get speechTranscriptionSectionTitle => 'Giọng nói & phiên âm';
 
   @override
   String get languageSettingsHelperText =>
@@ -3777,6 +3777,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
+  String get settingsSectionRecording => 'Ghi âm';
+
+  @override
+  String get settingsSectionSupport => 'Hỗ trợ';
+
+  @override
   String get plansAndBilling => 'Gói và Thanh toán';
 
   @override
@@ -4376,7 +4382,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saveKeyWarning => 'Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.';
 
   @override
-  String get yourApiKey => 'KHÓA API CỦA BẠN';
+  String get yourApiKey => 'Khóa API của bạn';
 
   @override
   String get tapToCopy => 'Nhấn để sao chép';
@@ -4391,13 +4397,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accessDataProgrammatically => 'Truy cập dữ liệu của bạn theo chương trình';
 
   @override
-  String get keyNameLabel => 'TÊN KHÓA';
+  String get keyNameLabel => 'Tên khóa';
 
   @override
   String get keyNamePlaceholder => 'vd: Tích hợp ứng dụng của tôi';
 
   @override
-  String get permissionsLabel => 'QUYỀN';
+  String get permissionsLabel => 'Quyền';
 
   @override
   String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';
@@ -8473,7 +8479,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tipAutoSync => 'Bản ghi tự động đồng bộ';
 
   @override
-  String get storageSection => 'BỘ NHỚ';
+  String get storageSection => 'Bộ nhớ';
 
   @override
   String get permissions => 'Quyền';

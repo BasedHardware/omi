@@ -1173,6 +1173,8 @@
     "selectAudioInput": "اختر إدخال الصوت",
     "loadingDevices": "جارٍ تحميل الأجهزة…",
     "settingsHeader": "الإعدادات",
+    "settingsSectionRecording": "التسجيل",
+    "settingsSectionSupport": "الدعم",
     "plansAndBilling": "الخطط والفواتير",
     "calendarIntegration": "تكامل التقويم",
     "dailySummary": "الملخص اليومي",

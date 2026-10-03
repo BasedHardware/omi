@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 /// Accents and primary actions are neutral: white on black in dark mode, black on white in light mode.
 /// Status colours use the corresponding iOS light and dark system variants.
 ///
-/// `AppStyles` and `ResponsiveHelper` predate these tokens. Do not add new uses of them.
+/// `AppStyles` predates these tokens. Do not add new uses of it.
 ///
 /// Resolved values for one appearance. The dark values are the original Omi tokens.
 @immutable
@@ -27,6 +27,11 @@ class OmiPalette {
       required this.conversationCard,
       required this.sourceBadgeSurface,
       required this.border,
+      required this.groupedPage,
+      required this.groupedCard,
+      required this.groupedBorder,
+      required this.iconTile,
+      required this.iconTileGlyph,
       required this.textPrimary,
       required this.textSecondary,
       required this.textTertiary,
@@ -51,6 +56,16 @@ class OmiPalette {
   final Color conversationCard;
   final Color sourceBadgeSurface;
   final Color border;
+
+  /// Top-level Settings: the page under outlined groups, the group card and its hairline border.
+  final Color groupedPage;
+  final Color groupedCard;
+  final Color groupedBorder;
+
+  /// The warm tile behind a settings row's line glyph, and the glyph itself.
+  final Color iconTile;
+  final Color iconTileGlyph;
+
   final Color textPrimary;
   final Color textSecondary;
   final Color textTertiary;
@@ -74,6 +89,11 @@ class OmiPalette {
     conversationCard: Color(0xFF1F1F25),
     sourceBadgeSurface: Color(0xFF2A2A31),
     border: Color(0xFF3C3C43),
+    groupedPage: Color(0xFF0A0A0A),
+    groupedCard: Color(0xFF141414),
+    groupedBorder: Color(0x14FFFFFF),
+    iconTile: Color(0xFF1B1A17),
+    iconTileGlyph: Color(0xFFB3AEA6),
     textPrimary: Color(0xFFFFFFFF),
     textSecondary: Color(0xFFAEAEB2),
     textTertiary: Color(0xFF8E8E93),
@@ -98,6 +118,11 @@ class OmiPalette {
     conversationCard: Color(0xFFFFFFFF),
     sourceBadgeSurface: Color(0xFFE5E5EA),
     border: Color(0xFFC6C6C8),
+    groupedPage: Color(0xFFFDFDFD),
+    groupedCard: Color(0xFFFFFFFF),
+    groupedBorder: Color(0x120A0A0A),
+    iconTile: Color(0xFFFAF8F4),
+    iconTileGlyph: Color(0xFF5F5B55),
     textPrimary: Color(0xFF000000),
     textSecondary: Color(0x993C3C43),
     textTertiary: Color(0xFF636366),
@@ -129,6 +154,11 @@ abstract final class OmiColors {
   static Color get conversationCard => active.conversationCard;
   static Color get sourceBadgeSurface => active.sourceBadgeSurface;
   static Color get border => active.border;
+  static Color get groupedPage => active.groupedPage;
+  static Color get groupedCard => active.groupedCard;
+  static Color get groupedBorder => active.groupedBorder;
+  static Color get iconTile => active.iconTile;
+  static Color get iconTileGlyph => active.iconTileGlyph;
   static Color get textPrimary => active.textPrimary;
   static Color get textSecondary => active.textSecondary;
   static Color get textTertiary => active.textTertiary;

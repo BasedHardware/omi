@@ -2267,11 +2267,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ИНТЕРФЕЈС АПЛИКАЦИЈЕ",
+    "appInterfaceSectionTitle": "Интерфејс апликације",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "ГОВОР И ПРЕПОЗНАВАЊЕ",
+    "speechTranscriptionSectionTitle": "Говор и препознавање",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Снимање",
+    "settingsSectionSupport": "Подршка",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +4998,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ВАШ API КЉУЧ",
+    "yourApiKey": "Ваш API кључ",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5021,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "ИМЕ КЉУЧА",
+    "keyNameLabel": "Име кључа",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5029,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "ДОЗВОЛЕ",
+    "permissionsLabel": "Дозволе",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10089,7 +10091,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "СКЛАДИШТЕ",
+    "storageSection": "Складиште",
     "@storageSection": {
         "description": "Section header for storage settings"
     },

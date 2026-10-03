@@ -56,7 +56,6 @@ class DeveloperMcpSection extends StatelessWidget {
               const SizedBox(width: OmiSpacing.xs),
               OmiButton.secondary(
                 label: l10n.createKey,
-                leading: const FaIcon(FontAwesomeIcons.plus),
                 size: OmiButtonSize.compact,
                 onPressed: () => showDialog(context: context, builder: (_) => const CreateMcpApiKeyDialog()),
               ),
@@ -68,7 +67,6 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.terminal),
               title: l10n.claudeCode,
               subtitle: l10n.addToClaudeCodeConfig,
             ),
@@ -82,7 +80,6 @@ class DeveloperMcpSection extends StatelessWidget {
                   const SizedBox(height: OmiSpacing.sm),
                   OmiButton.secondary(
                     label: l10n.copyConfig,
-                    leading: const FaIcon(FontAwesomeIcons.copy),
                     expand: true,
                     onPressed: () => OmiClipboard.copy(context, hostedMcpConfigJson(mcpUrl)),
                   ),
@@ -95,7 +92,6 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.desktop),
               title: l10n.claudeDesktop,
               subtitle: l10n.claudeDesktopConnectorSetup,
             ),
@@ -109,7 +105,6 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.server),
               title: l10n.mcpServer,
               subtitle: l10n.connectAiAssistantsToYourData,
             ),
@@ -157,7 +152,7 @@ class DeveloperMcpSection extends StatelessWidget {
             style: switch (kind) {
               McpJsonToken.plain => null,
               McpJsonToken.key => TextStyle(color: OmiColors.textSecondary),
-              McpJsonToken.string => TextStyle(color: OmiColors.warning),
+              McpJsonToken.string => TextStyle(color: OmiColors.textPrimary),
             },
           ),
       ],
@@ -184,7 +179,9 @@ class _McpKeysList extends StatelessWidget {
         }
         if (provider.keys.isEmpty) {
           return OmiEmptyState(
-              glyph: const FaIcon(FontAwesomeIcons.key), title: l10n.noApiKeysYet, message: l10n.createKeyToGetStarted);
+              glyph: const OmiLineIcon(OmiLineGlyph.key),
+              title: l10n.noApiKeysYet,
+              message: l10n.createKeyToGetStarted);
         }
         return OmiSettingsGroup(children: [for (final key in provider.keys) McpApiKeyListItem(apiKey: key)]);
       },
@@ -213,9 +210,9 @@ class _CodeBlock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.sm),
       decoration: BoxDecoration(
-        color: OmiColors.surface0,
+        color: OmiColors.iconTile,
         borderRadius: OmiRadius.mdAll,
-        border: Border.all(color: OmiColors.surface2),
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -247,9 +244,9 @@ class _CopyableValue extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
           decoration: BoxDecoration(
-            color: OmiColors.surface0,
+            color: OmiColors.iconTile,
             borderRadius: OmiRadius.mdAll,
-            border: Border.all(color: OmiColors.surface2),
+            border: Border.all(color: OmiColors.groupedBorder),
           ),
           child: Row(
             children: [

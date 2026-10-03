@@ -1154,6 +1154,8 @@
     "selectAudioInput": "选择音频输入",
     "loadingDevices": "正在加载设备…",
     "settingsHeader": "设置",
+    "settingsSectionRecording": "录音",
+    "settingsSectionSupport": "支持",
     "plansAndBilling": "计划与账单",
     "calendarIntegration": "日历集成",
     "dailySummary": "每日总结",

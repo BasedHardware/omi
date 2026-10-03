@@ -2211,7 +2211,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appInterfaceSectionTitle => 'ממשק אפליקציה';
 
   @override
-  String get speechTranscriptionSectionTitle => 'דיבור וריבוי מדיה';
+  String get speechTranscriptionSectionTitle => 'דיבור ותמלול';
 
   @override
   String get languageSettingsHelperText =>
@@ -3744,6 +3744,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get settingsHeader => 'הגדרות';
+
+  @override
+  String get settingsSectionRecording => 'הקלטה';
+
+  @override
+  String get settingsSectionSupport => 'תמיכה';
 
   @override
   String get plansAndBilling => 'תוכניות וחיוב';

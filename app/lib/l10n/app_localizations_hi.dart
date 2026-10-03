@@ -3750,6 +3750,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get settingsHeader => 'सेटिंग्स';
 
   @override
+  String get settingsSectionRecording => 'रिकॉर्डिंग';
+
+  @override
+  String get settingsSectionSupport => 'सहायता';
+
+  @override
   String get plansAndBilling => 'योजनाएं और बिलिंग';
 
   @override

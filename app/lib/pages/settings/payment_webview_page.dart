@@ -101,12 +101,10 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       return const SizedBox.shrink();
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        // A pushed page: back, not close. It reports "not completed" like the cancel URL does.
-        leading: OmiBackButton(onPressed: () => Navigator.of(context).pop(false)),
-        title: Text(widget.title ?? context.l10n.completeYourUpgrade),
-      ),
+    return OmiGroupedPage(
+      // A pushed page: back, not close. It reports "not completed" like the cancel URL does.
+      onBack: () => Navigator.of(context).pop(false),
+      title: widget.title ?? context.l10n.completeYourUpgrade,
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),

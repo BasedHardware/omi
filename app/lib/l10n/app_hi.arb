@@ -1150,6 +1150,8 @@
     "selectAudioInput": "ऑडियो इनपुट चुनें",
     "loadingDevices": "डिवाइस लोड हो रहे हैं…",
     "settingsHeader": "सेटिंग्स",
+    "settingsSectionRecording": "रिकॉर्डिंग",
+    "settingsSectionSupport": "सहायता",
     "plansAndBilling": "योजनाएं और बिलिंग",
     "calendarIntegration": "कैलेंडर एकीकरण",
     "dailySummary": "दैनिक सारांश",

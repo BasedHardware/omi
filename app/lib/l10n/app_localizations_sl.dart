@@ -2228,10 +2228,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get appLanguage => 'Jezik aplikacije';
 
   @override
-  String get appInterfaceSectionTitle => 'VMESNIK APLIKACIJE';
+  String get appInterfaceSectionTitle => 'Vmesnik aplikacije';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GOVOR IN TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Govor in transkripcija';
 
   @override
   String get languageSettingsHelperText =>
@@ -3779,6 +3779,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settingsHeader => 'NASTAVITVE';
 
   @override
+  String get settingsSectionRecording => 'Snemanje';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
   String get plansAndBilling => 'Načrti in obračun';
 
   @override
@@ -4377,7 +4383,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get saveKeyWarning => 'Shranite ta ključ zdaj! Ga ne boste mogli videti znova.';
 
   @override
-  String get yourApiKey => 'VAŠ KLJUČ API';
+  String get yourApiKey => 'Vaš ključ API';
 
   @override
   String get tapToCopy => 'Tapnite za kopiranje';
@@ -4392,13 +4398,13 @@ class AppLocalizationsSl extends AppLocalizations {
   String get accessDataProgrammatically => 'Dostopajte do podatkov programsko';
 
   @override
-  String get keyNameLabel => 'IME KLJUČA';
+  String get keyNameLabel => 'Ime ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOVOLJENJA';
+  String get permissionsLabel => 'Dovoljenja';
 
   @override
   String get permissionsInfoNote => 'R = Branje, W = Pisanje. Privzeto samo za branje, če ničesar ni izbrano.';
@@ -8496,7 +8502,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tipAutoSync => 'Posnetki se sinhronizirajo samodejno';
 
   @override
-  String get storageSection => 'SHRAMBA';
+  String get storageSection => 'Shramba';
 
   @override
   String get permissions => 'Dovoljenja';

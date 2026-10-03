@@ -39,9 +39,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.mdAll,
-        border: Border.all(color: OmiColors.border, width: 1),
+        color: OmiColors.groupedCard,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: Row(
         children: [
@@ -62,25 +62,17 @@ class _PaymentsPageState extends State<PaymentsPage> {
   Widget build(BuildContext context) {
     return Consumer<PaymentMethodProvider>(
       builder: (context, provider, child) {
-        return Scaffold(
-          backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.payments),
-          ),
+        return OmiGroupedPage(
+          title: context.l10n.payments,
           body: Skeletonizer(
             enabled: provider.isLoading,
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: OmiGroupedPage.padding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      context.l10n.selectedPaymentMethod,
-                      style: OmiType.title3,
-                    ),
-                    const SizedBox(height: 18),
+                    OmiSectionHeader(context.l10n.selectedPaymentMethod),
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
                         // PayPal is no longer offered; only treat Stripe as a valid active method.
@@ -93,11 +85,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                           children: [
                             if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
                             if (hasActiveMethod) ...[_buildActiveMethodCard(provider), const SizedBox(height: 24)],
-                            Text(
-                              context.l10n.availablePaymentMethods,
-                              style: OmiType.title3,
-                            ),
-                            const SizedBox(height: 16),
+                            OmiSectionHeader(context.l10n.availablePaymentMethods),
                             ..._buildOtherMethodCards(provider, activeMethod),
                             const SizedBox(height: 12),
                             _buildComingSoonCard(),
@@ -119,15 +107,15 @@ class _PaymentsPageState extends State<PaymentsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.mdAll,
-        border: Border.all(color: OmiColors.border, width: 1),
+        color: OmiColors.groupedCard,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            decoration: BoxDecoration(color: OmiColors.iconTile, borderRadius: OmiRadius.smAll),
             child: Icon(Icons.schedule_outlined, color: OmiColors.textTertiary, size: 22),
           ),
           const SizedBox(width: 14),
@@ -158,7 +146,6 @@ class _PaymentsPageState extends State<PaymentsPage> {
       icon: config.icon,
       title: config.title,
       subtitle: config.subtitle,
-      backgroundColor: config.backgroundColor,
       onManageTap: config.onManageTap,
       onSetActiveTap: config.onSetActiveTap,
       isActive: config.isActive,

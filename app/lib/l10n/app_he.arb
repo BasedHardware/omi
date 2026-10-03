@@ -2271,7 +2271,7 @@
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "דיבור וריבוי מדיה",
+    "speechTranscriptionSectionTitle": "דיבור ותמלול",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "הקלטה",
+    "settingsSectionSupport": "תמיכה",
     "@account": {
         "description": "Account section label"
     },

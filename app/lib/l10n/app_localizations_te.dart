@@ -2236,7 +2236,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get appLanguage => 'ఆ విషయానికి సంబంధించిన భాష';
 
   @override
-  String get appInterfaceSectionTitle => 'ఆ విషయానికి సంబంధించిన ఇంటర్ఫేస్';
+  String get appInterfaceSectionTitle => 'యాప్ ఇంటర్‌ఫేస్';
 
   @override
   String get speechTranscriptionSectionTitle => 'ఉచ్చారణ & ట్రాన్‌స్క్రిప్షన్';
@@ -3790,6 +3790,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get settingsHeader => 'సెట్టింగ్‌లు';
+
+  @override
+  String get settingsSectionRecording => 'రికార్డింగ్';
+
+  @override
+  String get settingsSectionSupport => 'మద్దతు';
 
   @override
   String get plansAndBilling => 'ప్లాన్‌లు & బిలింగ్';

@@ -2236,10 +2236,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appLanguage => 'Bahasa Aplikasi';
 
   @override
-  String get appInterfaceSectionTitle => 'ANTARA MUKA APLIKASI';
+  String get appInterfaceSectionTitle => 'Antara muka aplikasi';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PERTUTURAN & TRANSKRIPSI';
+  String get speechTranscriptionSectionTitle => 'Pertuturan & transkripsi';
 
   @override
   String get languageSettingsHelperText =>
@@ -3785,6 +3785,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
+  String get settingsSectionRecording => 'Rakaman';
+
+  @override
+  String get settingsSectionSupport => 'Sokongan';
+
+  @override
   String get plansAndBilling => 'Pelan & Pengebilan';
 
   @override
@@ -4386,7 +4392,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan dapat melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API anda';
 
   @override
   String get tapToCopy => 'Ketik untuk menyalin';
@@ -4401,13 +4407,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data anda secara programatik';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'cth., Integrasi Apl Saya';
 
   @override
-  String get permissionsLabel => 'KEBENARAN';
+  String get permissionsLabel => 'Kebenaran';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.';
@@ -8497,7 +8503,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tipAutoSync => 'Rakaman disegerakkan secara automatik';
 
   @override
-  String get storageSection => 'STORAN';
+  String get storageSection => 'Storan';
 
   @override
   String get permissions => 'Kebenaran';

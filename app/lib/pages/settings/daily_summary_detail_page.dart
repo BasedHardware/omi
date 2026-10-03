@@ -200,7 +200,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       builder: (sheetCtx) => OmiSettingsGroup(
         children: [
           OmiSettingsRow(
-            leading: const Icon(Icons.refresh),
+            leading: const OmiSettingsIconTile(OmiLineGlyph.refresh),
             title: context.l10n.regenerateRecap,
             showChevron: false,
             onTap: () {
@@ -209,7 +209,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             },
           ),
           OmiSettingsRow(
-            leading: const Icon(Icons.delete_outline),
+            // The custom tile carries the red: a glyph tile keeps its own ink.
+            leading: OmiSettingsIconTile.custom(child: OmiLineIcon(OmiLineGlyph.trash, color: OmiColors.danger)),
             title: context.l10n.deleteRecap,
             isDestructive: true,
             showChevron: false,

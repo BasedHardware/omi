@@ -140,7 +140,7 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
 │   ├── Device connected → battery pill → Connected Device (home/device.dart); phone icon → Phone Calls
 │   └── No device → Connect → Connect Device page; Record pill → Conversation Capturing (conversation_capturing/page.dart)
 │       └── Chevron → record options sheet (Phone Mic record / Phone Call)
-├── [settings gear, top right] → Settings sheet (settings_drawer.dart) — present on every slot
+├── [settings gear, top right] → Settings page (settings_drawer.dart, pushed full screen) — present on every slot
 │
 ├── [slot 0] Home (home/home_content.dart)
 │   ├── Conversation capture widget, today's tasks widget
@@ -169,8 +169,11 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
     │   └── Reviews, capabilities, install/enable, Chat button → Chat
     └── Top-bar "+" on this slot → Add App / Add MCP Server
 
-Settings sheet (settings_drawer.dart) — search + close header, then five visual groups: Account ·
-Plan & Usage, Referral Program · Device … Data & Privacy · Help & About, Feedback · Developer Settings.
+Settings (settings_drawer.dart) — a full-screen page pushed from the gear: back + title + search header,
+then a profile card (Account) and six labelled groups whose rows lead with an icon tile and have no
+dividers: Account (Plan & Usage, Referral Program) · Recording (Device, Recording & Transcription) · Features (Memories, Goals,
+Integrations) · Preferences (Notifications & Display, Data & Privacy) · Support (Help & About, Feedback) ·
+Developer (Developer Settings).
 Every top-level row has a ValueKey (`settings_account`, `settings_group_<group>`, or
 `settings_row_<SettingsDestination>` for the direct rows Plan, Referral and Feedback); each page has a
 Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings_row_<SettingsDestination>`
@@ -181,7 +184,7 @@ Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings
 │   ├── User ID (tap copies)
 │   └── Sign Out → Confirmation dialog; Delete Account (delete_account.dart)
 ├── Plan & Usage [settings_row_planAndUsage] (usage_page.dart) — "Pro" value when paid
-├── Referral Program [settings_row_referral] (referral_page.dart) — NEW tag
+├── Referral Program [settings_row_referral] (referral_page.dart)
 ├── Device [settings_group_device] → settings_groups.dart
 │   ├── Device Settings (device_settings.dart) (only when a device is connected)
 │   ├── Offline Sync (sync_page.dart / auto_sync_page.dart)
@@ -192,9 +195,11 @@ Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings
 │   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart); Identifying Others (people.dart)
 │   ├── Voice Response (picker sheet); Conversation Timeout (picker)
 │   └── Recording (BETA): Transcribe Later switch; Background Mode switch (Android only)
+├── Memories [settings_row_memories] (memories/page.dart)
+├── Goals [settings_row_goals]
+├── Integrations [settings_group_integrations] (integrations_page.dart) — also opens from conversation detail
 ├── Notifications & Display [settings_group_notifications] → settings_groups.dart
 │   └── Notifications (notifications_settings_page.dart); Home Screen; Conversation Display
-├── Integrations [settings_group_integrations] (integrations_page.dart) — BETA; also opens from conversation detail
 ├── Data & Privacy [settings_group_privacy] → settings_groups.dart
 │   ├── Data Protection (data_privacy_page.dart); Memories (memories/page.dart)
 │   └── Export All Data (spinner while running); Import Data (import_history_page.dart)
@@ -206,7 +211,7 @@ Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings
 └── Developer Settings [settings_group_developer] (developer.dart)
 (Settings search finds every row above and opens the page that holds it.)
 
-Transcription Settings (transcription_settings_page.dart) — not in settings drawer; reached from
+Transcription Settings (transcription_settings_page.dart) — not a row on the Settings page; reached from
 Plan & Usage, Developer Settings, or the Plans sheet
 ├── Source toggle: Omi Cloud vs Custom STT
 ├── Provider selector, API key, model config
@@ -252,7 +257,7 @@ Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #1
 
 **Settings gear:**
 - Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
-- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Account,
+- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → the Settings page (Account,
   Plan & Usage, Referral Program, Device, Recording & Transcription, Notifications & Display,
   Integrations, Data & Privacy, Help & About, Feedback, Developer Settings)
 
@@ -305,7 +310,7 @@ Every flow lists `prerequisites:` — conditions that MUST be true before runnin
 | `ble_on` | Bluetooth enabled on device | Enable Bluetooth in device Settings → Connected Devices. **Emulators/simulators do not support BLE** — requires physical device | Enable Bluetooth in device Settings. **iOS Simulator has no BLE** — requires physical iPhone |
 | `omi_device_connected` | Omi hardware paired and connected via BLE | Power on Omi device within BLE range → app auto-discovers on home screen → tap Connect. **Physical device only** | Same — power on Omi, app discovers it. **Physical iPhone only** |
 | `phone_number_verified` | Phone number added and verified in settings | Settings → Phone Calls → add phone number → receive SMS → enter code. Requires real phone number | Same flow — requires real phone number that receives SMS |
-| `developer_settings_enabled` | Developer Settings screen is open | Settings drawer → scroll down → tap "Developer Settings" (visible to all users) | Same navigation path |
+| `developer_settings_enabled` | Developer Settings screen is open | Settings page → scroll down to Developer → tap "Developer Settings" (visible to all users) | Same navigation path |
 | `adb_access` | Shell access for locale/prefs manipulation (Android only) | Debug build + `adb` in PATH. Verify: `adb shell run-as com.friend.ios.dev ls shared_prefs/` | Not applicable — iOS equivalent uses `xcrun simctl` for simulator or Xcode for device |
 
 ### Prerequisite dependency chain

@@ -3778,6 +3778,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get settingsHeader => 'सेटिंग्‍स';
 
   @override
+  String get settingsSectionRecording => 'रेकॉर्डिंग';
+
+  @override
+  String get settingsSectionSupport => 'सहाय्य';
+
+  @override
   String get plansAndBilling => 'योजना आणि बिलिंग';
 
   @override

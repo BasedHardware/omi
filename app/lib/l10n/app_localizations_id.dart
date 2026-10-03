@@ -2232,10 +2232,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get appLanguage => 'Bahasa Aplikasi';
 
   @override
-  String get appInterfaceSectionTitle => 'ANTARMUKA APLIKASI';
+  String get appInterfaceSectionTitle => 'Antarmuka aplikasi';
 
   @override
-  String get speechTranscriptionSectionTitle => 'UCAPAN & TRANSKRIPSI';
+  String get speechTranscriptionSectionTitle => 'Ucapan & transkripsi';
 
   @override
   String get languageSettingsHelperText =>
@@ -3780,6 +3780,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get settingsHeader => 'PENGATURAN';
 
   @override
+  String get settingsSectionRecording => 'Perekaman';
+
+  @override
+  String get settingsSectionSupport => 'Dukungan';
+
+  @override
   String get plansAndBilling => 'Paket & Penagihan';
 
   @override
@@ -4379,7 +4385,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API Anda';
 
   @override
   String get tapToCopy => 'Ketuk untuk menyalin';
@@ -4394,13 +4400,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data Anda secara terprogram';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'mis., Integrasi Aplikasi Saya';
 
   @override
-  String get permissionsLabel => 'IZIN';
+  String get permissionsLabel => 'Izin';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.';
@@ -8481,7 +8487,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get tipAutoSync => 'Rekaman disinkronkan secara otomatis';
 
   @override
-  String get storageSection => 'PENYIMPANAN';
+  String get storageSection => 'Penyimpanan';
 
   @override
   String get permissions => 'Izin';

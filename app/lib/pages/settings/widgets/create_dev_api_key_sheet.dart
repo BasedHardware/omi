@@ -177,12 +177,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
             // Permission rows
             OmiSettingsGroup(
               children: [
-                _buildPermissionRow(
-                    l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
-                _buildPermissionRow(l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
-                _buildPermissionRow(
-                    l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
-                _buildPermissionRow(l10n.goals, 'goals:read', 'goals:write', Icons.flag_outlined),
+                _buildPermissionRow(l10n.conversations, 'conversations:read', 'conversations:write', OmiLineGlyph.chat),
+                _buildPermissionRow(l10n.memories, 'memories:read', 'memories:write', OmiLineGlyph.memories),
+                _buildPermissionRow(l10n.actionItems, 'action_items:read', 'action_items:write', OmiLineGlyph.task),
+                _buildPermissionRow(l10n.goals, 'goals:read', 'goals:write', OmiLineGlyph.goals),
               ],
             ),
             const SizedBox(height: OmiSpacing.sm),
@@ -207,9 +205,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     );
   }
 
-  Widget _buildPermissionRow(String resource, String readScope, String writeScope, IconData icon) {
+  Widget _buildPermissionRow(String resource, String readScope, String writeScope, OmiLineGlyph glyph) {
     return OmiSettingsRow(
-      leading: Icon(icon),
+      leading: OmiSettingsIconTile(glyph),
       title: resource,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

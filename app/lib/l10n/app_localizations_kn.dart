@@ -2232,7 +2232,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get appLanguage => 'ಅ್ಯಪ್ ಭಾಷೆ';
 
   @override
-  String get appInterfaceSectionTitle => 'ಅ್ಯಪ್ ಇಂಟರ್ಫೇಸ್';
+  String get appInterfaceSectionTitle => 'ಆ್ಯಪ್ ಇಂಟರ್‌ಫೇಸ್';
 
   @override
   String get speechTranscriptionSectionTitle => 'ಭಾಷಣ ಮತ್ತು ಟ್ರಾನ್ಸ್ಕ್ರಿಪ್ಷನ್';
@@ -3784,6 +3784,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
+
+  @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
 
   @override
   String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';

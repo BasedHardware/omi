@@ -2233,10 +2233,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appLanguage => 'Jazyk aplikácie';
 
   @override
-  String get appInterfaceSectionTitle => 'ROZHRANIE APLIKÁCIE';
+  String get appInterfaceSectionTitle => 'Rozhranie aplikácie';
 
   @override
-  String get speechTranscriptionSectionTitle => 'REČ A PREPIS';
+  String get speechTranscriptionSectionTitle => 'Reč a prepis';
 
   @override
   String get languageSettingsHelperText =>
@@ -3774,6 +3774,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get settingsHeader => 'NASTAVENIA';
 
   @override
+  String get settingsSectionRecording => 'Nahrávanie';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturácia';
 
   @override
@@ -4369,7 +4375,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saveKeyWarning => 'Uložte si tento kľúč teraz! Znovu ho neuvidíte.';
 
   @override
-  String get yourApiKey => 'VÁŠ API KĽÚČ';
+  String get yourApiKey => 'Váš API kľúč';
 
   @override
   String get tapToCopy => 'Klepnutím skopírujete';
@@ -4384,13 +4390,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accessDataProgrammatically => 'Programovo pristupujte k svojim údajom';
 
   @override
-  String get keyNameLabel => 'NÁZOV KĽÚČA';
+  String get keyNameLabel => 'Názov kľúča';
 
   @override
   String get keyNamePlaceholder => 'napr., Moja integrácia aplikácie';
 
   @override
-  String get permissionsLabel => 'OPRÁVNENIA';
+  String get permissionsLabel => 'Oprávnenia';
 
   @override
   String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';
@@ -8462,7 +8468,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tipAutoSync => 'Nahrávky sa synchronizujú automaticky';
 
   @override
-  String get storageSection => 'ÚLOŽISKO';
+  String get storageSection => 'Úložisko';
 
   @override
   String get permissions => 'Oprávnenia';

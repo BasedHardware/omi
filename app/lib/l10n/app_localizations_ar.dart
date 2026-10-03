@@ -3741,6 +3741,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingsHeader => 'الإعدادات';
 
   @override
+  String get settingsSectionRecording => 'التسجيل';
+
+  @override
+  String get settingsSectionSupport => 'الدعم';
+
+  @override
   String get plansAndBilling => 'الخطط والفواتير';
 
   @override

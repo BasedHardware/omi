@@ -1151,6 +1151,8 @@
     "selectAudioInput": "音声入力を選択",
     "loadingDevices": "デバイスを読み込み中…",
     "settingsHeader": "設定",
+    "settingsSectionRecording": "録音",
+    "settingsSectionSupport": "サポート",
     "plansAndBilling": "プランと請求",
     "calendarIntegration": "カレンダー統合",
     "dailySummary": "日次の要約",

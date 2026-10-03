@@ -2267,7 +2267,7 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ఆ విషయానికి సంబంధించిన ఇంటర్ఫేస్",
+    "appInterfaceSectionTitle": "యాప్ ఇంటర్‌ఫేస్",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "రికార్డింగ్",
+    "settingsSectionSupport": "మద్దతు",
     "@account": {
         "description": "Account section label"
     },

@@ -102,38 +102,43 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     final selectable = visible.where((p) => !p.pinned).map((p) => p.id).toList();
     final selected = visible.where((p) => !p.pinned && provider.selectedIds.contains(p.id)).toList();
     final allSelected = selectable.isNotEmpty && selectable.every(provider.selectedIds.contains);
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-        leading: selecting
-            ? OmiIconButton(icon: const Icon(Icons.close), label: l10n.cancel, onPressed: provider.endSelection)
-            : const OmiBackButton(),
-        title: Text(selecting ? l10n.selectedCount(selected.length) : l10n.people),
-        actions: [
-          if (selecting)
-            OmiButton.toolbar(
-              key: const Key('people_select_all'),
-              label: allSelected ? l10n.deselectAll : l10n.selectAll,
-              onPressed: () {
-                OmiHaptics.selection();
-                allSelected ? provider.deselectAll(selectable) : provider.selectAll(selectable);
-              },
+    return OmiGroupedPage(
+      leading: selecting
+          ? OmiIconButton.filled(
+              icon: const Icon(Icons.close),
+              label: l10n.cancel,
+              fillColor: OmiColors.iconTile,
+              onPressed: provider.endSelection,
             )
-          else ...[
-            if (provider.people.isNotEmpty)
-              OmiButton.toolbar(
-                key: const Key('people_select'),
-                label: l10n.selectOption,
-                onPressed: () => _showSelectMenu(provider),
-              ),
-            OmiIconButton(
-              icon: const Icon(Icons.add),
-              label: l10n.addPerson,
-              onPressed: () => showPersonNameDialog(context, provider),
+          : null,
+      title: selecting ? l10n.selectedCount(selected.length) : l10n.people,
+      actions: [
+        if (selecting)
+          OmiButton.toolbar(
+            key: const Key('people_select_all'),
+            size: OmiButtonSize.compact,
+            label: allSelected ? l10n.deselectAll : l10n.selectAll,
+            onPressed: () {
+              OmiHaptics.selection();
+              allSelected ? provider.deselectAll(selectable) : provider.selectAll(selectable);
+            },
+          )
+        else ...[
+          if (provider.people.isNotEmpty)
+            OmiButton.toolbar(
+              key: const Key('people_select'),
+              size: OmiButtonSize.compact,
+              label: l10n.selectOption,
+              onPressed: () => _showSelectMenu(provider),
             ),
-          ],
+          OmiIconButton.filled(
+            icon: const Icon(Icons.add),
+            label: l10n.addPerson,
+            fillColor: OmiColors.iconTile,
+            onPressed: () => showPersonNameDialog(context, provider),
+          ),
         ],
-      ),
+      ],
       bottomNavigationBar: AnimatedSwitcher(
         duration: motion.standard,
         transitionBuilder: (child, animation) => SizeTransition(sizeFactor: animation, child: child),

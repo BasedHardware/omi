@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "ضبط",
+    "settingsSectionSupport": "پشتیبانی",
     "@account": {
         "description": "Account section label"
     },

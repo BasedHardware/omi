@@ -80,6 +80,11 @@ There are exactly two ways out, and they mean different things.
 | Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
+| Top-level Settings rows | `OmiSettingsGroup(style: OmiSettingsGroupStyle.outlined, header:)` of `OmiSettingsRow(leading: OmiSettingsIconTile(OmiLineGlyph.…))`: labelled outlined cards on `OmiColors.groupedPage`, no hairlines | a FontAwesome glyph or a local tile per row |
+| A page inside Settings | `OmiGroupedPage(title:, actions:, body:)`: circled back, centred title, `OmiColors.groupedPage`; under it every `OmiSettingsGroup` is outlined and every `OmiSectionHeader` the small label. Pages of destinations or choices (Device, Recording, Permissions, Language, …) lead rows with `OmiSettingsIconTile`; a page of values and toggles (Notifications & Display, a transcription provider's fields) uses plain rows. A custom block sits in an `OmiGroupedCard` | `Scaffold` + `AppBar` + a `surface1` card, a FontAwesome glyph on a setting row |
+| Settings type and row icons | Settings is set in Instrument Sans: `OmiGroupedPage` applies `OmiSettingsTypeface`, and a Settings page with its own `Scaffold` wraps it. Row icons are outline-only `OmiLineGlyph`s (1.8 line, the Omi v8 icon weight, no fill) in `OmiSettingsIconTile`; a live value draws its own (`OmiBatteryIcon`) in `OmiSettingsIconTile.custom` | the system font on one Settings page, a Material or FontAwesome icon leading a Settings row |
+| Two to four views of one list or chart (Today · Month · Year, All · Pending · Synced) | `OmiSegmentedControl(value:, segments:, onChanged:)`: full width, 44 pt segments, labels never wrap | a row of tinted chips or a hand-built toggle |
+| A long list on a Settings page (offline recordings) | rows built lazily, each in an `OmiGroupedSlice(first:, last:)` so a run reads as one outlined card, under a small label per day or source; a row's own action is a compact button or a labelled icon, and its text is time-sized so it stays on one line | one card per row, or a card that mounts every row |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
@@ -215,7 +220,7 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - **Colour** `OmiColors`: `surface0` (black in dark mode, grouped #F2F2F7 in light mode), `surface1/2/3` (card / elevated / pressed),
   `border`, `textPrimary` / `textSecondary` / `textTertiary` (tertiary no darker than ~#8E8E93, ≥ 4.5:1
   on surface1), `accent` (white in dark mode, black in light mode — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
-  `dangerSurface`. `AppStyles` and `ResponsiveHelper` palettes are legacy.
+  `dangerSurface`. `AppStyles` palettes are legacy.
 - **Type** `OmiType`: an iOS-like ramp (11 / 13 / 15 / 17 / 20 / 24 / 28 / 34) as `TextStyle`s.
 - **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill. **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32.
 - **Motion** `OmiMotion`: quick 150 ms (a control answering a press), standard 250 ms (content
@@ -252,6 +257,11 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 
 ## 12. Settings
 
+- Settings is a full-screen page pushed from Home's gear (`SettingsDrawer.show`), with a back
+  button and search in its header: first the profile card (avatar, name, email; opens Account),
+  then the groups Account, Recording, Features, Preferences, Support and Developer. Every page it
+  opens is an `OmiGroupedPage` in the same black-and-white look; colour is kept for warnings,
+  errors and destructive actions.
 - Everyday settings live in top-level Settings (D4): data & privacy, export/import, transcription,
   conversation display and timeout, payment methods, phone calls. Developer Settings keeps only
   developer tools (webhooks, MCP, API keys, firmware channels, experiments).

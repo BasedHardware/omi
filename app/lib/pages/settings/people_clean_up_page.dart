@@ -43,42 +43,20 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
     final l10n = context.l10n;
     final tickedCount = _candidates.where((p) => _ticked.contains(p.id)).length;
     final allTicked = _candidates.isNotEmpty && tickedCount == _candidates.length;
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(l10n.cleanUpTitle),
-        actions: [
-          if (_candidates.isNotEmpty)
-            OmiButton.toolbar(
-              key: const Key('people_clean_up_toggle_all'),
-              label: allTicked ? l10n.deselectAll : l10n.selectAll,
-              onPressed: () {
-                OmiHaptics.selection();
-                setState(() => allTicked ? _ticked.clear() : _ticked.addAll(_candidates.map((p) => p.id)));
-              },
-            ),
-        ],
-      ),
-      bottomNavigationBar: _candidates.isEmpty
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(OmiSpacing.md),
-                child: OmiButton.destructive(
-                  key: const Key('people_clean_up_delete'),
-                  label: tickedCount == 0 ? l10n.delete : l10n.deletePeopleCountAction(tickedCount),
-                  icon: Icons.delete_outline,
-                  expand: true,
-                  // Not awaited: the button must not spin behind the confirmation.
-                  onPressed: tickedCount == 0
-                      ? null
-                      : () {
-                          _delete();
-                        },
-                ),
-              ),
-            ),
+    return OmiGroupedPage(
+      title: l10n.cleanUpTitle,
+      actions: [
+        if (_candidates.isNotEmpty)
+          OmiButton.toolbar(
+            key: const Key('people_clean_up_toggle_all'),
+            size: OmiButtonSize.compact,
+            label: allTicked ? l10n.deselectAll : l10n.selectAll,
+            onPressed: () {
+              OmiHaptics.selection();
+              setState(() => allTicked ? _ticked.clear() : _ticked.addAll(_candidates.map((p) => p.id)));
+            },
+          ),
+      ],
       body: _candidates.isEmpty
           ? OmiEmptyState(
               icon: Icons.check_circle_outline,
@@ -122,6 +100,25 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
                   ),
                 ),
               ],
+            ),
+      bottomNavigationBar: _candidates.isEmpty
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(OmiSpacing.md),
+                child: OmiButton.destructive(
+                  key: const Key('people_clean_up_delete'),
+                  label: tickedCount == 0 ? l10n.delete : l10n.deletePeopleCountAction(tickedCount),
+                  icon: Icons.delete_outline,
+                  expand: true,
+                  // Not awaited: the button must not spin behind the confirmation.
+                  onPressed: tickedCount == 0
+                      ? null
+                      : () {
+                          _delete();
+                        },
+                ),
+              ),
             ),
     );
   }

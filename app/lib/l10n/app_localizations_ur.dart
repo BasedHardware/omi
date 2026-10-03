@@ -3777,6 +3777,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get settingsHeader => 'ترتیبات';
 
   @override
+  String get settingsSectionRecording => 'ریکارڈنگ';
+
+  @override
+  String get settingsSectionSupport => 'معاونت';
+
+  @override
   String get plansAndBilling => 'منصوبے اور بلنگ';
 
   @override

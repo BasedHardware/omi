@@ -2231,10 +2231,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get appLanguage => 'Мова додатка';
 
   @override
-  String get appInterfaceSectionTitle => 'ІНТЕРФЕЙС ДОДАТКУ';
+  String get appInterfaceSectionTitle => 'Інтерфейс додатку';
 
   @override
-  String get speechTranscriptionSectionTitle => 'МОВЛЕННЯ ТА ТРАНСКРИПЦІЯ';
+  String get speechTranscriptionSectionTitle => 'Мовлення та транскрипція';
 
   @override
   String get languageSettingsHelperText =>
@@ -3775,6 +3775,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get settingsHeader => 'НАЛАШТУВАННЯ';
 
   @override
+  String get settingsSectionRecording => 'Запис';
+
+  @override
+  String get settingsSectionSupport => 'Підтримка';
+
+  @override
   String get plansAndBilling => 'Плани та Оплата';
 
   @override
@@ -4374,7 +4380,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get saveKeyWarning => 'Збережіть цей ключ зараз! Ви більше не зможете його побачити.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЛЮЧ';
+  String get yourApiKey => 'Ваш API-ключ';
 
   @override
   String get tapToCopy => 'Торкніться, щоб скопіювати';
@@ -4389,13 +4395,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get accessDataProgrammatically => 'Програмний доступ до ваших даних';
 
   @override
-  String get keyNameLabel => 'НАЗВА КЛЮЧА';
+  String get keyNameLabel => 'Назва ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моя інтеграція';
 
   @override
-  String get permissionsLabel => 'ДОЗВОЛИ';
+  String get permissionsLabel => 'Дозволи';
 
   @override
   String get permissionsInfoNote => 'R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.';
@@ -8485,7 +8491,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get tipAutoSync => 'Записи синхронізуються автоматично';
 
   @override
-  String get storageSection => 'СХОВИЩЕ';
+  String get storageSection => 'Сховище';
 
   @override
   String get permissions => 'Дозволи';
