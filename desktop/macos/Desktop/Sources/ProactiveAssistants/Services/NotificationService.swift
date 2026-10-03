@@ -42,8 +42,8 @@ enum NotificationDeliveryMode: Equatable {
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Retain the existing preference for goals and reminders when Advice is retired.
   static var goalReminderNotificationsEnabled: Bool {
-    get { UserDefaults.standard.object(forKey: "adviceNotificationsEnabled") as? Bool ?? true }
-    set { UserDefaults.standard.set(newValue, forKey: "adviceNotificationsEnabled") }
+    get { UserDefaults.standard.object(forKey: .goalReminderNotificationsEnabled) as? Bool ?? true }
+    set { UserDefaults.standard.set(newValue, forKey: .goalReminderNotificationsEnabled) }
   }
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
 
