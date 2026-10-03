@@ -106,6 +106,12 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: MENTOR_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: MENTOR_JEV_SHADOW_DAILY_CAP
+    value: "1400"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED

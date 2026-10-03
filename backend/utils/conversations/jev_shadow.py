@@ -22,7 +22,7 @@ from google.api_core import exceptions as google_api_exceptions
 from redis.backoff import NoBackoff
 from redis.retry import Retry
 
-from config.jev_decisions import RelevanceArm, percentage, uid_bucket
+from config.jev_decisions import MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT, RelevanceArm, percentage, uid_bucket
 from database.jev_shadow import write_jev_shadow
 from models.conversation_enums import ConversationSource
 from utils.conversations import owner_jev, relevance_jev
@@ -39,7 +39,7 @@ from utils.metrics import (
     record_jev_shadow_outcome,
 )
 
-Lane = Literal['relevance', 'owner']
+Lane = Literal['relevance', 'owner', 'mentor']
 DEADLINE_SECONDS = 2.5
 MAX_OWNER_SHADOWS_PER_CONVERSATION = 8
 _slots = {'relevance': threading.BoundedSemaphore(2), 'owner': threading.BoundedSemaphore(8)}
@@ -97,11 +97,12 @@ def _get_shadow_redis(deadline: float) -> Any:
 
 def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str, deadline: float) -> str:
     try:
-        cap = int(
-            os.getenv('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', '60000')
-            if lane == 'relevance'
-            else os.getenv('MEMORY_OWNER_JEV_SHADOW_DAILY_CAP', '60000')
-        )
+        env_name, default = {
+            'relevance': ('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', 60000),
+            'owner': ('MEMORY_OWNER_JEV_SHADOW_DAILY_CAP', 60000),
+            'mentor': ('MENTOR_JEV_SHADOW_DAILY_CAP', MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT),
+        }[lane]
+        cap = int(os.getenv(env_name, str(default)))
     except ValueError:
         return 'cap'
     if cap <= 0:

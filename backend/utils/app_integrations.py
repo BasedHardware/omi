@@ -42,6 +42,7 @@ from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
 from database.users import get_user_language_preference
 from utils.subscription import is_trial_paywalled
+from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -77,6 +78,7 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.mentor_jev_shadow import mentor_shadow_attempt
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
@@ -693,6 +695,10 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     if base_threshold is None:
         return None
 
+    # Paid-only admission precedes all mentor context/model work; frequency stays intact.
+    if not mentor_plan_allows_evaluation(uid):
+        return None
+
     # 2. Rate limit check (5 min gap)
     mentor_sent_at = mem_db.get_proactive_noti_sent_at(uid, 'mentor')
     if mentor_sent_at and time.time() - mentor_sent_at < MENTOR_RATE_LIMIT_SECONDS:
@@ -787,158 +793,175 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
         recent_notifications = []
 
-    # ── Step 1: Gate ─────────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            relevance = evaluate_relevance(
-                user_name=user_name,
-                user_facts=user_facts,
-                goals=goals,
-                current_messages=conversation_messages,
-                recent_notifications=recent_notifications,
-                current_date=current_date,
-                # Routes this user's successive gate calls to the same cached
-                # prefix; the gate is evaluated repeatedly during one listening
-                # session and its facts/goals prefix does not change between them.
-                uid=uid,
-            )
-    except Exception as e:
-        logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
-        return None
+    with mentor_shadow_attempt(uid, conversation_messages, frequency) as shadow:
+        # ── Step 1: Gate ─────────────────────────────────────────────────────
+        gate_started = time.monotonic()
+        try:
+            with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+                relevance = evaluate_relevance(
+                    user_name=user_name,
+                    user_facts=user_facts,
+                    goals=goals,
+                    current_messages=conversation_messages,
+                    recent_notifications=recent_notifications,
+                    current_date=current_date,
+                    # Routes this user's successive gate calls to the same cached
+                    # prefix; the gate is evaluated repeatedly during one listening
+                    # session and its facts/goals prefix does not change between them.
+                    uid=uid,
+                )
+        except Exception as e:
+            shadow['pipeline_failure'] = 'gate_failed'
+            shadow['luna_gate_latency_ms'] = round((time.monotonic() - gate_started) * 1000, 2)
+            logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
+            return None
 
-    if not relevance.is_relevant or relevance.relevance_score < base_threshold:
+        shadow['luna_gate_latency_ms'] = round((time.monotonic() - gate_started) * 1000, 2)
+        shadow['luna_gate_verdict'] = relevance.is_relevant
+        shadow['luna_gate_score'] = relevance.relevance_score
+        shadow['luna_gate_passed'] = relevance.is_relevant and relevance.relevance_score >= base_threshold
+
+        if not relevance.is_relevant or relevance.relevance_score < base_threshold:
+            logger.info(
+                f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
+                f"context={relevance.context_summary[:100]}"
+            )
+            return None
+
         logger.info(
-            f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
-            f"context={relevance.context_summary[:100]}"
+            f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} "
+            f"reason={relevance.reasoning[:100]}"
         )
-        return None
 
-    logger.info(
-        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} "
-        f"reason={relevance.reasoning[:100]}"
-    )
+        # ── Gather full context (expensive: vector search + recent convos) ───
+        #
+        # The two sources are guarded separately on purpose: semantic search needs an embedding
+        # provider and a vector store, recent-by-time needs neither. Under one shared try/except a
+        # single embedding failure (missing key, quota, provider outage) also took down the
+        # recent-conversations fetch that follows it, leaving the mentor with no past context at
+        # all — silently, because the draft is still written from the live transcript alone.
+        past_conversations_str = ''
+        all_past: list[dict] = []
 
-    # ── Gather full context (expensive: vector search + recent convos) ───
-    #
-    # The two sources are guarded separately on purpose: semantic search needs an embedding
-    # provider and a vector store, recent-by-time needs neither. Under one shared try/except a
-    # single embedding failure (missing key, quota, provider outage) also took down the
-    # recent-conversations fetch that follows it, leaving the mentor with no past context at
-    # all — silently, because the draft is still written from the live transcript alone.
-    past_conversations_str = ''
-    all_past: list[dict] = []
+        # Vector search for semantically relevant conversations
+        try:
+            conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
+            if conversation_text.strip():
+                vector = generate_embedding(conversation_text[:2000])
+                memory_ids = query_vectors_by_metadata(
+                    uid, vector, dates_filter=[None, None], people=[], topics=[], entities=[], dates=[], limit=3
+                )
+                if memory_ids:
+                    vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
+                    if vector_convos:
+                        all_past.extend([c for c in vector_convos if not c.get('is_locked')])
+        except Exception as e:
+            logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
 
-    # Vector search for semantically relevant conversations
-    try:
-        conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        if conversation_text.strip():
-            vector = generate_embedding(conversation_text[:2000])
-            memory_ids = query_vectors_by_metadata(
-                uid, vector, dates_filter=[None, None], people=[], topics=[], entities=[], dates=[], limit=3
+        # Also fetch recent conversations by time for additional context
+        try:
+            recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
+            if recent_convos:
+                existing_ids = {c.get('id') for c in all_past}
+                for rc in recent_convos:
+                    if rc.get('id') not in existing_ids and not rc.get('is_locked'):
+                        all_past.append(rc)
+        except Exception as e:
+            logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
+
+        try:
+            if all_past:
+                past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
+        except Exception as e:
+            logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
+
+        # Resolve the user's output language once so the notification is generated in it, not English
+        # (the daily summary already respects this setting) (#5214).
+        try:
+            output_language = get_user_language_preference(uid) or 'en'
+        except Exception as e:
+            logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
+            output_language = 'en'
+
+        # ── Step 2: Generate ─────────────────────────────────────────────────
+        try:
+            with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+                draft = generate_notification(
+                    user_name=user_name,
+                    user_facts=user_facts,
+                    goals=goals,
+                    past_conversations_str=past_conversations_str,
+                    current_messages=conversation_messages,
+                    recent_notifications=recent_notifications,
+                    frequency=frequency,
+                    gate_reasoning=relevance.reasoning,
+                    output_language=output_language,
+                    current_date=current_date,
+                )
+        except Exception as e:
+            shadow['pipeline_failure'] = 'generate_failed'
+            logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
+            return None
+
+        shadow['draft_passed'] = False
+        notification_text = draft.notification_text
+        if not notification_text or len(notification_text) < 5:
+            logger.info(f"mentor_proactive empty_draft uid={uid}")
+            return None
+
+        if draft.confidence < base_threshold:
+            logger.info(
+                f"mentor_proactive draft_below_threshold uid={uid} "
+                f"confidence={draft.confidence:.2f} threshold={base_threshold}"
             )
-            if memory_ids:
-                vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
-                if vector_convos:
-                    all_past.extend([c for c in vector_convos if not c.get('is_locked')])
-    except Exception as e:
-        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
+            return None
 
-    # Also fetch recent conversations by time for additional context
-    try:
-        recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
-        if recent_convos:
-            existing_ids = {c.get('id') for c in all_past}
-            for rc in recent_convos:
-                if rc.get('id') not in existing_ids and not rc.get('is_locked'):
-                    all_past.append(rc)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
+        shadow['draft_passed'] = True
 
-    try:
-        if all_past:
-            past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
-    except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
+        # ── Step 3: Critic ───────────────────────────────────────────────────
+        try:
+            with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+                validation = validate_notification(
+                    user_name=user_name,
+                    notification_text=notification_text,
+                    draft_reasoning=draft.reasoning,
+                    current_messages=conversation_messages,
+                    goals=goals,
+                    output_language=output_language,
+                    current_date=current_date,
+                )
+        except Exception as e:
+            shadow['pipeline_failure'] = 'critic_failed'
+            logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
+            return None
 
-    # Resolve the user's output language once so the notification is generated in it, not English
-    # (the daily summary already respects this setting) (#5214).
-    try:
-        output_language = get_user_language_preference(uid) or 'en'
-    except Exception as e:
-        logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
-        output_language = 'en'
-
-    # ── Step 2: Generate ─────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            draft = generate_notification(
-                user_name=user_name,
-                user_facts=user_facts,
-                goals=goals,
-                past_conversations_str=past_conversations_str,
-                current_messages=conversation_messages,
-                recent_notifications=recent_notifications,
-                frequency=frequency,
-                gate_reasoning=relevance.reasoning,
-                output_language=output_language,
-                current_date=current_date,
+        shadow['critic_passed'] = validation.approved
+        if not validation.approved:
+            logger.info(
+                f"mentor_proactive critic_rejected uid={uid} "
+                f"notification={notification_text[:80]} reason={validation.reasoning[:100]}"
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
-        return None
+            return None
 
-    notification_text = draft.notification_text
-    if not notification_text or len(notification_text) < 5:
-        logger.info(f"mentor_proactive empty_draft uid={uid}")
-        return None
+        # ── Send ─────────────────────────────────────────────────────────────
+        if len(notification_text) > 150:
+            notification_text = notification_text[:150]
 
-    if draft.confidence < base_threshold:
         logger.info(
-            f"mentor_proactive draft_below_threshold uid={uid} "
-            f"confidence={draft.confidence:.2f} threshold={base_threshold}"
+            f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
+            f"category={draft.category} reasoning={draft.reasoning[:100]}"
         )
-        return None
+        dispatch = send_app_notification(uid, 'Omi', 'mentor', notification_text)
+        shadow['dispatch_status'] = getattr(getattr(dispatch, 'status', None), 'value', 'unknown')
+        shadow['notification_sent'] = shadow['dispatch_status'] == 'dispatched' and (dispatch.delivered or 0) > 0
 
-    # ── Step 3: Critic ───────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            validation = validate_notification(
-                user_name=user_name,
-                notification_text=notification_text,
-                draft_reasoning=draft.reasoning,
-                current_messages=conversation_messages,
-                goals=goals,
-                output_language=output_language,
-                current_date=current_date,
-            )
-    except Exception as e:
-        logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
-        return None
+        # Update rate limit and daily count
+        ts = int(time.time())
+        mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+        redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+        incr_daily_notification_count(uid, _user_day_zone(uid))
 
-    if not validation.approved:
-        logger.info(
-            f"mentor_proactive critic_rejected uid={uid} "
-            f"notification={notification_text[:80]} reason={validation.reasoning[:100]}"
-        )
-        return None
-
-    # ── Send ─────────────────────────────────────────────────────────────
-    if len(notification_text) > 150:
-        notification_text = notification_text[:150]
-
-    logger.info(
-        f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
-        f"category={draft.category} reasoning={draft.reasoning[:100]}"
-    )
-    send_app_notification(uid, 'Omi', 'mentor', notification_text)
-
-    # Update rate limit and daily count
-    ts = int(time.time())
-    mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    incr_daily_notification_count(uid, _user_day_zone(uid))
-
-    return notification_text
+        return notification_text
 
 
 def _process_proactive_notification(uid: str, app: App, data):
@@ -1297,7 +1320,7 @@ async def _async_trigger_realtime_integrations(
 
 
 def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
-    dispatch_notification(
+    return dispatch_notification(
         NotificationIntent.app_integration(
             user_id=user_id,
             app_name=app_name,

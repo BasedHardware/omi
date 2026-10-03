@@ -408,7 +408,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
     entries = ',\n'.join(
-        '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            **translation_defaults,
+            # EXP-005 and debounce are declared on this serving host too.
+            'MENTOR_GATE_DEBOUNCE_ENABLED': 'true',
+            'MENTOR_JEV_SHADOW_ENABLED': 'true',
+            'MENTOR_JEV_SHADOW_DAILY_CAP': '1400',
+        }.items()
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
