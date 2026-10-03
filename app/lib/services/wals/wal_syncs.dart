@@ -79,6 +79,7 @@ class WalSyncs implements IWalSync {
     DateTime Function()? phoneNow,
     Timer Function(Duration, void Function(Timer))? phonePeriodic,
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
   }) {
     _phoneSync = LocalWalSyncImpl(
       listener,
@@ -86,6 +87,7 @@ class WalSyncs implements IWalSync {
       now: phoneNow,
       periodic: phonePeriodic,
       jobStatusFetcher: phoneJobStatusFetcher,
+      coverageTelemetry: phoneCoverageTelemetry,
     );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
