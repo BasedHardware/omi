@@ -22,7 +22,10 @@ def _user_col(uid: str, collection: str) -> Any:
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
+    try:
+        raw: object = doc.to_dict()
+    except Exception:
+        return {}
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
@@ -108,8 +111,22 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
     query = query.offset(offset).limit(limit)
     items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = _typed_doc(doc)
-        items.append(_normalize_focus_session_doc(doc.id, data))
+        doc_id = getattr(doc, 'id', 'unknown')
+        try:
+            raw = doc.to_dict()
+        except Exception as exc:
+            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+            continue
+
+        if not isinstance(raw, dict) or not raw:
+            logger.warning("Skipping malformed focus session %s: EmptyOrNonDictDocument", doc_id)
+            continue
+
+        try:
+            items.append(_normalize_focus_session_doc(str(doc_id), raw))
+        except Exception as exc:
+            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+            continue
     return items
 
 
