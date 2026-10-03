@@ -12218,6 +12218,24 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }

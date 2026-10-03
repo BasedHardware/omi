@@ -23,6 +23,7 @@ enum SettingsDestination {
   goals,
   language,
   customVocabulary,
+  voice,
   voiceProfile,
   people,
   deleteAccount,
@@ -85,6 +86,7 @@ const _drawer = 'lib/pages/settings/settings_drawer.dart';
 const _account = 'lib/pages/settings/profile.dart';
 const _groups = 'lib/pages/settings/settings_groups.dart';
 const _notifications = 'lib/pages/settings/notifications_settings_page.dart';
+const _voice = 'lib/pages/settings/voice_settings_page.dart';
 const _device = 'lib/pages/settings/device_settings.dart';
 const _deviceInfo = 'lib/pages/settings/device/device_info_groups.dart';
 const _permissions = 'lib/pages/settings/permissions_page.dart';
@@ -125,7 +127,11 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('customVocabulary', (l) => l.customVocabulary, SettingsDestination.customVocabulary, _groups),
   SettingsSearchEntry('speechProfile', (l) => l.speechProfile, SettingsDestination.voiceProfile, _groups),
   SettingsSearchEntry('identifyingOthers', (l) => l.identifyingOthers, SettingsDestination.people, _groups),
-  SettingsSearchEntry('voiceResponseMode', (l) => l.voiceResponseMode, SettingsDestination.recordingGroup, _groups),
+  SettingsSearchEntry('assistantVoice', (l) => l.assistantVoice, SettingsDestination.voice, _voice),
+  SettingsSearchEntry('voiceResponseMode', (l) => l.voiceResponseMode, SettingsDestination.voice, _voice),
+  SettingsSearchEntry('readChatRepliesAloud', (l) => l.readChatRepliesAloud, SettingsDestination.voice, _voice),
+  SettingsSearchEntry(
+      'assistantVoiceSettingsTitle', (l) => l.assistantVoiceSettingsTitle, SettingsDestination.voice, _drawer),
   SettingsSearchEntry(
       'conversationTimeout', (l) => l.conversationTimeout, SettingsDestination.conversationTimeout, _groups),
   SettingsSearchEntry(
