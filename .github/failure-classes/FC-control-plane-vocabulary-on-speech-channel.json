@@ -5,7 +5,7 @@
   "canonical_prevention": "Carry classification on a silent hub tool whose result is opaque and unspeakable. Hub inject instructions must not list speakable output tokens. Native PCM is not sanitized by spokenText; do not add a speech-channel regex as a substitute for the non-speech channel.",
   "evidence_prs": [],
   "scope_hints": [
-    "desktop/macos/Desktop/Sources/FloatingControlBar/Interject/**",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/LegacyReplyTokenSanitizer.swift",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift",
     "desktop/macos/agent/src/runtime/omi-tool-manifest.ts"
   ],
