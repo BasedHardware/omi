@@ -49,8 +49,11 @@ and background processing.
   The UID allowlist is read only with `OMI_ENV_STAGE=dev`; prod declarations
   (including empty bindings) are rejected by the runtime env validator.
   Unset live percentages preserve dev's flag-on=everyone behavior. Production
-  stage 1 is live at J=1 with keep-all K=2 on all five processing hosts;
-  keep-all wins any overlap, and the remaining roughly 97% stay on nano.
+  stage 2 is live at J=10 after stage 1 soaked 24 h from 2026-10-01 22:46Z,
+  with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all K=2
+  remains live on all five processing hosts and wins any overlap. Non-keep-all
+  conversations outside the Jev range stay on nano; nano remains the large
+  control arm, not a separate matched nano-only cohort.
   Owner-flip flags and UID allowlists remain absent.
   `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
   transcript-only model-tier decisions outside the Jev arm asynchronously, with
@@ -231,11 +234,13 @@ The production shadow percentages are 100 (all five processing hosts). The
 production keep-all arm is live at 2 (started
 2026-10-01): a stable 2% of ambiguous model-tier conversations, chosen by
 conversation ID, are kept regardless of nano and record nano's would-be verdict;
-rollback is percent 0 and a redeploy. Jev relevance stage 1 started 2026-10-02
-at J=1 on the same five hosts. Keep-all takes precedence; the independent Jev
-bucket range is [2,3), and non-keep-all conversations outside it stay on nano.
-The nano remainder is the large control arm, but not a separate matched nano-only
-cohort. Owner-flip flags and UID allowlists remain absent; caps stay unchanged.
+rollback is percent 0 and a redeploy. Jev relevance stage 2 started 2026-10-03
+at J=10 on the same five hosts, after stage 1 soaked 24 h from 2026-10-01
+22:46Z with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all takes
+precedence; the independent Jev bucket range is [2,12), and non-keep-all
+conversations outside it stay on nano. The nano remainder is the large control
+arm, but not a separate matched nano-only cohort. Owner-flip flags and UID
+allowlists remain absent; caps stay unchanged.
 The coordinator enabled `jev_shadow.expire_at` TTL
 in `based-hardware` on 2026-10-01 and verified ACTIVE before the flip. Sync hosts have no exporter;
 readouts must distinguish their records from scraped attempt/latency coverage.
