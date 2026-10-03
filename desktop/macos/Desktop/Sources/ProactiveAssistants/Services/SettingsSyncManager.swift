@@ -13,6 +13,7 @@ class SettingsSyncManager {
     do {
       let remote = try await APIClient.shared.getAssistantSettings()
       applyRemoteSettings(remote)
+      await AssistantVoiceStore.shared.refresh()
       log("SettingsSyncManager: synced from server")
     } catch {
       logError("SettingsSyncManager: failed to sync from server", error: error)

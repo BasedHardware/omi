@@ -74,6 +74,12 @@ task retries and should be compared with Scheduler/audit execution counts.
    based-hardware --check --jobs notifications-job-scheduler-trigger`.
    The trigger is an existing managed resource, not `lifecycle: planned`.
    The owner workflow cannot reconcile unrelated Scheduler entries.
+   The trigger's OAuth identity is the dedicated
+   `notifications-job-scheduler@` account (`roles/run.invoker` on
+   `notifications-job` only). The workflow identity `omi-gha-notif-job-prod@`
+   holds `roles/iam.serviceAccountUser` on that account and the custom
+   `omiCiSchedulerJobUpdater` role (get/list/update only); without both, the
+   reconcile step's PATCH returns 403 (2026-10-03).
 3. The existing `.github/workflows/gcp_scheduler_reconcile.yml` also checks
    the full main manifest; production reconciliation requires its approval
    and typed confirmation. It is unnecessary for the scoped job shipment.
