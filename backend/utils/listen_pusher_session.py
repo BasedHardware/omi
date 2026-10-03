@@ -340,10 +340,8 @@ class ListenPusherSession:
                 # the capture timeline supplied one, and the legacy
                 # last-arrival-minus-duration estimate otherwise.
                 honor_projection = self.config.audio_timeline_v2 or self.audio_timeline_active
-                legacy_header = None
-                if not honor_projection:
-                    duration = pending_total_size / (effective_rate * 2)
-                    legacy_header = (self.audio_buffer_last_received or self.deps.now()) - duration
+                duration = pending_total_size / (effective_rate * 2)
+                legacy_header = (self.audio_buffer_last_received or self.deps.now()) - duration
 
                 def runs_are_contiguous(prev: AudioRun, nxt: AudioRun) -> bool:
                     # Legacy runs carry no projection; keep the legacy

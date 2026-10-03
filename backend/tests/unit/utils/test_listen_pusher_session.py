@@ -727,6 +727,48 @@ async def test_legacy_runs_without_projection_keep_legacy_grouping():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('span_state', ['config_v2', 'negotiated_spans'])
+async def test_spans_active_run_without_projection_falls_back_to_legacy_header(monkeypatch, span_state):
+    """A run accepted without a projected start still needs a legacy header.
+
+    When either the config flag or a negotiated handshake makes the session
+    projection-honoring, close_group used to leave ``header_timestamp`` as
+    ``None`` for a ``start_wall=None`` run, so ``struct.pack`` failed and the
+    envelope stalled instead of keeping the legacy arrival-minus-duration
+    estimate. The ambiguous-retry leg must resend that same header verbatim.
+    """
+    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
+    config = {'max_audio_buffer_size': 1_000_000}
+    incoming = None
+    if span_state == 'config_v2':
+        config['audio_timeline_v2'] = True
+    else:
+        config['audio_timeline_spans'] = True
+        incoming = [audio_timeline_ack_frame()]
+    ws = FakePusherWebSocket(incoming=incoming, send_errors=[None, RuntimeError("send failed")])
+    session = make_session(ws=ws, config_overrides=config)
+    await session.connect()
+    if span_state == 'negotiated_spans':
+        assert session.audio_timeline_active
+
+    rate = 8000
+    run = b'\x07\x00' * rate
+    session.audio_bytes_send(run, received_at=100.5, conversation_id='conv-1', start_wall=None)
+    await session._audio_bytes_flush()
+
+    expected_header = 100.5 - len(run) / (rate * 2)
+    assert [frame for frame in ws.sent if frame_type(frame) == 101] == []
+    assert session.audio_runs and session.audio_runs[0].uncertain
+
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == expected_header
+    assert audio_frames[0][12:] == run
+
+
+@pytest.mark.anyio
 async def test_spans_session_negotiates_the_timeline_handshake():
     connect_calls = []
     ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
