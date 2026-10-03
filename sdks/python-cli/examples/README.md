@@ -20,6 +20,14 @@
   asiantau (Welsh agent guide).
 * [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
   AI agent (Thai agent guide).
+* [`agent_quickstart.bs.md`](agent_quickstart.bs.md) — omi-cli vodič za agente (Bosnian agent guide).
+* [`agent_quickstart.jv.md`](agent_quickstart.jv.md) — pandhuan omi-cli kanggo agen (Javanese agent guide).
+* [`agent_quickstart.rm.md`](agent_quickstart.rm.md) — guida da omi-cli per agens (Romansh agent guide).
+* [`agent_quickstart.mwl.md`](agent_quickstart.mwl.md) — guia de omi-cli pa ls agentes (Mirandese agent guide).
+* [`agent_quickstart.an.md`](agent_quickstart.an.md) — guía d'omi-cli ta agents (Aragonese agent guide).
+* [`agent_quickstart.rn.md`](agent_quickstart.rn.md) — umuyoboro wa omi-cli kubw'aba agents (Kirundi agent guide).
+* [`agent_quickstart.fj.md`](agent_quickstart.fj.md) — ivakatakilaki ni omi-cli ni na agents (Fijian agent guide).
+* [`agent_quickstart.pap.md`](agent_quickstart.pap.md) — guia di omi-cli pa agentenan (Papiamento agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
