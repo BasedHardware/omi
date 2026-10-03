@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -65,6 +65,7 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
@@ -95,6 +96,7 @@ from utils.conversations.meeting_receipt import (
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.developer_memory_list import read_developer_memories
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
@@ -352,6 +354,8 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
@@ -366,6 +370,7 @@ def get_memories(
             logger.error(f"Invalid category in developer memories: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
+    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -383,45 +388,18 @@ def get_memories(
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
-    if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
-        valid_memories = []
-        for memory in memories:
-            try:
-                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-            except (AttributeError, TypeError, ValidationError, ValueError):
-                logger.warning("Skipping malformed memory in Developer API list")
-        return valid_memories
-    # Category is a sparse filter.  Read ordered universal pages until the
-    # requested category page is filled instead of filtering after a raw page
-    # (which returned short/empty pages whenever non-matching memories led it).
-    target_end = offset + limit
-    scan_offset = 0
-    matched = []
-    max_scan = 5000
-    while scan_offset < max_scan and len(matched) < target_end:
-        batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
-        if not batch:
-            break
-        scan_offset += len(batch)
-        if allowed is None:
-            matched.extend(batch)
-        else:
-            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
-        if len(batch) < batch_limit:
-            break
-    memories = matched[offset:target_end]
-    valid_memories = []
-    for memory in memories:
-        try:
-            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-        except (AttributeError, TypeError, ValidationError, ValueError):
-            # MemoryService normally returns validated MemoryDB rows, but a
-            # malformed historical adapter row must not turn this compatibility
-            # endpoint into a 500 for every otherwise healthy memory.
-            logger.warning("Skipping malformed memory in Developer API list")
-    return valid_memories
+    memories = read_developer_memories(
+        service,
+        uid,
+        limit=limit,
+        offset=offset,
+        allowed=allowed,
+        budget=budget,
+        response_model=CleanerMemory,
+        logger=logger,
+    )
+    finish_list_budget(response, budget)
+    return memories
 
 
 @router.get(
