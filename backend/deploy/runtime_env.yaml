@@ -2045,6 +2045,17 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
@@ -2407,9 +2418,17 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
+          PROACTIVITY_REDIS_PASSWORD:
+            secret:
+              name: prod-omi-backend-secrets
+              key: REDIS_DB_PASSWORD
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -2586,9 +2605,17 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: POSTHOG_PROJECT_API_KEY
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
+          PROACTIVITY_REDIS_PASSWORD:
+            secret:
+              name: prod-omi-backend-secrets
+              key: REDIS_DB_PASSWORD
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -2749,10 +2776,10 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
-        REDIS_DB_PORT:
+        PROACTIVITY_REDIS_PORT:
           value: '13151'
           category: service_discovery
-        REDIS_DB_HOST:
+        PROACTIVITY_REDIS_HOST:
           value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
           category: service_discovery
         OMI_CUSTOMER_DATA_PROJECT:
@@ -2776,7 +2803,16 @@ environments:
         POSTHOG_PROJECT_API_KEY:
           secret: POSTHOG_PROJECT_API_KEY
           version: latest
+        REDIS_DB_HOST:
+          secret: DESKTOP_REDIS_DB_HOST
+          version: latest
+        REDIS_DB_PORT:
+          secret: DESKTOP_REDIS_DB_PORT
+          version: latest
         REDIS_DB_PASSWORD:
+          secret: DESKTOP_REDIS_DB_PASSWORD
+          version: latest
+        PROACTIVITY_REDIS_PASSWORD:
           secret: REDIS_DB_PASSWORD
           version: latest
     cloud_run:
@@ -2819,7 +2855,7 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
-            REDIS_DB_PASSWORD:
+            PROACTIVITY_REDIS_PASSWORD:
               secret: REDIS_DB_PASSWORD
               version: latest
             POSTHOG_PROJECT_API_KEY:
@@ -3017,10 +3053,10 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
-            REDIS_DB_PORT:
+            PROACTIVITY_REDIS_PORT:
               value: '13151'
               category: service_discovery
-            REDIS_DB_HOST:
+            PROACTIVITY_REDIS_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
               category: service_discovery
             MENTOR_PIPELINE:
@@ -3157,7 +3193,7 @@ environments:
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
-            REDIS_DB_PASSWORD:
+            PROACTIVITY_REDIS_PASSWORD:
               secret: REDIS_DB_PASSWORD
               version: latest
             POSTHOG_PROJECT_API_KEY:
@@ -3301,10 +3337,10 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            REDIS_DB_PORT:
+            PROACTIVITY_REDIS_PORT:
               value: '13151'
               category: service_discovery
-            REDIS_DB_HOST:
+            PROACTIVITY_REDIS_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
               category: service_discovery
             MENTOR_PIPELINE:
@@ -3418,7 +3454,7 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            REDIS_DB_PASSWORD:
+            PROACTIVITY_REDIS_PASSWORD:
               secret: REDIS_DB_PASSWORD
               version: latest
             POSTHOG_PROJECT_API_KEY:
@@ -3541,10 +3577,10 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            REDIS_DB_PORT:
+            PROACTIVITY_REDIS_PORT:
               value: '13151'
               category: service_discovery
-            REDIS_DB_HOST:
+            PROACTIVITY_REDIS_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
               category: service_discovery
             MENTOR_PIPELINE:
@@ -3653,7 +3689,7 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            REDIS_DB_PASSWORD:
+            PROACTIVITY_REDIS_PASSWORD:
               secret: REDIS_DB_PASSWORD
               version: latest
             POSTHOG_PROJECT_API_KEY:
@@ -3747,10 +3783,10 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            REDIS_DB_PORT:
+            PROACTIVITY_REDIS_PORT:
               value: '13151'
               category: service_discovery
-            REDIS_DB_HOST:
+            PROACTIVITY_REDIS_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
               category: service_discovery
             MENTOR_PIPELINE:

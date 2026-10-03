@@ -5,6 +5,17 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      PROACTIVITY_REDIS_HOST:
+        config_map:
+          name: prod-omi-backend-config
+          key: REDIS_DB_HOST
+      PROACTIVITY_REDIS_PORT:
+        value: '13151'
+        category: service_discovery
+      PROACTIVITY_REDIS_PASSWORD:
+        secret:
+          name: prod-omi-backend-secrets
+          key: REDIS_DB_PASSWORD
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
@@ -25,9 +36,17 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: POSTHOG_PROJECT_API_KEY
-        REDIS_DB_PORT:
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
           value: '13151'
           category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
@@ -219,9 +238,17 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: POSTHOG_PROJECT_API_KEY
-        REDIS_DB_PORT:
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
           value: '13151'
           category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
@@ -358,10 +385,10 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
-      REDIS_DB_PORT:
+      PROACTIVITY_REDIS_PORT:
         value: '13151'
         category: service_discovery
-      REDIS_DB_HOST:
+      PROACTIVITY_REDIS_HOST:
         value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
         category: service_discovery
       OMI_CUSTOMER_DATA_PROJECT:
@@ -388,7 +415,16 @@ overlay:
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
     secrets:
+      REDIS_DB_HOST:
+        secret: DESKTOP_REDIS_DB_HOST
+        version: latest
+      REDIS_DB_PORT:
+        secret: DESKTOP_REDIS_DB_PORT
+        version: latest
       REDIS_DB_PASSWORD:
+        secret: DESKTOP_REDIS_DB_PASSWORD
+        version: latest
+      PROACTIVITY_REDIS_PASSWORD:
         secret: REDIS_DB_PASSWORD
         version: latest
       GEMINI_API_KEY:
@@ -406,7 +442,7 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
-          REDIS_DB_PASSWORD:
+          PROACTIVITY_REDIS_PASSWORD:
             secret: REDIS_DB_PASSWORD
             version: latest
           POSTHOG_PROJECT_API_KEY:
@@ -425,10 +461,10 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
-          REDIS_DB_HOST:
+          PROACTIVITY_REDIS_HOST:
             value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             category: service_discovery
           POSTHOG_HOST:
@@ -589,7 +625,7 @@ overlay:
         # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
         # service reads needs its own grant to this account. Every backend Cloud Run service is pinned.
         secrets:
-          REDIS_DB_PASSWORD:
+          PROACTIVITY_REDIS_PASSWORD:
             secret: REDIS_DB_PASSWORD
             version: latest
           POSTHOG_PROJECT_API_KEY:
@@ -602,10 +638,10 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
-          REDIS_DB_HOST:
+          PROACTIVITY_REDIS_HOST:
             value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             category: service_discovery
           POSTHOG_HOST:
@@ -737,7 +773,7 @@ overlay:
             category: rollout
       backend-sync-backfill:
         secrets:
-          REDIS_DB_PASSWORD:
+          PROACTIVITY_REDIS_PASSWORD:
             secret: REDIS_DB_PASSWORD
             version: latest
           POSTHOG_PROJECT_API_KEY:
@@ -750,10 +786,10 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
-          REDIS_DB_HOST:
+          PROACTIVITY_REDIS_HOST:
             value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             category: service_discovery
           POSTHOG_HOST:
@@ -864,7 +900,7 @@ overlay:
             category: rollout
       backend-integration:
         secrets:
-          REDIS_DB_PASSWORD:
+          PROACTIVITY_REDIS_PASSWORD:
             secret: REDIS_DB_PASSWORD
             version: latest
           POSTHOG_PROJECT_API_KEY:
@@ -877,10 +913,10 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
-          REDIS_DB_PORT:
+          PROACTIVITY_REDIS_PORT:
             value: '13151'
             category: service_discovery
-          REDIS_DB_HOST:
+          PROACTIVITY_REDIS_HOST:
             value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             category: service_discovery
           POSTHOG_HOST:

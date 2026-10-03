@@ -54,7 +54,7 @@ ingress:
   tls: []
 
 env:
-  # Shared customer-data admission and reservation evidence.
+  # Cohort admission uses a separate Redis connection from reservation evidence.
   - name: MENTOR_PIPELINE
     value: cohort
   - name: POSTHOG_HOST
@@ -66,18 +66,37 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: POSTHOG_PROJECT_API_KEY
-  - name: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_HOST
     valueFrom:
       configMapKeyRef:
         name: prod-omi-backend-config
         key: REDIS_DB_HOST
-  - name: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PASSWORD
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: REDIS_DB_PASSWORD
-  - name: REDIS_DB_PORT
+  - name: PROACTIVITY_REDIS_PORT
     value: "13151"
+  # Reservation evidence retains its optional pre-Phase-A store.
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-reservation-runtime-config
+        key: REDIS_DB_HOST
+        optional: true
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: VERTEX_RESERVATION_REDIS_PASSWORD
+        optional: true
+  - name: REDIS_DB_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-reservation-runtime-config
+        key: REDIS_DB_PORT
+        optional: true
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN

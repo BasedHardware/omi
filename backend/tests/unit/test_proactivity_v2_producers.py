@@ -723,3 +723,17 @@ def test_followup_http_recovery_without_duplicate_spend(store, monkeypatch, faul
         assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0
     else:
         assert row['state'] == 'ready'
+
+
+def test_v2_listen_wakeup_uses_isolated_redis(monkeypatch):
+    from unittest.mock import Mock
+    from database import proactivity_redis
+
+    client = Mock()
+    monkeypatch.setattr(proactivity_redis, 'get_client', lambda: client)
+    producers.spine._publish_listen_wakeup('synthetic', {'notification_type': 'proactivity_v2'})
+    assert client.publish.call_args.args[0] == producers.spine.redis_db.PROACTIVE_MESSAGE_CHANNEL
+    assert json.loads(client.publish.call_args.args[1]) == {
+        'uid': 'synthetic',
+        'notification_type': 'proactivity_v2',
+    }

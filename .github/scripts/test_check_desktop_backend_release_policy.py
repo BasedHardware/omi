@@ -287,6 +287,9 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         generic_mappings = (
             ("GEMINI_API_KEY", "DESKTOP_GEMINI_API_KEY"),
             ("FIREBASE_API_KEY", "DESKTOP_FIREBASE_API_KEY"),
+            ("REDIS_DB_PASSWORD", "DESKTOP_REDIS_DB_PASSWORD"),
+            ("REDIS_DB_HOST", "DESKTOP_REDIS_DB_HOST"),
+            ("REDIS_DB_PORT", "DESKTOP_REDIS_DB_PORT"),
         )
         for environment_key, secret_name in generic_mappings:
             legacy = f"{environment_key}={environment_key}:latest"
@@ -295,18 +298,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 legacy,
                 1,
             )
-            with self.subTest(legacy=legacy):
-                errors = POLICY.validate_deploy_workflow(mutated, production=True)
-                self.assertTrue(any(legacy in error for error in errors), errors)
-
-        redis_mappings = (
-            ("REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest", "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest"),
-            ("REDIS_DB_HOST=redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com", "REDIS_DB_HOST=REDIS_DB_HOST:latest"),
-            ("REDIS_DB_PORT=13151", "REDIS_DB_PORT=REDIS_DB_PORT:latest"),
-        )
-        for current, legacy in redis_mappings:
-            mutated = self.prod.replace(current, legacy, 1)
-            self.assertNotEqual(mutated, self.prod)
             with self.subTest(legacy=legacy):
                 errors = POLICY.validate_deploy_workflow(mutated, production=True)
                 self.assertTrue(any(legacy in error for error in errors), errors)
@@ -324,7 +315,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 self.assertTrue(any(f"{pinecone_key}=" in error for error in errors), errors)
 
         missing_removal = self.prod.replace(
-            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json,REDIS_DB_HOST,REDIS_DB_PORT\n",
+            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json\n",
             "",
             1,
         )
@@ -626,6 +617,18 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_production_v2_redis_is_independent_of_desktop_reservation_store(self) -> None:
+        for binding in (
+            "PROACTIVITY_REDIS_HOST=redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com",
+            "PROACTIVITY_REDIS_PORT=13151",
+            "PROACTIVITY_REDIS_PASSWORD=REDIS_DB_PASSWORD:latest",
+        ):
+            with self.subTest(binding=binding):
+                mutated = self.prod.replace(binding, "", 1)
+                self.assertNotEqual(mutated, self.prod)
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any(binding in error for error in errors), errors)
 
     def test_runtime_image_filter_selects_desktop_backend_container_on_two_container_revision(self) -> None:
         expected_image = (
