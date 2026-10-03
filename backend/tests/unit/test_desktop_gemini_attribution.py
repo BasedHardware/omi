@@ -193,6 +193,7 @@ def test_macos_every_gemini_client_init_declares_a_lane(chunk):
 def test_macos_gemini_transports_route_through_the_shared_header_helper():
     core = MACOS_SOURCES / 'ProactiveAssistants' / 'Core' / 'GeminiClient.swift'
     embed = MACOS_SOURCES / 'ProactiveAssistants' / 'Services' / 'EmbeddingService.swift'
+    screen_task = MACOS_SOURCES / 'ProactiveAssistants' / 'Assistants' / 'TaskExtraction' / 'ScreenTaskTransport.swift'
     if not core.exists() or not embed.exists():
         pytest.skip('desktop sources are not present in this checkout')
     assert core.read_text().count('applyGeminiProxyHeaders') == 4
@@ -200,6 +201,10 @@ def test_macos_gemini_transports_route_through_the_shared_header_helper():
     assert embedding.count('applyGeminiProxyHeaders') == 2
     assert 'lane: .embedding' in embedding
     assert 'workload: .maintenance' in embedding
+    screen = screen_task.read_text()
+    assert screen.count('applyGeminiProxyHeaders') == 1
+    assert 'lane: .taskExtraction' in screen
+    assert 'workload: .extraction' in screen
 
 
 # Source-inspection ratchet: only the centralized transports may construct the
@@ -228,6 +233,7 @@ def test_no_raw_proxy_url_or_attribution_headers_outside_transport_owners(chunk)
                 macos_owner,
                 'ProactiveAssistants/Core/GeminiClient.swift',
                 'ProactiveAssistants/Services/EmbeddingService.swift',
+                'ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskTransport.swift',
             }:
                 offenders.append(str(rel))
     else:
