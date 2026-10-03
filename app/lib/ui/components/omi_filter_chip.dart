@@ -57,16 +57,14 @@ class OmiFilterChip extends StatelessWidget {
               ),
               child: _withIcon(
                 Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: label),
-                      if (count != null)
-                        TextSpan(
-                          text: '  $count',
-                          style: TextStyle(color: foreground.withValues(alpha: 0.6)),
-                        ),
-                    ],
-                  ),
+                  TextSpan(children: [
+                    TextSpan(text: label),
+                    if (count != null)
+                      TextSpan(
+                        text: '  $count',
+                        style: TextStyle(color: foreground.withValues(alpha: 0.6)),
+                      ),
+                  ]),
                   style: OmiType.subhead.copyWith(color: foreground, fontWeight: FontWeight.w500),
                 ),
                 foreground,

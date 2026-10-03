@@ -34,9 +34,7 @@ class ConversationDetailTabs extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: ConversationDetailInk.hairline)),
-        ),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ConversationDetailInk.hairline))),
         child: Row(
           children: [
             Expanded(
@@ -108,10 +106,7 @@ class _VisibilityLabel extends StatelessWidget {
             children: [
               FaIcon(FontAwesomeIcons.globe, size: 12, color: ink),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: OmiType.footnote.copyWith(color: ink, fontWeight: FontWeight.w500),
-              ),
+              Text(label, style: OmiType.footnote.copyWith(color: ink, fontWeight: FontWeight.w500)),
             ],
           ),
         ),

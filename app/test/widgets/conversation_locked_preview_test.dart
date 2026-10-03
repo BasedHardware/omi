@@ -81,12 +81,10 @@ void main() {
             child: child!,
           ),
           home: Scaffold(
-            body: ListView(
-              children: [
-                body ??
-                    ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0),
-              ],
-            ),
+            body: ListView(children: [
+              body ??
+                  ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0),
+            ]),
           ),
         ),
       ),
@@ -175,11 +173,7 @@ void main() {
           isLocked: true,
         ),
     ];
-    await pumpRow(
-      tester,
-      observer: routes,
-      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
-    );
+    await pumpRow(tester, observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
 
     expect(find.byType(OmiLockedPreview), findsOneWidget);
     expect(find.text(_upgrade), findsOneWidget);
@@ -191,10 +185,8 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('locked_preview_action')));
     expect(routes.pushed, hasLength(2));
-    expect(
-      (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
-      isA<UsagePage>(),
-    );
+    expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
+        isA<UsagePage>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

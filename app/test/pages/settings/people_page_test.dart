@@ -36,58 +36,43 @@ Person _person(
   Map<String, int> reasons = const {},
   bool pinned = false,
   int? labelsToConfirm,
-}) => Person(
-  id: id,
-  name: name,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-  voiceReadiness: voice,
-  conversationCount: conversations,
-  lastHeardAt: lastHeard,
-  talkSeconds: conversations == null ? null : conversations * 60.0,
-  confidence: confidence,
-  confidenceReasons: [
-    for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
-  ],
-  pinned: pinned,
-  labelsToConfirm: labelsToConfirm,
-);
+}) =>
+    Person(
+      id: id,
+      name: name,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      voiceReadiness: voice,
+      conversationCount: conversations,
+      lastHeardAt: lastHeard,
+      talkSeconds: conversations == null ? null : conversations * 60.0,
+      confidence: confidence,
+      confidenceReasons: [
+        for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
+      ],
+      pinned: pinned,
+      labelsToConfirm: labelsToConfirm,
+    );
 
 final _people = [
-  _person(
-    'p-maya',
-    'Maya Chen',
-    conversations: 24,
-    lastHeard: _now,
-    voice: 'ready',
-    confidence: 'confirmed',
-    reasons: {'manual_labels': 6},
-    pinned: true,
-  ),
-  _person(
-    'p-sam',
-    'Sam Okafor',
-    conversations: 5,
-    lastHeard: _now.subtract(const Duration(days: 2)),
-    voice: 'ready',
-    confidence: 'likely',
-    reasons: {'card_picks': 2, 'auto_corrected': 1, 'auto_unconfirmed': 3},
-    labelsToConfirm: 1,
-  ),
-  _person(
-    'p-because',
-    'Because',
-    conversations: 3,
-    lastHeard: _now.subtract(const Duration(days: 1)),
-    reasons: {'auto_unconfirmed': 3},
-  ),
-  _person(
-    'p-cs',
-    'Cs',
-    conversations: 2,
-    lastHeard: _now.subtract(const Duration(days: 9)),
-    reasons: {'never_confirmed': 1},
-  ),
+  _person('p-maya', 'Maya Chen',
+      conversations: 24,
+      lastHeard: _now,
+      voice: 'ready',
+      confidence: 'confirmed',
+      reasons: {'manual_labels': 6},
+      pinned: true),
+  _person('p-sam', 'Sam Okafor',
+      conversations: 5,
+      lastHeard: _now.subtract(const Duration(days: 2)),
+      voice: 'ready',
+      confidence: 'likely',
+      reasons: {'card_picks': 2, 'auto_corrected': 1, 'auto_unconfirmed': 3},
+      labelsToConfirm: 1),
+  _person('p-because', 'Because',
+      conversations: 3, lastHeard: _now.subtract(const Duration(days: 1)), reasons: {'auto_unconfirmed': 3}),
+  _person('p-cs', 'Cs',
+      conversations: 2, lastHeard: _now.subtract(const Duration(days: 9)), reasons: {'never_confirmed': 1}),
   _person('p-ines', 'Inês Moreira', conversations: 0, reasons: {'never_confirmed': 1}),
 ];
 
@@ -116,23 +101,21 @@ Future<PeopleProvider> _pump(
     deletePersonById: deletePersonById ?? (_) async => true,
     setPinned: (pins ?? _Pins()).call,
   );
-  await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<PeopleProvider>.value(value: provider),
-        ChangeNotifierProvider<SpeakerTagPromptsProvider>(
-          create: (_) => SpeakerTagPromptsProvider(
-            fetchSettings: () => Completer<ApiResult<GeneratedVoiceProfileSettings>>().future,
-          ),
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider<PeopleProvider>.value(value: provider),
+      ChangeNotifierProvider<SpeakerTagPromptsProvider>(
+        create: (_) => SpeakerTagPromptsProvider(
+          fetchSettings: () => Completer<ApiResult<GeneratedVoiceProfileSettings>>().future,
         ),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: UserPeoplePage(),
       ),
+    ],
+    child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: UserPeoplePage(),
     ),
-  );
+  ));
   await tester.pumpAndSettle();
   return provider;
 }
@@ -202,13 +185,10 @@ void main() {
 
   testWidgets('Select All skips pinned people and the delete confirms', (tester) async {
     final deleted = <String>[];
-    final provider = await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
 
     await tester.tap(find.byKey(const Key('people_select')));
     await tester.pumpAndSettle();
@@ -236,13 +216,10 @@ void main() {
 
   testWidgets('filtered Select All deletes only visible rows and names every target', (tester) async {
     final deleted = <String>[];
-    final provider = await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
     await tester.tap(find.byKey(const Key('people_filter_lowConfidence')));
     await tester.pumpAndSettle();
     provider.beginSelection();
@@ -264,13 +241,10 @@ void main() {
 
   testWidgets('changing search or filter clears selection before another delete', (tester) async {
     final deleted = <String>[];
-    final provider = await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
     await tester.enterText(find.byType(TextField), 'sam');
     await tester.pumpAndSettle();
     provider.beginSelection();
@@ -295,13 +269,10 @@ void main() {
 
   testWidgets('Clean Up preselects unsure unpinned people, lets one be kept, and confirms', (tester) async {
     final deleted = <String>[];
-    final provider = await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
 
     expect(find.text('3 people Omi is unsure about'), findsOneWidget);
     await tester.tap(find.byKey(const Key('people_clean_up_review')));
@@ -329,13 +300,10 @@ void main() {
 
   testWidgets('cancelling the Clean Up confirmation deletes nothing', (tester) async {
     final deleted = <String>[];
-    await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
     await tester.tap(find.byKey(const Key('people_clean_up_review')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('people_clean_up_delete')));
@@ -385,10 +353,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Confidence'), findsOneWidget);
-    expect(
-      find.text("Omi usually recognizes Sam Okafor's voice, but you've only confirmed it a few times."),
-      findsOneWidget,
-    );
+    expect(find.text("Omi usually recognizes Sam Okafor's voice, but you've only confirmed it a few times."),
+        findsOneWidget);
     expect(find.text('Picked in 2 suggestions'), findsWidgets);
     expect(find.text('Helps'), findsWidgets);
     expect(find.text('1 match moved to someone else'), findsOneWidget);
@@ -401,14 +367,10 @@ void main() {
   testWidgets('Person page: Pin switch with the honest line, and a pinned delete names the person', (tester) async {
     final pins = _Pins();
     final deleted = <String>[];
-    await _pump(
-      tester,
-      pins: pins,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    await _pump(tester, pins: pins, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
     await tester.tap(find.text('Maya Chen'));
     await tester.pumpAndSettle();
 
@@ -430,23 +392,21 @@ void main() {
 
   testWidgets('a failed first load with nothing cached offers Try Again', (tester) async {
     final provider = PeopleProvider(loadPeople: () async => null);
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PeopleProvider>.value(value: provider),
-          ChangeNotifierProvider<SpeakerTagPromptsProvider>(
-            create: (_) => SpeakerTagPromptsProvider(
-              fetchSettings: () => Completer<ApiResult<GeneratedVoiceProfileSettings>>().future,
-            ),
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PeopleProvider>.value(value: provider),
+        ChangeNotifierProvider<SpeakerTagPromptsProvider>(
+          create: (_) => SpeakerTagPromptsProvider(
+            fetchSettings: () => Completer<ApiResult<GeneratedVoiceProfileSettings>>().future,
           ),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: UserPeoplePage(),
         ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: UserPeoplePage(),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Try Again'), findsOneWidget);
@@ -467,13 +427,10 @@ void main() {
 
   testWidgets('bulk deletion protects current pins even with stale selected ids', (tester) async {
     final deleted = <String>[];
-    final provider = await _pump(
-      tester,
-      deletePersonById: (id) async {
-        deleted.add(id);
-        return true;
-      },
-    );
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
     expect(await provider.deletePeople(['p-maya', 'p-cs']), 1);
     expect(deleted, ['p-cs']);
     expect(provider.people.map((p) => p.id), contains('p-maya'));
