@@ -246,9 +246,11 @@ configured ramp and capacity. There is no portfolio split or worst-provider
 probe. The existing Parakeet admission and batch-pressure gates still reject
 at connect and overflow into the next target. Recovery target IDs stay
 distinct per registry entry, while connection breakers key on provider plus
-actual endpoint plus credential plus stage — two Modulate targets on the same
-wire share one breaker but still fail independently as recovery candidates. A
-narrow typed-death hook routes a custom endpoint's serving failure
+actual endpoint plus stage with the credential synced as account identity —
+two Modulate targets on the same wire share one breaker but still fail
+independently as recovery candidates, and credential rotation clears only
+account/quota state without erasing the unchanged endpoint's outage evidence.
+A narrow typed-death hook routes a custom endpoint's serving failure
 to its own local breaker, preserving the old endpoint's serving capacity;
 account failures still quarantine their shared credential family.
 `live_target_connect.py` reuses the existing Modulate socket protocol
@@ -453,10 +455,18 @@ default, `provider@<fleet prefix>` for a custom endpoint), so a sibling
 endpoint's evidence never moves the default or another sibling. Account
 writes and reads stay family-scoped and dominate every sibling's selection
 bench; a snapshot merges the queried endpoint's selection bench with the
-family's strongest live account deadline. Custom target circuits key on the
-same provider+endpoint+credential+stage fingerprint rather than the target
-id, so alias/cost/ramp edits reuse a breaker while an endpoint, credential or
-stage rotation gets a fresh one; the cache is bounded at 64 entries.
+family's strongest live account deadline. Custom target circuits key on a
+provider+endpoint+stage selection fingerprint rather than the target id, so
+alias/cost/ramp edits reuse a breaker while an endpoint or stage rotation
+gets a fresh one; the cache is bounded at 64 entries. Process-local
+selection breakers retain connect/serve outage evidence across credential
+rotation for an unchanged endpoint: credential rotation clears
+account/quota state only, endpoint changes start fresh selection state
+while an unchanged credential's account protection remains, and stage
+changes start fresh scoped state. A custom endpoint's serve death opens
+that endpoint's local target breaker and does not bench the family default.
+The Redis fleet/cost namespaces still include the credential in their
+digests, so shared state still starts fresh on rotation.
 While `STT_ROUTING_MODE=off`, snapshots return a neutral score with zero
 samples and merge only family account benches — local and cached selection
 benches and scores are ignored without being erased, so toggling back on

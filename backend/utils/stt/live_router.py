@@ -149,7 +149,7 @@ def engine_matches(target: Target, models: dict[str, str | None] | None) -> bool
 
 
 def _circuit_identity(target: Target) -> str:
-    return f'{target.family}@{live_stt_state.fleet_prefix(target.family, endpoint=target.endpoint)}'
+    return f'{target.family}@{live_stt_state.circuit_prefix(target.family, endpoint=live_stt_state.target_endpoint(target))}'
 
 
 class _TargetCircuitAdmissionRefused(ProviderCircuitBreaker):
@@ -173,6 +173,7 @@ def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None
             raise ValueError('Default live target requires its family circuit')
         return default
     identity = _circuit_identity(target)
+    account = live_stt_state.fleet_prefix(target.family, account=True)
     with _target_circuits_lock:
         circuit = _target_circuits.get(identity)
         if circuit is None:
@@ -185,6 +186,7 @@ def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None
                     return _target_circuit_admission_refused
                 del _target_circuits[evicted]
             circuit = _target_circuits[identity] = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+        circuit.sync_account_identity(account)
     return circuit
 
 

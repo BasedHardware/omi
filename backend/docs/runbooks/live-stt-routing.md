@@ -60,7 +60,13 @@ comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod;
 a changed endpoint, credential or stage starts its scoped state
 with no migration or backfill of older namespaces, which are never read. Raw
 URLs and keys never appear in Redis paths, logs or metrics. A pod's in-memory
-health views reset when that identity changes. Do not
+health views reset when that identity changes. Process-local selection
+breakers differ: they retain connect/serve outage evidence across credential
+rotation for an unchanged endpoint — credential rotation clears
+account/quota state only, an endpoint change starts fresh selection state
+while the unchanged credential's account protection remains, and a stage
+change starts fresh scoped state. A custom endpoint's serve death opens
+that endpoint's local target breaker and does not bench the family default. Do not
 reuse older-namespace evidence. At stage 100, one hashed user contributes at most three
 success/failure outcomes in a five-minute Redis-time window. Windows hold at
 most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),

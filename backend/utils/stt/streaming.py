@@ -42,7 +42,7 @@ from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_IDS
+from config.live_stt_registry import DEFAULT_IDS, Target
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
@@ -50,6 +50,7 @@ from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
+from utils.stt.live_router import target_circuit
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -171,11 +172,12 @@ _modulate_circuit = ProviderCircuitBreaker(
 )
 _soniox_circuit = soniox_circuit_from_env()
 
-# Per-family identity (stage + that family's endpoint and credential fingerprint)
-# each family breaker was built under. A rotated credential or replaced endpoint
-# resets only that family's benches, mirroring FleetHealth._check_identity and
-# live_router's identity-keyed _target_circuits; registry targets keep their own
-# circuits. One family's input change must not clear a sibling's evidence.
+# Per-family selection identity (stage + that family's endpoint fingerprint)
+# each family breaker was built under; the credential is synced separately as
+# account identity. A replaced endpoint or stage change resets only that
+# family's selection benches, mirroring FleetHealth._check_identity and
+# live_router's identity-keyed _target_circuits; registry targets keep their
+# own circuits. One family's input change must not clear a sibling's evidence.
 _family_circuits_identity: dict[str, str] = {}
 _family_circuits_lock = threading.Lock()
 
@@ -198,23 +200,23 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
     else:
         raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
     family = primary_service.value
-    identity = _family_circuits_identity
-    seen = live_stt_state.fleet_prefix(family)
-    if identity.get(family) is None:
-        with _family_circuits_lock:
-            identity.setdefault(family, seen)
-    elif identity[family] != seen:
-        with _family_circuits_lock:
-            if identity.get(family) != seen:
-                # A rotated credential, replaced endpoint, or stage change for
-                # THIS family invalidates the evidence its bench was built on:
-                # the replacement credential must not inherit the old
-                # account-open circuit (the same failure mode the Redis views
-                # already reset for in FleetHealth._check_identity). Sibling
-                # families keep their evidence; registry targets are keyed
-                # separately in live_router._target_circuits.
-                circuit.reset()
-                identity[family] = seen
+    selection = live_stt_state.circuit_prefix(family)
+    account = live_stt_state.fleet_prefix(family, account=True)
+    with _family_circuits_lock:
+        seen = _family_circuits_identity.get(family)
+        if seen is None:
+            _family_circuits_identity[family] = selection
+        elif seen != selection:
+            # A replaced endpoint or stage change for THIS family invalidates
+            # its selection evidence (the same boundary the Redis views reset
+            # for in FleetHealth._check_identity). An unchanged credential
+            # keeps its account bench; a rotated credential clears only
+            # account state inside sync_account_identity. Sibling families
+            # keep their evidence; registry targets are keyed separately in
+            # live_router._target_circuits.
+            circuit.reset_selection()
+            _family_circuits_identity[family] = selection
+        circuit.sync_account_identity(account)
     return circuit
 
 
@@ -243,6 +245,11 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
         circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
     else:
+        if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
+            circuit = target_circuit(
+                Target(DEFAULT_IDS.get(service.value, service.value), service.value, 0, endpoint=endpoint),
+                circuit,
+            )
         circuit.record_serve_failure()
     health.quarantine(
         service.value,

@@ -1798,7 +1798,10 @@ def test_target_circuit_identity_follows_endpoint_credential_stage_and_family(mo
     assert live_router.target_circuit(alias) is circuit
     assert live_router.target_circuit(target) is circuit
     monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
-    assert live_router.target_circuit(target) is not circuit
+    rotated_cred = live_router.target_circuit(target)
+    assert rotated_cred is circuit
+    assert circuit.state == 'open'
+    assert not circuit.allow_request()
     monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     assert live_router.target_circuit(target) is not circuit
@@ -1964,7 +1967,7 @@ async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(
 
 
 def test_family_circuit_reset_on_identity_rotation(monkeypatch):
-    """A rotated credential/stage must not inherit the old family bench."""
+    """A rotated credential must not inherit the old family account bench."""
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
     st._family_circuits_identity.clear()
@@ -1977,7 +1980,7 @@ def test_family_circuit_reset_on_identity_rotation(monkeypatch):
     assert st._circuit_for_primary(st.STTService.modulate) is first
     assert first.state == 'open'
 
-    # Rotated credential: the bench is cleared, breaker identity is fresh.
+    # Rotated credential: only the account bench is cleared.
     monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
     rotated = st._circuit_for_primary(st.STTService.modulate)
     assert rotated is first
@@ -2006,6 +2009,213 @@ def test_family_circuit_reset_on_identity_rotation(monkeypatch):
         st._circuit_for_primary(st.STTService('not-a-service'))
 
 
+@pytest.mark.parametrize('scope', ['family', 'target'])
+@pytest.mark.parametrize('outage', ['connect', 'serve'])
+def test_credential_rotation_preserves_selection_outage(monkeypatch, scope, outage):
+    """Rotating the credential must not erase an unchanged endpoint's outage."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    target = _target(id='modulate-a', endpoint='wss://one.invalid/x')
+    if scope == 'family':
+        circuit = st._circuit_for_primary(st.STTService.modulate)
+        lookup = lambda: st._circuit_for_primary(st.STTService.modulate)
+    else:
+        circuit = live_router.target_circuit(target)
+        lookup = lambda: live_router.target_circuit(target)
+    if outage == 'connect':
+        for _ in range(3):
+            circuit.record_failure()
+    else:
+        circuit.record_serve_failure()
+    assert circuit.state == 'open'
+    opened_at, failures = circuit._opened_at, circuit._failures
+    events, bench = circuit._serve_error_events, circuit._serve_error_bench_seconds
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert lookup() is circuit
+    assert circuit.state == 'open'
+    assert not circuit.allow_request()
+    assert not circuit.cooldown_elapsed()
+    assert (circuit._opened_at, circuit._failures) == (opened_at, failures)
+    assert (circuit._serve_error_events, circuit._serve_error_bench_seconds) == (events, bench)
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-c')
+    assert lookup() is circuit
+    assert circuit.state == 'open'
+    assert not circuit.allow_request()
+
+
+def test_credential_rotation_keeps_serve_half_open_probe_protected(monkeypatch):
+    """A stale-generation callback must not close rotated serve evidence."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    circuit = st._circuit_for_primary(st.STTService.modulate)
+    circuit.record_serve_failure()
+    assert circuit.allow_request(force=True)
+    assert circuit.state == 'half_open'
+    settle_ok, _settle_fail = circuit.deferred_result_callbacks()
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert st._circuit_for_primary(st.STTService.modulate) is circuit
+    assert circuit.state == 'half_open'
+
+    settle_ok()
+    assert circuit.state == 'half_open'
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+
+
+def test_credential_rotation_restores_outage_under_account_bench(monkeypatch):
+    """Outage then account bench: rotation restores the underlying open outage."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    circuit = st._circuit_for_primary(st.STTService.modulate)
+    circuit.record_serve_failure()
+    serve_opened_at = circuit._opened_at
+    serve_events = circuit._serve_error_events
+    circuit.record_account_failure(1800)
+    assert circuit._account_cooldown is not None
+    circuit.record_account_failure(1800)
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert st._circuit_for_primary(st.STTService.modulate) is circuit
+    assert circuit.state == 'open'
+    assert circuit._opened_by_serve_error
+    assert circuit._opened_at == serve_opened_at
+    assert circuit._serve_error_events == serve_events
+    assert circuit._account_cooldown is None
+    assert not circuit.allow_request()
+
+
+@pytest.mark.parametrize('scope', ['family', 'target'])
+def test_serve_death_while_account_benched_survives_rotation(monkeypatch, scope):
+    """Account bench then serve death: rotation restores the escalated outage."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    target = _target(id='modulate-a', endpoint='wss://one.invalid/x')
+    if scope == 'family':
+        circuit = st._circuit_for_primary(st.STTService.modulate)
+        lookup = lambda: st._circuit_for_primary(st.STTService.modulate)
+    else:
+        circuit = live_router.target_circuit(target)
+        lookup = lambda: live_router.target_circuit(target)
+    circuit.record_account_failure(1800)
+    account_opened_at = circuit._opened_at
+    circuit.record_serve_failure()
+    assert circuit.state == 'open'
+    assert circuit._account_cooldown is not None
+    assert circuit._opened_at == account_opened_at
+    assert circuit._serve_error_events == 1
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert lookup() is circuit
+    assert circuit.state == 'open'
+    assert circuit._opened_by_serve_error
+    assert circuit._account_cooldown is None
+    assert circuit._remaining_successes_to_close > 1
+    assert not circuit.allow_request()
+
+
+@pytest.mark.parametrize('scope', ['family', 'target'])
+def test_connect_failures_while_account_benched_survive_rotation(monkeypatch, scope):
+    """Connect failures recorded under an account bench reopen on rotation."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    now = [10.0]
+    target = _target(id='modulate-a', endpoint='wss://one.invalid/x')
+    if scope == 'family':
+        circuit = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30, clock=lambda: now[0])
+        monkeypatch.setattr(st, '_modulate_circuit', circuit)
+        st._circuit_for_primary(st.STTService.modulate)
+        lookup = lambda: st._circuit_for_primary(st.STTService.modulate)
+    else:
+        monkeypatch.setattr(
+            live_router,
+            'ProviderCircuitBreaker',
+            lambda **kwargs: ProviderCircuitBreaker(clock=lambda: now[0], **kwargs),
+        )
+        circuit = live_router.target_circuit(target)
+        lookup = lambda: live_router.target_circuit(target)
+    circuit.record_account_failure(1800)
+    account_opened_at = circuit._opened_at
+    now[0] += 5
+    for _ in range(3):
+        circuit.record_failure()
+    assert circuit._opened_at == account_opened_at
+    assert circuit._account_cooldown is not None
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert lookup() is circuit
+    assert circuit.state == 'open'
+    assert circuit._opened_at == now[0]
+    assert not circuit._opened_by_serve_error
+    assert circuit._account_cooldown is None
+    assert not circuit.allow_request()
+
+
+def test_endpoint_rotation_resets_selection_but_keeps_account_bench(monkeypatch):
+    """An endpoint change starts fresh selection state; the unchanged credential
+    account bench and sibling/custom evidence survive."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('SONIOX_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    circuit = st._circuit_for_primary(st.STTService.soniox)
+    circuit.record_serve_failure()
+    circuit.record_account_failure(1800)
+    account_opened_at = circuit._opened_at
+
+    monkeypatch.setenv('SONIOX_WS_URL', 'wss://soniox-rotated.invalid/transcribe-websocket')
+    assert st._circuit_for_primary(st.STTService.soniox) is circuit
+    assert circuit.state == 'open'
+    assert circuit._account_cooldown is not None
+    assert circuit._opened_at == account_opened_at
+    assert not circuit.allow_request()
+    assert not circuit._opened_by_serve_error
+    assert circuit._failures == 0
+    assert circuit._serve_error_events == 0
+
+    parakeet = st._circuit_for_primary(st.STTService.parakeet)
+    parakeet.record_serve_failure()
+    assert parakeet.state == 'open'
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'wss://parakeet-rotated.invalid')
+    assert st._circuit_for_primary(st.STTService.parakeet) is parakeet
+    assert parakeet.state == 'closed'
+    assert parakeet.allow_request()
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    custom = live_router.target_circuit(_target(id='modulate-a', endpoint='wss://one.invalid/x'))
+    custom.record_serve_failure()
+    rotated = live_router.target_circuit(_target(id='modulate-a', endpoint='wss://two.invalid/x'))
+    assert rotated is not custom
+    assert rotated.state == 'closed'
+    assert custom.state == 'open'
+
+
+def test_custom_target_credential_rotation_clears_account_bench(monkeypatch):
+    """A custom endpoint's account bench clears on rotation like the family's."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-a')
+    st._family_circuits_identity.clear()
+    target = _target(id='modulate-a', endpoint='wss://one.invalid/x')
+    circuit = live_router.target_circuit(target)
+    circuit.record_account_failure(1800)
+    assert circuit.state == 'open'
+    assert circuit.account_cooldown_seconds_remaining > 1700
+    assert live_router.target_circuit(target) is circuit
+    assert circuit.state == 'open'
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'cred-b')
+    assert live_router.target_circuit(target) is circuit
+    assert circuit.state == 'closed'
+    assert circuit.account_cooldown_seconds_remaining == 0.0
+    assert circuit.allow_request()
+
+
 @pytest.mark.asyncio
 async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monkeypatch, isolated):
     """A custom-endpoint serve death must not bench the family default endpoint."""
@@ -2019,6 +2229,9 @@ async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monk
     monkeypatch.setattr(live_session, 'health', pod)
 
     endpoint = 'wss://endpoint-a.invalid/stream'
+    st._circuit_for_primary(st.STTService.modulate)
+    precreated = live_router.target_circuit(_target(id='modulate-alias', endpoint=endpoint))
+    assert precreated.state == 'closed'
     raw = SimpleNamespace(is_connection_dead=False, routing_endpoint=endpoint)
     socket = SimpleNamespace(
         raw=raw,
@@ -2037,6 +2250,46 @@ async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monk
     assert state.bench == 'selection'
     default = pod.cached_snapshot(['modulate'], 'en')['modulate']
     assert not default.bench
+
+    family = st._circuit_for_primary(st.STTService.modulate)
+    assert family.state == 'closed' and family.allow_request()
+    custom = live_router.target_circuit(Target('modulate-velma-2', 'modulate', 0.055, endpoint=endpoint))
+    assert custom is precreated and custom is not family
+    assert custom.state == 'open' and not custom.allow_request()
+    sibling = live_router.target_circuit(_target(id='modulate-b', endpoint='wss://other.invalid/stream'))
+    assert sibling.state == 'closed' and sibling.allow_request()
+
+
+@pytest.mark.asyncio
+async def test_serve_death_endpoint_controls_and_account_family_scope(monkeypatch, isolated):
+    """Default/unknown endpoints bench the family; account rejections stay family-wide."""
+    pod = isolated
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    monkeypatch.setattr(st, 'health', pod)
+    st._family_circuits_identity.clear()
+    family = st._circuit_for_primary(st.STTService.modulate)
+
+    assert st.open_provider_selection_circuit('modulate', reason='modulate_serve_error') is True
+    assert family.state == 'open'
+    family.reset()
+    default_endpoint = live_stt_state.family_endpoint('modulate')
+    assert (
+        st.open_provider_selection_circuit('modulate', reason='modulate_serve_error', endpoint=default_endpoint) is True
+    )
+    assert family.state == 'open'
+    assert not live_router._target_circuits
+
+    family.reset()
+    custom_endpoint = 'wss://endpoint-a.invalid/stream'
+    assert (
+        st.open_provider_selection_circuit('modulate', reason='provider_budget_exhausted', endpoint=custom_endpoint)
+        is True
+    )
+    assert family.state == 'open' and family._account_cooldown is not None
+    custom = live_router.target_circuit(Target('modulate-velma-2', 'modulate', 0.055, endpoint=custom_endpoint))
+    assert custom.state == 'closed' and custom.allow_request()
 
 
 @pytest.mark.asyncio

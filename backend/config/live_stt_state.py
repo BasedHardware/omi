@@ -15,6 +15,7 @@ from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SU
 
 COST_PREFIX = 'omi:live-stt:cost-v8'
 FLEET_PREFIX = 'omi:live-stt:fleet-v2'
+LOCAL_CIRCUIT_PREFIX = 'omi:live-stt:local-selection'
 FAMILIES = ('deepgram', 'modulate', 'parakeet', 'soniox')
 ROUTED_LANGUAGES = frozenset(
     MODULATE_SUPPORTED_LANGUAGES | frozenset().union(*PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL.values()) | {'other'}
@@ -93,6 +94,16 @@ def fleet_prefix(family: str, *, account: bool = False, endpoint: str | None = N
             family_credential(family),
         )
     return f'{FLEET_PREFIX}:{stage()}:{fingerprint}'
+
+
+def circuit_prefix(family: str, *, endpoint: str | None = None) -> str:
+    """Process-local selection-breaker identity (stage + family + endpoint; credential excluded)."""
+    fingerprint = _digest(
+        'live-stt-local-selection',
+        family,
+        family_endpoint(family) if endpoint is None else endpoint,
+    )
+    return f'{LOCAL_CIRCUIT_PREFIX}:{stage()}:{fingerprint}'
 
 
 def fleet_state_key(family: str, *, account: bool = False, endpoint: str | None = None) -> str:

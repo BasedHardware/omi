@@ -173,7 +173,11 @@ while account quarantine stays credential-wide and dominates every sibling.
 Endpoint connection breakers share that partition under a 64-identity bound
 per process: the bound evicts only the oldest closed breaker, and while every
 cached breaker is open or half-open a new endpoint identity is refused by the
-same circuit/admission gate instead of resetting a live bench.
+same circuit/admission gate instead of resetting a live bench. Unlike the
+shared Redis keys, the local selection-breaker identity excludes the
+credential: rotating a key clears only account/quota state and retains an
+unchanged endpoint's connect/serve outage evidence, while an endpoint or
+stage change starts fresh scoped selection state.
 While routing is off, connect snapshots report a neutral score and merge only
 family account benches — selection benches and scores are ignored without
 being erased. Per-language freshness is read for every bounded supported language at
