@@ -27,6 +27,36 @@ OAUTH_CONFIGS = {
     'clickup': {'name': 'ClickUp'},
 }
 
+MAX_OAUTH_EXPIRES_IN_SECONDS = 31_536_000  # 365 days; anything larger is a bogus upstream value.
+
+
+def coerce_expires_in(value: Any) -> Optional[int]:
+    """Return *value* as a positive int of seconds, or None when it is unusable.
+
+    OAuth providers occasionally return `expires_in` as a string, null, or a
+    nested object. Passing such a value straight into `timedelta(seconds=...)`
+    raises TypeError, which surfaced as a 500 during token refresh. Missing or
+    nonsensical values are treated as "unknown expiry" instead of crashing.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        seconds = value
+    elif isinstance(value, float):
+        if value != value or value in (float('inf'), float('-inf')):  # NaN / inf
+            return None
+        seconds = int(value)
+    elif isinstance(value, str):
+        try:
+            seconds = int(value.strip())
+        except (ValueError, AttributeError):
+            return None
+    else:
+        return None
+    if seconds <= 0 or seconds > MAX_OAUTH_EXPIRES_IN_SECONDS:
+        return None
+    return seconds
+
 http_client: Optional[httpx.AsyncClient] = None
 
 
@@ -113,8 +143,9 @@ async def refresh_oauth_token(
             }
             if new_refresh_token:
                 update_payload['refresh_token'] = new_refresh_token
-            if expires_in:
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            expires_seconds = coerce_expires_in(expires_in)
+            if expires_seconds is not None:
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_seconds)
                 update_payload['expires_at'] = expires_at.isoformat()
             await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, update_payload)
             return {**integration, **update_payload}
@@ -150,8 +181,8 @@ async def refresh_oauth_token(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        logger.error(f'{app_key}: Error refreshing token: {sanitize(str(e))}')
+        raise HTTPException(status_code=500, detail=f"Error refreshing token: {sanitize(str(e))}")
 
 
 async def ensure_valid_oauth_token(
