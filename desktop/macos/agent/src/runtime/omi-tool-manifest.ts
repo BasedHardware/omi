@@ -382,7 +382,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "Supports SELECT, INSERT, UPDATE, DELETE.",
         "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
-        "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
+        "Use get_work_context for recent-work destinations; use the current schema for structured record queries.",
         "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
         "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
@@ -1059,12 +1059,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "execute_sql",
     label: "Execute SQL",
     description:
-      "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. The durable work index is context_visits(handlesJson) joined to context_buckets. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
+      "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
     promptSnippet: "execute_sql - Query exact structured local stats and aggregates (SELECT only)",
     promptGuidelines: [
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
       "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer.",
+      "Use get_work_context for recent-work destinations; use semantic_search only for fuzzy screen content after get_work_context cannot answer.",
     ],
     latency: "fast local",
     inputSchema: schema(

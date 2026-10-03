@@ -57,14 +57,14 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Supports SELECT, INSERT, UPDATE, DELETE.",
       "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
-      "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
+      "Use get_work_context for recent-work destinations; use the current schema for structured record queries.",
       "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
       "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
       "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
+      "Use get_work_context for recent-work destinations; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
     ]
     ),
     Capability(
