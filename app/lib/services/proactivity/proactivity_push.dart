@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
@@ -39,13 +41,24 @@ abstract final class ProactivityPush {
   static bool matches(Map<String, dynamic> data) => data['notification_type'] == 'proactivity_v2';
 
   static Future<bool> handle(Map<String, dynamic> data,
-      {ProactivityOutbox? outbox, ProactivityTargetOpener? open}) async {
+      {ProactivityOutbox? outbox,
+      ProactivityTargetOpener? open,
+      Duration ownerTimeout = const Duration(seconds: 15),
+      Duration pollInterval = const Duration(milliseconds: 50)}) async {
     final id = data['item_id'];
     final kind = data['target_kind'];
     final targetId = data['target_id'];
     if (!matches(data) || id is! String || id.isEmpty || kind is! String || targetId is! String) return false;
+    final receipts = outbox ?? ProactivityRuntime.outbox;
+    // getInitialMessage can arrive before preferences and AuthProvider mount.
+    // Wait for the normal authenticated binding; never bypass sign-in/onboarding.
+    final deadline = DateTime.now().add(ownerTimeout);
+    while (!receipts.isCurrent(receipts.epoch) && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(pollInterval);
+    }
+    if (!receipts.isCurrent(receipts.epoch)) return false;
     return openProactivityTarget(id, GeneratedProactivityTarget(kind: kind, id: targetId),
-        outbox: outbox ?? ProactivityRuntime.outbox,
+        outbox: receipts,
         channel: 'push',
         routeOverride: data['navigate_to'] == '/chat/mentor' ? '/chat/mentor' : null,
         open: open);

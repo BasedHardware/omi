@@ -63,4 +63,35 @@ void main() {
         isFalse);
     expect(h.events, isEmpty);
   });
+  test('cold-start tap waits for authenticated binding before navigation', () async {
+    final h = OutcomeHarness();
+    addTearDown(h.outbox.dispose);
+    await h.bind(null);
+    var opens = 0;
+    final pending = ProactivityPush.handle(push,
+        outbox: h.outbox,
+        ownerTimeout: const Duration(seconds: 1),
+        pollInterval: const Duration(milliseconds: 1), open: (r, {canOpen}) async {
+      opens++;
+      return true;
+    });
+    expect(opens, 0);
+    await h.bind();
+    expect(await pending, isTrue);
+    expect(opens, 1);
+    await Future<void>.delayed(Duration.zero);
+    expect(h.events.single.channel, 'push');
+  });
+  test('signed-out tap is dropped without opening or recording after wait expires', () async {
+    final h = OutcomeHarness();
+    addTearDown(h.outbox.dispose);
+    await h.bind(null);
+    expect(
+        await ProactivityPush.handle(push,
+            outbox: h.outbox,
+            ownerTimeout: Duration.zero,
+            open: (r, {canOpen}) async => throw StateError('Must not navigate')),
+        isFalse);
+    expect(h.events, isEmpty);
+  });
 }
