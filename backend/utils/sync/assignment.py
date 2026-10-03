@@ -316,7 +316,7 @@ def assign_in_transaction(
         lineage_binding == 'stamp_fallback'
         and target_id
         and target is not None
-        and sync_lineage_resolve_active_for(user_ref.id)
+        and sync_live_dedupe_active_for(user_ref.id)
     )
     anchor_mismatch = capture_mismatch(own_anchor, incoming) if own_anchor else 'none'
     if anchor_mismatch != 'none':

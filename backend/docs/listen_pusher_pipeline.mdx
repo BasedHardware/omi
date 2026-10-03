@@ -42,10 +42,13 @@ duplication; non-contiguous captures are never concatenated) — while missing,
 malformed, conflicting or out-of-bounds evidence retains the original audio,
 and an upload without the claim costs no lookup. Derivatives are internally
 marked `coverage_trimmed` so the 1 s VAD minimum admits genuinely new
-sub-second slices; unmarked audio keeps the floor unchanged. A clean no-row lookup probes the recording id
-once (`id_probe`, ceiling 16) and each resolve line counts returned candidates
-only; stamp-fallback live appends bucket extent growth on `span_delta_bucket`
-(`sync_lineage_append`, or `sync_lineage_stamp_append` while dedupe is off).
+sub-second slices; unmarked audio keeps the floor unchanged. The live-dedupe switch also gates the lineage
+diagnostics added with it: on, a clean no-row lookup probes the recording id
+once (`id_probe`, ceiling 16), each resolve line counts returned candidates
+only, and stamp-fallback live appends bucket extent growth on `span_delta_bucket`
+(`sync_lineage_append` or `sync_lineage_stamp_append`); off restores the main
+query set and log format — no probe, no stage counts, no stamp-append marker
+or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;

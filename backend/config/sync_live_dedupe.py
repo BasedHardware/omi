@@ -13,13 +13,17 @@ exact-retry pass then drops identical normalized text plus identical absolute
 range or segment id only for a capture-proven segment or one sharing the
 stored line's nonempty ``sync:`` scope; anything ambiguous is kept.
 
+The same switch gates safe strict-overlap deferral in
+``utils/sync/recording_lineage.py`` (``ambiguous_pending`` instead of guessing
+among overlapping generations, then the existing retryable failed-segment path)
+and the bounded lineage diagnostics it added (stage counts, ``id_probe`` reads
+and the ``event=sync_lineage_stamp_append`` telemetry line).
+
 ``SYNC_LINEAGE_LIVE_DEDUPE_ENABLED`` unset or blank means on. Only an explicit
 on-token keeps it on when set; every other value — including a mistyped kill
 switch — means off, and off restores the exact previous intake path: identical
-persistence, results and enrichment decisions, with no dedupe stats or markers.
-Lineage diagnostics stay additive under the lineage gate, so off may still emit
-``event=sync_lineage_stamp_append`` for a stamp-fallback live append — a
-content-free telemetry line, never a stored field or behavior change.
+persistence, results and enrichment decisions, main-format lineage logging, no
+probe reads, and no dedupe stats or markers.
 
 The switch alone does not widen the change: activation additionally requires
 ``sync_lineage_resolve_active_for(uid)``, so it reaches only users admitted to

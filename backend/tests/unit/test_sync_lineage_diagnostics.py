@@ -287,12 +287,32 @@ def test_probe_never_runs_on_degraded_failed_or_truncated_lookups(empty_lineage_
     [
         (sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'off'),
         (sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid'),
+        (SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off'),
+        (SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'disabled-typo'),
     ],
 )
 def test_probe_never_runs_when_disabled_or_not_allowlisted(empty_lineage_db, monkeypatch, env, value):
     monkeypatch.setenv(env, value)
     resolve_no_rows(empty_lineage_db)
     assert 'probe' not in empty_lineage_db.calls
+
+
+@pytest.mark.parametrize(
+    ('env', 'value'),
+    [
+        (SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off'),
+        (SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'disabled-typo'),
+        (sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid'),
+    ],
+)
+def test_dedupe_off_or_excluded_cohort_emits_only_main_log_fields(empty_lineage_db, monkeypatch, caplog, env, value):
+    monkeypatch.setenv(env, value)
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        resolve_no_rows(empty_lineage_db)
+    line = [r.getMessage() for r in caplog.records if 'event=sync_lineage_resolve' in r.getMessage()][0]
+    assert line.startswith('event=sync_lineage_resolve outcome=')
+    assert 'id_probe=' not in line and 'candidates=' not in line and 'dropped_' not in line
+    assert 'job_ref=' in line
 
 
 def test_probe_never_runs_when_rows_were_returned(monkeypatch):
@@ -433,7 +453,7 @@ def test_attacker_controlled_marker_text_never_reaches_telemetry(caplog):
     assert SENTINEL_TEXT not in caplog.text
 
 
-def test_dedupe_off_marks_stamp_append_without_dedupe_stats(monkeypatch):
+def test_dedupe_off_writes_neither_dedupe_stats_nor_stamp_append(monkeypatch):
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     store = seeded_store([live_row()])
     incoming = _stamp_incoming(NEW)
@@ -441,7 +461,7 @@ def test_dedupe_off_marks_stamp_append_without_dedupe_stats(monkeypatch):
     assigned, created, _ = intake(store, incoming, target_id=LIVE_ID)
     assert created is False and assigned['id'] == LIVE_ID
     assert '_sync_lineage_dedupe' not in assigned
-    assert assigned['_sync_lineage_stamp_append'] == '0_60'
+    assert '_sync_lineage_stamp_append' not in assigned
 
 
 def _extent(start, end):
@@ -517,7 +537,7 @@ def test_append_telemetry_carries_the_span_bucket(pipeline_module, monkeypatch, 
     assert len(lines) == 1 and 'span_delta_bucket=60_300' in lines[0]
 
 
-def test_dedupe_off_emits_only_the_stamp_append_event(pipeline_module, monkeypatch, caplog):
+def test_dedupe_off_emits_no_lineage_append_or_stamp_event(pipeline_module, monkeypatch, caplog):
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     pipeline = pipeline_module
     store = seeded_store([live_row()])
@@ -528,7 +548,7 @@ def test_dedupe_off_emits_only_the_stamp_append_event(pipeline_module, monkeypat
     assert ok is True
     stamp = [r.getMessage() for r in caplog.records if 'event=sync_lineage_stamp_append' in r.getMessage()]
     dedupe = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append ' in r.getMessage()]
-    assert stamp == ['event=sync_lineage_stamp_append span_delta_bucket=0']
+    assert stamp == []
     assert dedupe == []
 
 

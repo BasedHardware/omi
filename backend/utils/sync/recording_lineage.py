@@ -38,11 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.sync_lineage import (
-    sync_lineage_resolve_active_for,
-    sync_lineage_resolve_enabled,
-    sync_lineage_resolve_uid_allowed,
-)
+from config.sync_lineage import sync_lineage_resolve_enabled, sync_lineage_resolve_uid_allowed
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
@@ -129,10 +125,18 @@ def lineage_resolution_requested(
     if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
         return False
     if not sync_lineage_resolve_enabled():
-        _emit(LineagePlan(targets={}, outcome='disabled', reason='none'), job_id)
+        _emit(
+            LineagePlan(targets={}, outcome='disabled', reason='none'),
+            job_id,
+            diagnostics=sync_live_dedupe_active_for(uid),
+        )
         return False
     if not sync_lineage_resolve_uid_allowed(uid):
-        _emit(LineagePlan(targets={}, outcome='not_allowlisted', reason='none'), None)
+        _emit(
+            LineagePlan(targets={}, outcome='not_allowlisted', reason='none'),
+            None,
+            diagnostics=sync_live_dedupe_active_for(uid),
+        )
         return False
     return True
 
@@ -562,7 +566,7 @@ def resolve_segment_targets(
         and truncated_before is None
         and plan.rows == 0
         and clean_text(origin_id)
-        and sync_lineage_resolve_active_for(uid)
+        and sync_live_dedupe_active_for(uid)
     ):
         plan.id_probe = _id_probe(
             lineage_module[0],
@@ -582,7 +586,7 @@ def resolve_segment_targets(
             reason='other',
             outcome='degraded',
         )
-    _emit(plan, job_id)
+    _emit(plan, job_id, diagnostics=sync_live_dedupe_active_for(uid))
     return plan.targets
 
 
@@ -667,14 +671,36 @@ def fallback_segment_targets(
     return plan.targets
 
 
-def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
+def _emit(plan: LineagePlan, job_id: Optional[str], diagnostics: Optional[bool] = None) -> None:
     """One bounded metric and log line per decision; never ids, uids or transcript text."""
+    if diagnostics is None:
+        diagnostics = sync_live_dedupe_enabled()
     outcome = plan.outcome if plan.outcome in OUTCOMES else 'lookup_failed'
     try:
         OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(outcome=outcome).inc()
     except Exception:
         pass
     counts = plan.counts
+    if not diagnostics:
+        try:
+            logger.info(
+                'event=sync_lineage_resolve outcome=%s reason=%s segments=%d bound=%d stamp_overridden=%d '
+                'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s job_ref=%s',
+                outcome,
+                plan.reason,
+                len(plan.targets),
+                counts.get('bound', 0),
+                counts.get('stamp_overridden', 0),
+                counts.get('stamp_fallback', 0),
+                counts.get('unbound', 0),
+                plan.generations,
+                plan.rows,
+                'origin_row_only' if plan.degraded else 'lineage',
+                bounded_correlation_ref(job_id),
+            )
+        except Exception:
+            pass
+        return
     filters = plan.filter_counts
     emitted = lambda key: min(filters.get(key, 0), 16)
     try:
