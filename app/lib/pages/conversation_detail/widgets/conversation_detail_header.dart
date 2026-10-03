@@ -28,7 +28,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Transcript never loses the title or the facts.
 ///
 /// The title in large type (tap to rename), then one row of outlined chips: when it started and how
-/// long it ran, the folder, and — when they apply — who spoke and the event's recordings. Visibility
+/// long it ran, and — when they apply — its folder, who spoke and the event's recordings. Visibility
 /// lives in the ⋯ menu ([ConversationVisibilitySheet]).
 class ConversationDetailHeader extends StatelessWidget {
   const ConversationDetailHeader({super.key, required this.onOpenRecordings});
@@ -67,7 +67,8 @@ class ConversationDetailHeader extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _whenChip(context, conversation),
-                  _FolderChip(conversation: conversation, folder: folder),
+                  // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
+                  if (folder != null) _FolderChip(conversation: conversation, folder: folder),
                   if (peopleLabel != null)
                     _peopleChip(
                       context,
@@ -102,7 +103,8 @@ class ConversationDetailHeader extends StatelessWidget {
       focusNode: provider.titleFocusNode,
       controller: provider.titleController,
       style: titleStyle,
-      hintText: transcriptFallbackTitle(conversation) ??
+      hintText:
+          transcriptFallbackTitle(conversation) ??
           recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
     );
   }
@@ -113,10 +115,7 @@ class ConversationDetailHeader extends StatelessWidget {
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
     final duration = conversationDurationLabel(conversation, context.l10n);
-    final label = [
-      '${dates.dayHeader(start)} ${dates.time(start)}',
-      if (duration.isNotEmpty) duration,
-    ].join(' · ');
+    final label = ['${dates.dayHeader(start)} ${dates.time(start)}', if (duration.isNotEmpty) duration].join(' · ');
     final calendarEvent = conversation.calendarEvent;
     final chip = ConversationDetailChip(
       key: const Key('conversation_when'),
@@ -235,16 +234,16 @@ class _PeopleAvatars extends StatelessWidget {
   }
 }
 
-/// Opens the move-to-folder sheet. A filed conversation's folder glyph keeps the folder's colour.
+/// The conversation's folder; opens the move-to-folder sheet. The folder glyph keeps its colour.
 class _FolderChip extends StatelessWidget {
   const _FolderChip({required this.conversation, required this.folder});
 
   final ServerConversation conversation;
-  final Folder? folder;
+  final Folder folder;
 
   @override
   Widget build(BuildContext context) {
-    final label = folder?.name ?? context.l10n.noFolder;
+    final label = folder.name;
     return Semantics(
       button: true,
       label: '${context.l10n.moveToFolder}: $label',
@@ -256,7 +255,7 @@ class _FolderChip extends StatelessWidget {
         },
         child: ConversationDetailChip(
           key: const Key('conversation_folder'),
-          icon: FaIcon(folderIconToFa(folder?.icon), size: 13, color: folder?.colorValue),
+          icon: FaIcon(folderIconToFa(folder.icon), size: 13, color: folder.colorValue),
           label: label,
         ),
       ),

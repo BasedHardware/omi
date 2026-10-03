@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
@@ -34,17 +35,14 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  );
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 typedef DeviceConnectionBuilder = DeviceConnection? Function(BtDevice device);
 
 class DeviceService {
   DeviceService({DeviceConnectionBuilder? connectionBuilder})
-      : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create;
+    : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create;
 
   final DeviceConnectionBuilder _connectionBuilder;
 
@@ -156,16 +154,12 @@ class DeviceService {
     await _teardownConnection(id);
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug(
-      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
-    );
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug(
-        '[DeviceService] Device not in discovered list, checking stored device',
-      );
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
         Logger.debug('[DeviceService] Using stored device: ${device.name}');
@@ -173,9 +167,7 @@ class DeviceService {
           _devices.add(device);
         }
       } else {
-        Logger.debug(
-          '[DeviceService] No stored device available for $id, returning',
-        );
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
@@ -184,9 +176,7 @@ class DeviceService {
     if (connection != null) {
       _connections[id] = connection;
       try {
-        await connection.connect(
-          onConnectionStateChanged: onDeviceConnectionStateChanged,
-        );
+        await connection.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
       } catch (_) {
         // A native GATT link may already be up even when device-specific
         // initialization (for example, a protected Limitless write) fails.
@@ -208,9 +198,7 @@ class DeviceService {
         rethrow;
       }
     } else {
-      Logger.debug(
-        '[DeviceService] Failed to create device connection for ${device.id}',
-      );
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 
@@ -264,15 +252,9 @@ class DeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  ) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -286,16 +268,11 @@ class DeviceService {
 
   final Mutex _mutex = Mutex();
 
-  Future<DeviceConnection?> ensureConnection(
-    String deviceId, {
-    bool force = false,
-  }) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
       final existing = _connections[deviceId];
-      Logger.debug(
-        "ensureConnection $deviceId ${existing?.status} $force",
-      );
+      Logger.debug("ensureConnection $deviceId ${existing?.status} $force");
 
       if (_staleBondRecoveryRequired) {
         Logger.debug('ensureConnection blocked: stale iOS BLE bond recovery required');
@@ -303,7 +280,7 @@ class DeviceService {
       }
 
       // Connected to this device — return it
-      if (existing?.status == DeviceConnectionState.connected) {
+      if (existing?.status == DeviceConnectionState.connected && await existing!.transport.isConnected()) {
         return existing;
       }
 
@@ -318,7 +295,18 @@ class DeviceService {
       if (!force) return null;
 
       try {
-        await _connectToDevice(deviceId);
+        if (existing != null && BleBridge.instance.preservesCaptureIntent(deviceId)) {
+          // Preserve the source and its listeners; native manageDevice will
+          // establish/discover a real link if the cached transport is down.
+          // Go through the connection (not the bare transport) so device setup
+          // such as the pendant time sync runs after the link returns, and a
+          // transport failure surfaces as DeviceConnectionException like the
+          // cold-connect path. Re-pass the service callback so later state
+          // changes keep reaching subscribers.
+          await existing.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+        } else {
+          await _connectToDevice(deviceId);
+        }
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
         return null;
@@ -338,9 +326,7 @@ class DeviceService {
   // Helper method to get stored device from SharedPreferences
   BtDevice? _getStoredDevice(String id) {
     try {
-      return SharedPreferencesUtil().btDevices.firstWhereOrNull(
-            (d) => d.id == id && d.id.isNotEmpty,
-          );
+      return SharedPreferencesUtil().btDevices.firstWhereOrNull((d) => d.id == id && d.id.isNotEmpty);
     } catch (e) {
       Logger.debug('Error getting stored device: $e');
     }

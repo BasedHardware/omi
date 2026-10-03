@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -48,20 +49,26 @@ void main() {
   testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
     await setupSharedPreferences();
     var loaded = <Person>[];
-    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final people = PeopleProvider(
+      loadPeople: () async => PeopleListResponse(people: loaded),
+      renamePerson: (_, __) async => true,
+    );
     final segment = segmentFor('reactive', 2)..personId = 'later';
-    await tester.pumpWidget(ChangeNotifierProvider.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
         value: people,
         child: MaterialApp(
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate
+            GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
-        )));
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
     expect(find.text('Speaker 1'), findsOneWidget);
@@ -178,9 +185,7 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
-          ),
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: true)),
         ),
       );
       await tester.pumpAndSettle();
@@ -272,23 +277,23 @@ void main() {
     testWidgets('a long saved transcript opens at its first line and stays there when it changes', (tester) async {
       await setupSharedPreferences();
       List<TranscriptSegment> lines(int count) => [
-            for (var i = 0; i < count; i++)
-              TranscriptSegment(
-                id: 'line-$i',
-                text: 'Line number $i of the conversation.',
-                speaker: 'SPEAKER_0${i % 2}',
-                isUser: i.isEven,
-                personId: null,
-                start: i * 10.0,
-                end: i * 10.0 + 5,
-                translations: [],
-              ),
-          ];
+        for (var i = 0; i < count; i++)
+          TranscriptSegment(
+            id: 'line-$i',
+            text: 'Line number $i of the conversation.',
+            speaker: 'SPEAKER_0${i % 2}',
+            isUser: i.isEven,
+            personId: null,
+            start: i * 10.0,
+            end: i * 10.0 + 5,
+            translations: [],
+          ),
+      ];
       Widget page(List<TranscriptSegment> segments) => MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
-          );
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
+      );
 
       await tester.pumpWidget(page(lines(60)));
       await tester.pumpAndSettle();

@@ -1153,6 +1153,10 @@ class SharedPreferencesUtil {
     saveStringList('cachedPeople', people);
   }
 
+  bool get cachedPeopleStatsTruncated => _preferences?.get('cachedPeopleStatsTruncated') == true;
+
+  set cachedPeopleStatsTruncated(bool value) => saveBool('cachedPeopleStatsTruncated', value);
+
   addCachedPerson(Person person) {
     final List<Person> people = cachedPeople;
     people.add(person);
@@ -1267,6 +1271,7 @@ class SharedPreferencesUtil {
     cachedConversations = <ServerConversation>[];
     cachedMessages = <ServerMessage>[];
     cachedPeople = <Person>[];
+    cachedPeopleStatsTruncated = false;
     appsList = <App>[];
     modifiedConversationDetails = null;
     cachedSingleLanguageMode = false;

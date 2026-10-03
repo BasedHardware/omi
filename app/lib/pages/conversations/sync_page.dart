@@ -18,6 +18,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
+import 'widgets/offline_sync_storage_sheet.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
@@ -129,7 +130,8 @@ class WalListItem extends StatelessWidget {
         final timeStr = OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = OmiDuration.compact(wal.seconds, context.l10n);
         final source = _sourceLabel(context);
-        final showBar = displayState == WalSyncDisplayState.syncing &&
+        final showBar =
+            displayState == WalSyncDisplayState.syncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -139,8 +141,9 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction:
-                displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: displayState == WalSyncDisplayState.syncing
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return showOmiConfirm(
@@ -178,8 +181,11 @@ class WalListItem extends StatelessWidget {
                             children: [
                               Text(
                                 source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
-                                style:
-                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  color: OmiColors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -370,8 +376,10 @@ class _SyncPageState extends State<SyncPage> {
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
-        provider: provider,
+      builder: (sheetContext) => OfflineSyncStorageSheet(
+        syncedCount: provider.syncedWals.length,
+        pendingCount: provider.pendingDeletableWals.length,
+        totalCount: provider.clearableWalsCount,
         onClearSynced: () async {
           Navigator.of(sheetContext).pop();
           final confirmed = await showOmiConfirm(
@@ -518,7 +526,8 @@ class _SyncPageState extends State<SyncPage> {
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
       final counts = syncProvider.offlineServerProcessingCounts;
-      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
+      subtitle =
+          SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (p, t) => l.processingProgress(p, t),
@@ -543,10 +552,7 @@ class _SyncPageState extends State<SyncPage> {
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
-          if (showSpinner) ...[
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(width: 12),
-          ],
+          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,14 +643,14 @@ class _SyncPageState extends State<SyncPage> {
         isPending
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
-                ? FontAwesomeIcons.triangleExclamation
-                : FontAwesomeIcons.clockRotateLeft,
+            ? FontAwesomeIcons.triangleExclamation
+            : FontAwesomeIcons.clockRotateLeft,
       ),
       title: isPending
           ? context.l10n.noPendingRecordings
           : isCorrupted
-              ? context.l10n.syncStatusFileUnavailable
-              : context.l10n.noProcessedRecordings,
+          ? context.l10n.syncStatusFileUnavailable
+          : context.l10n.noProcessedRecordings,
       message: isPending ? context.l10n.allCaughtUp : null,
     );
   }
@@ -917,164 +923,7 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count)
-      : isHeader = true,
-        wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
 
-  _PendingListItem.wal(this.wal)
-      : isHeader = false,
-        label = null,
-        icon = null,
-        color = null,
-        count = null;
-}
-
-class _ManageStorageSheet extends StatelessWidget {
-  final SyncProvider provider;
-  final VoidCallback onClearSynced;
-  final VoidCallback onClearPending;
-  final VoidCallback onClearAll;
-
-  const _ManageStorageSheet({
-    required this.provider,
-    required this.onClearSynced,
-    required this.onClearPending,
-    required this.onClearAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = provider.clearableWalsCount;
-
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Synced row
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: context.l10n.synced,
-            subtitle: context.l10n.safelyBackedUp,
-            count: syncedCount,
-            onClear: syncedCount > 0 ? onClearSynced : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          // Pending row
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: context.l10n.pending,
-            subtitle: context.l10n.notYetSynced,
-            count: pendingCount,
-            onClear: pendingCount > 0 ? onClearPending : null,
-            clearLabel: context.l10n.clear,
-            isWarning: true,
-          ),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final int count;
-  final VoidCallback? onClear;
-  final String clearLabel;
-  final bool isWarning;
-
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.count,
-    required this.onClear,
-    required this.clearLabel,
-    this.isWarning = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '$count',
-                        style: TextStyle(
-                          color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade400,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              ],
-            ),
-          ),
-          if (onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(
-                  clearLabel,
-                  style: TextStyle(
-                    color: isWarning ? Colors.orange.shade300 : Colors.red.shade300,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
 }

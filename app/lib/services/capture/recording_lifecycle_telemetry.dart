@@ -16,11 +16,12 @@ class RecordingLifecycleTelemetry {
     RecordingIdFactory? idFactory,
     RecordingClock? clock,
     int Function()? identityEpoch,
-  })  : _emitter = emitter ?? _emitProductionEvent,
-        _idFactory = idFactory ?? _defaultId,
-        _clock = clock ?? DateTime.now,
-        _identityEpoch = identityEpoch ?? (() => AnalyticsManager.identityEpoch);
+  }) : _emitter = emitter ?? _emitProductionEvent,
+       _idFactory = idFactory ?? _defaultId,
+       _clock = clock ?? DateTime.now,
+       _identityEpoch = identityEpoch ?? (() => AnalyticsManager.identityEpoch);
 
+  static const String requestedEvent = 'Recording Requested';
   static const String startedEvent = 'Recording Started';
   static const String completedEvent = 'Recording Completed';
   static const String startFailedEvent = 'Recording Start Failed';
@@ -67,12 +68,13 @@ class RecordingLifecycleTelemetry {
   }
 
   void _milestone(String stage) => _emit('Recording Observation', {
-        'recording_id': _recordingId,
-        'recording_source': _source,
-        'stage': stage,
-        'since_prepare_ms':
-            _preparedAt == null ? 0 : (_clock().difference(_preparedAt!).inMilliseconds).clamp(0, 2147483647),
-      });
+    'recording_id': _recordingId,
+    'recording_source': _source,
+    'stage': stage,
+    'since_prepare_ms': _preparedAt == null
+        ? 0
+        : (_clock().difference(_preparedAt!).inMilliseconds).clamp(0, 2147483647),
+  });
 
   String? _recordingId;
   String? _source;
@@ -96,14 +98,19 @@ class RecordingLifecycleTelemetry {
     _ownerEpoch = _identityEpoch();
     _preparedAt = _clock();
     _source = source;
+    _emit(requestedEvent, {'recording_id': _recordingId, 'recording_source': _source});
     return _recordingId!;
   }
 
-  void markStarted() {
+  void subscriptionFailed() =>
+      _emit('Recording Subscription Failed', {'recording_id': _recordingId, 'recording_source': _source});
+
+  void markStarted({String? evidence}) {
     if (_recordingId == null || _source == null || _startedEmitted) return;
     _startedAt = _clock();
     _startedEmitted = true;
     _emit(startedEvent, {
+      if (evidence != null) 'capture_evidence': evidence,
       'recording_id': _recordingId,
       'recording_source': _source,
     });
@@ -122,8 +129,9 @@ class RecordingLifecycleTelemetry {
         'duration_seconds': _durationSeconds(_startedAt!),
         'reason': _normalizeReason(reason),
         'audio_observed': _audioObserved,
-        'audio_observation_coverage':
-            _source?.startsWith('phone_mic_batch') == true ? 'native_batch_unavailable' : 'dart_ingress',
+        'audio_observation_coverage': _source?.startsWith('phone_mic_batch') == true
+            ? 'native_batch_unavailable'
+            : 'dart_ingress',
         'transcript_observed': _transcriptObserved,
         'audio_bytes_observed': _audioBytes,
         'socket_bytes_submitted': _socketBytes,
@@ -178,17 +186,16 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
-        _ => 'unknown',
-      };
+    'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+    _ => 'unknown',
+  };
 
   static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
-        'permission_denied' ||
-        'capture_unavailable' ||
-        'pipeline_unavailable' ||
-        'pipeline_closed' ||
-        'unknown' =>
-          failureClass,
-        _ => 'unknown',
-      };
+    'permission_denied' ||
+    'capture_unavailable' ||
+    'pipeline_unavailable' ||
+    'pipeline_closed' ||
+    'unknown' => failureClass,
+    _ => 'unknown',
+  };
 }

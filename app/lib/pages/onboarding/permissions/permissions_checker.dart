@@ -57,8 +57,12 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
               alignment: const Alignment(0, 0.4),
               child: ExcludeSemantics(
                 // The asset is white; tint it so it shows on the light page too.
-                child: Image.asset(Assets.images.logoTransparent.path,
-                    width: 120, height: 120, color: OmiColors.textPrimary),
+                child: Image.asset(
+                  Assets.images.logoTransparent.path,
+                  width: 120,
+                  height: 120,
+                  color: OmiColors.textPrimary,
+                ),
               ),
             ),
           ),
@@ -69,7 +73,7 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                 Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
                 const SizedBox(height: OmiSpacing.xs),
                 Text(
-                  context.l10n.permissionsSetupDescription,
+                  context.l10n.permissionsChangeAnytime,
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),

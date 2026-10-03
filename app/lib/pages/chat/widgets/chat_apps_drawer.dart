@@ -37,9 +37,7 @@ class ChatAppsDrawer extends StatelessWidget {
     final l10n = context.l10n;
     return Drawer(
       backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
           builder: (context, messageProvider, appProvider, child) {
@@ -67,16 +65,11 @@ class ChatAppsDrawer extends StatelessWidget {
                   ),
                 ),
                 Divider(color: OmiColors.border, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
-                  child: Text(
-                    l10n.selectApp,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-                  ),
-                ),
                 Expanded(
+                  // The rows say what they are: no "Select App" label above them, and no empty-state
+                  // sentence that explains the Enable Apps row below it.
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
                     children: [
                       _AppRow(
                         avatar: const ChatOmiAvatar(),
@@ -91,15 +84,6 @@ class ChatAppsDrawer extends StatelessWidget {
                           isSelected: selectedAppId == app.id,
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
-                        ),
-                      if (chatApps.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(OmiSpacing.lg),
-                          child: Text(
-                            l10n.noChatAppsEnabled,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                            textAlign: TextAlign.center,
-                          ),
                         ),
                       ListTile(
                         leading: Padding(
@@ -162,13 +146,13 @@ class _AppRow extends StatelessWidget {
       trailing: isSelected
           ? ExcludeSemantics(child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
-              ? null
-              : OmiIconButton(
-                  icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
-                  label: context.l10n.disableAppNamed(name),
-                  color: OmiColors.textTertiary,
-                  onPressed: onDisable,
-                ),
+          ? null
+          : OmiIconButton(
+              icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
+              label: context.l10n.disableAppNamed(name),
+              color: OmiColors.textTertiary,
+              onPressed: onDisable,
+            ),
       selected: isSelected,
       selectedTileColor: OmiColors.surface2,
       onTap: onTap,

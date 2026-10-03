@@ -166,6 +166,20 @@ transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
+The adapter log statements routed through `sanitize_provider_error()` do
+not echo raw provider or user text. Live-socket, batch, and auxiliary STT error paths
+route exception strings and provider frames through
+`sanitize_provider_error()`, which emits only a validated numeric status
+(`code=`), a canonical diagnostic phrase or `[redacted]` (`diagnostic=`),
+and a closed-set exception category (`exception_type=`), capped at 160
+characters. Severity and the typed death/close classification are
+unchanged — only the free-text payload is withheld, since provider bodies
+can carry account details, signed URLs, paths, or transcript text even
+when purely alphabetic. Raw provider text stays latched on `death_reason`
+for classification and failover; router-boundary logging and rethrows
+outside this patch can still surface it. The Deepgram SDK's own private
+logging is unchanged.
+
 Soniox streams final token deltas whose network-frame boundaries can split a
 word. Its adapter retains the pending word across frames, preserving subword
 text until whitespace, a speaker change, a gap of at least three seconds, or

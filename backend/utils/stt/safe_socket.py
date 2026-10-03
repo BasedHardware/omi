@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from config.live_stt_replay import ReplayLimits
+from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ class SafeDeepgramSocket(STTSocket):
         except Exception as e:
             if self._death_reason is None:
                 self._death_reason = f'keep_alive {type(e).__name__}: {e}'
-            logger.warning('DG keep_alive exception, connection dead: %s: %s', type(e).__name__, e)
+            logger.warning('DG keep_alive exception, connection dead: %s', sanitize_provider_error(e))
             self._dg_dead = True
 
     @property
@@ -139,7 +140,7 @@ class SafeDeepgramSocket(STTSocket):
             except Exception as e:
                 if self._death_reason is None:
                     self._death_reason = f'send {type(e).__name__}: {e}'
-                logger.warning('DG send exception, connection dead: %s: %s', type(e).__name__, e)
+                logger.warning('DG send exception, connection dead: %s', sanitize_provider_error(e))
                 self._dg_dead = True
                 return False
 
@@ -168,7 +169,7 @@ class SafeDeepgramSocket(STTSocket):
             except Exception as e:
                 if self._death_reason is None:
                     self._death_reason = f'finalize {type(e).__name__}: {e}'
-                logger.warning('DG finalize exception, connection dead: %s: %s', type(e).__name__, e)
+                logger.warning('DG finalize exception, connection dead: %s', sanitize_provider_error(e))
                 self._dg_dead = True
                 raise
 

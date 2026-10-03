@@ -2,6 +2,7 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -33,6 +36,17 @@ class _RecordingAdapter implements AnalyticsAdapter {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
+class _CaptureIntent extends ChangeNotifier implements CaptureProvider {
+  int cleared = 0;
+  @override
+  void updateRecordingDevice(BtDevice? device) {
+    if (device == null) cleared++;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 class _NoConnectivityPlatform extends ConnectivityPlatform {
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async => [ConnectivityResult.none];
@@ -47,10 +61,7 @@ BtDevice _device(String id) => BtDevice(id: id, name: 'Omi', type: DeviceType.om
 /// constants, satisfying `FirebaseCrashlyticsPlatform.instanceFor`'s assertion.
 class _CrashlyticsCapableFirebaseCore implements TestFirebaseCoreHostApi {
   @override
-  Future<PigeonInitializeResponse> initializeApp(
-    String appName,
-    PigeonFirebaseOptions initializeAppRequest,
-  ) async {
+  Future<PigeonInitializeResponse> initializeApp(String appName, PigeonFirebaseOptions initializeAppRequest) async {
     return PigeonInitializeResponse(
       name: appName,
       options: initializeAppRequest,
@@ -129,7 +140,11 @@ void main() {
       bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
         disconnectHistory: [
           _persistedEvent(
-              timestamp: now - 3600 * 1000, reason: 'clean_disconnect', reasonCode: 0, appState: 'foreground'),
+            timestamp: now - 3600 * 1000,
+            reason: 'clean_disconnect',
+            reasonCode: 0,
+            appState: 'foreground',
+          ),
           _persistedEvent(timestamp: now - 1000, reason: 'gatt_error_25', reasonCode: 25, appState: 'inactive'),
         ],
         reconnectionCount: 3,
@@ -141,6 +156,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     provider.pairedDevice = _device('AA:AA:AA:AA:AA:10');
+    provider.connectedDevice = provider.pairedDevice;
 
     // The provider fires tracking unawaited; drain its microtask chain before flushing.
     provider.onDeviceDisconnected();
@@ -160,13 +176,29 @@ void main() {
     expect(analytics.events.where((event) => event == 'Device Disconnected'), isEmpty);
   });
 
+  for (final recovery in [true, false]) {
+    test('physical disconnect preserves capture intent only for recovery=$recovery', () async {
+      const id = 'AA:AA:AA:AA:AA:12';
+      final capture = _CaptureIntent();
+      final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+      addTearDown(provider.dispose);
+      addTearDown(capture.dispose);
+      addTearDown(() => BleBridge.instance.unregisterPeripheral(id));
+      provider.captureProvider = capture;
+      provider.pairedDevice = _device(id);
+      BleBridge.instance.onPeripheralDisconnected(id, recovery ? 'capture_recovery' : null);
+      provider.onDeviceDisconnected();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(provider.connectedDevice, isNull);
+      expect(capture.cleared, recovery ? 0 : 1);
+    });
+  }
+
   test('unreadable diagnostics still emit with unknown reason fields', () async {
     final analytics = _RecordingAdapter();
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
-    final provider = DeviceProvider(
-      bleDiagnosticsLoader: (_) async => throw StateError('native channel unavailable'),
-    );
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('native channel unavailable'));
     addTearDown(provider.dispose);
     provider.pairedDevice = _device('AA:AA:AA:AA:AA:11');
 
