@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 46,
-    "pr_linux_minutes_per_day": 11900,
+    "pr_linux_minutes_per_day": 12100,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change.",
+  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change. Android emulator prevention after #20437 adds 240 Linux min/day plus 80 for broader startup/WAL selection; raise Linux cap by 200 (1.7%) to cover the resulting approximately 12000 forecast with about 100 min headroom. Other caps unchanged; re-seed next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -1888,13 +1888,13 @@
       "budget_p50_minutes": 17,
       "display_name": "Dart Analyze & Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 25,
+      "expected_runs_per_day": 25.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1906,13 +1906,31 @@
       "budget_p50_minutes": 13,
       "display_name": "Android Compile Smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 8,
+      "expected_runs_per_day": 12,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/android-emulator-checks": {
+      "budget_p50_minutes": 20,
+      "display_name": "Android Emulator Acceptance",
+      "expected_runs_class": "forecast-selected-pr",
+      "expected_runs_per_day": 12,
+      "if": "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "Mobile maintainers",
+      "rationale": "PR #20437 reproduced a native Android 16 startup cancellation race missed by host tests. Add native stress plus one-ABI minified AOT startup acceptance on Linux; forecast 12 selected full-tier PR runs/day including startup/WAL inputs. Re-seed after first weekly sample.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1924,13 +1942,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Android JVM Unit Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 8,
+      "expected_runs_per_day": 12,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1942,13 +1960,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Detect Changes",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216,
+      "expected_runs_per_day": 216.1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1960,13 +1978,13 @@
       "budget_p50_minutes": 25,
       "display_name": "Dart Tests (Pacific/Kiritimati)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.1,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1978,13 +1996,13 @@
       "budget_p50_minutes": 4,
       "display_name": "Generated Files",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 21,
+      "expected_runs_per_day": 21.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1996,13 +2014,13 @@
       "budget_p50_minutes": 19,
       "display_name": "iOS Compile Check",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 24,
+      "expected_runs_per_day": 24.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -2014,13 +2032,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Seeded Journeys (hermetic)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.1,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2032,7 +2050,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Mobile Release Eligibility",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216,
+      "expected_runs_per_day": 216.1,
       "if": "${{ always() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -2043,11 +2061,12 @@
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
+        "android-emulator-checks",
         "ios-compile-check",
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2059,7 +2078,7 @@
       "budget_p50_minutes": 5,
       "display_name": "Post-merge mobile failure issues",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.1,
       "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
       "matrix": {},
       "matrix_size": 1,
@@ -2068,10 +2087,11 @@
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
+        "android-emulator-checks",
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder Include Android emulator acceptance in the existing main/nightly failure issue aggregation.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4570,7 +4590,7 @@
     "mobile-app-checks.yml": {
       "name": "Mobile App Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory Add manual exact-source Android acceptance before tags when path selection skipped it; emulator only is forced, other jobs retain their path conditions.",
       "triggers": {
         "pull_request": "",
         "push": {
@@ -4580,7 +4600,8 @@
           {
             "cron": "41 4 * * *"
           }
-        ]
+        ],
+        "workflow_dispatch": ""
       }
     },
     "mobile_internal_build.yml": {

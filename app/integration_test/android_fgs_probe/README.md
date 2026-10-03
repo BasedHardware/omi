@@ -26,5 +26,14 @@ output directory. The runner refuses physical devices and older Android images.
 At source `147f77d86a2d`, immediate stop kills the probe with
 `RemoteServiceException$ForegroundServiceDidNotStartInTimeException`. An
 `onCreate` promotion alone does not repair an already cancelled pending start.
-The companion hermetic tests run with `:app:testDevDebugUnitTest`; the emulator
-probe is explicit integration verification outside the hermetic Flutter suite.
+The companion hermetic tests run with `:app:testDevDebugUnitTest`. Mobile App
+Checks now runs this probe and minified AOT startup acceptance on an Android 16
+Linux emulator. A selected failure or skip blocks Mobile Release Eligibility,
+which Codemagic's existing source-admission gate requires. See the
+[acceptance guide](../../docs/android-emulator-acceptance.md).
+
+The runner writes `receipt.json` with source SHA, probe APK hash, API level,
+boot ID and every case result. A failed/incomplete run cannot leave a stale
+passing receipt. Android still enforces its foreground-service deadline; a
+bounded 60-second case wait accommodates host contention and Activity.onStop
+without skipping the actual promotion, lifecycle or cleanup assertions.

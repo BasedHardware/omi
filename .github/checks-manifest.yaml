@@ -488,6 +488,12 @@ checks:
     triggers: ["app/**"]
     lanes: ["local", "ci"]
     reason: "user-facing app changes require a durable mobile fragment on PR and main push"
+  - id: android-emulator-acceptance-contract
+    command: ["python3", "app/scripts/android_startup_smoke_test.py"]
+    triggers: ["app/scripts/android_emulator.py", "app/scripts/android_startup_smoke.py", "app/scripts/android_startup_smoke_test.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #20437 reproduced a native startup crash missed by host tests; offline emulator acceptance must reject crashes, false liveness and unsafe account reuse"
+
   - id: mobile-store-promote-contract
     command: ["python3", "app/scripts/mobile_store_promote_test.py"]
     triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]

@@ -905,11 +905,13 @@ workflows:
           ADMISSION_PROOF="$(mktemp)"
           trap 'rm -f "$ADMISSION_PROOF"' EXIT
           python3 ../.github/scripts/collect_mobile_release_admission.py \
+            --platform android \
             --sha "$CHECKED_OUT_SHA" \
             --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
             --token "${GITHUB_TOKEN:-}" \
             --output "$ADMISSION_PROOF"
           python3 ../.github/scripts/verify_mobile_release_admission.py \
+            --platform android \
             --sha "$CHECKED_OUT_SHA" \
             --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
             --proof "$ADMISSION_PROOF"

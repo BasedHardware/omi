@@ -9,6 +9,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import os
+import subprocess
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,12 +77,44 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
     def test_accepts_exact_success_with_current_main_advanced(self) -> None:
         self.assert_admitted()
 
+    def test_android_requires_positive_emulator_proof_even_if_aggregate_passes(self):
+        value = proof()
+        with self.assertRaises(GUARD.MobileReleaseAdmissionError):
+            GUARD.validate_admission(value, sha=SHA, repository=REPOSITORY, platform="android")
+        acceptance = {**value["mobile_aggregate"], "check_name": "Android Emulator Acceptance"}
+        for event in ("push", "workflow_dispatch"):
+            GUARD.validate_admission(
+                {**value, "android_acceptance": {**acceptance, "event": event}},
+                sha=SHA,
+                repository=REPOSITORY,
+                platform="android",
+            )
+        for key, replacement in (
+            ("conclusion", "skipped"),
+            ("conclusion", "cancelled"),
+            ("head_sha", "c" * 40),
+            ("event", "pull_request"),
+            ("run_attempt", 2),
+            ("head_branch", "feature"),
+        ):
+            with self.subTest(key=key, replacement=replacement), self.assertRaises(GUARD.MobileReleaseAdmissionError):
+                GUARD.validate_admission(
+                    {**value, "android_acceptance": {**acceptance, key: replacement}},
+                    sha=SHA,
+                    repository=REPOSITORY,
+                    platform="android",
+                )
+
     def test_accepts_exact_current_main_tip(self) -> None:
-        self.assert_admitted(proof(current_main={
-            "branch": "main",
-            "sha": SHA,
-            "source_sha_is_ancestor_of_current_main": True,
-        }))
+        self.assert_admitted(
+            proof(
+                current_main={
+                    "branch": "main",
+                    "sha": SHA,
+                    "source_sha_is_ancestor_of_current_main": True,
+                }
+            )
+        )
 
     def test_rejects_wrong_source_sha(self) -> None:
         with self.assertRaisesRegex(GUARD.MobileReleaseAdmissionError, "requested source SHA"):
@@ -90,11 +124,15 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
 
     def test_rejects_source_that_is_not_current_main_ancestor(self) -> None:
         with self.assertRaisesRegex(GUARD.MobileReleaseAdmissionError, "ancestor"):
-            self.assert_admitted(proof(current_main={
-                "branch": "main",
-                "sha": CURRENT_MAIN,
-                "source_sha_is_ancestor_of_current_main": False,
-            }))
+            self.assert_admitted(
+                proof(
+                    current_main={
+                        "branch": "main",
+                        "sha": CURRENT_MAIN,
+                        "source_sha_is_ancestor_of_current_main": False,
+                    }
+                )
+            )
 
     def test_rejects_wrong_repository_event_or_workflow_identity(self) -> None:
         cases = (
@@ -157,6 +195,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "journeys-hermetic": "skipped",
             "android-compile-smoke": "success",
             "android-unit-tests": "success",
+            "android-emulator-checks": "success",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
         }
@@ -171,6 +210,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "journeys-hermetic": "skipped",
             "android-compile-smoke": "skipped",
             "android-unit-tests": "skipped",
+            "android-emulator-checks": "skipped",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
         }
@@ -185,6 +225,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "journeys-hermetic": "skipped",
             "android-compile-smoke": "skipped",
             "android-unit-tests": "skipped",
+            "android-emulator-checks": "skipped",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
         }
@@ -229,10 +270,35 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "journeys-hermetic",
             "android-compile-smoke",
             "android-unit-tests",
+            "android-emulator-checks",
             "ios-compile-check",
             "dart-tests-kiritimati",
         ):
             self.assertIn(f"      - {job_id}", workflow)
+
+    def test_selected_emulator_failure_or_skip_blocks_actual_aggregate_script(self) -> None:
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/mobile-app-checks.yml").read_text())
+        script = workflow["jobs"]["mobile-release-eligibility"]["steps"][0]["run"]
+        environment = dict(os.environ, CHANGES_RESULT="success", FULL_CI="true", EMULATOR_EXPECTED="true")
+        for name in (
+            "GENERATED_FILES_RESULT",
+            "ANALYZE_AND_TEST_RESULT",
+            "JOURNEYS_RESULT",
+            "ANDROID_COMPILE_RESULT",
+            "ANDROID_UNIT_RESULT",
+            "IOS_COMPILE_RESULT",
+            "DART_TIMEZONE_RESULT",
+        ):
+            environment[name] = "success"
+        for result in ("failure", "cancelled", "skipped", "", "success"):
+            with self.subTest(result=result):
+                environment["ANDROID_EMULATOR_RESULT"] = result
+                command = subprocess.run(["bash", "-c", script], env=environment, capture_output=True, text=True)
+                self.assertEqual(command.returncode == 0, result == "success", command.stderr)
+        environment.update(EMULATOR_EXPECTED="false", ANDROID_EMULATOR_RESULT="skipped")
+        self.assertEqual(subprocess.run(["bash", "-c", script], env=environment, capture_output=True).returncode, 0)
 
 
 if __name__ == "__main__":

@@ -292,6 +292,7 @@ def _is_app_compile_smoke_input(path: str) -> bool:
             "app/setup/scripts/",
             "app/config/",
             "app/assets/",
+            "app/integration_test/android_fgs_probe/",
         )
     ) or path in {
         "app/pubspec.yaml",
@@ -300,13 +301,20 @@ def _is_app_compile_smoke_input(path: str) -> bool:
         "app/analysis_options.yaml",
         "app/l10n.yaml",
         "app/flavorizr.yaml",
+        "app/scripts/android_emulator.py", "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py", ".github/workflows/mobile-app-checks.yml",
     }
 
 
 def _is_app_android_pr_input(path: str) -> bool:
     """Inputs that can change Android's build graph or native interface on a PR."""
-    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
+    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/",
+        "app/integration_test/android_fgs_probe/", "app/lib/startup/", "app/lib/services/wals/",
+        "app/lib/services/capture/")) or path in {
         "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
+        "app/lib/main.dart", "app/lib/startup_auth.dart", "app/lib/startup_firebase.dart",
+        "app/lib/startup_routing.dart", "app/lib/flavors.dart",
+        "app/scripts/android_emulator.py", "app/scripts/android_startup_smoke.py", "app/scripts/android_fgs_probe.py",
         "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
         ".github/workflows/mobile-app-checks.yml",
     }

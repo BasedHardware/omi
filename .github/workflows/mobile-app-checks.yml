@@ -7,6 +7,7 @@ on:
   # made GitHub skip the entire workflow — the iOS job never existed, which
   # reads as "green" and proves nothing.
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: '41 4 * * *'
 
@@ -522,6 +523,83 @@ jobs:
         # does not rebuild every ABI. This job does not wait for the APK.
         run: ./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64
 
+  android-emulator-checks:
+    name: Android Emulator Acceptance
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.2'
+          cache-read-only: true
+      - name: Install acceptance build tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0" "platforms;android-36"
+      - name: Prepare secret-free local app inputs
+        working-directory: app
+        run: |
+          mkdir -p android/app/src/dev/ android/app/src/prod/
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+          cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+          cp setup/prebuilt/key.properties android/key.properties
+          {
+            echo 'API_BASE_URL='
+            echo 'USE_WEB_AUTH=true'
+            echo 'USE_AUTH_CUSTOM_TOKEN=true'
+            echo 'STAGING_API_URL='
+          } > .dev.env
+          : > .env
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          bash scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev
+      - name: Build minified AOT APK for emulator acceptance
+        working-directory: app
+        env:
+          CM_KEYSTORE_PATH: ${{ github.workspace }}/app/setup/prebuilt/debug.keystore
+          CM_KEYSTORE_PASSWORD: android
+          CM_KEY_ALIAS: androiddebugkey
+          CM_KEY_PASSWORD: android
+        # One ABI limits R8/native-build memory. Existing arm64 compile remains.
+        run: flutter build apk --release --flavor dev --target-platform android-x64 --dart-define=OMI_APP_PROFILE=local_dev
+      - name: Enable Linux KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise actual native lifecycle and packaged startup
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -memory 2048
+          script: |
+            python3 app/scripts/android_fgs_probe.py --serial emulator-5554 --gradle gradle --rounds 5 --output android-acceptance/native
+            python3 app/scripts/android_startup_smoke.py --serial emulator-5554 --apk app/build/app/outputs/flutter-apk/app-dev-release.apk --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --rounds 3 --output android-acceptance/startup
+      - name: Upload emulator acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-acceptance-${{ github.event.pull_request.head.sha || github.sha }}
+          path: android-acceptance/
+          if-no-files-found: error
+          retention-days: 14
+
   ios-compile-check:
     name: iOS Compile Check
     runs-on: macos-26
@@ -736,6 +814,7 @@ jobs:
       - journeys-hermetic
       - android-compile-smoke
       - android-unit-tests
+      - android-emulator-checks
       - ios-compile-check
       - dart-tests-kiritimati
     if: ${{ always() }}
@@ -755,6 +834,8 @@ jobs:
           JOURNEYS_RESULT: ${{ needs.journeys-hermetic.result }}
           ANDROID_COMPILE_RESULT: ${{ needs.android-compile-smoke.result }}
           ANDROID_UNIT_RESULT: ${{ needs.android-unit-tests.result }}
+          ANDROID_EMULATOR_RESULT: ${{ needs.android-emulator-checks.result }}
+          EMULATOR_EXPECTED: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true') }}
           IOS_COMPILE_RESULT: ${{ needs.ios-compile-check.result }}
           DART_TIMEZONE_RESULT: ${{ needs.dart-tests-kiritimati.result }}
         run: |
@@ -775,6 +856,7 @@ jobs:
                 "$HAS_JOURNEYS:$JOURNEYS_RESULT" \
                 "$HAS_ANDROID:$ANDROID_COMPILE_RESULT" \
                 "$HAS_ANDROID:$ANDROID_UNIT_RESULT" \
+                "$HAS_ANDROID:$ANDROID_EMULATOR_RESULT" \
                 "$HAS_IOS:$IOS_COMPILE_RESULT"; do
                 required="${spec%%:*}"
                 result="${spec#*:}"
@@ -788,12 +870,17 @@ jobs:
             echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          if [[ "$EMULATOR_EXPECTED" == true && "$ANDROID_EMULATOR_RESULT" != success ]]; then
+            echo "Required Android Emulator Acceptance did not pass: $ANDROID_EMULATOR_RESULT" >&2
+            exit 1
+          fi
           for result in \
             "$GENERATED_FILES_RESULT" \
             "$ANALYZE_AND_TEST_RESULT" \
             "$JOURNEYS_RESULT" \
             "$ANDROID_COMPILE_RESULT" \
             "$ANDROID_UNIT_RESULT" \
+            "$ANDROID_EMULATOR_RESULT" \
             "$IOS_COMPILE_RESULT" \
             "$DART_TIMEZONE_RESULT"; do
             case "$result" in
@@ -808,7 +895,7 @@ jobs:
 
   post-merge-failure-issues:
     name: Post-merge mobile failure issues
-    needs: [changes, journeys-hermetic, android-compile-smoke, android-unit-tests, dart-tests-kiritimati]
+    needs: [changes, journeys-hermetic, android-compile-smoke, android-unit-tests, android-emulator-checks, dart-tests-kiritimati]
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
@@ -823,6 +910,7 @@ jobs:
           JOURNEYS: ${{ needs.journeys-hermetic.result }}
           ANDROID_COMPILE: ${{ needs.android-compile-smoke.result }}
           ANDROID_JVM: ${{ needs.android-unit-tests.result }}
+          ANDROID_EMULATOR: ${{ needs.android-emulator-checks.result }}
           TIMEZONES: ${{ needs.dart-tests-kiritimati.result }}
           EVENT: ${{ github.event_name }}
           JOURNEYS_EXPECTED: ${{ needs.changes.outputs.has_app_journeys }}
@@ -831,7 +919,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          for spec in "Seeded Journeys:$JOURNEYS:$JOURNEYS_EXPECTED" "Android Compile Smoke:$ANDROID_COMPILE:$ANDROID_EXPECTED" "Android JVM Unit Tests:$ANDROID_JVM:$ANDROID_EXPECTED" "Dart Far Timezones:$TIMEZONES:$TIMEZONES_EXPECTED"; do
+          for spec in "Seeded Journeys:$JOURNEYS:$JOURNEYS_EXPECTED" "Android Compile Smoke:$ANDROID_COMPILE:$ANDROID_EXPECTED" "Android JVM Unit Tests:$ANDROID_JVM:$ANDROID_EXPECTED" "Android Emulator Acceptance:$ANDROID_EMULATOR:$ANDROID_EXPECTED" "Dart Far Timezones:$TIMEZONES:$TIMEZONES_EXPECTED"; do
             suite="${spec%%:*}"
             rest="${spec#*:}"
             result="${rest%%:*}"

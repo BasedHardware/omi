@@ -2,6 +2,7 @@
 """Exercise the real sync service on an isolated Android 16 emulator, without auth."""
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -11,6 +12,7 @@ import time
 
 APP = Path(__file__).resolve().parents[1]
 PACKAGE = "com.omi.fgsprobe"
+MODES = ("empty", "burst", "restart", "orphan-stop", "background-stop")
 
 
 def main():
@@ -21,27 +23,19 @@ def main():
     parser.add_argument("--rounds", type=int, default=5)
     args = parser.parse_args()
     if not Path(args.gradle).is_file() and shutil.which(args.gradle) is None:
-        parser.error(
-            "Gradle executable is missing. Pass --gradle /path/to/gradle; see the probe README."
-        )
+        parser.error("Gradle executable is missing. Pass --gradle /path/to/gradle; see the probe README.")
     sdk = Path(os.environ.get("ANDROID_HOME", str(Path.home() / "Library/Android/sdk")))
     adb = [str(sdk / "platform-tools/adb"), "-s", args.serial]
 
     def device(*command):
         for attempt in range(2):
-            result = subprocess.run(
-                [*adb, *command], text=True, capture_output=True, timeout=20
-            )
+            result = subprocess.run([*adb, *command], text=True, capture_output=True, timeout=20)
             if result.returncode == 0:
                 return result.stdout.strip()
-            if attempt == 0 and (
-                "device offline" in result.stderr or "device not found" in result.stderr
-            ):
+            if attempt == 0 and ("device offline" in result.stderr or "device not found" in result.stderr):
                 subprocess.run([*adb, "wait-for-device"], check=True, timeout=15)
                 continue
-            raise RuntimeError(
-                f"ADB {command} failed ({result.returncode}): {result.stderr.strip()}"
-            )
+            raise RuntimeError(f"ADB {command} failed ({result.returncode}): {result.stderr.strip()}")
 
     if device("shell", "getprop", "ro.kernel.qemu") != "1":
         raise SystemExit("This probe requires an isolated emulator.")
@@ -51,6 +45,8 @@ def main():
         parser.error("--rounds must be positive")
     boot_id = device("shell", "cat", "/proc/sys/kernel/random/boot_id")
     args.output.mkdir(parents=True, exist_ok=True)
+    receipt_path = args.output / "receipt.json"
+    receipt_path.unlink(missing_ok=True)
     project = APP / "integration_test/android_fgs_probe"
     env = dict(os.environ, ANDROID_HOME=str(sdk))
     subprocess.run(
@@ -62,9 +58,25 @@ def main():
     apk = project / "build/outputs/apk/debug/fgs-probe-debug.apk"
     device("install", "-r", str(apk))
     results = []
+    with apk.open("rb") as artifact:
+        artifact_hash = hashlib.file_digest(artifact, "sha256").hexdigest()
+    receipt = {
+        "schema_version": 1,
+        "kind": "android-fgs-lifecycle",
+        "passed": False,
+        "source_sha": subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip(),
+        "artifact_sha256": artifact_hash,
+        "serial": args.serial,
+        "boot_id": boot_id,
+        "api_level": int(device("shell", "getprop", "ro.build.version.sdk")),
+        "rounds": args.rounds,
+        "cases": results,
+    }
     try:
         for round_number in range(args.rounds):
-            for mode in ("empty", "burst", "restart", "orphan-stop", "background-stop"):
+            for mode in MODES:
                 device("shell", "am", "force-stop", PACKAGE)
                 device("logcat", "-c")
                 device(
@@ -78,7 +90,10 @@ def main():
                     mode,
                 )
                 active_verified = mode not in ("burst", "restart")
-                deadline = time.monotonic() + 15
+                # Android enforces its own foreground deadline. Give the
+                # emulator enough bounded wall time to deliver Activity.onStop
+                # and emit the terminal marker on a busy CI host.
+                deadline = time.monotonic() + 60
                 while time.monotonic() < deadline:
                     log = device(
                         "logcat",
@@ -91,9 +106,7 @@ def main():
                         "SyncTransfer.FgService",
                     )
                     if not active_verified and f"ACTIVE mode={mode}" in log:
-                        active = device(
-                            "shell", "dumpsys", "activity", "services", PACKAGE
-                        )
+                        active = device("shell", "dumpsys", "activity", "services", PACKAGE)
                         active_power = (
                             device(
                                 "shell",
@@ -102,14 +115,9 @@ def main():
                             .split("Wake Locks:", 1)[1]
                             .split("Suspend Blockers:", 1)[0]
                         )
-                        active_verified = (
-                            "isForeground=true" in active
-                            and "omi:sync-transfer" in active_power
-                        )
+                        active_verified = "isForeground=true" in active and "omi:sync-transfer" in active_power
                         if not active_verified:
-                            raise SystemExit(
-                                "A queued stop terminated the later active transfer."
-                            )
+                            raise SystemExit("A queued stop terminated the later active transfer.")
                     if f"SURVIVED mode={mode}" in log or "FATAL EXCEPTION" in log:
                         break
                     time.sleep(0.5)
@@ -129,26 +137,21 @@ def main():
                     and f"SURVIVED mode={mode}" in log
                     and "FATAL EXCEPTION" not in log
                     and "ServiceRecord{" not in services
-                    and "omi:sync-transfer"
-                    not in power.split("Wake Locks:", 1)[1].split(
-                        "Suspend Blockers:", 1
-                    )[0]
+                    and "omi:sync-transfer" not in power.split("Wake Locks:", 1)[1].split("Suspend Blockers:", 1)[0]
                     and f"|{PACKAGE}|" not in notifications
                 )
                 results.append({"round": round_number, "mode": mode, "passed": passed})
-                (args.output / "results.json").write_text(
-                    json.dumps(results, indent=2) + "\n"
-                )
+                (args.output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
                 print(results[-1], flush=True)
                 if not passed:
-                    raise SystemExit(
-                        "Native foreground-service regression; see probe logs."
-                    )
+                    raise SystemExit("Native foreground-service regression; see probe logs.")
     finally:
-        device("shell", "am", "force-stop", PACKAGE)
-    print(
-        f"PASS: {len(results)} cold launches; no crash, service, notification, or wake-lock leak."
-    )
+        try:
+            device("shell", "am", "force-stop", PACKAGE)
+            receipt["passed"] = len(results) == args.rounds * len(MODES) and all(case["passed"] for case in results)
+        finally:
+            receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+    print(f"PASS: {len(results)} cold launches; no crash, service, notification, or wake-lock leak.")
 
 
 if __name__ == "__main__":
