@@ -147,6 +147,7 @@ from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
 from config.sync_lineage import sync_lineage_resolve_active_for
+from utils.sync import recording_lineage as sync_recording_lineage
 from utils.sync.recording_lineage import (
     ambiguous_binding_pending,
     fallback_segment_targets,
@@ -1923,7 +1924,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # its allowlist, the whole batch resolves here as before: a unique match replaces the
     # stamp, a miss drops it. Old clients without this proof retain their stamp either way.
     use_lineage = lineage_resolution_requested(
-        uid, recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
+        uid,
+        recording_session_id,
+        audio_start_seconds,
+        audio_end_seconds,
+        job_id=job_id,
+        capture_evidence_claims=capture_evidence_claims,
+        filenames=[os.path.basename(path) for path in raw_paths],
     )
     if not use_lineage:
         target_conversation_id = await _resolve_safety_wal_target(
@@ -2121,6 +2128,22 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             except asyncio.CancelledError:
                 preserve_retry_material = True
                 raise
+            if (
+                use_lineage
+                and sync_recording_lineage.sync_lineage_s1_required()
+                and len(source_frame_maps) != len(wav_paths)
+            ):
+                use_lineage = False
+                target_conversation_id = await _resolve_safety_wal_target(
+                    uid,
+                    target_conversation_id,
+                    recording_session_id,
+                    source,
+                    client_device_id,
+                    should_lock,
+                    audio_start_seconds,
+                    audio_end_seconds,
+                )
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(

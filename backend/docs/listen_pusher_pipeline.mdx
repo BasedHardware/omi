@@ -70,6 +70,18 @@ lineage stamped. Prod lists one uid on all five identical services (unset
 admits everyone); dev leaves it unset. Refused eligible uploads log
 `event=sync_lineage_resolve outcome=not_allowlisted` with no ids. The metric
 comes from backend-sync, which is not scraped, so logs are the watch source.
+`SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank on, explicit on-tokens
+on, any unrecognized value including a typo off) additionally requires, inside
+`lineage_resolution_requested` after the kill switch and the allowlist, a
+complete validated S1 upload claim set for the exact uploaded basename set
+under `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Absent, invalid or incomplete claims
+fall back to the pre-lineage whole-batch resolver even for admitted users, and
+a post-decode mapping-count mismatch at the coordinator takes the same route
+before VAD. Turning the gate off broadens eligibility back to the prior
+ungated binding; it is not a lineage kill switch and never widens the
+allowlist or bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Prod declares `true` on
+Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and
+`backend-integration`.
 Widen only after the 48 h log gates in `ARCHITECTURE.md`, then watch 24 h.
 The full API `backend-integration` image also mounts sync and listen routes and carries the same gate. `desktop-backend` has a separate router set with neither site. Deploy renderers reject missing or divergent prod literals and chart drift. Persisted refresh debt from an admitted append survives narrowing without reappending speech; open live rows leave that refresh to finalization. Stage the chart before gated code, drain sync work across mixed writer revisions, and use only a compatible historical Helm release for rollback. See the deployment details in `utils/sync/ARCHITECTURE.md`.
 

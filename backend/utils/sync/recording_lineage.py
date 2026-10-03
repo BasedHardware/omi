@@ -32,15 +32,22 @@ fails the sync job by itself.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.sync_lineage import sync_lineage_resolve_enabled, sync_lineage_resolve_uid_allowed
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.sync_lineage import (
+    sync_lineage_resolve_enabled,
+    sync_lineage_resolve_uid_allowed,
+    sync_lineage_s1_required,
+)
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
+from utils.capture_evidence import parse_sync_file_claims
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
@@ -106,6 +113,27 @@ class LineagePlan:
     id_probe: str = 'not_run'
 
 
+def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: Sequence[str]) -> bool:
+    """Complete validated S1 metadata for the exact uploaded basename set."""
+    if (
+        not capture_evidence_dark_write_enabled()
+        or not isinstance(capture_evidence_claims, Mapping)
+        or not capture_evidence_claims
+        or not filenames
+        or len(capture_evidence_claims) > 20
+        or len(filenames) > 20
+    ):
+        return False
+    try:
+        payload = json.dumps(
+            {'version': 1, 'files': [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]}
+        )
+        parsed = parse_sync_file_claims(payload, filenames)
+    except Exception:
+        return False
+    return len(parsed) == len(filenames) == len(capture_evidence_claims)
+
+
 def lineage_resolution_requested(
     uid: Optional[str],
     recording_session_id: Optional[str],
@@ -113,6 +141,8 @@ def lineage_resolution_requested(
     audio_end_seconds: Optional[float],
     *,
     job_id: Optional[str] = None,
+    capture_evidence_claims: Optional[Mapping] = None,
+    filenames: Sequence[str] = (),
 ) -> bool:
     """True when this upload binds per segment; otherwise records why for eligible uploads.
 
@@ -137,6 +167,8 @@ def lineage_resolution_requested(
             None,
             diagnostics=sync_live_dedupe_active_for(uid),
         )
+        return False
+    if sync_lineage_s1_required() and not _s1_claims_complete(capture_evidence_claims, filenames):
         return False
     return True
 

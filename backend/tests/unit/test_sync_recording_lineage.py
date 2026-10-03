@@ -1072,6 +1072,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
 async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     await module._run_full_pipeline_background_async(
@@ -1084,6 +1085,7 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
 @pytest.mark.asyncio
 async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
     module, stubs = coordinator
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
 
@@ -1109,6 +1111,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
 async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()[:1]
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     pipeline = stubs['pipeline']

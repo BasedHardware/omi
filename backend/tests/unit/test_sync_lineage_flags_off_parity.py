@@ -22,7 +22,12 @@ from utils.sync import assignment, recording_lineage
 
 BASE = '35238e1dbeb6bb59821e5d01e281eb26d7dfbf0d'
 SNAPSHOT = Path(__file__).parent / 'fixtures' / 'sync_lineage_main_parity.json'
-FLAGS = ('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'SYNC_WAL_AUDIO_COVERAGE_ENABLED')
+FLAGS = (
+    'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
+    'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
+    'SYNC_LINEAGE_S1_REQUIRED',
+    'LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED',
+)
 
 
 def _source(path):

@@ -859,6 +859,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -1159,6 +1162,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
@@ -1421,6 +1427,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
@@ -1634,6 +1643,9 @@ environments:
               value: 'true'
               category: rollout
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
               value: 'true'
               category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:
@@ -2827,6 +2839,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -3144,6 +3159,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
@@ -3396,6 +3414,9 @@ environments:
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
@@ -3620,6 +3641,9 @@ environments:
               value: 'true'
               category: rollout
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
               value: 'true'
               category: rollout
             SYNC_WAL_AUDIO_COVERAGE_ENABLED:

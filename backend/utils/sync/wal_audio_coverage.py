@@ -19,7 +19,7 @@ import wave
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, TypeGuard
 
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_audio_coverage import sync_wal_audio_coverage_active_for
@@ -67,7 +67,7 @@ def _remove_generated(paths: set) -> None:
             logger.warning('wal audio coverage: failed to remove generated path after error')
 
 
-def _claim_valid(claim: Mapping) -> bool:
+def _claim_valid(claim: Any) -> TypeGuard[dict]:
     raw: Any = claim
     if not isinstance(raw, Mapping):
         return False
@@ -440,12 +440,16 @@ def build_sync_source_frame_maps(
 ) -> dict:
     """Anchor each decoded WAL WAV to original frame ordinals when S1 claims exist."""
     source_frame_maps: dict = {}
-    if not (capture_evidence_dark_write_enabled() and capture_evidence_claims):
+    if not (
+        capture_evidence_dark_write_enabled()
+        and isinstance(capture_evidence_claims, Mapping)
+        and capture_evidence_claims
+    ):
         return source_frame_maps
     for wav_path in wav_paths:
         claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
         if (
-            claim is None
+            not _claim_valid(claim)
             or (claim['codec'] == 'pcm16' and '_pcm16_' not in wav_path)
             or (claim['codec'] == 'opus' and '_opus_' not in wav_path)
         ):
