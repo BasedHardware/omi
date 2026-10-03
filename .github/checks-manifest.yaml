@@ -1642,6 +1642,11 @@ checks:
     triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
+  - id: iq-rating-security-tests
+    command: ["python3", "plugins/iq_rating/test_iq_rating_security.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET /iq-rating/iq must safely serialize uid and peopleData in inline scripts and HTML-escape exception messages"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
