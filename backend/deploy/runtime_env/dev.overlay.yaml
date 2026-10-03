@@ -47,6 +47,9 @@ overlay:
           value: 'true'
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         STT_LEARNED_LANGUAGE_PROFILE:

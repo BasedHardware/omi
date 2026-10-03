@@ -36,6 +36,7 @@ def controls(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
     monkeypatch.delenv('STT_ROUTING_TARGETS_JSON', raising=False)
     monkeypatch.delenv('STT_ROUTING_DISRUPTION_GATE', raising=False)
     # Scope every new test's process state; do not poison another module's circuits.

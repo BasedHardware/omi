@@ -17,6 +17,11 @@ from utils.stt.provider_resilience import ProviderCircuitBreaker
 from tests.unit.test_live_cost_router import MemoryRedis
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 class Replacement:
     def __init__(self, callback):
         self.callback = callback

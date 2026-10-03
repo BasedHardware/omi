@@ -21,6 +21,11 @@ from utils.stt.streaming import STTService
 from utils.stt import streaming as st
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 class Socket:
     def __init__(self, *, dead=False, reason=None, callback=None, finishing=False, raw=None):
         self.is_connection_dead = dead

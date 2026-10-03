@@ -18,6 +18,11 @@ from utils.stt.recovery_state import LiveRecoveryController, RecoveryState
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'

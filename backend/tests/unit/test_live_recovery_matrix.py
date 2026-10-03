@@ -67,6 +67,12 @@ from utils.stt.replay_delivery import (
 )
 from utils.stt.send_queue import AudioSendQueue, audio_send_deadline
 
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 BYTES_PER_SECOND = 16000 * 2
 PREFIX_SECONDS = 20
 SAMPLE_RATE = 16000

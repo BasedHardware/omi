@@ -147,6 +147,8 @@ def enable_recovery_writer_pace(
 ) -> None:
     """Opt a recovery leg's real transport into writer cadence. Managed
     wrappers and initial ordinary/PTT legs never see this call."""
+    if getattr(socket, 'recovery_enabled', None) is False:
+        return
     current = socket
     seen: set[int] = set()
     for _ in range(8):

@@ -90,6 +90,11 @@ OTHER_FREQUENCY_HZ = 700.0  # a second voice would sit here; far from the owner'
 _FAKE_FREQS = (100.0, 200.0, 350.0, 700.0)
 
 
+@pytest.fixture(autouse=True)
+def _recovery_enabled(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'

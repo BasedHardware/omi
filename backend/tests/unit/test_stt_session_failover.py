@@ -27,6 +27,11 @@ from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 class FakeSocket:
     def __init__(self, dead: bool = False, typed_death_reason: Optional[str] = None):
         self._dead = dead

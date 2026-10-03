@@ -21,6 +21,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
@@ -192,7 +193,11 @@ class SafeSonioxSocket(STTSocket):
         # terminal-failure vocabulary; None until the socket dies.
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
-        self._send_queue: AudioSendQueue[bytes | str] = AudioSendQueue(maxsize=2000)
+        self.recovery_enabled = recovery_enabled()
+        if self.recovery_enabled:
+            self._send_queue: Any = AudioSendQueue(maxsize=2000)
+        else:
+            self._send_queue = asyncio.Queue(maxsize=2000)
         self._writer_pace: RecoveryWriterPace | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
@@ -255,9 +260,13 @@ class SafeSonioxSocket(STTSocket):
 
     def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
         """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        if not self.recovery_enabled:
+            return
         self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
 
     async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self.recovery_enabled:
+            return not (self._dead or self._closed or self._finishing)
         try:
             await self._send_queue.wait_for_capacity(
                 limit=limit if limit is not None else self.replay_limits.queue_packets,
@@ -344,6 +353,16 @@ class SafeSonioxSocket(STTSocket):
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:
                     await self._ws.send(json.dumps({'type': 'keepalive'}))
+                    continue
+                if not self.recovery_enabled:
+                    if data == b'':
+                        # Documented end-of-audio signal: an empty text frame.
+                        if self._audio_sent:
+                            await self._ws.send('')
+                        break
+                    await self._ws.send(data)
+                    if isinstance(data, bytes):
+                        self._audio_sent = True
                     continue
                 if data == b'':
                     self._send_queue.discard(data)

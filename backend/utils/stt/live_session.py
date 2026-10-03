@@ -25,6 +25,7 @@ from utils.stt.live_router import connecting_target, target_circuit, TargetEngin
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
 from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
@@ -53,6 +54,7 @@ WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
+        self.recovery_enabled = session_recovery_enabled(receiver)
         if not hasattr(receiver, '_stt_failed_targets'):
             receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
@@ -379,10 +381,11 @@ class LiveChainSession:
         except asyncio.CancelledError:
             # A setup timeout/disconnect can arrive after a raw socket opens
             # but before the connector hands it back to the receiver.
-            for candidate in constructed:
-                candidate.retire_for_replay()
-                candidate.mark_owner_teardown()
-                await abort_replay_socket(candidate)
+            if self.recovery_enabled:
+                for candidate in constructed:
+                    candidate.retire_for_replay()
+                    candidate.mark_owner_teardown()
+                    await abort_replay_socket(candidate)
             raise
         host.stt_service = actual
         self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
@@ -457,6 +460,8 @@ class LiveLegSocket(STTSocket):
             client_has_left=self._client_has_left,
             text_seen=lambda: self._cost_text_seen,
         )
+        self.recovery_enabled = session_recovery_enabled(session.receiver)
+        self.leg_outcome.recovery_enabled = self.recovery_enabled
         self._cost_text_seen = False
         self._target_death_recorded = False
         self._closing_for_health = False
@@ -850,7 +855,18 @@ class LiveLegSocket(STTSocket):
             return declared
         return ReplayLimits(max_frame_bytes=replay_delivery.REPLAY_PACKET_BYTES)
 
+    def _leg_recovery_enabled(self) -> bool:
+        pinned = getattr(getattr(self, 'leg_outcome', None), 'recovery_enabled', None)
+        if isinstance(pinned, bool):
+            return pinned
+        enabled = getattr(self, 'recovery_enabled', None)
+        if isinstance(enabled, bool):
+            return enabled
+        return session_recovery_enabled(getattr(self, 'session', None))
+
     async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self._leg_recovery_enabled():
+            return not self.is_connection_dead
         wait = getattr(self.raw, 'wait_send_capacity', None)
         if not callable(wait):
             return not self.is_connection_dead
@@ -928,7 +944,10 @@ class LiveLegSocket(STTSocket):
         # at the first claim, even if the 1s monitor lost the race.
         if not self.leg_outcome.claimed and self.is_connection_dead:
             self._latch_failure()
-            settle_terminal_socket(self, self.service.value, self.normalized_death_reason, departing=True)
+            if self._leg_recovery_enabled():
+                settle_terminal_socket(self, self.service.value, self.normalized_death_reason, departing=True)
+            else:
+                settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
         self.leg_outcome.owner_closing = True
 
     def finish(self) -> None:

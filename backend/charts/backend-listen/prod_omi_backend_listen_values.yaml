@@ -402,6 +402,8 @@ env:
     value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_FAILOVER_RECOVERY_ENABLED
+    value: "false"
   - name: STT_ROUTING_MODE
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS

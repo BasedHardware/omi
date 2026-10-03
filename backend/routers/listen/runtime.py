@@ -67,6 +67,7 @@ from utils.stt.live_metrics import (
     provider_family,
 )
 from config.live_stt_registry import routing_on
+from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -130,6 +131,7 @@ class ListenSessionRuntime:
     """Stateful session coordinator; subcomponents only communicate through this surface."""
 
     def __init__(self, request: ListenRequest):
+        self.recovery_enabled = recovery_enabled()
         self.request = request
         self.declared_codec = request.codec
         self.limits = ListenLimits()
@@ -404,7 +406,11 @@ class ListenSessionRuntime:
             arm = getattr(self, '_cost_routing_arm', None)
             if arm is not None:
                 COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
-            if self.state.live_transcript_delivered and self.state.stt_terminal_failure:
+            if (
+                session_recovery_enabled(self)
+                and self.state.live_transcript_delivered
+                and self.state.stt_terminal_failure
+            ):
                 provider = (
                     getattr(getattr(self, 'stt_service', None), 'value', None)
                     or getattr(self.state, 'stt_provider', None)
@@ -912,6 +918,13 @@ class ListenSessionRuntime:
         )
 
     async def run(self) -> None:
+        token = current_recovery_enabled.set(self.recovery_enabled)
+        try:
+            await self._run()
+        finally:
+            current_recovery_enabled.reset(token)
+
+    async def _run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
         register_listen_session(self)

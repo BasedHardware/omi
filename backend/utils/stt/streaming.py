@@ -43,6 +43,7 @@ from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config.live_stt_registry import DEFAULT_IDS
 from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
@@ -415,7 +416,8 @@ async def connect_stt_socket_with_fallback(
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
 
-    recovery = current_recovery.get()
+    recovery_on = recovery_enabled()
+    recovery = current_recovery.get() if recovery_on else None
 
     reason = 'circuit_open'
     capacity_subtype: str | None = None
@@ -461,7 +463,7 @@ async def connect_stt_socket_with_fallback(
                 if isinstance(typed_probe_death, str):
                     typed_connect_reason = typed_probe_death
                 close_rejected_socket(socket)
-                if typed_probe_death == PROVIDER_RATE_LIMITED:
+                if recovery_on and typed_probe_death == PROVIDER_RATE_LIMITED:
                     reason = 'provider_429'
                     circuit.release_probe()
                 else:
@@ -479,7 +481,7 @@ async def connect_stt_socket_with_fallback(
                 if isinstance(typed_death, str):
                     typed_connect_reason = typed_death
                 close_rejected_socket(socket)
-                if typed_death == PROVIDER_RATE_LIMITED:
+                if recovery_on and typed_death == PROVIDER_RATE_LIMITED:
                     reason = 'provider_429'
                     circuit.release_probe()
                 else:
@@ -516,7 +518,7 @@ async def connect_stt_socket_with_fallback(
             circuit.record_failure()
         except Exception as error:
             reason = _fallback_failure_reason(error)
-            if reason == 'provider_429':
+            if recovery_on and reason == 'provider_429':
                 circuit.release_probe()
             else:
                 circuit.record_failure()
@@ -1398,7 +1400,11 @@ class SafeModulateSocket(STTSocket):
         self._lock = threading.Lock()
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
-        self._send_queue: AudioSendQueue[bytes] = AudioSendQueue(maxsize=2000)
+        self.recovery_enabled = recovery_enabled()
+        if self.recovery_enabled:
+            self._send_queue: Any = AudioSendQueue(maxsize=2000)
+        else:
+            self._send_queue = asyncio.Queue(maxsize=2000)
         self._writer_pace: RecoveryWriterPace | None = None
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
@@ -1522,9 +1528,13 @@ class SafeModulateSocket(STTSocket):
 
     def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
         """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        if not self.recovery_enabled:
+            return
         self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
 
     async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self.recovery_enabled:
+            return not (self._dead or self._closed)
         try:
             await self._send_queue.wait_for_capacity(
                 limit=limit if limit is not None else self.replay_limits.queue_packets,
@@ -1580,6 +1590,15 @@ class SafeModulateSocket(STTSocket):
         try:
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
+                if not self.recovery_enabled:
+                    if data == b'':
+                        break
+                    if data == _EOS_SENTINEL:
+                        # Docs: send empty text frame ("") to signal end of audio stream
+                        await self._ws.send('')
+                        break
+                    await self._ws.send(data)
+                    continue
                 if data == b'':
                     self._send_queue.discard(data)
                     break

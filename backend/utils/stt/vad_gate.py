@@ -30,6 +30,7 @@ from utils.metrics import (
     OMI_VAD_GATE_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
     VAD_WINDOW_SAMPLES,
@@ -732,6 +733,7 @@ class GatedSTTSocket(STTSocket):
         send_tracker: Any = None,
     ):
         self._conn = stt_connection
+        self.recovery_enabled = session_recovery_enabled(stt_connection)
         self._gate = gate
         self._passthrough_audio = passthrough_audio
         # Audio-timeline v2: the provider epoch's translator. Accepted sends
@@ -758,6 +760,11 @@ class GatedSTTSocket(STTSocket):
         return self._conn.death_reason
 
     async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        enabled = getattr(self, 'recovery_enabled', None)
+        if enabled is None:
+            enabled = session_recovery_enabled(self._conn)
+        if not enabled:
+            return not self.is_connection_dead
         wait = getattr(self._conn, 'wait_send_capacity', None)
         if not callable(wait):
             return not self.is_connection_dead

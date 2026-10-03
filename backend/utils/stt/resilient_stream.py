@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import asyncio
+import time
 from collections import deque
 from typing import Any, Callable, Literal, cast
 
+from config.live_stt_recovery import recovery_enabled as _env_recovery_enabled
+from config.live_stt_recovery import session_recovery_enabled
 from config.stt_provider_policy import provider_for_service
 
 from utils.stt.live_metrics import (
@@ -38,6 +41,9 @@ RING_SECONDS = 15
 RECOVERY_CAPTURE_SECONDS = 150
 # Keep a full default replay horizon of recent VAD-negative capture, not just pre-roll.
 WINDOW_SILENCE_TAIL_SECONDS = 15
+MAX_RECONNECTS = 3
+MAX_RECONNECTS_PER_MINUTE = 2
+MAX_REPLAY_SECONDS = 30
 
 
 def enabled() -> bool:
@@ -45,7 +51,14 @@ def enabled() -> bool:
 
 
 class ResilientAudio:
-    def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS, strict_replay: bool = False) -> None:
+    def __init__(
+        self,
+        sample_rate: int,
+        *,
+        ring_seconds: int = RING_SECONDS,
+        strict_replay: bool = False,
+        recovery_enabled: bool | None = None,
+    ) -> None:
         self.sample_rate = sample_rate
         self.ring_seconds = ring_seconds
         self._base_ring_seconds = ring_seconds
@@ -53,8 +66,11 @@ class ResilientAudio:
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
         self.finalized_sample = 0
+        self._attempts: deque[float] = deque()
+        self._total_attempts = 0
         self._replayed_samples = 0
         self.on_cut: Callable[[int], None] | None = None
+        self._recovery_enabled = recovery_enabled if recovery_enabled is not None else _env_recovery_enabled()
 
     @property
     def buffered_bytes(self) -> int:
@@ -143,6 +159,24 @@ class ResilientAudio:
     def snapshot(self) -> tuple[tuple[int, bytes], ...]:
         return tuple(self._chunks)
 
+    def admit(self, provider: str, reason: str, *, samples: int | None = None) -> bool:
+        now = time.monotonic()
+        while self._attempts and now - self._attempts[0] >= 60:
+            self._attempts.popleft()
+        if samples is None:
+            samples = sum(len(data) // 2 for _, data in self._chunks)
+        if (
+            self._total_attempts >= MAX_RECONNECTS
+            or len(self._attempts) >= MAX_RECONNECTS_PER_MINUTE
+            or self._replayed_samples + samples > MAX_REPLAY_SECONDS * self.sample_rate
+        ):
+            RECONNECT.labels(provider=provider, reason=reason, outcome='limited').inc()
+            return False
+        self._total_attempts += 1
+        self._attempts.append(now)
+        RECONNECT.labels(provider=provider, reason=reason, outcome='attempt').inc()
+        return True
+
     def record_replay(self, provider: str, samples: int) -> None:
         self._replayed_samples += samples
         REPLAY_SECONDS.labels(provider=provider).inc(samples / self.sample_rate)
@@ -155,6 +189,9 @@ class ResilientAudio:
         # replacement before replay can produce text. Reserve one normal
         # tail per adopted downstream leg, including a full 135s replay. The
         # absolute 150s ceiling bounds retention even across repeated calls.
+        if not self._recovery_enabled:
+            self.ring_seconds = min(90 + 3 * RING_SECONDS, self.ring_seconds + RING_SECONDS)
+            return
         self.ring_seconds = min(90 + 4 * RING_SECONDS, self.ring_seconds + RING_SECONDS)
 
 
@@ -284,7 +321,7 @@ class ReplayFilterMixin:
         )
 
 
-def socket_is_finishing(socket: Any) -> bool:
+def socket_is_finishing(socket: Any, *, include_unmanaged_finishing: bool = False) -> bool:
     """Read the teardown latch through managed and legacy wrappers."""
     seen: set[int] = set()
     pending = [socket]
@@ -302,6 +339,10 @@ def socket_is_finishing(socket: Any) -> bool:
                 # leaving. Only the serving owner can declare teardown, so do not
                 # descend into the raw transport here.
                 return bool(outcome.owner_closing)
+            if getattr(current, '_finishing', False) and (
+                include_unmanaged_finishing or not session_recovery_enabled(current)
+            ):
+                return True
             pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
         except Exception:
             continue

@@ -18,6 +18,11 @@ from utils.stt.streaming import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 def _exercise_abrupt_modulate_close():
     audio_chunk = b'audio_chunks'
     provider_frames = []

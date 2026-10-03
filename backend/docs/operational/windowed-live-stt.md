@@ -25,6 +25,47 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
 | `SONIOX_CIRCUIT_COOLDOWN_SECONDS` | `30` | `30` | `30` |
+| `STT_FAILOVER_RECOVERY_ENABLED` | `false` | `false` | `false` |
+
+**Failover-recovery gate.** `STT_FAILOVER_RECOVERY_ENABLED` selects the session
+mode once at listen-session start; the pin survives mid-session environment
+changes, delayed component construction, successor legs, and spawned writer
+tasks, so changing the value only affects new sessions or replacement pods.
+**Off** (the default everywhere, including this merge) runs the pre-recovery
+paths: the 135-second capture cap and legacy reconnect budgets (3 total, 2 per
+minute, 30s cumulative replay), plain `asyncio.Queue` provider send queues
+without writer pacing, the legacy finalize/EOS order, legacy circuit
+rejection semantics (429 records failure/selection bench; account protections
+are unchanged), and the unmanaged `_finishing` latch. The new recovery metrics (`omi_stt_replay_wall_seconds`,
+`omi_stt_replay_audio_seconds_total`, `omi_stt_replay_queue_high_water`,
+`omi_stt_replay_skipped_seconds_total`, `omi_stt_replay_successor_closed_total`,
+`omi_stt_recovery_attempts_total`, `omi_stt_connect_backoff_total`,
+`omi_live_session_terminal_after_text_total`) still register but never emit
+values in this mode; baseline metrics such as `omi_stt_replay_seconds_total`
+and `omi_stt_reconnect_total` are unchanged. **On**, intended only for the
+canary Deployment with `STT_FAILOVER_RECOVERY_ENABLED=true`, the recovery
+state machine applies: `LiveRecoveryController`, the shared 60s
+episode, 150s bounded replacement headroom, paced `AudioSendQueue` replay, and
+release-not-bench 429 probe handling. **Every recovery description in this
+document below applies only to flag-on sessions.**
+
+The production scrape exposes pod names, not the `track=canary` label. Set
+`${canary_pods:regex}` to the escaped exact enabled-canary pod names and
+`${control_pods:regex}` to the escaped exact flag-off control pod names;
+refresh those lists after replacement. These are proposed watches, not executed
+production measurements:
+
+```promql
+sum by (source,successor) (increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
+sum by (provider) (increase(omi_live_session_terminal_after_text_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
+histogram_quantile(0.95, sum by (le,source,successor) (rate(omi_stt_replay_wall_seconds_bucket{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[5m])))
+sum(increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${control_pods:regex}"}[15m])) > 0
+```
+
+New recovery counters and histogram observation counts must stay zero on
+flag-off controls. Missing telemetry is not proof of darkness or health; the
+coordinator must verify scrape coverage and actual per-pod flag configuration.
+This merge is inert — it performs no deploy and changes no running session.
 
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,

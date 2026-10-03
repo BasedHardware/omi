@@ -26,6 +26,11 @@ from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAU
 
 
 @pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
+@pytest.fixture(autouse=True)
 def configured(monkeypatch):
     monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
     monkeypatch.setenv('STT_SHED_CONNECT_FAILURES', '3')

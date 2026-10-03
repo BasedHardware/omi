@@ -33,6 +33,11 @@ from utils.stt.streaming import SafeModulateSocket
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 class Transport:
     def __init__(self, fail_after=None):
         self.sent = []

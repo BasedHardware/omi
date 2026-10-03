@@ -18,6 +18,11 @@ from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
 
 
 @pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
+@pytest.fixture(autouse=True)
 def serving(monkeypatch, runtime):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')

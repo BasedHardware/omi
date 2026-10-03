@@ -61,6 +61,11 @@ from utils.stt.streaming import STTService, _fallback_failure_reason
 from utils.stt.vad_gate import GatedSTTSocket
 
 
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
 class FakeWebSocket:
     """Provider WebSocket yielding a scripted inbound frame list."""
 
