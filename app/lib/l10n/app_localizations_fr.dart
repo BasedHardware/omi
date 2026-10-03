@@ -385,12 +385,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get cannotBeUndone => 'Cette action est irréversible.';
 
   @override
-  String get allDataErased =>
-      'Toutes vos mémoires et conversations seront définitivement effacées.';
+  String get allDataErased => 'Vos souvenirs et conversations seront effacés.';
 
   @override
   String get appsDisconnected =>
-      'Vos applications et intégrations seront déconnectées immédiatement.';
+      'Vos applications et intégrations seront déconnectées.';
 
   @override
   String get exportBeforeDelete =>
@@ -2343,14 +2342,14 @@ class AppLocalizationsFr extends AppLocalizations {
   String get appLanguage => 'Langue de l\'application';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFACE DE L\'APPLICATION';
+  String get appInterfaceSectionTitle => 'Interface de l\'application';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VOIX ET TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Voix et transcription';
 
   @override
   String get languageSettingsHelperText =>
-      'La langue de l\'application modifie les menus et les boutons. La langue vocale affecte la transcription de vos enregistrements.';
+      'La langue de l\'application modifie les menus et les boutons. La langue principale affecte la transcription de vos enregistrements.';
 
   @override
   String get translationNotice => 'Avis de traduction';
@@ -4802,7 +4801,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get askOmiAnything => 'Demandez à Omi n\'importe quoi sur votre vie';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Débloquez la mémoire infinie d\'Omi';
+  String get unlockOmiInfiniteMemory => 'Souvenirs illimités';
 
   @override
   String get youreOnAnnualPlan => 'Vous êtes sur le forfait annuel';
@@ -4815,7 +4814,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get unableToLoadPlans => 'Impossible de charger les forfaits';
 
   @override
-  String get checkConnectionTryAgain => 'Vérifiez votre connexion et réessayez';
+  String get checkConnectionTryAgain =>
+      'Vérifiez votre connexion et réessayez.';
 
   @override
   String get useFreePlan => 'Utiliser le forfait gratuit';
@@ -6321,7 +6321,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
+      '300 minutes premium par mois. Choisissez « Sur l\'appareil » pour une transcription gratuite et illimitée.';
 
   @override
   String get viewUsage => 'Voir lutilisation';
@@ -6408,7 +6408,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 minutes premium/mois. Longlet Sur appareil offre une transcription gratuite illimitée. ';
+      '300 minutes premium par mois. Choisissez « Sur l\'appareil » pour une transcription gratuite et illimitée. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6463,7 +6463,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'La transcription en direct intégrée dOmi est optimisée pour les conversations en temps réel avec détection automatique des interlocuteurs et diarisation.';
+      'La transcription en direct d\'Omi est conçue pour les conversations en temps réel et indique qui a dit quoi.';
 
   @override
   String get reset => 'Réinitialiser';
@@ -8986,7 +8986,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Les enregistrements se synchronisent automatiquement';
 
   @override
-  String get storageSection => 'STOCKAGE';
+  String get storageSection => 'Stockage';
 
   @override
   String get permissions => 'Autorisations';
@@ -9445,11 +9445,11 @@ class AppLocalizationsFr extends AppLocalizations {
       'Facultatif — vos idées nous aident à créer un meilleur produit.';
 
   @override
-  String get deleteFlowConfirmTitle => 'C\'est définitif';
+  String get deleteFlowConfirmTitle => 'Supprimer votre compte ?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Une fois votre compte supprimé, il est impossible de le récupérer.';
+      'Cette action est irréversible, même par l\'assistance.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9915,7 +9915,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Enregistrez l\'audio maintenant et transcrivez-le à la demande plutôt qu\'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.';
+      'Enregistrez maintenant, transcrivez quand vous voulez. D\'ici là, l\'audio reste sur votre téléphone.';
 
   @override
   String get transcribeLaterNote =>
@@ -10388,7 +10388,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get planSheetChooseYourPlan =>
-      'Choisissez votre formule pour débloquer Omi en illimité.';
+      'Choisissez le forfait qui vous convient.';
 
   @override
   String get availableOnMacMobileWeb => 'Disponible sur Mac, mobile et web';
@@ -11075,7 +11075,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi ne se connectera plus à cet appareil. Pour l’utiliser à nouveau, vous devrez l’associer de nouveau.';
+      'Omi ne se connectera plus à cet appareil.';
 
   @override
   String get deviceForgottenMessage => 'Appareil oublié';
@@ -12567,7 +12567,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi vous demandera de confirmer les correspondances proches au lieu de deviner.';
+      'Omi demande avant d\'associer des voix proches.';
 
   @override
   String get pinAction => 'Épingler';
@@ -12935,4 +12935,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Détails';
+
+  @override
+  String get couldNotLoadApiKeys => 'Impossible de charger les clés API.';
 }

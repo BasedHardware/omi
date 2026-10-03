@@ -376,12 +376,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get cannotBeUndone => 'Túto akciu nie je možné vrátiť späť.';
 
   @override
-  String get allDataErased =>
-      'Všetky vaše spomienky a konverzácie budú natrvalo odstránené.';
+  String get allDataErased => 'Vaše spomienky a konverzácie budú vymazané.';
 
   @override
-  String get appsDisconnected =>
-      'Vaše aplikácie a integrácie budú okamžite odpojené.';
+  String get appsDisconnected => 'Vaše aplikácie a integrácie budú odpojené.';
 
   @override
   String get exportBeforeDelete =>
@@ -2312,14 +2310,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appLanguage => 'Jazyk aplikácie';
 
   @override
-  String get appInterfaceSectionTitle => 'ROZHRANIE APLIKÁCIE';
+  String get appInterfaceSectionTitle => 'Rozhranie aplikácie';
 
   @override
-  String get speechTranscriptionSectionTitle => 'REČ A PREPIS';
+  String get speechTranscriptionSectionTitle => 'Reč a prepis';
 
   @override
   String get languageSettingsHelperText =>
-      'Jazyk aplikácie mení ponuky a tlačidlá. Jazyk reči ovplyvňuje spôsob prepisu vašich nahrávok.';
+      'Jazyk aplikácie mení ponuky a tlačidlá. Primárny jazyk ovplyvňuje spôsob prepisu vašich nahrávok.';
 
   @override
   String get translationNotice => 'Oznámenie o preklade';
@@ -4727,7 +4725,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get askOmiAnything => 'Opýtajte sa Omi čokoľvek o svojom živote';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Odomknite nekonečnú pamäť Omi';
+  String get unlockOmiInfiniteMemory => 'Neobmedzené spomienky';
 
   @override
   String get youreOnAnnualPlan => 'Ste na ročnom pláne';
@@ -4741,7 +4739,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Skontrolujte pripojenie a skúste znova';
+      'Skontrolujte pripojenie a skúste to znova.';
 
   @override
   String get useFreePlan => 'Použiť bezplatný plán';
@@ -6230,7 +6228,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+      '300 prémiových minút mesačne. Pre neobmedzený bezplatný prepis zvoľte „Na zariadení“.';
 
   @override
   String get viewUsage => 'Zobraziť využitie';
@@ -6316,7 +6314,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+      '300 prémiových minút mesačne. Pre neobmedzený bezplatný prepis zvoľte „Na zariadení“. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6371,7 +6369,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Vstavaný živý prepis Omi je optimalizovaný pre konverzácie v reálnom čase s automatickou detekciou rečníkov a diarizáciou.';
+      'Živý prepis Omi je navrhnutý na konverzácie v reálnom čase a označuje, kto čo povedal.';
 
   @override
   String get reset => 'Resetovať';
@@ -8830,7 +8828,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tipAutoSync => 'Nahrávky sa synchronizujú automaticky';
 
   @override
-  String get storageSection => 'ÚLOŽISKO';
+  String get storageSection => 'Úložisko';
 
   @override
   String get permissions => 'Oprávnenia';
@@ -9280,10 +9278,11 @@ class AppLocalizationsSk extends AppLocalizations {
       'Nepovinné — vaše myšlienky nám pomáhajú vytvoriť lepší produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+  String get deleteFlowConfirmTitle => 'Odstrániť váš účet?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Po odstránení účtu sa nedá obnoviť.';
+  String get deleteFlowConfirmSubtitle =>
+      'Túto akciu nemožno vrátiť, ani s pomocou podpory.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9748,7 +9747,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nahrávajte zvuk teraz a prepíšte ho neskôr podľa potreby, namiesto naživo. Nahrávky sa uložia v telefóne a potom ich odošlete na vytvorenie konverzácií.';
+      'Nahrávajte teraz, prepisujte, kedy chcete. Dovtedy zostáva zvuk v telefóne.';
 
   @override
   String get transcribeLaterNote =>
@@ -10207,8 +10206,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Príliš staré na synchronizáciu — Omi ho nemôže prijať';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Vyberte si plán a odomknite neobmedzené Omi.';
+  String get planSheetChooseYourPlan => 'Vyberte si plán, ktorý vám vyhovuje.';
 
   @override
   String get availableOnMacMobileWeb => 'Dostupné na Macu, mobile a webe';
@@ -10893,7 +10891,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi sa prestane pripájať k tomuto zariadeniu. Ak ho chcete znova používať, budete ho musieť znova spárovať.';
+      'Omi sa prestane pripájať k tomuto zariadeniu.';
 
   @override
   String get deviceForgottenMessage => 'Zariadenie zabudnuté';
@@ -12374,8 +12372,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine =>
-      'Omi vás požiada o potvrdenie blízkych zhôd namiesto hádania.';
+  String get pinPersonHonestLine => 'Omi sa opýta, než priradí podobné hlasy.';
 
   @override
   String get pinAction => 'Pripnúť';
@@ -12739,4 +12736,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Podrobnosti';
+
+  @override
+  String get couldNotLoadApiKeys => 'Kľúče API sa nepodarilo načítať.';
 }

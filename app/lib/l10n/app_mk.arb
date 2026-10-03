@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Сите ваши спомени и разговори ќе бидат трајно избришани.",
+    "allDataErased": "Вашите сеќавања и разговори ќе бидат избришани.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Ваши апликации и интеграции ќе бидат исклучени веднаш.",
+    "appsDisconnected": "Вашите апликации и интеграции ќе бидат исклучени.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ИНТЕРФЕЈС НА АПЛИКАЦИЈА",
+    "appInterfaceSectionTitle": "Интерфејс на апликација",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "ГОВОР И ТРАНСКРИПЦИЈА",
+    "speechTranscriptionSectionTitle": "Говор и транскрипција",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Јазикот на апликацијата менува менија и копчиња. Јазикот на говор влијае на тоа како ваши записи се транскрибираат.",
+    "languageSettingsHelperText": "Јазикот на апликацијата ги менува менијата и копчињата. Примарниот јазик влијае на тоа како се транскрибираат вашите записи.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Отклучи неограничена меморија на Omi",
+    "unlockOmiInfiniteMemory": "Неограничени сеќавања",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Проверете ја врската и обидете се повторно",
+    "checkConnectionTryAgain": "Проверете ја врската и обидете се повторно.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
+    "premiumMinutesInfo": "300 премиум минути месечно. Изберете „На уред“ за неограничена бесплатна транскрипција.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
+    "premiumMinutesMonth": "300 премиум минути месечно. Изберете „На уред“ за неограничена бесплатна транскрипција. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Вградената живо транскрипција на Omi е оптимизирана за разговори во реално време со автоматско препознавање и диаризирање на говорник.",
+    "omiTranscriptionOptimized": "Транскрипцијата во живо на Omi е создадена за разговори во реално време и означува кој што рекол.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "СКЛАДИРАЊЕ",
+    "storageSection": "Складирање",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Кажете ни повеќе",
     "deleteFlowFeedbackSubtitle": "Што би направило Omi да работи за вас?",
     "deleteFlowFeedbackHint": "Опционално — вашите мисли ни помагаат да изградиме подобар производ.",
-    "deleteFlowConfirmTitle": "Ова е трајно",
-    "deleteFlowConfirmSubtitle": "Откако ќе ја избришете сметката, не може да се врати.",
+    "deleteFlowConfirmTitle": "Да се избрише вашата сметка?",
+    "deleteFlowConfirmSubtitle": "Ова не може да се врати, дури ни од поддршката.",
     "deleteConsequenceSubscription": "Секоја активна претплата ќе биде откажана.",
     "deleteConsequenceNoRecovery": "Вашата сметка не може да се обнови — ниту од поддршката.",
     "deleteTypeToConfirm": "Внесете DELETE за потврда",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Синхронизацијата користи транскрипција од Omi",
     "syncCustomSttWarningMessage": "Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.",
     "transcribeLaterTitle": "Транскрибирај подоцна",
-    "transcribeLaterDescription": "Снимај аудио сега, а транскрибирај го подоцна по потреба наместо во живо. Снимките се чуваат на твојот телефон, а потоа ги прикачуваш за да создадеш разговори.",
+    "transcribeLaterDescription": "Снимајте сега, транскрибирајте кога ќе сакате. Дотогаш звукот останува на вашиот телефон.",
     "transcribeLaterNote": "Работи со микрофонот на телефонот и со Omi и Limitless уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.",
     "transcribeLaterStorageFull": "На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.",
     "unmute": "Вклучи звук",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "Среден",
     "whisperModelSizeSmall": "Мал",
     "whisperModelSizeTiny": "Многу мал",
-    "planSheetChooseYourPlan": "Изберете го вашиот план за да го отклучите неограничениот Omi.",
+    "planSheetChooseYourPlan": "Изберете го планот што ви одговара.",
     "availableOnMacMobileWeb": "Достапно на Mac, мобилен и веб",
     "popularBadge": "ПОПУЛАРНО",
     "worksOnDesktop": "Работи на компјутер",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Потврдете го бројот за да се јавувате преку Omi.",
     "phoneDeleteNumberFailed": "Бројот не може да се избрише",
     "forgetDeviceConfirmTitle": "Да се заборави уредот?",
-    "forgetDeviceConfirmMessage": "Omi ќе престане да се поврзува со овој уред. За повторно да го користите, ќе треба повторно да го спарите.",
+    "forgetDeviceConfirmMessage": "Omi ќе престане да се поврзува со овој уред.",
     "deviceForgottenMessage": "Уредот е заборавен",
     "unpairDeviceConfirmTitle": "Да се раздели уредот?",
     "rollBack": "Врати",
@@ -11265,7 +11265,7 @@
     "personWhyConfidence": "Зошто?",
     "pinPersonTitle": "Закачи {name}",
     "pinPersonSubtitle": "Задржете го {name} и очекувајте го во вашите разговори",
-    "pinPersonHonestLine": "Omi ќе ве праша да потврдите блиски совпаѓања наместо да погодува.",
+    "pinPersonHonestLine": "Omi прашува пред да поврзе слични гласови.",
     "pinAction": "Закачи",
     "unpinAction": "Откачи",
     "personPinnedToast": "{name} е закачен",
@@ -11342,5 +11342,6 @@
     "speakerLabelTalkTime": "{duration} од овој глас",
     "findDeviceNoneTitle": "Не е пронајден Omi",
     "findDeviceNoneMessage": "Вклучете го и држете го близу до телефонот.",
-    "startupFailedDetails": "Детали"
+    "startupFailedDetails": "Детали",
+    "couldNotLoadApiKeys": "API клучевите не можеа да се вчитаат."
 }

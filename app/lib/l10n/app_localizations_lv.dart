@@ -373,12 +373,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get cannotBeUndone => 'To nevar atsaukt.';
 
   @override
-  String get allDataErased =>
-      'Visas jūsu atmiņas un sarunas tiks neatgriezeniski dzēstas.';
+  String get allDataErased => 'Jūsu atmiņas un sarunas tiks izdzēstas.';
 
   @override
   String get appsDisconnected =>
-      'Jūsu lietotnes un integrācijas tiks atsavi notas nekavējoties.';
+      'Jūsu lietotnes un integrācijas tiks atvienotas.';
 
   @override
   String get exportBeforeDelete =>
@@ -2297,14 +2296,14 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appLanguage => 'Lietotnes valoda';
 
   @override
-  String get appInterfaceSectionTitle => 'LIETOJUMPROGRAMMAS INTERFEISS';
+  String get appInterfaceSectionTitle => 'Lietojumprogrammas interfeiss';
 
   @override
-  String get speechTranscriptionSectionTitle => 'RUNA UN TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Runa un transkripcija';
 
   @override
   String get languageSettingsHelperText =>
-      'Lietojumprogrammas valoda maina izvēlnes un pogas. Runas valoda ietekmē to, kā tiek transkribēti jūsu ieraksti.';
+      'Lietotnes valoda maina izvēlnes un pogas. Primārā valoda ietekmē to, kā tiek transkribēti jūsu ieraksti.';
 
   @override
   String get translationNotice => 'Tulkošanas paziņojums';
@@ -4716,7 +4715,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get askOmiAnything => 'Jautājiet Omi jebko par savu dzīvi';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Atbloķējiet Omi bezgalīgo atmiņu';
+  String get unlockOmiInfiniteMemory => 'Neierobežotas atmiņas';
 
   @override
   String get youreOnAnnualPlan => 'Jūs esat gada plānā';
@@ -4730,7 +4729,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Pārbaudiet savienojumu un mēģiniet vēlreiz';
+      'Pārbaudiet savienojumu un mēģiniet vēlreiz.';
 
   @override
   String get useFreePlan => 'Izmantot bezmaksas plānu';
@@ -6223,7 +6222,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '300 premium minūtes mēnesī. Neierobežotai bezmaksas transkripcijai izvēlieties “Ierīcē”.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6310,7 +6309,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '300 premium minūtes mēnesī. Neierobežotai bezmaksas transkripcijai izvēlieties “Ierīcē”. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6365,7 +6364,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi iebūvētā tiešraides transkripcija ir optimizēta reāllaika sarunām ar automātisku runātāju noteikšanu un diarizāciju.';
+      'Omi tiešraides transkripcija ir veidota reāllaika sarunām un norāda, kurš ko teica.';
 
   @override
   String get reset => 'Atiestatīt';
@@ -8865,7 +8864,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tipAutoSync => 'Ieraksti tiek sinhronizēti automātiski';
 
   @override
-  String get storageSection => 'KRĀTUVE';
+  String get storageSection => 'Krātuve';
 
   @override
   String get permissions => 'Atļaujas';
@@ -9318,11 +9317,11 @@ class AppLocalizationsLv extends AppLocalizations {
       'Neobligāti — tavas domas palīdz mums veidot labāku produktu.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Tas ir neatgriezenisks';
+  String get deleteFlowConfirmTitle => 'Dzēst jūsu kontu?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Kad esi izdzēsis savu kontu, to nav iespējams atjaunot.';
+      'To nevar atsaukt, pat ar atbalsta palīdzību.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9786,7 +9785,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.';
+      'Ierakstiet tagad, transkribējiet, kad vēlaties. Līdz tam audio paliek jūsu tālrunī.';
 
   @override
   String get transcribeLaterNote =>
@@ -10247,8 +10246,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Izvēlieties savu plānu, lai atbloķētu neierobežotu Omi.';
+  String get planSheetChooseYourPlan => 'Izvēlieties sev piemērotu plānu.';
 
   @override
   String get availableOnMacMobileWeb =>
@@ -10933,7 +10931,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi pārstās savienoties ar šo ierīci. Lai to izmantotu vēlreiz, tā būs jāsavieno pārī no jauna.';
+      'Omi pārstās savienoties ar šo ierīci.';
 
   @override
   String get deviceForgottenMessage => 'Ierīce aizmirsta';
@@ -12414,7 +12412,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi lūgs jums apstiprināt tuvas atbilstības, nevis minēs.';
+      'Omi pajautā, pirms saskaņo līdzīgas balsis.';
 
   @override
   String get pinAction => 'Piespraust';
@@ -12776,4 +12774,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Detalizēti';
+
+  @override
+  String get couldNotLoadApiKeys => 'Neizdevās ielādēt API atslēgas.';
 }

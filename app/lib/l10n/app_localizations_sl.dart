@@ -375,12 +375,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get cannotBeUndone => 'To ne može biti razveljaviti.';
 
   @override
-  String get allDataErased =>
-      'Vsi vaši spomin in pogovori bodo trajno izbrisani.';
+  String get allDataErased => 'Vaši spomini in pogovori bodo izbrisani.';
 
   @override
   String get appsDisconnected =>
-      'Vaše aplikacije in integracije bodo takoj odklopljene.';
+      'Vaše aplikacije in integracije bodo prekinjene.';
 
   @override
   String get exportBeforeDelete =>
@@ -2297,14 +2296,14 @@ class AppLocalizationsSl extends AppLocalizations {
   String get appLanguage => 'Jezik aplikacije';
 
   @override
-  String get appInterfaceSectionTitle => 'VMESNIK APLIKACIJE';
+  String get appInterfaceSectionTitle => 'Vmesnik aplikacije';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GOVOR IN TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Govor in transkripcija';
 
   @override
   String get languageSettingsHelperText =>
-      'Jezik aplikacije spreminja menuje in gumbe. Jezik govora vpliva na transkripcijo svojih posnetkov.';
+      'Jezik aplikacije spreminja menije in gumbe. Primarni jezik vpliva na to, kako se prepišejo vaši posnetki.';
 
   @override
   String get translationNotice => 'Obvestilo o prevodu';
@@ -4721,7 +4720,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get askOmiAnything => 'Vprašajte Omi kaj koli o svojem življenju';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Odkleni Omijev neskončni spomin';
+  String get unlockOmiInfiniteMemory => 'Neomejeni spomini';
 
   @override
   String get youreOnAnnualPlan => 'Ste na letnem načrtu';
@@ -4734,7 +4733,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get unableToLoadPlans => 'Načrtov ni mogoče naložiti';
 
   @override
-  String get checkConnectionTryAgain => 'Preverite povezavo in poskusite znova';
+  String get checkConnectionTryAgain =>
+      'Preverite povezavo in poskusite znova.';
 
   @override
   String get useFreePlan => 'Uporabite brezplačni načrt';
@@ -6229,7 +6229,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.';
+      '300 premium minut na mesec. Za neomejeno brezplačno transkripcijo izberite »Na napravi«.';
 
   @override
   String get viewUsage => 'Poglej uporabo';
@@ -6316,7 +6316,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ';
+      '300 premium minut na mesec. Za neomejeno brezplačno transkripcijo izberite »Na napravi«. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6371,7 +6371,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Vgrajena transkripcija Omi je optimizirana za pogovore v realnem času z avtomatskim prepoznavanjem govorcev in diarizacijo.';
+      'Prepis v živo v Omi je ustvarjen za pogovore v realnem času in označi, kdo je kaj rekel.';
 
   @override
   String get reset => 'Ponastavite';
@@ -8876,7 +8876,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tipAutoSync => 'Posnetki se sinhronizirajo samodejno';
 
   @override
-  String get storageSection => 'SHRAMBA';
+  String get storageSection => 'Shramba';
 
   @override
   String get permissions => 'Dovoljenja';
@@ -9332,11 +9332,11 @@ class AppLocalizationsSl extends AppLocalizations {
       'Neobvezno — vaše misli nam pomagajo zgraditi boljši izdelek.';
 
   @override
-  String get deleteFlowConfirmTitle => 'To je dokončno';
+  String get deleteFlowConfirmTitle => 'Želite izbrisati svoj račun?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Ko izbrišete račun, ga ni mogoče obnoviti.';
+      'Tega ni mogoče razveljaviti, niti s pomočjo podpore.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9799,7 +9799,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Zvok posnemite zdaj in ga prepišite pozneje, ko želite, namesto sproti. Posnetki se shranijo v vaš telefon, nato jih naložite in iz njih nastanejo pogovori.';
+      'Snemajte zdaj, prepišite, ko želite. Do takrat zvok ostane v vašem telefonu.';
 
   @override
   String get transcribeLaterNote =>
@@ -10260,8 +10260,7 @@ class AppLocalizationsSl extends AppLocalizations {
       'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Izberite svoj paket in odklenite neomejeni Omi.';
+  String get planSheetChooseYourPlan => 'Izberite paket, ki vam ustreza.';
 
   @override
   String get availableOnMacMobileWeb => 'Na voljo na Macu, mobilnem in spletu';
@@ -10945,7 +10944,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi se ne bo več povezoval s to napravo. Če jo želite znova uporabljati, jo boste morali znova seznaniti.';
+      'Omi se ne bo več povezoval s to napravo.';
 
   @override
   String get deviceForgottenMessage => 'Naprava pozabljena';
@@ -12429,7 +12428,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi vas bo prosil za potrditev bližnjih ujemanj, namesto da ugiba.';
+      'Omi vpraša, preden poveže podobne glasove.';
 
   @override
   String get pinAction => 'Pripni';
@@ -12794,4 +12793,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Podrobnosti';
+
+  @override
+  String get couldNotLoadApiKeys => 'Ključev API ni bilo mogoče naložiti.';
 }

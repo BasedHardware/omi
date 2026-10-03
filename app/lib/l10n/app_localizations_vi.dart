@@ -377,12 +377,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get cannotBeUndone => 'Hành động này không thể hoàn tác.';
 
   @override
-  String get allDataErased =>
-      'Tất cả ký ức và cuộc trò chuyện của bạn sẽ bị xóa vĩnh viễn.';
+  String get allDataErased => 'Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa.';
 
   @override
   String get appsDisconnected =>
-      'Các ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối ngay lập tức.';
+      'Ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối.';
 
   @override
   String get exportBeforeDelete =>
@@ -2305,14 +2304,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appLanguage => 'Ngôn ngữ ứng dụng';
 
   @override
-  String get appInterfaceSectionTitle => 'GIAO DIỆN ỨNG DỤNG';
+  String get appInterfaceSectionTitle => 'Giao diện ứng dụng';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GIỌNG NÓI & PHIÊN ÂM';
+  String get speechTranscriptionSectionTitle => 'Giọng nói & phiên âm';
 
   @override
   String get languageSettingsHelperText =>
-      'Ngôn ngữ Ứng dụng thay đổi menu và nút. Ngôn ngữ Giọng nói ảnh hưởng đến cách bản ghi âm của bạn được phiên âm.';
+      'Ngôn ngữ ứng dụng thay đổi menu và nút. Ngôn ngữ chính ảnh hưởng đến cách bản ghi âm của bạn được phiên âm.';
 
   @override
   String get translationNotice => 'Thông báo dịch';
@@ -4724,7 +4723,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get askOmiAnything => 'Hỏi Omi bất cứ điều gì về cuộc sống của bạn';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Mở khóa bộ nhớ vô hạn của Omi';
+  String get unlockOmiInfiniteMemory => 'Kỷ niệm không giới hạn';
 
   @override
   String get youreOnAnnualPlan => 'Bạn đang sử dụng gói năm';
@@ -4737,7 +4736,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get unableToLoadPlans => 'Không thể tải các gói';
 
   @override
-  String get checkConnectionTryAgain => 'Kiểm tra kết nối và thử lại';
+  String get checkConnectionTryAgain => 'Kiểm tra kết nối rồi thử lại.';
 
   @override
   String get useFreePlan => 'Sử dụng gói miễn phí';
@@ -6229,7 +6228,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get cloudProvider => 'Nhà cung cấp đám mây';
 
   @override
-  String get premiumMinutesInfo => 'Thông tin phút Premium';
+  String get premiumMinutesInfo =>
+      '300 phút cao cấp mỗi tháng. Chọn Trên thiết bị để phiên âm miễn phí không giới hạn.';
 
   @override
   String get viewUsage => 'Xem mức sử dụng';
@@ -6311,7 +6311,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+      '300 phút cao cấp mỗi tháng. Chọn Trên thiết bị để phiên âm miễn phí không giới hạn. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6366,7 +6366,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Phiên âm trực tiếp tích hợp của Omi được tối ưu hóa cho các cuộc hội thoại thời gian thực với phát hiện người nói tự động và phân tách người nói.';
+      'Phiên âm trực tiếp của Omi được tạo cho các cuộc trò chuyện thời gian thực và ghi rõ ai nói gì.';
 
   @override
   String get reset => 'Đặt lại';
@@ -8840,7 +8840,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tipAutoSync => 'Bản ghi tự động đồng bộ';
 
   @override
-  String get storageSection => 'BỘ NHỚ';
+  String get storageSection => 'Bộ nhớ';
 
   @override
   String get permissions => 'Quyền';
@@ -9293,11 +9293,11 @@ class AppLocalizationsVi extends AppLocalizations {
       'Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Đây là vĩnh viễn';
+  String get deleteFlowConfirmTitle => 'Xóa tài khoản của bạn?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Khi bạn xóa tài khoản, không có cách nào để khôi phục.';
+      'Không thể hoàn tác thao tác này, kể cả bộ phận hỗ trợ.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9759,7 +9759,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.';
+      'Ghi âm ngay, phiên âm khi bạn muốn. Đến lúc đó, âm thanh vẫn ở trên điện thoại của bạn.';
 
   @override
   String get transcribeLaterNote =>
@@ -10220,8 +10220,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusTooOld => 'Quá cũ để đồng bộ — Omi không thể chấp nhận';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Chọn gói của bạn để mở khóa Omi không giới hạn.';
+  String get planSheetChooseYourPlan => 'Chọn gói phù hợp với bạn.';
 
   @override
   String get availableOnMacMobileWeb => 'Có sẵn trên Mac, di động và web';
@@ -10903,7 +10902,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi sẽ ngừng kết nối với thiết bị này. Để dùng lại, bạn sẽ phải ghép nối lại.';
+      'Omi sẽ ngừng kết nối với thiết bị này.';
 
   @override
   String get deviceForgottenMessage => 'Đã quên thiết bị';
@@ -12380,7 +12379,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi sẽ nhờ bạn xác nhận các kết quả gần giống thay vì đoán.';
+      'Omi sẽ hỏi trước khi khớp các giọng nói gần giống nhau.';
 
   @override
   String get pinAction => 'Ghim';
@@ -12744,4 +12743,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Chi tiết';
+
+  @override
+  String get couldNotLoadApiKeys => 'Không thể tải khóa API.';
 }

@@ -376,12 +376,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get cannotBeUndone => 'Detta kan inte ångras.';
 
   @override
-  String get allDataErased =>
-      'Alla dina minnen och konversationer kommer att raderas permanent.';
+  String get allDataErased => 'Dina minnen och konversationer raderas.';
 
   @override
-  String get appsDisconnected =>
-      'Dina appar och integrationer kommer att kopplas från omedelbart.';
+  String get appsDisconnected => 'Dina appar och integrationer kopplas från.';
 
   @override
   String get exportBeforeDelete =>
@@ -2302,14 +2300,14 @@ class AppLocalizationsSv extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APPGRÄNSSNITT';
+  String get appInterfaceSectionTitle => 'Appgränssnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TAL OCH TRANSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Tal och transkription';
 
   @override
   String get languageSettingsHelperText =>
-      'Appspråk ändrar menyer och knappar. Talspråk påverkar hur dina inspelningar transkriberas.';
+      'Appspråk ändrar menyer och knappar. Primärt språk påverkar hur dina inspelningar transkriberas.';
 
   @override
   String get translationNotice => 'Översättningsmeddelande';
@@ -4716,7 +4714,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get askOmiAnything => 'Fråga Omi vad som helst om ditt liv';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Lås upp Omis oändliga minne';
+  String get unlockOmiInfiniteMemory => 'Obegränsade minnen';
 
   @override
   String get youreOnAnnualPlan => 'Du har årsplanen';
@@ -4730,7 +4728,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Kontrollera din anslutning och försök igen';
+      'Kontrollera anslutningen och försök igen.';
 
   @override
   String get useFreePlan => 'Använd gratisplan';
@@ -6220,7 +6218,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
+      '300 premiumminuter i månaden. Välj På enhet för obegränsad gratis transkription.';
 
   @override
   String get viewUsage => 'Visa användning';
@@ -6306,7 +6304,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
+      '300 premiumminuter i månaden. Välj På enhet för obegränsad gratis transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6361,7 +6359,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis inbyggda livetranskription är optimerad för realtidskonversationer med automatisk talarigenkänning och diarisering.';
+      'Omis livetranskription är byggd för samtal i realtid och visar vem som sa vad.';
 
   @override
   String get reset => 'Återställ';
@@ -8835,7 +8833,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tipAutoSync => 'Inspelningar synkroniseras automatiskt';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Behörigheter';
@@ -9285,11 +9283,11 @@ class AppLocalizationsSv extends AppLocalizations {
       'Valfritt — dina tankar hjälper oss att bygga en bättre produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Detta är permanent';
+  String get deleteFlowConfirmTitle => 'Radera ditt konto?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'När du har raderat ditt konto går det inte att återställa.';
+      'Det går inte att ångra, inte ens via supporten.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9752,7 +9750,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.';
+      'Spela in nu och transkribera när du vill. Tills dess stannar ljudet på telefonen.';
 
   @override
   String get transcribeLaterNote =>
@@ -10214,8 +10212,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'För gammal för att synkas — Omi kan inte ta emot den';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Välj din plan för att låsa upp obegränsad Omi.';
+  String get planSheetChooseYourPlan => 'Välj den plan som passar dig.';
 
   @override
   String get availableOnMacMobileWeb => 'Tillgänglig på Mac, mobil och webb';
@@ -10898,7 +10895,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi slutar ansluta till den här enheten. För att använda den igen måste du parkoppla den på nytt.';
+      'Omi slutar ansluta till den här enheten.';
 
   @override
   String get deviceForgottenMessage => 'Enheten har glömts';
@@ -12371,8 +12368,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine =>
-      'Omi ber dig bekräfta nära matchningar i stället för att gissa.';
+  String get pinPersonHonestLine => 'Omi frågar innan liknande röster matchas.';
 
   @override
   String get pinAction => 'Fäst';
@@ -12733,4 +12729,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Detaljer';
+
+  @override
+  String get couldNotLoadApiKeys => 'Det gick inte att läsa in API-nycklar.';
 }

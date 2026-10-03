@@ -377,12 +377,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get cannotBeUndone => 'Это действие нельзя отменить.';
 
   @override
-  String get allDataErased =>
-      'Все ваши воспоминания и разговоры будут безвозвратно удалены.';
+  String get allDataErased => 'Ваши воспоминания и беседы будут удалены.';
 
   @override
   String get appsDisconnected =>
-      'Ваши приложения и интеграции будут немедленно отключены.';
+      'Ваши приложения и интеграции будут отключены.';
 
   @override
   String get exportBeforeDelete =>
@@ -2314,14 +2313,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appLanguage => 'Язык приложения';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЙС ПРИЛОЖЕНИЯ';
+  String get appInterfaceSectionTitle => 'Интерфейс приложения';
 
   @override
-  String get speechTranscriptionSectionTitle => 'РЕЧЬ И ТРАНСКРИПЦИЯ';
+  String get speechTranscriptionSectionTitle => 'Речь и транскрипция';
 
   @override
   String get languageSettingsHelperText =>
-      'Язык приложения изменяет меню и кнопки. Язык речи влияет на то, как транскрибируются ваши записи.';
+      'Язык приложения изменяет меню и кнопки. Основной язык влияет на то, как транскрибируются ваши записи.';
 
   @override
   String get translationNotice => 'Уведомление о переводе';
@@ -4738,7 +4737,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get askOmiAnything => 'Спросите Omi о чём угодно о своей жизни';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Разблокируйте бесконечную память Omi';
+  String get unlockOmiInfiniteMemory => 'Неограниченные воспоминания';
 
   @override
   String get youreOnAnnualPlan => 'Вы на годовом плане';
@@ -4752,7 +4751,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Проверьте подключение и попробуйте снова';
+      'Проверьте подключение и повторите попытку.';
 
   @override
   String get useFreePlan => 'Использовать бесплатный план';
@@ -6249,7 +6248,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
+      '300 премиум-минут в месяц. Выберите «На устройстве» для неограниченной бесплатной транскрипции.';
 
   @override
   String get viewUsage => 'Посмотреть использование';
@@ -6336,7 +6335,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 премиум-минут/месяц. Вкладка На устройстве предлагает неограниченную бесплатную транскрипцию. ';
+      '300 премиум-минут в месяц. Выберите «На устройстве» для неограниченной бесплатной транскрипции. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6391,7 +6390,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Встроенная живая транскрипция Omi оптимизирована для разговоров в реальном времени с автоматическим определением говорящего и диаризацией.';
+      'Живая транскрипция Omi создана для разговоров в реальном времени и отмечает, кто что сказал.';
 
   @override
   String get reset => 'Сбросить';
@@ -8896,7 +8895,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tipAutoSync => 'Записи синхронизируются автоматически';
 
   @override
-  String get storageSection => 'ХРАНИЛИЩЕ';
+  String get storageSection => 'Хранилище';
 
   @override
   String get permissions => 'Разрешения';
@@ -9350,11 +9349,11 @@ class AppLocalizationsRu extends AppLocalizations {
       'Необязательно — ваши мысли помогают нам создавать лучший продукт.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Это необратимо';
+  String get deleteFlowConfirmTitle => 'Удалить аккаунт?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'После удаления аккаунта восстановить его невозможно.';
+      'Это нельзя отменить, даже через поддержку.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9822,7 +9821,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Записывайте звук сейчас и расшифровывайте его по запросу, а не в реальном времени. Записи сохраняются на вашем телефоне, после чего вы загружаете их, чтобы создать беседы.';
+      'Записывайте сейчас, расшифровывайте когда захотите. До тех пор аудио остаётся на телефоне.';
 
   @override
   String get transcribeLaterNote =>
@@ -10283,8 +10282,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Слишком старая для синхронизации — Omi не может её принять';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Выберите тариф, чтобы открыть безлимитный Omi.';
+  String get planSheetChooseYourPlan => 'Выберите подходящий вам план.';
 
   @override
   String get availableOnMacMobileWeb => 'Доступно на Mac, мобильном и в вебе';
@@ -10968,7 +10966,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi перестанет подключаться к этому устройству. Чтобы снова им пользоваться, его нужно будет заново связать.';
+      'Omi перестанет подключаться к этому устройству.';
 
   @override
   String get deviceForgottenMessage => 'Устройство забыто';
@@ -12451,7 +12449,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi попросит вас подтвердить близкие совпадения, а не будет гадать.';
+      'Omi спрашивает, прежде чем сопоставить похожие голоса.';
 
   @override
   String get pinAction => 'Закрепить';
@@ -12815,4 +12813,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Подробности';
+
+  @override
+  String get couldNotLoadApiKeys => 'Не удалось загрузить ключи API.';
 }

@@ -162,7 +162,7 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
 │   ├── Task checkboxes, drag-drop reorder, task → goal linking
 │   └── Top-bar extras on this slot: export → Task Integrations, completed toggle
 │
-└── [slot 3] Apps (apps/page.dart) — "Search 1500+ Apps" / "Featured" (explore_install_page.dart)
+└── [slot 3] Apps (apps/page.dart) — "Search apps" / "Featured" (explore_install_page.dart)
     ├── Popular apps (horizontal scroll)
     ├── Category sections → Category apps page
     ├── App item → App Detail (app_detail/app_detail.dart)
@@ -244,7 +244,7 @@ Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #1
 - Navigate home: press the leftmost one
 - iOS (verified 2026-07-11, iPhone XR, 414pt-wide screen): 4 slots at y≈816, x=20/114/207/300, each w=94.
   Left to right: slot 0 = Home, slot 1 = Conversations (folder tabs All/Starred/…), slot 2 = Tasks,
-  slot 3 = Apps marketplace ("Search 1500+ Apps" / "Featured")
+  slot 3 = Apps marketplace ("Search apps" / "Featured")
 
 **Chat entry point (not a bottom-nav tab):**
 - Open chat by tapping the "Ask Omi" input bar on the home screen — a full-width gesture

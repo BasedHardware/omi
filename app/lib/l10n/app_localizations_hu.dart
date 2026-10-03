@@ -376,12 +376,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cannotBeUndone => 'Ez nem vonható vissza.';
 
   @override
-  String get allDataErased =>
-      'Minden emléked és beszélgetésed véglegesen törlésre kerül.';
+  String get allDataErased => 'Az emlékeid és a beszélgetéseid törlődnek.';
 
   @override
   String get appsDisconnected =>
-      'Alkalmazásaid és integrációid azonnal leválasztásra kerülnek.';
+      'Az alkalmazásaid és integrációid leválasztásra kerülnek.';
 
   @override
   String get exportBeforeDelete =>
@@ -2316,14 +2315,14 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appLanguage => 'Alkalmazás nyelve';
 
   @override
-  String get appInterfaceSectionTitle => 'ALKALMAZÁS FELÜLET';
+  String get appInterfaceSectionTitle => 'Alkalmazás felület';
 
   @override
-  String get speechTranscriptionSectionTitle => 'BESZÉD ÉS ÁTÍRÁS';
+  String get speechTranscriptionSectionTitle => 'Beszéd és átírás';
 
   @override
   String get languageSettingsHelperText =>
-      'Az alkalmazás nyelve megváltoztatja a menüket és gombokat. A beszéd nyelve befolyásolja, hogyan íródnak át a felvételei.';
+      'Az alkalmazás nyelve megváltoztatja a menüket és gombokat. Az elsődleges nyelv befolyásolja, hogyan íródnak át a felvételei.';
 
   @override
   String get translationNotice => 'Fordítási értesítés';
@@ -4750,7 +4749,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get askOmiAnything => 'Kérdezzen Omi-tól bármit az életéről';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Oldja fel Omi végtelen memóriáját';
+  String get unlockOmiInfiniteMemory => 'Korlátlan emlék';
 
   @override
   String get youreOnAnnualPlan => 'Ön az éves csomagon van';
@@ -4764,7 +4763,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Ellenőrizze a kapcsolatot és próbálja újra';
+      'Ellenőrizd a kapcsolatot, és próbáld újra.';
 
   @override
   String get useFreePlan => 'Ingyenes csomag használata';
@@ -6263,7 +6262,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
+      'Havi 300 prémium perc. Korlátlan ingyenes átíráshoz válaszd az „Eszközön” lehetőséget.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
@@ -6349,7 +6348,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+      'Havi 300 prémium perc. Korlátlan ingyenes átíráshoz válaszd az „Eszközön” lehetőséget. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6404,7 +6403,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Az Omi beépített élő átírása valós idejű beszélgetésekre van optimalizálva automatikus beszélő-felismeréssel és diarizációval.';
+      'Az Omi élő átírása valós idejű beszélgetésekhez készült, és jelöli, ki mit mondott.';
 
   @override
   String get reset => 'Visszaállítás';
@@ -8914,7 +8913,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tipAutoSync => 'A felvételek automatikusan szinkronizálódnak';
 
   @override
-  String get storageSection => 'TÁRHELY';
+  String get storageSection => 'Tárhely';
 
   @override
   String get permissions => 'Engedélyek';
@@ -9366,11 +9365,11 @@ class AppLocalizationsHu extends AppLocalizations {
       'Nem kötelező — a gondolataid segítenek nekünk jobb terméket építeni.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Ez végleges';
+  String get deleteFlowConfirmTitle => 'Törlöd a fiókodat?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Miután törölted a fiókodat, nincs mód a visszaállítására.';
+      'Ez nem vonható vissza, még az ügyfélszolgálat által sem.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9831,7 +9830,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.';
+      'Rögzíts most, és írd át, amikor szeretnéd. Addig a hang a telefonodon marad.';
 
   @override
   String get transcribeLaterNote =>
@@ -10297,8 +10296,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Válaszd ki a csomagodat a korlátlan Omi feloldásához.';
+  String get planSheetChooseYourPlan => 'Válaszd ki a hozzád illő csomagot.';
 
   @override
   String get availableOnMacMobileWeb => 'Elérhető Macen, mobilon és weben';
@@ -10983,7 +10981,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Az Omi nem csatlakozik többé ehhez az eszközhöz. Az újbóli használathoz újra párosítanod kell.';
+      'Az Omi nem csatlakozik többé ehhez az eszközhöz.';
 
   @override
   String get deviceForgottenMessage => 'Eszköz elfelejtve';
@@ -12466,7 +12464,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi megkér, hogy erősítsd meg a közeli egyezéseket, ahelyett hogy találgatna.';
+      'Az Omi rákérdez, mielőtt hasonló hangokat párosítana.';
 
   @override
   String get pinAction => 'Kitűzés';
@@ -12831,4 +12829,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Részletek';
+
+  @override
+  String get couldNotLoadApiKeys => 'Nem sikerült betölteni az API-kulcsokat.';
 }

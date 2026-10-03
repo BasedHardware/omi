@@ -382,12 +382,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get cannotBeUndone => 'Això no es pot desfer.';
 
   @override
-  String get allDataErased =>
-      'Tots els vostres records i converses s\'eliminaran permanentment.';
+  String get allDataErased => 'S\'esborraran els teus records i converses.';
 
   @override
   String get appsDisconnected =>
-      'Les vostres aplicacions i integracions es desconnectaran immediatament.';
+      'Es desconnectaran les teves aplicacions i integracions.';
 
   @override
   String get exportBeforeDelete =>
@@ -2328,14 +2327,14 @@ class AppLocalizationsCa extends AppLocalizations {
   String get appLanguage => 'Idioma de l\'aplicació';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFÍCIE DE L\'APLICACIÓ';
+  String get appInterfaceSectionTitle => 'Interfície de l\'aplicació';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VEU I TRANSCRIPCIÓ';
+  String get speechTranscriptionSectionTitle => 'Veu i transcripció';
 
   @override
   String get languageSettingsHelperText =>
-      'L\'idioma de l\'aplicació canvia els menús i els botons. L\'idioma de la veu afecta com es transcriuen les teves gravacions.';
+      'L\'idioma de l\'aplicació canvia els menús i els botons. L\'idioma principal afecta com es transcriuen les teves gravacions.';
 
   @override
   String get translationNotice => 'Avís de traducció';
@@ -4767,8 +4766,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Pregunta a Omi qualsevol cosa sobre la teva vida';
 
   @override
-  String get unlockOmiInfiniteMemory =>
-      'Desbloqueja la memòria infinita d\'Omi';
+  String get unlockOmiInfiniteMemory => 'Records il·limitats';
 
   @override
   String get youreOnAnnualPlan => 'Estàs al pla anual';
@@ -4782,7 +4780,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get checkConnectionTryAgain =>
-      'Comprova la connexió i torna-ho a provar';
+      'Comprova la connexió i torna-ho a provar.';
 
   @override
   String get useFreePlan => 'Utilitzar pla gratuït';
@@ -6288,7 +6286,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
+      '300 minuts prèmium al mes. Tria «Al dispositiu» per a una transcripció gratuïta il·limitada.';
 
   @override
   String get viewUsage => 'Veure ús';
@@ -6375,7 +6373,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
+      '300 minuts prèmium al mes. Tria «Al dispositiu» per a una transcripció gratuïta il·limitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6430,7 +6428,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'La transcripció en directe integrada dOmi està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
+      'La transcripció en directe d\'Omi està pensada per a converses en temps real i indica qui ha dit què.';
 
   @override
   String get reset => 'Restablir';
@@ -8947,7 +8945,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Els enregistraments es sincronitzen automàticament';
 
   @override
-  String get storageSection => 'EMMAGATZEMATGE';
+  String get storageSection => 'Emmagatzematge';
 
   @override
   String get permissions => 'Permisos';
@@ -9397,11 +9395,11 @@ class AppLocalizationsCa extends AppLocalizations {
       'Opcional — les teves idees ens ajuden a crear un producte millor.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Això és permanent';
+  String get deleteFlowConfirmTitle => 'Vols suprimir el teu compte?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Un cop eliminis el teu compte, no es podrà recuperar.';
+      'Això no es pot desfer, ni tan sols el servei d\'assistència.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9868,7 +9866,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Grava l\'àudio ara i transcriu-lo quan vulguis en comptes de fer-ho en directe. Les gravacions es desen al telèfon i, després, les puges per crear converses.';
+      'Grava ara i transcriu quan vulguis. Fins aleshores, l\'àudio es queda al telèfon.';
 
   @override
   String get transcribeLaterNote =>
@@ -10333,8 +10331,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Massa antic per sincronitzar — Omi no el pot acceptar';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Tria el teu pla per desbloquejar Omi sense límits.';
+  String get planSheetChooseYourPlan => 'Tria el pla que t\'encaixi.';
 
   @override
   String get availableOnMacMobileWeb => 'Disponible a Mac, mòbil i web';
@@ -11019,7 +11016,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi deixarà de connectar-se a aquest dispositiu. Per tornar-lo a fer servir, l’hauràs de tornar a vincular.';
+      'Omi deixarà de connectar-se a aquest dispositiu.';
 
   @override
   String get deviceForgottenMessage => 'Dispositiu oblidat';
@@ -12507,7 +12504,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get pinPersonHonestLine =>
-      'Omi et demanarà que confirmis les coincidències properes en lloc d\'endevinar.';
+      'Omi pregunta abans d\'associar veus semblants.';
 
   @override
   String get pinAction => 'Fixa';
@@ -12873,4 +12870,8 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Detalls';
+
+  @override
+  String get couldNotLoadApiKeys =>
+      'No s\'han pogut carregar les claus d\'API.';
 }

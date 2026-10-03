@@ -358,10 +358,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cannotBeUndone => 'この操作は元に戻せません。';
 
   @override
-  String get allDataErased => 'すべての記録と会話が完全に消去されます。';
+  String get allDataErased => '記憶と会話は消去されます。';
 
   @override
-  String get appsDisconnected => 'アプリと連携は直ちに解除されます。';
+  String get appsDisconnected => 'アプリと連携は接続解除されます。';
 
   @override
   String get exportBeforeDelete => '削除前にデータをエクスポートできますが、削除後は復元できません。';
@@ -2222,7 +2222,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get languageSettingsHelperText =>
-      'アプリ言語はメニューとボタンを変更します。音声言語は録音の文字起こし方法に影響します。';
+      'アプリ言語はメニューとボタンを変更します。主要言語は録音の文字起こし方法に影響します。';
 
   @override
   String get translationNotice => '翻訳に関するお知らせ';
@@ -4513,7 +4513,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get askOmiAnything => 'Omiにあなたの人生について何でも聞いてください';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omiの無限の記憶をアンロック';
+  String get unlockOmiInfiniteMemory => '記憶無制限';
 
   @override
   String get youreOnAnnualPlan => '年間プランをご利用中です';
@@ -4525,7 +4525,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToLoadPlans => 'プランを読み込めません';
 
   @override
-  String get checkConnectionTryAgain => '接続を確認して再試行してください';
+  String get checkConnectionTryAgain => '接続を確認して、もう一度お試しください。';
 
   @override
   String get useFreePlan => '無料プランを使用';
@@ -5962,7 +5962,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '月間300分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+      '月300分のプレミアム枠。無制限の無料文字起こしには「オンデバイス」を選択してください。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -6044,7 +6044,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '月間 300 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。';
+      '月300分のプレミアム枠。無制限の無料文字起こしには「オンデバイス」を選択してください。 ';
 
   @override
   String get audioProcessedLocally =>
@@ -6099,7 +6099,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omiの組み込みライブ文字起こしは、自動話者検出とダイアライゼーションによるリアルタイム会話に最適化されています。';
+      'Omiのライブ文字起こしはリアルタイムの会話向けに作られており、誰が何を話したかを表示します。';
 
   @override
   String get reset => 'リセット';
@@ -8904,10 +8904,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteFlowFeedbackHint => '任意 — あなたの声がより良い製品づくりに役立ちます。';
 
   @override
-  String get deleteFlowConfirmTitle => 'この操作は取り消せません';
+  String get deleteFlowConfirmTitle => 'アカウントを削除しますか？';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'アカウントを削除すると、復元することはできません。';
+  String get deleteFlowConfirmSubtitle => 'この操作は取り消せません。サポートでも復元できません。';
 
   @override
   String get deleteConsequenceSubscription => '有効なサブスクリプションはキャンセルされます。';
@@ -9346,7 +9346,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
+      '今録音して、好きなときに文字起こしできます。それまで音声はスマートフォンに保存されます。';
 
   @override
   String get transcribeLaterNote =>
@@ -9787,7 +9787,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusTooOld => '古すぎて同期できません — Omi は受け付けられません';
 
   @override
-  String get planSheetChooseYourPlan => 'プランを選んで、無制限のOmiを解放しましょう。';
+  String get planSheetChooseYourPlan => 'あなたに合ったプランを選んでください。';
 
   @override
   String get availableOnMacMobileWeb => 'Mac、モバイル、ウェブで利用可能';
@@ -10447,8 +10447,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'デバイスの登録を解除しますか?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omiはこのデバイスに接続しなくなります。再び使用するには、もう一度ペアリングする必要があります。';
+  String get forgetDeviceConfirmMessage => 'Omiはこのデバイスに接続しなくなります。';
 
   @override
   String get deviceForgottenMessage => 'デバイスの登録を解除しました';
@@ -11886,7 +11885,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omiは推測せず、近い一致の確認をお願いします。';
+  String get pinPersonHonestLine => '似た声を照合する前にOmiが確認します。';
 
   @override
   String get pinAction => 'ピン留め';
@@ -12238,4 +12237,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get startupFailedDetails => '詳細';
+
+  @override
+  String get couldNotLoadApiKeys => 'APIキーを読み込めませんでした。';
 }

@@ -371,12 +371,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get cannotBeUndone => 'Dette kan ikke angres.';
 
   @override
-  String get allDataErased =>
-      'Alle minnene og samtalene dine vil bli permanent slettet.';
+  String get allDataErased => 'Minnene og samtalene dine blir slettet.';
 
   @override
-  String get appsDisconnected =>
-      'Appene og integrasjonene dine vil bli frakoblet umiddelbart.';
+  String get appsDisconnected => 'Appene og integrasjonene dine kobles fra.';
 
   @override
   String get exportBeforeDelete =>
@@ -2294,14 +2292,14 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-GRENSESNITT';
+  String get appInterfaceSectionTitle => 'App-grensesnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TALE OG TRANSKRIPSJON';
+  String get speechTranscriptionSectionTitle => 'Tale og transkripsjon';
 
   @override
   String get languageSettingsHelperText =>
-      'App-språk endrer menyer og knapper. Talespråk påvirker hvordan opptakene dine transkriberes.';
+      'Appspråk endrer menyer og knapper. Primærspråk påvirker hvordan opptakene dine transkriberes.';
 
   @override
   String get translationNotice => 'Oversettelsesvarsel';
@@ -4700,7 +4698,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get askOmiAnything => 'Spør Omi om hva som helst om livet ditt';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Lås opp Omis uendelige hukommelse';
+  String get unlockOmiInfiniteMemory => 'Ubegrensede minner';
 
   @override
   String get youreOnAnnualPlan => 'Du er på årsabonnementet';
@@ -4713,7 +4711,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get unableToLoadPlans => 'Kunne ikke laste planer';
 
   @override
-  String get checkConnectionTryAgain => 'Sjekk tilkoblingen og prøv igjen';
+  String get checkConnectionTryAgain => 'Sjekk tilkoblingen og prøv igjen.';
 
   @override
   String get useFreePlan => 'Bruk gratis abonnement';
@@ -6203,7 +6201,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
+      '300 premium-minutter i måneden. Velg «På enhet» for ubegrenset gratis transkripsjon.';
 
   @override
   String get viewUsage => 'Se forbruk';
@@ -6288,7 +6286,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
+      '300 premium-minutter i måneden. Velg «På enhet» for ubegrenset gratis transkripsjon. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6343,7 +6341,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis innebygde live-transkribering er optimalisert for sanntidssamtaler med automatisk talerdeteksjon og diarisering.';
+      'Omis direktetranskripsjon er laget for samtaler i sanntid og viser hvem som sa hva.';
 
   @override
   String get reset => 'Tilbakestill';
@@ -8827,7 +8825,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tipAutoSync => 'Opptak synkroniseres automatisk';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Tillatelser';
@@ -9277,11 +9275,11 @@ class AppLocalizationsNo extends AppLocalizations {
       'Valgfritt — tankene dine hjelper oss å bygge et bedre produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Dette er permanent';
+  String get deleteFlowConfirmTitle => 'Slette kontoen din?';
 
   @override
   String get deleteFlowConfirmSubtitle =>
-      'Når du sletter kontoen din, kan den ikke gjenopprettes.';
+      'Dette kan ikke angres, heller ikke av kundestøtte.';
 
   @override
   String get deleteConsequenceSubscription =>
@@ -9743,7 +9741,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Ta opp lyd nå og transkriber den ved behov i stedet for direkte. Opptakene lagres på telefonen, og du laster dem opp for å lage samtaler.';
+      'Ta opp nå, transkriber når du vil. Frem til da blir lyden på telefonen din.';
 
   @override
   String get transcribeLaterNote =>
@@ -10203,8 +10201,7 @@ class AppLocalizationsNo extends AppLocalizations {
       'For gammel til å synkroniseres — Omi kan ikke ta imot den';
 
   @override
-  String get planSheetChooseYourPlan =>
-      'Velg abonnementet ditt for å låse opp ubegrenset Omi.';
+  String get planSheetChooseYourPlan => 'Velg planen som passer deg.';
 
   @override
   String get availableOnMacMobileWeb => 'Tilgjengelig på Mac, mobil og nett';
@@ -10886,7 +10883,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get forgetDeviceConfirmMessage =>
-      'Omi slutter å koble til denne enheten. For å bruke den igjen må du pare den på nytt.';
+      'Omi slutter å koble til denne enheten.';
 
   @override
   String get deviceForgottenMessage => 'Enheten er glemt';
@@ -12358,8 +12355,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine =>
-      'Omi ber deg bekrefte nære treff i stedet for å gjette.';
+  String get pinPersonHonestLine => 'Omi spør før lignende stemmer matches.';
 
   @override
   String get pinAction => 'Fest';
@@ -12721,4 +12717,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get startupFailedDetails => 'Detaljer';
+
+  @override
+  String get couldNotLoadApiKeys => 'Kunne ikke laste inn API-nøkler.';
 }
