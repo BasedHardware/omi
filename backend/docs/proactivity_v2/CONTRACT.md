@@ -258,7 +258,7 @@ resolution/enrichment. Use existing rate cards; round the worst-case reservation
 
 Initial producers allow text-only, nonstreaming, one provider attempt per call,
 no tools, images, web search, persistent cache creation, provider SDK retries,
-route fallback or direct SDK path. Output bounds include reasoning tokens. Bound
+route fallback or direct SDK path. Output bounds include reasoning tokens: the pinned OpenAI model requires explicit `max_completion_tokens`; legacy `max_tokens` requests are rejected before admission. Bound
 the complete serialized request plus provider framing with the supported model's
 conservative token upper bound; reject models whose framing/tokenization cannot
 be bounded. Price all input as uncached, at the applicable highest context tier;
@@ -690,3 +690,5 @@ work. Budget admission and push reservations remain fail-closed.
 Mentor pushes retain `navigate_to=/chat/mentor`, which released clients already
 route, along with the v2 item/target identity. The producer owns the actual mentor
 chat message; generic lock-screen copy is not materialized as a second chat message.
+
+A confirmed low acted rate at >=200 deliveries latches the kill even when cost usage is incomplete; unknown usage cannot defer that independently provable kill. Unknown cost still cannot produce a passing cost verdict. Missing provider usage retains the whole reservation and denies publication. Changes to provider usage parsing are limited to Jev; other provider surfaces retain their existing behavior.

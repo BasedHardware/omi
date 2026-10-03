@@ -102,7 +102,6 @@ def envelope_for(
             'messages',
             'stream',
             'response_format',
-            'max_tokens',
             'max_completion_tokens',
             'reasoning_effort',
             'temperature',
@@ -118,7 +117,7 @@ def envelope_for(
             for m in messages
         ):
             raise ProactivityDenied('invalid_request')
-        output_tokens = payload.get('max_completion_tokens', payload.get('max_tokens'))
+        output_tokens = payload.get('max_completion_tokens')
         if type(output_tokens) is not int or not 1 <= output_tokens <= row.max_output_tokens:
             raise ProactivityDenied('invalid_output_bound')
     serialized = json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()

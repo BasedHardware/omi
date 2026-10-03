@@ -185,3 +185,40 @@ async def test_executor_denials_never_reach_provider(store, gated, monkeypatch, 
             attempt_trace=AttemptTrace(),
         )
     assert provider.calls == 0
+
+
+def test_legacy_output_limit_cannot_bypass_reasoning_bound(store):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='invalid_request'):
+        gate.envelope_for(
+            ctx, 'openai', 'gpt-6-luna', {'messages': [{'role': 'user', 'content': 'synthetic'}], 'max_tokens': 512}
+        )
+
+
+@pytest.mark.asyncio
+async def test_missing_provider_usage_retains_reservation_and_denies_publication(store, gated):
+    class MissingUsage(Provider):
+        async def create_chat_completion(self, request, **kwargs):
+            self.calls += 1
+            return ProviderResponse(response={'choices': []}, accounting=ProviderResponseMetadata())
+
+    item = claim(store)
+    route = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': 'omi:auto:proactive-notification',
+            'messages': [{'role': 'user', 'content': 'synthetic'}],
+            'max_completion_tokens': 512,
+        },
+    )
+    provider = MissingUsage()
+    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError):
+        await execute_chat_completion(
+            route,
+            build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+        )
+    row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
+    assert provider.calls == 1 and row['cost_status'] == 'indeterminate'
+    assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0

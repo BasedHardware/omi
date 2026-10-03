@@ -412,15 +412,14 @@ def cohort_query(client: Any, name: str, start: datetime, end: datetime) -> Any:
 
 def metric_verdict(producer: Producer, totals: dict[str, int]) -> str:
     delivered, acted = totals['delivered_count'], totals['acted_count']
+    # The engagement verdict is certain even when cost usage is incomplete.
+    if delivered >= producer.kill_min_deliveries and acted / delivered < producer.min_acted_24h_rate:
+        return 'killed'
     if totals['unknown_count']:
         return 'unknown'
     if delivered < producer.kill_min_deliveries:
         return 'collecting'
-    if (
-        acted / delivered < producer.min_acted_24h_rate
-        or not acted
-        or totals['charged_micro_usd'] > acted * producer.max_micro_usd_per_acted_item
-    ):
+    if totals['charged_micro_usd'] > acted * producer.max_micro_usd_per_acted_item:
         return 'killed'
     return 'passing'
 

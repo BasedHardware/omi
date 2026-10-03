@@ -266,14 +266,10 @@ class OpenAICompatibleChatCompletionProvider:
         return ProviderResponse(
             response=parsed,
             accounting=ProviderResponseMetadata(
-                usage=(
-                    ProviderUsage(
-                        prompt_tokens=prompt_tokens,
-                        uncached_input_tokens=prompt_tokens,
-                        total_tokens=total_tokens,
-                    )
-                    if type(usage_raw.get('prompt_tokens')) is int and usage_raw['prompt_tokens'] >= 0
-                    else None
+                usage=ProviderUsage(
+                    prompt_tokens=prompt_tokens,
+                    uncached_input_tokens=prompt_tokens,
+                    total_tokens=total_tokens,
                 )
             ),
         )

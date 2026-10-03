@@ -15,3 +15,10 @@ def test_maturity_sample_cost_and_unknown_guards():
     assert metric_verdict(producer, totals) == 'killed'
     totals['unknown_count'] = 1
     assert metric_verdict(producer, totals) == 'unknown'
+
+
+def test_low_engagement_still_latches_kill_with_unknown_cost():
+    totals = dict(delivered_count=200, acted_count=19, negative_count=0, charged_micro_usd=0, unknown_count=1)
+    assert metric_verdict(producer_for('commitment_followup'), totals) == 'killed'
+    totals.update(acted_count=20, unknown_count=0, negative_count=200)
+    assert metric_verdict(producer_for('commitment_followup'), totals) == 'passing'
