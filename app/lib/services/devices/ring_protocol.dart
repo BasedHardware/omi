@@ -32,12 +32,38 @@ class RingProtocol {
   static const int notifyData = 0x03;
   static const int notifyDone = 0x04;
   static const int notifyReadBegin = 0x05;
+  static const int notifyLiveMark = 0x06;
 
   static const int cmdInfo = 0x10;
   static const int cmdRead = 0x11;
   static const int cmdAdvance = 0x12;
   static const int cmdClear = 0x13;
+  static const int cmdCustodyEnable = 0x14;
+  static const int cmdAdvanceId = 0x15;
   static const int cmdStop = 0x03;
+
+  static const int ackOk = 0;
+  static const int ackInvalidCommand = 6;
+  static const int ackSeqOutOfRange = 10;
+  static const int ackRingIdMismatch = 11;
+
+  static const int capAppAckReclaim = 0x01;
+  static const int capLivePersist = 0x02;
+  static const int capAdvanceIdempotent = 0x04;
+  static const int capRingId = 0x08;
+  static const int capMaskV1 = 0x0F;
+  static const int custodyContractVersion = 1;
+
+  static bool isRingBufferFirmware(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown') return false;
+    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    if (parts.length < 3) return false;
+    if (parts[0] > 3) return true;
+    if (parts[0] < 3) return false;
+    if (parts[1] > 0) return true;
+    if (parts[1] < 0) return false;
+    return parts[2] >= 20;
+  }
 
   /// Parse the 16-byte status read into a RingStatus. Returns null if the
   /// payload is too short.
@@ -63,6 +89,20 @@ class RingProtocol {
       capacityPackets: bd.getUint32(17, Endian.big),
       droppedPackets: bd.getUint64(21, Endian.big),
       packetSize: bd.getUint16(29, Endian.big),
+      advertisedCaps: value.length >= 32 ? bd.getUint8(31) : 0,
+      contractVersion: value.length >= 33 ? bd.getUint8(32) : 0,
+      ringId: value.length >= 41 ? bd.getUint64(33, Endian.big) : null,
+      infoBytes: value.length,
+    );
+  }
+
+  static LiveMarkNotification? parseLiveMarkNotification(List<int> value) {
+    if (value.isEmpty || value[0] != notifyLiveMark || value.length < 19) return null;
+    final bd = ByteData.sublistView(Uint8List.fromList(value));
+    return LiveMarkNotification(
+      ringId: bd.getUint64(1, Endian.big),
+      ringSeq: bd.getUint64(9, Endian.big),
+      liveIndex: bd.getUint16(17, Endian.big),
     );
   }
 
@@ -105,6 +145,22 @@ class RingProtocol {
     return cmd.buffer.asUint8List();
   }
 
+  static Uint8List encodeCustodyEnableCommand(int requestedCaps) {
+    final cmd = ByteData(3);
+    cmd.setUint8(0, cmdCustodyEnable);
+    cmd.setUint8(1, custodyContractVersion);
+    cmd.setUint8(2, requestedCaps & 0xFF);
+    return cmd.buffer.asUint8List();
+  }
+
+  static Uint8List encodeAdvanceIdCommand(int ringId, int newReadSeq) {
+    final cmd = ByteData(17);
+    cmd.setUint8(0, cmdAdvanceId);
+    cmd.setUint64(1, ringId, Endian.big);
+    cmd.setUint64(9, newReadSeq, Endian.big);
+    return cmd.buffer.asUint8List();
+  }
+
   /// Read the 4-byte big-endian timestamp prefix of a ring record.
   /// Caller is responsible for supplying a buffer of at least 4 bytes.
   static int readRecordTimestamp(List<int> record) {
@@ -137,6 +193,17 @@ class RingProtocol {
     }
     return frames;
   }
+}
+
+class LiveMarkNotification {
+  final int ringId;
+  final int ringSeq;
+  final int liveIndex;
+
+  const LiveMarkNotification({required this.ringId, required this.ringSeq, required this.liveIndex});
+
+  @override
+  String toString() => 'LiveMarkNotification(ring=$ringId, seq=$ringSeq, liveIndex=$liveIndex)';
 }
 
 /// Decoded NOTIFY_DONE payload.

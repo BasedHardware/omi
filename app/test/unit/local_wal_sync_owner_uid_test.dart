@@ -121,7 +121,7 @@ void main() {
         reason: 'no account data is lost across the handover');
   });
 
-  test('logout and account-switch churn stays within the shared unsynced retention cap', () async {
+  test('logout and account-switch churn never evicts pending WALs at the cap', () async {
     var persisted = <Wal>[];
 
     SharedPreferences.setMockInitialValues({'uid': 'account-a'});
@@ -139,9 +139,16 @@ void main() {
     syncA.testWals = List.generate(400, (index) => _wal(start: 1000 + index, ownerUid: 'account-b'));
     await syncA.addExternalWal(_wal(start: 2000, ownerUid: 'account-b'), admittedGeneration: syncA.sessionGeneration);
 
-    expect(persisted, hasLength(maxRetainedCaptureWalCount));
-    expect(persisted.where((wal) => wal.ownerUid == 'account-a'), hasLength(319),
-        reason: 'the oldest retired-account WALs must participate in the shared cap');
+    // The cap is admission-only: retired and foreign buckets are never evicted
+    // to make room — every pending copy stays.
+    expect(persisted, hasLength(801));
+    expect(persisted.where((wal) => wal.ownerUid == 'account-a'), hasLength(400),
+        reason: 'retired-account WALs are retained, not trimmed to fit the cap');
+
+    // New durable admissions past the cap are refused instead.
+    final admitted = await syncA.ensureStorageAdmission(bytes: 1024, admittedGeneration: syncA.sessionGeneration);
+    expect(admitted, isFalse);
+    expect(syncA.retentionRisk?.reason, 'count_cap');
 
     SharedPreferences.setMockInitialValues({'uid': 'account-c'});
     await SharedPreferencesUtil.init();
@@ -154,8 +161,7 @@ void main() {
     await syncC.walReady;
 
     expect(syncC.testWals, isEmpty, reason: 'the retained account-B WALs are foreign to account C');
-    expect(persisted, hasLength(maxRetainedCaptureWalCount),
-        reason: 'foreign WALs loaded after an account switch remain inside the cap');
+    expect(persisted, hasLength(801), reason: 'foreign WALs loaded after an account switch remain, unevicted');
     await syncC.stop();
   });
 }
