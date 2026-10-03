@@ -3835,5 +3835,6 @@
     "diagnosticsDropsPerHour": "ok. {count} na godzinę",
     "diagnosticsLongestGap": "Najdłuższa przerwa",
     "diagnosticsSincePairingSummary": "Od sparowania: zerwania: {drops}, nieudane połączenia: {failed}.",
-    "diagnosticsLastDuration": "Ostatnie {duration}"
+    "diagnosticsLastDuration": "Ostatnie {duration}",
+    "peopleStatsIncomplete": "Liczby mogą być niepełne."
 }

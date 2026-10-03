@@ -11357,5 +11357,6 @@
     "diagnosticsDropsPerHour": "ঘণ্টায় প্রায় {count}",
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
     "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
-    "diagnosticsLastDuration": "শেষ {duration}"
+    "diagnosticsLastDuration": "শেষ {duration}",
+    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।"
 }

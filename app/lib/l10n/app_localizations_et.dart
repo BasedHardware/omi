@@ -12285,4 +12285,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimased $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
 }

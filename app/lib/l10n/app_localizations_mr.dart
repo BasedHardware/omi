@@ -12298,4 +12298,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'गेले $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'मोजणी अपूर्ण असू शकते.';
 }

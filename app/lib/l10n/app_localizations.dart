@@ -21992,6 +21992,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last {duration}'**
   String diagnosticsLastDuration(String duration);
+
+  /// No description provided for @peopleStatsIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts may be incomplete.'**
+  String get peopleStatsIncomplete;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

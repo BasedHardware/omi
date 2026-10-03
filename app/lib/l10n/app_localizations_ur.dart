@@ -12304,4 +12304,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'پچھلے $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
 }

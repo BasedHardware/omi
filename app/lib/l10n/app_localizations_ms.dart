@@ -12322,4 +12322,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration lepas';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
 }

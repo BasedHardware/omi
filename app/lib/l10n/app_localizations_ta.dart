@@ -12375,4 +12375,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'கடந்த $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
 }

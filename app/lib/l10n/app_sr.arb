@@ -11357,5 +11357,6 @@
     "diagnosticsDropsPerHour": "отприлике {count} на сат",
     "diagnosticsLongestGap": "Најдужи прекид",
     "diagnosticsSincePairingSummary": "Од упаривања: прекида {drops}, неуспелих веза {failed}.",
-    "diagnosticsLastDuration": "Последњих {duration}"
+    "diagnosticsLastDuration": "Последњих {duration}",
+    "peopleStatsIncomplete": "Бројеви можда нису потпуни."
 }

@@ -12309,4 +12309,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últimos $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'As contagens podem estar incompletas.';
 }

@@ -12274,4 +12274,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'पिछले $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'गिनती अधूरी हो सकती है।';
 }

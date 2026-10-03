@@ -3367,7 +3367,7 @@ class CaptureController extends ChangeNotifier
     final process = _processInProgressConversationOverride ?? processInProgressConversation;
     final request = process();
     _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then((result) async {
+    request.then<void>((result) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
         result: result,
         actions: externalActions,
@@ -3380,7 +3380,18 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
+    }).catchError((Object error, StackTrace stack) {
+      Logger.debug('Process Now result handling failed: ${error.runtimeType}');
+      return _reportDetachedCaptureError('capture_process_now', error, stack);
     });
+  }
+
+  Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) async {
+    try {
+      await PlatformManager.instance.crashReporter.reportCrash('$operation: ${error.runtimeType}', stack);
+    } catch (reporterError) {
+      Logger.debug('Detached capture error report failed: ${reporterError.runtimeType}');
+    }
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
@@ -3614,6 +3625,9 @@ class CaptureController extends ChangeNotifier
       );
       _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
         _peopleRefreshFuture = null;
+      }).catchError((Object error, StackTrace stack) {
+        Logger.debug('People cache refresh failed: ${error.runtimeType}');
+        return _reportDetachedCaptureError('capture_people_refresh_suggestion', error, stack);
       });
     }
 
@@ -3737,6 +3751,9 @@ class CaptureController extends ChangeNotifier
     if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
       _peopleRefreshFuture = externalActions.refreshPeople().whenComplete(() {
         _peopleRefreshFuture = null;
+      }).catchError((Object error, StackTrace stack) {
+        Logger.debug('People cache refresh failed: ${error.runtimeType}');
+        return _reportDetachedCaptureError('capture_people_refresh_segments', error, stack);
       });
     }
 
