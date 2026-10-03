@@ -50,9 +50,12 @@ class DailySummariesListState extends State<DailySummariesList> {
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _refreshing = false;
   static const int _limit = 20;
   bool _hasMore = true;
   bool _loadFailed = false;
+  bool _loadMoreFailed = false;
+  int _generation = 0;
 
   DailySummariesFetcher get _fetchSummaries => widget.fetchSummaries ?? getDailySummaries;
 
@@ -66,37 +69,68 @@ class DailySummariesListState extends State<DailySummariesList> {
   Future<void> refresh() => _loadSummaries(showSpinner: _summaries.isEmpty);
 
   Future<void> _loadSummaries({bool showSpinner = true}) async {
-    if (showSpinner) setState(() => _isLoading = true);
-    final result = await _fetchSummaries(limit: _limit, offset: 0);
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        // A failed read is not "no recaps": keep what is on screen and leave
-        // paging open so the next attempt can still load.
-        _loadFailed = !result.ok;
-        if (result.ok) {
-          _summaries = result.items;
-          _hasMore = result.items.length >= _limit;
-        }
-      });
+    final generation = ++_generation;
+    setState(() {
+      _refreshing = true;
+      _isLoadingMore = false;
+      if (showSpinner) _isLoading = true;
+    });
+    try {
+      final result = await _fetchSummaries(limit: _limit, offset: 0)
+          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      if (mounted && generation == _generation) {
+        setState(() {
+          // A failed read is not "no recaps": keep what is on screen and leave
+          // paging open so the next attempt can still load.
+          _loadFailed = !result.ok;
+          if (result.ok) {
+            _summaries = result.items;
+            _hasMore = result.items.length >= _limit;
+            _loadMoreFailed = false;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _refreshing = false;
+          if (_isLoading) _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadingMore || !_hasMore) return;
+    if (_isLoadingMore || !_hasMore || _loadMoreFailed || _refreshing) return;
+    final generation = _generation;
     setState(() => _isLoadingMore = true);
-    // Derive the offset from the current list length so swipe-deletions don't
-    // cause the next page to skip rows (a standalone counter would drift).
-    final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length);
-    if (mounted) {
-      setState(() {
-        if (moreResult.ok) {
-          _summaries.addAll(moreResult.items);
-          _hasMore = moreResult.items.length >= _limit;
-        }
-        _isLoadingMore = false;
-      });
+    try {
+      // Derive the offset from the current list length so swipe-deletions don't
+      // cause the next page to skip rows (a standalone counter would drift).
+      final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length)
+          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      if (mounted && generation == _generation) {
+        setState(() {
+          if (moreResult.ok) {
+            _summaries.addAll(moreResult.items);
+            _hasMore = moreResult.items.length >= _limit;
+          } else {
+            _loadMoreFailed = true;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadMoreFailed = true);
+    } finally {
+      if (mounted && generation == _generation && _isLoadingMore) setState(() => _isLoadingMore = false);
     }
+  }
+
+  void _retryLoadMore() {
+    setState(() => _loadMoreFailed = false);
+    _loadMore();
   }
 
   Future<void> _openSummary(DailySummary summary) async {
@@ -183,11 +217,23 @@ class DailySummariesListState extends State<DailySummariesList> {
           if (_isLoadingMore) {
             return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
           }
+          if (_loadMoreFailed || _loadFailed) {
+            return Padding(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              child: Center(
+                child: OmiButton.secondary(
+                  label: context.l10n.tryAgain,
+                  size: OmiButtonSize.compact,
+                  onPressed: _loadMoreFailed ? _retryLoadMore : () => _loadSummaries(),
+                ),
+              ),
+            );
+          }
           return SizedBox(height: widget.bottomPadding);
         }
 
         // Prefetch more when approaching end
-        if (_hasMore && !_isLoadingMore && index >= _summaries.length - 3) {
+        if (_hasMore && !_isLoadingMore && !_loadMoreFailed && !_loadFailed && index >= _summaries.length - 3) {
           WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
         }
 

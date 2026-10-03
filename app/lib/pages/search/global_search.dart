@@ -238,7 +238,14 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   }
 
   Future<void> _loadOverview() async {
-    switch (await widget.source.overview()) {
+    final ApiResult<SearchOverview> result;
+    try {
+      result = await widget.source.overview();
+    } catch (e) {
+      Logger.debug('Search overview unavailable: $e');
+      return;
+    }
+    switch (result) {
       case ApiSuccess(:final data):
         if (mounted) setState(() => _overview = data);
       case ApiFailure(:final problem):
@@ -254,15 +261,18 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     }
     _debounce?.cancel();
     final query = value.trim();
+    _generation++;
     if (query.isEmpty) {
-      _generation++;
       setState(() {
         _searching = false;
         _results = const _Results();
       });
       return;
     }
-    setState(() => _scope = null);
+    setState(() {
+      _scope = null;
+      _results = const _Results();
+    });
     _debounce = Timer(const Duration(milliseconds: 300), () => _run(query));
   }
 
@@ -282,24 +292,54 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       }
     }
 
-    final (conversations, recaps, tasks, memories) = await (
-      source.conversations(query),
-      source.recaps(query),
-      source.tasks(query),
-      source.memories(query),
-    ).wait;
-    if (!mounted || generation != _generation) return;
-    if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
-    setState(() {
-      _searching = false;
-      _results = _Results(
-        conversations: conversations.items,
-        recaps: rows(recaps),
-        tasks: rows(tasks),
-        memories: rows(memories),
-        partial: partial,
-      );
-    });
+    var conversations = const ConversationSearchResult(
+        items: [], currentPage: 0, totalPages: 0, outcome: ConversationSearchResultOutcome.failure);
+    var recaps = <DailySummary>[];
+    var tasks = <ActionItemWithMetadata>[];
+    var memories = <MemorySearchHit>[];
+    try {
+      await Future.wait<void>([
+        Future.sync(() => source.conversations(query)).then((r) {
+          conversations = r;
+        }).catchError((_) {
+          partial = true;
+        }),
+        Future.sync(() => source.recaps(query)).then((r) {
+          recaps = rows(r);
+        }).catchError((_) {
+          partial = true;
+        }),
+        Future.sync(() => source.tasks(query)).then((r) {
+          tasks = rows(r);
+        }).catchError((_) {
+          partial = true;
+        }),
+        Future.sync(() => source.memories(query)).then((r) {
+          memories = rows(r);
+        }).catchError((_) {
+          partial = true;
+        }),
+      ]).timeout(const Duration(seconds: 15), onTimeout: () {
+        partial = true;
+        return const [];
+      });
+    } catch (_) {
+      partial = true;
+    } finally {
+      if (mounted && generation == _generation) {
+        if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
+        setState(() {
+          _searching = false;
+          _results = _Results(
+            conversations: conversations.items,
+            recaps: recaps,
+            tasks: tasks,
+            memories: memories,
+            partial: partial,
+          );
+        });
+      }
+    }
   }
 
   void _remember(String query) {
