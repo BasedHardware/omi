@@ -28,6 +28,7 @@ from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
+from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
@@ -637,9 +638,8 @@ def create_or_get_finalization_intent(
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     jobs_collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     projection_collection = client.collection(FINALIZATION_PROJECTION_COLLECTION)
-    recording_sessions_collection = (
-        client.collection('users').document(uid).collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION)
-    )
+    user_ref = client.collection('users').document(uid)
+    recording_sessions_collection = user_ref.collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION)
 
     def create_intent_in_transaction(transaction: Any) -> FinalizationIntent:
         # The Firestore SDK's transactional wrapper retains retry state. Build
@@ -662,11 +662,13 @@ def create_or_get_finalization_intent(
             recording_sessions_collection=recording_sessions_collection,
         )
 
-    return run_with_transaction_contention_retry(
+    intent = run_with_transaction_contention_retry(
         client.transaction,
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
+    invalidate_people_stats_cache(uid)
+    return intent
 
 
 def _resume_blocked_byok_job_txn(
@@ -1901,9 +1903,8 @@ def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[s
     rewinding another pod's advance.
     """
     client = _client(firestore_client)
-    snapshot = (
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC).get()
-    )
+    state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC)
+    snapshot = state_ref.get()
     if not getattr(snapshot, 'exists', False):
         return {'resume_after_path': None, 'generation': 0}
     data = snapshot.to_dict() or {}
@@ -2469,9 +2470,8 @@ def abandon_byok_finalization_job(
 def get_byok_abandonment_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
     """Return the persisted BYOK sweep cursor and its CAS generation."""
     client = _client(firestore_client)
-    snapshot = (
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC).get()
-    )
+    state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC)
+    snapshot = state_ref.get()
     if not getattr(snapshot, 'exists', False):
         return {'resume_after_path': None, 'generation': 0}
     data = snapshot.to_dict() or {}

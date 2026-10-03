@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from itertools import islice
 from typing import Any, Dict, Iterable, List, Optional
 
+from database import people_stats_cache
+from utils.other.list_budget import ListReadBudget
+
 PEOPLE_STATS_SCAN_CAP = 1000
 
 
@@ -77,6 +80,9 @@ def apply_people_stats(people: List[Any], stats: Dict[str, Dict[str, Any]]) -> N
 def collect_people_stats(
     conversations: Iterable[Dict[str, Any]],
     scan_cap: int = PEOPLE_STATS_SCAN_CAP,
+    *,
+    uid: Optional[str] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Aggregate stats over up to ``scan_cap`` rows of one newest-first conversation iterator.
 
@@ -85,10 +91,24 @@ def collect_people_stats(
     rows so a tombstone inside the window cannot end the scan early (#19908),
     and stops at its ``ListReadBudget`` — in which case the prefix it already
     yielded is the honest partial result.
+
+    With ``uid``, the aggregate map is served from and stored to the
+    generation-namespaced ``database.people_stats_cache``: the generation and
+    entry resolve before the iterator is consumed, so a hit performs no
+    Firestore reads. A truncated scan is never stored.
     """
     iterator = iter(conversations)
     try:
-        return aggregate_people_stats(islice(iterator, scan_cap))
+        generation = people_stats_cache.current_generation(uid) if uid is not None else None
+        if generation is not None:
+            cached = people_stats_cache.read_people_stats_cache(uid, generation, scan_cap)
+            if cached is not None:
+                return cached
+        stats = aggregate_people_stats(islice(iterator, scan_cap))
+        if generation is not None and budget is not None and not budget.truncated:
+            if people_stats_cache.current_generation(uid) == generation:
+                people_stats_cache.write_people_stats_cache(uid, generation, scan_cap, stats)
+        return stats
     finally:
         close = getattr(iterator, 'close', None)
         if callable(close):
