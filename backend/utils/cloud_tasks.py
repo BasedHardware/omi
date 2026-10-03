@@ -410,7 +410,9 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
     )
 
 
-def verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True) -> int:
+def verify_configured_cloud_tasks_oidc(
+    request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True
+) -> int:
     """Verify a configured task audience and issuer; returns task retry count.
 
     Sync function on purpose — verify_oauth2_token fetches Google certs over
@@ -444,7 +446,7 @@ def verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str,
 
 def verify_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for sync-job task routes."""
-    return verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
+    return verify_configured_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
 
 
 def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
@@ -454,13 +456,13 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
     audience names a different service (backend-sync-backfill) can still
     mint a token the merge worker will accept.
     """
-    return verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
+    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
     """Verify deletion tasks."""
     deletion_audience = _account_deletion_oidc_audience()
-    retry_count = verify_cloud_tasks_oidc(
+    retry_count = verify_configured_cloud_tasks_oidc(
         request,
         audience=deletion_audience,
         invoker_sa=_invoker_sa(),
@@ -471,7 +473,7 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for the isolated listen finalization task route."""
-    return verify_cloud_tasks_oidc(
+    return verify_configured_cloud_tasks_oidc(
         request,
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),

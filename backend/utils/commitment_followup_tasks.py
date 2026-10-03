@@ -52,7 +52,7 @@ def schedule_followup(uid: str, task_id: str, due_at: datetime | str, *, retry_o
 
 
 def verify_followup_task(request: Request) -> int:
-    return cloud_tasks.verify_cloud_tasks_oidc(
+    return cloud_tasks.verify_configured_cloud_tasks_oidc(
         request,
         audience=os.getenv('COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL', ''),
         invoker_sa=os.getenv('COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA', ''),
