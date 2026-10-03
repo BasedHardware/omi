@@ -1,10 +1,19 @@
 """Bounded ADB and network isolation shared by Android acceptance runners."""
 
 from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path
 import subprocess
 import time
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as artifact:
+        for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class Emulator:

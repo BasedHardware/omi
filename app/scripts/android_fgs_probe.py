@@ -2,13 +2,14 @@
 """Exercise the real sync service on an isolated Android 16 emulator, without auth."""
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
 from pathlib import Path
 import subprocess
 import time
+
+from android_emulator import sha256_file
 
 APP = Path(__file__).resolve().parents[1]
 PACKAGE = "com.omi.fgsprobe"
@@ -58,8 +59,7 @@ def main():
     apk = project / "build/outputs/apk/debug/fgs-probe-debug.apk"
     device("install", "-r", str(apk))
     results = []
-    with apk.open("rb") as artifact:
-        artifact_hash = hashlib.file_digest(artifact, "sha256").hexdigest()
+    artifact_hash = sha256_file(apk)
     receipt = {
         "schema_version": 1,
         "kind": "android-fgs-lifecycle",

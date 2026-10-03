@@ -2,14 +2,13 @@
 """Cold-launch an exact APK offline; require a rendered, healthy first-run screen."""
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
 import time
 
-from android_emulator import Emulator
+from android_emulator import Emulator, sha256_file
 
 PACKAGES = {"com.friend.ios", "com.friend.ios.dev"}
 
@@ -46,8 +45,7 @@ def run_smoke(device, apk, output, *, aapt, rounds=3, observe_seconds=20):
         raise ValueError("Run android_fgs_probe.py first to install the accessibility probe.")
     if any(device.run("shell", "pm", "list", "packages", existing) for existing in sorted(PACKAGES)):
         raise ValueError("Use a fresh emulator without Omi installed; acceptance never clears existing account data.")
-    with apk.open("rb") as artifact:
-        artifact_hash = hashlib.file_digest(artifact, "sha256").hexdigest()
+    artifact_hash = sha256_file(apk)
     receipt = {
         "schema_version": 1,
         "kind": "android-offline-startup",
