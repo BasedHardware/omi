@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-llm-request-without-usable-user-content",
+  "violated_contract": "A conversation notes request must contain usable source content in a provider-supported non-system message. Metadata and structural transcript headers are not source content, and an all-system request projects to empty Gemini contents.",
+  "canonical_prevention": "Gate model construction on usable transcript, described-photo or admitted image content, preserve the existing empty/discarded lifecycle policy, and serialize volatile source content as a user message while keeping cacheable instructions separate.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_notes_v2.py",
+    "backend/tests/unit/test_conversation_structure_input_shape.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/llm/**"],
+  "status": "open"
+}

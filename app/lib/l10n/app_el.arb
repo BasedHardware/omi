@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
     "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
     "diagnosticsLastDuration": "Τελευταία {duration}",
-    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς."
+    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς.",
+    "reprocessingConversationProgress": "Γίνεται επανεπεξεργασία της συνομιλίας…",
+    "conversationReprocessed": "Η συνομιλία ενημερώθηκε",
+    "loadingTranscript": "Φόρτωση απομαγνητοφώνησης…",
+    "transcriptLoadFailed": "Δεν ήταν δυνατή η φόρτωση της απομαγνητοφώνησης.",
+    "processingConversationProgress": "Επεξεργασία συνομιλίας…",
+    "conversationProcessingFailedMessage": "Δεν ήταν δυνατή η επεξεργασία αυτής της συνομιλίας.",
+    "waitForReprocessing": "Περιμένετε να ολοκληρωθεί η επανεπεξεργασία.",
+    "unnamedSpeakerLabel": "Ομιλητής",
+    "unresolvedSpeakersNotice": "Οι ομιλητές δεν διαχωρίζονται μεταξύ ηχογραφήσεων.",
+    "unresolvedSpeakersTitle": "Σχετικά με τις ετικέτες ομιλητών",
+    "unresolvedSpeakersMessage": "Το Omi δεν μπόρεσε να διακρίνει τις άλλες φωνές μεταξύ των ηχογραφήσεων. Πατήστε μια ετικέτα ομιλητή για να ονομάσετε ποιος μιλάει.",
+    "nameSpeakerTitle": "Ονομασία ομιλητή",
+    "playbackPreparingAudio": "Προετοιμασία ήχου…",
+    "playbackBackToCurrent": "Πίσω στο τρέχον",
+    "playbackAudioUnavailable": "Ο ήχος δεν είναι διαθέσιμος",
+    "playbackAudioLoadFailed": "Δεν ήταν δυνατή η φόρτωση του ήχου",
+    "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση"
 }

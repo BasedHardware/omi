@@ -160,7 +160,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
-ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout'})
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',

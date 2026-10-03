@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -354,43 +355,54 @@ void main() {
         contains('confirmed-batch-delete'));
   });
 
-  test('latest authoritative reconciliation for each type survives cooldown', () async {
-    final host = _CooldownHost();
-    final date = DateTime.now();
-    addTearDown(() => host.firstDelete.complete());
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
-    siri.queueDelete('memory', 'trigger-timeout');
-    await siri.drainIndexForTest();
-    Memory memory(String id) => Memory(
-        id: id,
-        uid: 'owner-a',
-        content: id,
-        category: MemoryCategory.manual,
-        createdAt: date,
-        updatedAt: date,
-        visibility: MemoryVisibility.private);
-    ActionItemWithMetadata task(String id) =>
-        ActionItemWithMetadata(id: id, description: id, completed: false, createdAt: date);
-    ServerConversation conversation(String id) => ServerConversation(
-        id: id, createdAt: date, structured: Structured(id, id), status: ConversationStatus.completed);
-    await siri.reconcileMemories([memory('obsolete')]);
-    await siri.reconcileMemories([memory('current')]);
-    await siri.reconcileTasks([task('obsolete')], includeCompleted: true);
-    await siri.reconcileTasks([task('current')], includeCompleted: true);
-    await siri.reconcileConversations([conversation('obsolete')]);
-    await siri.reconcileConversations([conversation('current')]);
-    expect(host.memoryReconciles, 0);
-    expect(host.taskReconciles, 0);
-    expect(host.conversationReconciles, 0);
-    await Future<void>.delayed(const Duration(milliseconds: 130));
-    await siri.drainIndexForTest();
-    expect(host.memories.map((row) => row.id), ['current']);
-    expect(host.tasks.map((row) => row.id), ['current']);
-    expect(host.conversations.map((row) => row.id), ['current']);
-    expect(host.memoryReconciles, 1);
-    expect(host.taskReconciles, 1);
-    expect(host.conversationReconciles, 1);
+  test('latest authoritative reconciliation for each type survives cooldown', () {
+    fakeAsync((time) {
+      final host = _CooldownHost();
+      final date = DateTime.now();
+      final siri = SiriIntegration.forTest(host, 'owner-a',
+          nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+      siri.queueDelete('memory', 'trigger-timeout');
+      time.flushMicrotasks();
+      time.elapse(const Duration(milliseconds: 20));
+      Memory memory(String id) => Memory(
+          id: id,
+          uid: 'owner-a',
+          content: id,
+          category: MemoryCategory.manual,
+          createdAt: date,
+          updatedAt: date,
+          visibility: MemoryVisibility.private);
+      ActionItemWithMetadata task(String id) =>
+          ActionItemWithMetadata(id: id, description: id, completed: false, createdAt: date);
+      ServerConversation conversation(String id) => ServerConversation(
+          id: id, createdAt: date, structured: Structured(id, id), status: ConversationStatus.completed);
+      unawaited(siri.reconcileMemories([memory('obsolete')]));
+      time.flushMicrotasks();
+      unawaited(siri.reconcileMemories([memory('current')]));
+      time.flushMicrotasks();
+      unawaited(siri.reconcileTasks([task('obsolete')], includeCompleted: true));
+      time.flushMicrotasks();
+      unawaited(siri.reconcileTasks([task('current')], includeCompleted: true));
+      time.flushMicrotasks();
+      unawaited(siri.reconcileConversations([conversation('obsolete')]));
+      time.flushMicrotasks();
+      unawaited(siri.reconcileConversations([conversation('current')]));
+      time.flushMicrotasks();
+      expect(host.memoryReconciles, 0);
+      expect(host.taskReconciles, 0);
+      expect(host.conversationReconciles, 0);
+      // Advance timers and the cooldown clock together, without CI scheduling races.
+      time.elapse(const Duration(milliseconds: 130));
+      time.flushMicrotasks();
+      expect(host.memories.map((row) => row.id), ['current']);
+      expect(host.tasks.map((row) => row.id), ['current']);
+      expect(host.conversations.map((row) => row.id), ['current']);
+      expect(host.memoryReconciles, 1);
+      expect(host.taskReconciles, 1);
+      expect(host.conversationReconciles, 1);
+      host.firstDelete.complete();
+      time.flushMicrotasks();
+    });
   });
 
   test('removal ledger cap requests an owner repair and fresh traversal', () async {
