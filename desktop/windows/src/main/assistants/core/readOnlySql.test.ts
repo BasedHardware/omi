@@ -14,7 +14,7 @@ import {
   rejectDangerousShape,
   wrapWithRowCap,
   type QueryRunner
-} from './sql'
+} from './readOnlySql'
 
 describe('isReadOnlySql', () => {
   it('accepts SELECT and WITH', () => {

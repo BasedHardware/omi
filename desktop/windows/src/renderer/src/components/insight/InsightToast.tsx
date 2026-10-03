@@ -135,7 +135,6 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
 
 export function InsightToast(): React.JSX.Element {
   const [content, setContent] = useState<ToastContent | null>(null)
-  const [feedbackError, setFeedbackError] = useState(false)
 
   useEffect(() => {
     document.body.classList.add('insight-toast-body')
@@ -164,27 +163,6 @@ export function InsightToast(): React.JSX.Element {
   if (content.type === 'whatsnew') return <WhatsNewCard p={content.p} />
 
   const insight = content.p
-  const jitFeedback = insight.jit
-  const submitJitFeedback = (
-    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
-  ): void => {
-    if (!jitFeedback) return
-    setFeedbackError(false)
-    void window.omi
-      .jitFeedback({
-        eventId: jitFeedback.eventId,
-        lane: jitFeedback.lane,
-        action,
-        subjectId: jitFeedback.subjectId,
-        triggerRevision: jitFeedback.triggerRevision,
-        accountGeneration: jitFeedback.accountGeneration,
-        ...(action === 'snooze'
-          ? { snoozedUntil: new Date(Date.now() + 60 * 60_000).toISOString() }
-          : {})
-      })
-      .then(() => window.omi.insightDismiss())
-      .catch(() => setFeedbackError(true))
-  }
   return (
     <div
       className="insight-card"
@@ -203,42 +181,8 @@ export function InsightToast(): React.JSX.Element {
       </div>
       <div className="insight-headline">{insight.headline}</div>
       <div className="insight-advice">{insight.advice}</div>
-      {jitFeedback?.rewindFrameId !== undefined ? (
-        <button
-          className="insight-foot"
-          onClick={() => void window.omi.rewindFocusFrame(jitFeedback.rewindFrameId!)}
-        >
-          Open keyframe in Rewind
-        </button>
-      ) : null}
       <div className="insight-foot">{insight.sourceApp}</div>
-      {jitFeedback ? (
-        <div className="meeting-actions" aria-label="JIT feedback">
-          <button
-            className="meeting-btn meeting-btn-primary"
-            onClick={() => submitJitFeedback('useful')}
-          >
-            Useful
-          </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('false_positive')}>
-            Not relevant
-          </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('snooze')}>
-            Snooze
-          </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('disable')}>
-            Disable trigger
-          </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('missed_or_late')}>
-            Missed / late
-          </button>
-        </div>
-      ) : null}
-      {feedbackError ? (
-        <div role="alert" className="insight-foot">
-          Couldn&apos;t save feedback; it will stay available to retry.
-        </div>
-      ) : null}
+
     </div>
   )
 }

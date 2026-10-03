@@ -178,16 +178,6 @@ const throttle = new NotificationThrottle()
 // preference, and it should not survive a restart.
 let snoozedUntil: number | null = null
 
-// When authoritative Windows JIT is active, the legacy insight/context-bucket
-// lane must not spend a second, untracked ambient notification budget. The
-// callback is host-owned and fail-open while JIT authority is unknown so the
-// existing assistant remains the rollback lane when the flag is off.
-let jitLegacyAmbientGate: (() => boolean) | null = null
-
-export function setJitLegacyAmbientGate(gate: (() => boolean) | null): void {
-  jitLegacyAmbientGate = gate
-}
-
 /** Silence every proactive notification until `untilMs`. Pass null to clear. */
 export function setNotificationSnooze(untilMs: number | null): void {
   snoozedUntil = untilMs
@@ -210,11 +200,7 @@ export function isNotificationSnoozed(now: number = Date.now()): boolean {
  *  can never disagree about whether a toast could appear. `assistantId` is
  *  accepted for symmetry with `notifyProactive` and a future per-assistant master;
  *  today the gate is global. */
-export function notificationsActive(assistantId: string, now: number = Date.now()): boolean {
-  // JIT admission consumes the visit for the Insight pipeline, not only the
-  // toast. When the rollout is effective, Insight.isEnabled() must go false so
-  // Gemini is not purchased behind a suppressed notification.
-  if (assistantId === 'insight' && jitLegacyAmbientGate?.()) return false
+export function notificationsActive(_assistantId: string, now: number = Date.now()): boolean {
   const settings = getAppSettings()
   if (isNotificationSnoozed(now)) return false
   if (!settings.notificationsEnabled) return false
@@ -228,10 +214,6 @@ export function notifyProactive(
   payload: InsightPayload,
   opts: { respectFrequency?: boolean; now?: number } = {}
 ): boolean {
-  if (assistantId === 'insight' && jitLegacyAmbientGate?.()) {
-    console.log('[assistants] legacy insight suppressed while JIT authority is active')
-    return false
-  }
   const settings = getAppSettings()
   const now = opts.now ?? Date.now()
   const decision = throttle.tryAllow({
@@ -250,7 +232,7 @@ export function notifyProactive(
   return true
 }
 
-/** Acquire the real local toast budget before any JIT server reservation or
+/** Acquire the real local toast budget before any server reservation or
  * model call. A null result means snoozed, disabled, frequency-suppressed, or
  * already reserved by a concurrent proactive lane. */
 export function reserveProactiveDeliverySlot(
@@ -270,7 +252,7 @@ export function reserveProactiveDeliverySlot(
 }
 
 /** Commit the previously acquired local slot and send through the existing
- * insight surface. No caller should emit a JIT delivery receipt unless this
+ * insight surface. No caller should emit a delivery receipt unless this
  * returns true. */
 export function commitProactiveDeliverySlot(
   slot: NotificationDeliverySlot,

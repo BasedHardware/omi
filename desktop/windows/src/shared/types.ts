@@ -902,28 +902,6 @@ export type OmiBridgeApi = {
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
   focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
-  /** Dev/QA only: run the REAL Insight Phase-1 activity aggregate over the last 24h
-   *  with `denylist` and return ONLY the distinct app names (never OCR/titles).
-   *  Proves a denylisted app is excluded at the SQL layer. Absent in production. */
-  insightDebugActivity: (denylist: string[]) => Promise<{ apps: string[]; rowCount: number }>
-  /** Dev/QA only: run the REAL execute_sql closure with `denylist` and return ONLY
-   *  the row count (or a content-free error). Proves the denylist CTE-shadow filters
-   *  a denylisted app to zero rows. Absent in production. */
-  insightDebugSql: (
-    query: string,
-    denylist: string[]
-  ) => Promise<{ rowCount: number; error?: string }>
-  /** Dev/QA only: optionally apply a notifications patch, then return the REAL
-   *  insightAssistant.isEnabled() and the inputs deciding it. Absent in production. */
-  insightDebugIsEnabled: (patch?: {
-    notificationsEnabled?: boolean
-    notificationFrequency?: number
-  }) => Promise<{
-    isEnabled: boolean
-    insightEnabled: boolean
-    notificationsEnabled: boolean
-    notificationFrequency: number
-  }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>
@@ -1071,16 +1049,7 @@ export type OmiBridgeApi = {
   /** Settings → main: deliver an example insight (a test). */
   insightTest: () => void
   /** Explicit JIT feedback; silence is never interpreted as feedback. */
-  jitFeedback: (input: {
-    eventId: string
-    lane: 'planned' | 'ambient'
-    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
-    subjectId: string
-    triggerRevision: number | null
-    accountGeneration: number
-    snoozedUntil?: string | null
-  }) => Promise<{ queued: true }>
-  jitFeedbackDrain: () => Promise<{ sent: number; failed: number }>
+
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
   // --- Meeting detection (Phase 5) ---
@@ -2229,22 +2198,7 @@ export type InsightPayload = {
   category: InsightCategory
   sourceApp: string
   confidence: number // 0..1
-  /** Present only for a JIT toast with a supported feedback receipt (currently
-   * planned triggers; ambient candidates have no trigger revision fence yet).
-   * Explicit user actions are the sole feedback source and are sent through the
-   * durable main-process outbox. */
-  jit?: {
-    lane: 'planned' | 'ambient'
-    eventId: string
-    subjectId: string
-    candidateId: string
-    triggerRevision: number | null
-    accountGeneration: number
-    /** HashRouter-compatible Rewind link for the single attached keyframe. */
-    rewindDeepLink?: string
-    /** Frame id consumed by the main-process navigation bridge. */
-    rewindFrameId?: number
-  }
+
 }
 
 // Stored row: powers both toast dedupe and the Insights history page. `dismissed`
@@ -2633,14 +2587,10 @@ export type GoalGenerateResult =
       reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' | 'stale' | 'error'
     }
 
+/** Shared toast presentation and screen privacy preferences. */
 export type InsightSettings = {
-  enabled: boolean // default ON
-  intervalMin: number // default 15 (picker offers 15/20/30/60)
-  // 'omi' = the in-app acrylic toast (richer, branded); 'native' = a Windows
-  // notification (kept in the Action Center). Default 'omi'.
   notificationStyle: InsightNotificationStyle
   denylist: string[]
-  lastRunAt: number | null
 }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────

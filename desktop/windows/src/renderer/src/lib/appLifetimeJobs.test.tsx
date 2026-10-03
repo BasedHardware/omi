@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 
-// Regression guard for the Hub port. These four engines used to be kicked off from
+// Regression guard for the Hub port. These three engines used to be kicked off from
 // the Home PAGE's mount. Home is now a switch between two designs, so anything that
 // changes which component Home renders — or that moves the jobs back into a page —
 // would silently stop them in production. This test fails the moment the app shell
@@ -12,14 +12,12 @@ import { render, cleanup, act } from '@testing-library/react'
 
 const maybeBuildLocalGraph = vi.fn()
 const maybeStartScreenSynthesis = vi.fn()
-const maybeStartInsightEngine = vi.fn()
 const maybeStartRetentionSweep = vi.fn()
 
 vi.mock('./kgSynthesis', () => ({ maybeBuildLocalGraph: () => maybeBuildLocalGraph() }))
 vi.mock('./screenSynthesis', () => ({
   maybeStartScreenSynthesis: () => maybeStartScreenSynthesis()
 }))
-vi.mock('./insightEngine', () => ({ maybeStartInsightEngine: () => maybeStartInsightEngine() }))
 vi.mock('./retentionSweep', () => ({ maybeStartRetentionSweep: () => maybeStartRetentionSweep() }))
 
 import { useAppLifetimeJobs } from './appLifetimeJobs'
@@ -39,10 +37,9 @@ afterEach(() => {
 })
 
 describe('useAppLifetimeJobs — the shell owns the background engines', () => {
-  it('starts screen synthesis, the insight engine, and the retention sweep on mount', () => {
+  it('starts screen synthesis, and the retention sweep on mount', () => {
     render(<Shell />)
     expect(maybeStartScreenSynthesis).toHaveBeenCalledTimes(1)
-    expect(maybeStartInsightEngine).toHaveBeenCalledTimes(1)
     expect(maybeStartRetentionSweep).toHaveBeenCalledTimes(1)
   })
 
@@ -62,7 +59,7 @@ describe('useAppLifetimeJobs — the shell owns the background engines', () => {
   })
 
   // The tests above prove the HOOK works. They do not prove anyone CALLS it — delete
-  // the call from App.tsx and they all still pass, while the four engines quietly stop
+  // the call from App.tsx and they all still pass, while the three engines quietly stop
   // in production. That is the regression this file exists to prevent, so guard the
   // call site directly. AppShellInner is not exported and rendering the real App would
   // need the whole auth/router/firebase stack mocked, so this is a source tripwire (the

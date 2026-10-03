@@ -19,7 +19,6 @@ vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
 import { TASK_MODEL, TASK_FALLBACK_MODEL } from './tasks/geminiWire'
 import { MODEL as FOCUS_MODEL } from './focus/gemini'
 import { MODEL as MEMORY_MODEL } from './memory/gemini'
-import { MODEL as INSIGHT_MODEL, FALLBACK_MODEL as INSIGHT_FALLBACK_MODEL } from './insight/gemini'
 
 const PT_MODEL = 'gemini-2.5-flash'
 const OFF_PT_MODEL = 'gemini-2.5-flash-lite'
@@ -38,8 +37,5 @@ describe('assistant model pins vs the Vertex PT reservation', () => {
     expect(MEMORY_MODEL).toBe(OFF_PT_MODEL)
   })
 
-  it('insight never lands on the PT model, fallback included', () => {
-    expect(INSIGHT_MODEL).toBe(OFF_PT_MODEL)
-    expect(INSIGHT_FALLBACK_MODEL).toBe(OFF_PT_MODEL)
-  })
+
 })
