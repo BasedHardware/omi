@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "περίπου {count} την ώρα",
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
     "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
-    "diagnosticsLastDuration": "Τελευταία {duration}"
+    "diagnosticsLastDuration": "Τελευταία {duration}",
+    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς."
 }

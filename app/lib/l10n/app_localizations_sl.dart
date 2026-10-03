@@ -12321,4 +12321,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Zadnjih $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
 }

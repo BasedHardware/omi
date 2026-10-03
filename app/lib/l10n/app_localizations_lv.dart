@@ -12319,4 +12319,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Pēdējās $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
 }

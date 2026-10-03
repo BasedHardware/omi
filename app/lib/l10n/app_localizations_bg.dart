@@ -12336,4 +12336,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последните $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Бройките може да са непълни.';
 }

@@ -12295,4 +12295,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Posledních $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
 }

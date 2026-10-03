@@ -12303,4 +12303,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Son $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
 }

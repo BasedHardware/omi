@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "ongeveer {count} per uur",
     "diagnosticsLongestGap": "Langste onderbreking",
     "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
-    "diagnosticsLastDuration": "Laatste {duration}"
+    "diagnosticsLastDuration": "Laatste {duration}",
+    "peopleStatsIncomplete": "De aantallen zijn mogelijk onvolledig."
 }

@@ -12279,4 +12279,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Seneste $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Antallene kan være ufuldstændige.';
 }

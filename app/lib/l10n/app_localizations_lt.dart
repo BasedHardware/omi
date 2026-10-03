@@ -12313,4 +12313,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Paskutinės $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
 }
