@@ -9,6 +9,7 @@ as a live-transcription failure. Flag-off sessions keep the legacy ordering.
 import asyncio
 import threading
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -684,6 +685,105 @@ async def test_crash_cancel_aborts_pending_drain_without_late_callbacks(monkeypa
     finally:
         run_task.cancel()
         await asyncio.gather(run_task, return_exceptions=True)
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exit_mode', ['lifetime_done', 'disconnect'])
+async def test_close_deadline_bounds_monitored_drain_and_cancel_ack(monkeypatch, exit_mode):
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client())
+    monkeypatch.setattr(receiver_module, 'SHUTDOWN_DELIVERY_SECONDS', 0.15, raising=False)
+    monkeypatch.setattr(receiver_module, 'SHUTDOWN_CLEANUP_SECONDS', 0.05, raising=False)
+    monkeypatch.setattr(replay_delivery_module, 'SHUTDOWN_CLEANUP_SECONDS', 0.05, raising=False)
+    ws = ClientSocket()
+    rt = make_runtime(ws, monkeypatch)
+    rt.limits = replace(rt.limits, bg_drain_timeout=0.3)
+    persisted: list[str] = []
+    stub_transcript_persistence(rt, persisted, monkeypatch)
+    persist_attempted = asyncio.Event()
+    release = asyncio.Event()
+
+    async def held_update(conversation, segments, photos, finished_at, started_at, **kwargs):
+        assert [segment.text for segment in segments] == ['LAST']
+        persist_attempted.set()
+        await release.wait()
+        persisted.extend(segment.text for segment in segments)
+        return (conversation, segments, [])
+
+    rt.transcripts._update_live_conversation = held_update
+    rt.conversations.process_conversation = AsyncMock(return_value=True)
+    actual = rt.receiver
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda action, segments: action(segments))
+    monkeypatch.setattr(actual, '_capture', lambda *a, **k: None)
+
+    async def held_drain():
+        actual._enqueue_stt_segments(
+            [{'text': 'LAST', 'start': 0.0, 'end': 0.5, 'speaker': 'speaker_0', 'is_user': False}]
+        )
+        await release.wait()
+
+    monkeypatch.setattr(actual, '_drain_stt_sockets', held_drain)
+    if exit_mode == 'disconnect':
+        rt._heartbeat = lambda: rt.state.shutdown_event.wait()
+    raws: list = []
+    dials: list = []
+    wire_providers(monkeypatch, rt, raws, dials)
+    teardown_started: dict = {}
+    real_teardown = rt._teardown
+
+    async def timed_teardown():
+        teardown_started['at'] = time.monotonic()
+        release.set()
+        await real_teardown()
+
+    rt._teardown = timed_teardown
+    drain_calls: list = []
+    real_drain = rt.task_supervisor.drain_monitored
+
+    async def drain_spy(**kwargs):
+        drain_calls.append(kwargs)
+        return await real_drain(**kwargs)
+
+    rt.task_supervisor.drain_monitored = drain_spy
+    worker: asyncio.Task | None = None
+    box: dict = {}
+    watch_supervise(rt, box)
+    run_task = asyncio.create_task(rt.run())
+    try:
+        await until(lambda: actual.stt_socket is not None)
+        ws.feed_audio(marker(1, 2))
+        await until(lambda: rt.state.first_audio_byte_timestamp is not None)
+
+        async def held_worker():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await release.wait()
+                raise
+
+        worker = rt.task_supervisor.create_lifetime_task(held_worker(), name='held_worker')
+        departed = replay_delivery_module.clock()
+        if exit_mode == 'lifetime_done':
+            ws.disconnect()
+        else:
+            ws.incoming.put_nowait({'type': 'websocket.disconnect', 'code': 1000})
+        await asyncio.wait_for(run_task, timeout=3)
+        bound = 0.15 + 0.05
+        assert box['result'].reason == exit_mode
+        assert teardown_started['at'] - departed <= bound + 0.15
+        assert drain_calls and drain_calls[-1].get('deadline') is not None
+        assert persist_attempted.is_set()
+        assert worker.cancelled()
+        rt.conversations.process_conversation.assert_awaited()
+        assert len(dials) == 0
+    finally:
+        release.set()
+        run_task.cancel()
+        await asyncio.gather(run_task, return_exceptions=True)
+        if worker is not None:
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
         await stop(raws)
 
 

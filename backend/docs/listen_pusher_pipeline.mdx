@@ -771,9 +771,12 @@ already-connected prefix and tail delivery, queued wire writes, EOS, and final
 provider callbacks inside a 28-second delivery budget, then allows up to 2
 seconds of bounded cancellation/abort cleanup, while the transcript consumer
 stays alive until the bounded STT drain completes so last provider callbacks
-persist before finalization; flag-off sessions keep the legacy supervision
-order unchanged. See the replay pacing and latency contract
-in `backend/docs/operational/windowed-live-stt.md`. A full ring triggers failover
+persist before finalization. That overall ~30-second bound is shared by the
+monitored persistence drain and the cancellation-acknowledgement wait on the
+session supervisor, and teardown plus conversation finalization always run
+afterwards; flag-off sessions keep the legacy supervision order unchanged. See
+the replay pacing and latency contract in
+`backend/docs/operational/windowed-live-stt.md`. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
 Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest

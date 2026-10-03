@@ -1004,10 +1004,20 @@ class ListenSessionRuntime:
                 receive_error = receive_task.exception()
                 if receive_error is not None:
                     raise receive_error
+            close_bound: Optional[float] = None
+            if self.recovery_enabled:
+                if self.receiver.shutdown_deadline is None:
+                    self.receiver.shutdown_deadline = (
+                        replay_delivery.clock() + receiver_module.SHUTDOWN_DELIVERY_SECONDS
+                    )
+                close_bound = self.receiver.shutdown_deadline + receiver_module.SHUTDOWN_CLEANUP_SECONDS
             if not receive_task.done():
                 self.state.active = False
                 if ordinary_close:
-                    await self._complete_receive(receive_task)
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
+                elif self.recovery_enabled:
+                    receive_task.cancel()
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
                 else:
                     receive_task.cancel()
                     try:
@@ -1015,7 +1025,12 @@ class ListenSessionRuntime:
                     except asyncio.CancelledError:
                         pass
             self.state.shutdown_event.set()
-            await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
+            if self.recovery_enabled:
+                await self.task_supervisor.drain_monitored(
+                    timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
+                )
+            else:
+                await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
         except Exception as error:
             logger.error('Listen WebSocket operation failed type=%s', type(error).__name__)
             self.state.live_transcription_failed = True
@@ -1034,12 +1049,8 @@ class ListenSessionRuntime:
             or self.request.websocket.client_state != WebSocketState.CONNECTED
         )
 
-    async def _complete_receive(self, receive_task: asyncio.Task[Any]) -> None:
-        deadline = getattr(self.receiver, 'shutdown_deadline', None)
-        bound = (
-            replay_delivery.clock() + receiver_module.SHUTDOWN_DELIVERY_SECONDS if deadline is None else deadline
-        ) + receiver_module.SHUTDOWN_CLEANUP_SECONDS
-        remaining = lambda: max(0.0, bound - replay_delivery.clock())
+    async def _complete_receive(self, receive_task: asyncio.Task[Any], *, deadline: float) -> None:
+        remaining = lambda: max(0.0, deadline - replay_delivery.clock())
         _, pending = await asyncio.wait({receive_task}, timeout=remaining())
         if pending:
             receive_task.cancel()
