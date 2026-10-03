@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -183,6 +185,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -355,6 +359,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -510,6 +516,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
@@ -639,6 +647,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -747,6 +757,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

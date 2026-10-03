@@ -13,7 +13,11 @@ from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config.audio_timeline import (
+    audio_timeline_spans_enabled,
+    audio_timeline_v2_enabled,
+    live_speaker_capture_clock_enabled,
+)
 from config.translation import resolve_ondemand_config
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
@@ -245,6 +249,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.capture_timeline: Any = None
         self._pending_source_frame: dict | None = None
         self.capture_timeline_v2 = False
+        self.capture_timeline_spans = False
         if (
             not host.is_multi_channel
             and not host.use_custom_stt
@@ -260,8 +265,10 @@ class ListenReceiver(ReplayFilterMixin):
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = audio_timeline_v2_enabled()
+            self.capture_timeline_spans = audio_timeline_spans_enabled()
             host.state.capture_timeline = self.capture_timeline
             host.state.capture_timeline_v2 = self.capture_timeline_v2
+            host.state.capture_timeline_spans = self.capture_timeline_spans
             # Conversation ownership of recent capture ranges. Entries are
             # *runs* (contiguous samples under one conversation), coalesced by
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
@@ -1709,7 +1716,7 @@ class ListenReceiver(ReplayFilterMixin):
                             buffer.extend(decoded)
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
-                            if self.capture_timeline_v2:
+                            if self.capture_timeline_v2 or self.capture_timeline_spans:
                                 self.host.audio_bytes_send(
                                     decoded,
                                     now,

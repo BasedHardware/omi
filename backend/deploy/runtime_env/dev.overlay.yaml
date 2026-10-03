@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -142,6 +144,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -428,6 +432,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
@@ -560,6 +566,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -697,6 +705,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -795,6 +805,8 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

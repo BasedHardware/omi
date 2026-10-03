@@ -5,7 +5,9 @@ import struct
 
 import pytest
 
+import utils.listen_pusher_session as pusher_session
 from utils.listen_pusher_session import (
+    AUDIO_TIMELINE_PROTOCOL,
     FINALIZATION_IN_FLIGHT_ERROR,
     FINALIZATION_RESULT_PROTOCOL,
     FINALIZATION_STALE_GENERATION_ERROR,
@@ -14,6 +16,7 @@ from utils.listen_pusher_session import (
     ListenPusherSessionConfig,
     ListenPusherSessionDeps,
 )
+from utils.pusher_protocol import audio_timeline_ack_frame
 
 
 class FakePusherWebSocket:
@@ -117,9 +120,11 @@ def make_session(
     if config_overrides:
         config_values.update(config_overrides)
 
-    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None, client_kind='unknown'):
+    async def connect_to_pusher(
+        uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None
+    ):
         if connect_calls is not None:
-            connect_calls.append((uid, sample_rate, retries, is_active))
+            connect_calls.append((uid, sample_rate, retries, is_active, audio_timeline))
         if client_kind_calls is not None:
             client_kind_calls.append(client_kind)
         return ws or FakePusherWebSocket()
@@ -638,8 +643,8 @@ async def test_v2_runs_split_into_separate_101_frames_across_a_wall_gap():
     concatenating them would delete the gap from the stored audio while the
     header still claimed the first run's position.
     """
-    ws = FakePusherWebSocket()
-    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000, 'audio_timeline_v2': True})
     await session.connect()
 
     rate = 8000
@@ -661,8 +666,8 @@ async def test_v2_runs_split_into_separate_101_frames_across_a_wall_gap():
 
 @pytest.mark.anyio
 async def test_v2_contiguous_runs_still_share_one_101_frame():
-    ws = FakePusherWebSocket()
-    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000, 'audio_timeline_v2': True})
     await session.connect()
 
     rate = 8000
@@ -682,8 +687,8 @@ async def test_v2_contiguous_runs_still_share_one_101_frame():
 @pytest.mark.anyio
 async def test_v2_runs_split_into_separate_101_frames_on_overlap_or_backward_jump():
     """Overlapping runs or backward jumps must not be concatenated into one frame."""
-    ws = FakePusherWebSocket()
-    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000, 'audio_timeline_v2': True})
     await session.connect()
 
     rate = 8000
@@ -717,3 +722,121 @@ async def test_legacy_runs_without_projection_keep_legacy_grouping():
     audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
     assert len(audio_frames) == 1
     assert audio_frames[0][12:] == b'abcdefgh'
+
+
+@pytest.mark.anyio
+async def test_spans_session_negotiates_the_timeline_handshake():
+    connect_calls = []
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    session = make_session(
+        ws=ws,
+        config_overrides={'audio_timeline_spans': True},
+        connect_calls=connect_calls,
+    )
+
+    await session.connect()
+
+    assert connect_calls[0][4] == AUDIO_TIMELINE_PROTOCOL
+    assert session.audio_timeline_active
+    assert not session.audio_timeline_suspended
+
+
+@pytest.mark.anyio
+async def test_spans_session_without_ack_keeps_legacy_byte_semantics(monkeypatch):
+    """An unacknowledged spans session must not let projected starts reach the wire."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    connect_calls = []
+    ws = FakePusherWebSocket()
+    session = make_session(
+        ws=ws,
+        config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 1_000_000},
+        connect_calls=connect_calls,
+    )
+    await session.connect()
+
+    assert connect_calls[0][4] == AUDIO_TIMELINE_PROTOCOL
+    assert not session.audio_timeline_active
+    assert not session.audio_timeline_suspended
+
+    rate = 8000
+    run_a = b'\x01\x00' * rate
+    run_b = b'\x02\x00' * rate
+    session.audio_bytes_send(run_a, received_at=100.5, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=101.5)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    timestamp = struct.unpack('d', audio_frames[0][4:12])[0]
+    assert timestamp == 101.5 - (2 * rate * 2) / (rate * 2)
+    assert audio_frames[0][12:] == run_a + run_b
+
+
+@pytest.mark.anyio
+async def test_spans_session_ack_enables_projected_runs_and_gap_splits():
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    session = make_session(
+        ws=ws,
+        config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 1_000_000},
+    )
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x01\x00' * rate
+    run_b = b'\x02\x00' * rate
+    session.audio_bytes_send(run_a, received_at=100.5, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=101.5)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 2
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 100.0
+    assert struct.unpack('d', audio_frames[1][4:12])[0] == 101.5
+
+
+@pytest.mark.anyio
+async def test_spans_capability_loss_mid_recording_withholds_audio_then_resumes(monkeypatch):
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    capable = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    capable_again = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    incapable = FakePusherWebSocket()
+    sockets = [capable, incapable, capable_again]
+    session = make_session(
+        ws=capable,
+        config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 1_000_000},
+    )
+
+    async def rotating_connector(
+        uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None
+    ):
+        return sockets.pop(0)
+
+    session.deps.connect_to_pusher = rotating_connector
+
+    await session.connect()
+    assert session.audio_timeline_active
+
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1', start_wall=99.9)
+    session._mark_disconnected()
+    session.reconnect_task.cancel()
+    try:
+        await session.reconnect_task
+    except asyncio.CancelledError:
+        pass
+    session.reconnect_task = None
+
+    session.pusher_connected = False
+    await session.connect()
+    assert session.audio_timeline_suspended
+
+    await session._audio_bytes_flush()
+    assert session.audio_total_size == 4
+    assert [frame for frame in incapable.sent if frame_type(frame) == 101] == []
+
+    session.pusher_connected = False
+    await session.connect()
+    assert not session.audio_timeline_suspended
+    await session._audio_bytes_flush()
+    audio_frames = [frame for frame in capable_again.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 99.9

@@ -97,6 +97,7 @@ def capture_window(
     end: float,
     *,
     segments: Optional[Sequence[Mapping[str, Any]]] = None,
+    tolerance: float = CAPTURE_CLOCK_TOLERANCE_SECONDS,
 ) -> Optional[Tuple[float, float]]:
     """Where the live receiver heard ``[start, end)``, when every contributor recorded it.
 
@@ -125,10 +126,10 @@ def capture_window(
         cap_end = _numeric(segment.get('audio_capture_end'))
         if seg_start is None or seg_end is None or cap_start is None or cap_end is None or cap_end <= cap_start:
             return None
-        if abs((cap_end - cap_start) - (seg_end - seg_start)) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+        if abs((cap_end - cap_start) - (seg_end - seg_start)) > tolerance:
             return None
         offsets.append(cap_start - seg_start)
-    if max(offsets) - min(offsets) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+    if max(offsets) - min(offsets) > tolerance:
         return None
     offset = sorted(offsets)[len(offsets) // 2]
     return (start_f + offset, end_f + offset)
@@ -217,13 +218,26 @@ def locate(
     end: float,
     *,
     segments: Optional[Sequence[Mapping[str, Any]]] = None,
+    capture_spans: bool = False,
 ) -> AudioPlacement:
     """Map ``[start, end)`` (conversation-relative) onto stored audio, or refuse.
 
-    ``reason`` is one of ``v2`` / ``sync`` (a window is returned and may be
-    trusted), ``untrusted_clock`` (no window; a provisional candidate is the
-    caller's risk), ``uncovered_audio`` / ``unplaced`` / ``missing_origin`` /
-    ``invalid_window`` (no window; the caller must not guess).
+    ``reason`` is one of ``v2`` / ``sync`` / ``capture_span`` (a window is
+    returned and may be trusted), ``untrusted_clock`` (no window; a
+    provisional candidate is the caller's risk), ``uncovered_audio`` /
+    ``unplaced`` / ``missing_origin`` / ``invalid_window`` (no window; the
+    caller must not guess).
+
+    ``capture_spans`` admits a live segment's receiver-recorded capture
+    window as trusted only when the contributors cover the requested text
+    window, every contributor carries complete finite ordered capture fields
+    whose offset and duration agree within the strict 1 ms coverage
+    tolerance, the whole ``audio_files`` manifest passes the v2 validator
+    (every chunk has a finite span paired with a timestamp), and validated
+    span coverage fully contains the capture window. Any gap — a spanless or
+    malformed manifest, an uncovered hiatus, a missing or conflicting
+    contributor — stays ``untrusted_clock``; a real manifest that mixes
+    span-bearing and legacy chunks is refused rather than half-trusted.
     """
     start_f = _numeric(start)
     end_f = _numeric(end)
@@ -255,13 +269,35 @@ def locate(
 
     if not contributors:
         return AudioPlacement(None, 'untrusted_clock')
+    all_sync = True
     for segment in contributors:
         scope = segment.get('speaker_id_scope')
         if not isinstance(scope, str) or not scope.startswith('sync:') or len(scope) == len('sync:'):
+            all_sync = False
+            break
+    if all_sync:
+        if not _union_covers(contributors, start_f, end_f):
             return AudioPlacement(None, 'untrusted_clock')
-    if not _union_covers(contributors, start_f, end_f):
-        return AudioPlacement(None, 'untrusted_clock')
-    return AudioPlacement((abs_start, abs_end), 'sync')
+        return AudioPlacement((abs_start, abs_end), 'sync')
+    if capture_spans:
+        if not _union_covers(contributors, start_f, end_f):
+            return AudioPlacement(None, 'untrusted_clock')
+        window = capture_window(
+            conversation,
+            start_f,
+            end_f,
+            segments=contributors,
+            tolerance=COVERAGE_TOLERANCE_SECONDS,
+        )
+        if window is None:
+            return AudioPlacement(None, 'untrusted_clock')
+        audio_files = conversation.get('audio_files')
+        if not _v2_manifest_valid(audio_files):
+            return AudioPlacement(None, 'untrusted_clock')
+        if not covered_window(audio_files, window[0], window[1]):
+            return AudioPlacement(None, 'untrusted_clock')
+        return AudioPlacement(window, 'capture_span')
+    return AudioPlacement(None, 'untrusted_clock')
 
 
 def _tokens(text: str) -> list:

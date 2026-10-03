@@ -53,6 +53,7 @@ from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
+    OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
     OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL,
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
@@ -317,6 +318,9 @@ async def _websocket_util_trigger(
                     conv_id,
                     cast(str, cached_protection_level),
                 )
+                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
+                    reason='with_spans' if batch.get('span') is not None else 'without_spans'
+                ).inc()
                 if batch.get('span') is not None and batch.get('end') is not None:
                     # The digest ledger records only runs whose object exists.
                     # Batches are contiguous by construction (discontinuities

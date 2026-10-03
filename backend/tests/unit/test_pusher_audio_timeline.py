@@ -24,6 +24,7 @@ from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
 import utils.pusher_protocol as pusher_protocol
+from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
 from utils.pusher_protocol import AUDIO_TIMELINE_PROTOCOL, audio_timeline_ack_frame
 
 
@@ -443,3 +444,51 @@ async def test_failed_upload_retries_on_a_later_process_tick(env, monkeypatch):
     ), 'the ready-lane retry must be paced by a later process tick, not retried in the same loop turn'
     assert len(env) == 3, 'every closed run still uploads'
     assert [chunk['data'] for _cid, chunk in env] == [run_a, run_b, run_c]
+
+
+async def test_off_uploaded_objects_match_baseline_golden_bytes_and_metadata(env):
+    """Flag-off golden equivalence: with no protocol negotiated the current
+    handler must produce exactly the uploaded chunk objects the pinned
+    baseline produced for these frames (verified byte-identical against
+    `git show 6b23e737acdfc0635fb33f3a6e956edd30645e64` during review), no ack
+    bytes on the wire and no span metadata."""
+    pcm_a = b'\x21\x00' * (RATE // 2)
+    pcm_b = b'\x22\x00' * (RATE // 2)
+    frames = [
+        _conversation('c1'),
+        _audio(100.0, pcm_a),
+        _audio(100.5, pcm_b),
+        _conversation('c2'),
+        _audio(200.0, pcm_a),
+    ]
+    ws_current = FakeWebSocket(list(frames))
+
+    await pusher._websocket_util_trigger(ws_current, 'uid-at', RATE, 'test', None)
+
+    golden = [
+        ('c1', {'data': pcm_a + pcm_b, 'timestamp': 100.0}),
+        ('c2', {'data': pcm_a, 'timestamp': 200.0}),
+    ]
+    assert ws_current.sent_bytes == []
+    current_uploads = [(cid, dict(chunk)) for cid, chunk in env]
+    assert current_uploads == golden
+    assert all('span' not in chunk for _cid, chunk in current_uploads)
+
+
+async def test_upload_metric_counts_span_and_spanless_objects_once_each(env, monkeypatch):
+    pcm = b'\x23\x00' * (RATE // 2)
+    frames = [_conversation('c1'), _audio(100.0, pcm), _audio(110.5, pcm)]
+
+    with_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+    without_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get()
+    await _run(FakeWebSocket(list(frames)), audio_timeline=None)
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() == with_before
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get() == without_before + len(
+        env
+    )
+
+    env.clear()
+    with_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+    await _run(FakeWebSocket(list(frames)))
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() == with_before + len(env)
+    assert len(env) == 2

@@ -87,6 +87,7 @@ class ListenPusherSessionConfig:
     # Opt this session into audio-timeline v2 (AUDIO_TIMELINE_V2 at the call
     # boundary). The pusher must acknowledge capability before v2 audio is sent.
     audio_timeline_v2: bool = False
+    audio_timeline_spans: bool = False
 
 
 @dataclass
@@ -329,8 +330,10 @@ class ListenPusherSession:
                 group: List[AudioRun] = []
                 group_conversation: Optional[str] = None
 
+                honor_projection = self.config.audio_timeline_v2 or self.audio_timeline_active
+
                 def frame_header_time(runs: List[AudioRun]) -> Optional[float]:
-                    if runs and runs[0].start_wall is not None:
+                    if honor_projection and runs and runs[0].start_wall is not None:
                         return runs[0].start_wall
                     duration = pending_total_size / (effective_rate * 2)
                     return (self.audio_buffer_last_received or self.deps.now()) - duration
@@ -338,7 +341,7 @@ class ListenPusherSession:
                 def runs_are_contiguous(prev: AudioRun, nxt: AudioRun) -> bool:
                     # Legacy runs carry no projection; keep the legacy
                     # grouping for them.
-                    if prev.start_wall is None or nxt.start_wall is None:
+                    if not honor_projection or prev.start_wall is None or nxt.start_wall is None:
                         return True
                     projected_prev_end = prev.start_wall + len(prev.data) / (effective_rate * 2)
                     return abs(nxt.start_wall - projected_prev_end) <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
@@ -711,12 +714,13 @@ class ListenPusherSession:
                 'is_active': self.deps.is_active,
                 'client_kind': self.config.client_kind,
             }
-            if self.config.audio_timeline_v2:
+            wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
+            if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL
             self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
             if self.pusher_ws is None:
                 return
-            if self.config.audio_timeline_v2:
+            if wants_timeline:
                 # Capability gated per socket: an explicit acknowledgment is
                 # required before any v2 audio is committed, and again on
                 # every reconnect of a v2 session.

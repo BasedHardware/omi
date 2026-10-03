@@ -40,7 +40,9 @@ from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio_timeline import coverage_outcome
 from utils.audio import AudioRingBuffer
+from utils.conversations.audio_placement import locate
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
+from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
 from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.vad_gate import GatedSTTSocket
 from utils.stt import vad_gate as vad_gate_module
@@ -325,10 +327,12 @@ def pusher_env(monkeypatch):
 class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
-    def __init__(self, monkeypatch, *, v2: bool, conversation_id: str):
+    def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
         self.clock = {'wall': T0, 'mono': 0.0}
         self.v2 = v2
+        self.spans = spans
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
+        monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true' if spans else 'false')
         # Control the receiver's arrival observations (module-scoped shim).
         self._real_time_module = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])
@@ -389,6 +393,7 @@ class _Stack:
                 max_pending_speaker_sample_requests=10,
                 client_kind='test',
                 audio_timeline_v2=self.v2,
+                audio_timeline_spans=self.spans,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: current['id'],
@@ -416,7 +421,7 @@ class _Stack:
     def start_pusher_server(self):
         self.server_ws = FakeServerWebSocket()
         self.server_task = asyncio.create_task(
-            pusher._websocket_util_trigger(self.server_ws, UID, RATE, 'test', 2 if self.v2 else None)
+            pusher._websocket_util_trigger(self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None)
         )
 
     async def stop_pusher_server(self):
@@ -924,5 +929,200 @@ async def test_capability_loss_withholds_audio_as_coverage_gap(monkeypatch, gcs,
         audio_frame = next(frame for frame in frames if struct.unpack('<I', frame[:4])[0] == 101)
         assert abs(struct.unpack('<d', audio_frame[4:12])[0] - stack.clock['wall']) < 0.001
         assert audio_frame[12:] == phrase
+    finally:
+        stack.restore()
+
+
+async def test_spans_only_stores_proven_spans_without_v2_text(monkeypatch, gcs, pusher_env, telemetry):
+    """Spans-only storage: projected 101 starts reach the pusher and the stored
+    object carries a span manifest, while the text path keeps byte-identical
+    legacy provider-native times with only the private capture window attached.
+    """
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.audio_timeline_active
+        assert stack.receiver.capture_timeline is not None
+        assert stack.receiver.capture_timeline_spans is True
+        assert stack.receiver.capture_timeline_v2 is False
+
+        phrase = _phrase(5, 4.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(8)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        assert files, 'spans mode must still upload private-cloud audio'
+        spans = files[0]['chunk_spans']
+        assert spans and abs(spans[0]['start'] - T0) < 0.05
+        assert abs(spans[-1]['end'] - (T0 + 4.0)) < 0.05
+
+        stack.provider_callback([_provider_segment(0.0, 4.0, 'spans phrase')])
+        segment = stack.segments_collected[-1]
+        assert segment['start'] == 0.0
+        assert segment['end'] == 4.0
+        assert segment.get('audio_capture_start') is not None or segment.get('_capture_abs_start') is not None
+    finally:
+        stack.restore()
+
+
+def _stored_blobs(gcs):
+    return [blob for bucket in gcs._buckets.values() for blob in bucket.blobs.values() if blob._data is not None]
+
+
+async def test_spans_burst_and_wall_hiatus_split_through_blob_metadata(monkeypatch, gcs, pusher_env, telemetry):
+    """Burst arrival must land on the capture projection (not the arrival
+    stamp), a real wall+monotonic hiatus must split the stored span manifest,
+    and the uploaded object bytes must equal the exact run PCM."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.audio_timeline_active
+
+        phrase_a = _phrase(1, 2.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase_a[i * piece : (i + 1) * piece], 0.005, 0.005) for i in range(4)]
+        frames.append({'_advance': (5.0, 5.0)})
+        phrase_b = _phrase(2, 2.0)
+        frames += [_frame(phrase_b[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append(_disconnect_frame())
+
+        with_spans_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+        without_spans_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get()
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        spans = sorted((s for f in files for s in f['chunk_spans']), key=lambda s: s['start'])
+        assert len(spans) == 2, f'burst run and post-hiatus run must split: {spans}'
+        assert spans[0]['start'] < T0 + 1.0, 'burst must project back to capture position, not the arrival stamp'
+        assert spans[1]['start'] - spans[0]['end'] > 3.0
+
+        blobs = _stored_blobs(gcs)
+        assert len(blobs) == 2
+        assert sorted(b._data for b in blobs) == sorted([phrase_a, phrase_b])
+        assert all(getattr(b, 'metadata') for b in blobs)
+        assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() - with_spans_before == 2
+        assert (
+            OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get() == without_spans_before
+        )
+
+        conversation = {
+            'id': CONV1,
+            'started_at': datetime.fromtimestamp(T0, tz=timezone.utc),
+            'private_cloud_sync_enabled': True,
+            'audio_files': files,
+            'transcript_segments': [],
+        }
+        in_run = {
+            'id': 's0',
+            'start': 0.0,
+            'end': 2.0,
+            'speaker_id_scope': 'conn:0',
+            'audio_capture_start': spans[0]['start'],
+            'audio_capture_end': spans[0]['end'],
+        }
+        placement = locate(conversation, 0.0, 2.0, segments=[in_run], capture_spans=True)
+        assert placement.reason == 'capture_span'
+        assert placement.window == (spans[0]['start'], spans[0]['end'])
+
+        gap_start = spans[0]['end'] + 0.5
+        in_gap = {
+            'id': 's1',
+            'start': 2.0,
+            'end': 4.0,
+            'speaker_id_scope': 'conn:0',
+            'audio_capture_start': gap_start,
+            'audio_capture_end': gap_start + 2.0,
+        }
+        assert locate(conversation, 2.0, 4.0, segments=[in_gap], capture_spans=True).reason == 'untrusted_clock'
+    finally:
+        stack.restore()
+
+
+async def test_spans_wall_only_clock_jump_keeps_projection_contiguous(monkeypatch, gcs, pusher_env, telemetry):
+    """A logical wall step with no real delivery hiatus mints no span split:
+    projection continues on the capture axis and storage sees one run."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+
+        piece = int(0.5 * RATE * 2)
+        run_a = _phrase(1, 2.0)
+        run_b = _phrase(2, 2.0)
+        frames = [_frame(run_a[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append({'_advance': (3600.0, 0.05)})
+        frames += [_frame(run_b[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        spans = [s for f in files for s in f['chunk_spans']]
+        assert len(spans) == 1, f'an hour of wall drift must not mint an hour of audio: {spans}'
+        assert spans[0]['end'] - spans[0]['start'] == pytest.approx(4.0, abs=0.1)
+    finally:
+        stack.restore()
+
+
+async def test_spans_callback_rejects_keep_finite_text_without_capture_window(monkeypatch, gcs, pusher_env, telemetry):
+    """Spans-only is legacy clock-only text: finite rejected provider segments
+    are still delivered unchanged and carry no private capture window."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        phrase = _phrase(1, 4.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(8)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        assert stack.provider.accepted_samples >= 4 * RATE
+
+        stack.provider_callback(
+            [
+                _provider_segment(1.0, 1.0, 'point word'),
+                _provider_segment(10.0, 11.0, 'late word'),
+            ]
+        )
+        point, late = stack.segments_collected[-2:]
+        for segment, (start, end, text) in zip((point, late), ((1.0, 1.0, 'point word'), (10.0, 11.0, 'late word'))):
+            assert segment['start'] == start
+            assert segment['end'] == end
+            assert segment['text'] == text
+            assert segment.get('_capture_abs_start') is None
+            assert 'audio_capture_start' not in segment
+            assert segment.get('_capture_window_unavailable') is True
+        assert stack.receiver.capture_timeline_v2 is False
+
+        callbacks2, _modulate2, epoch2 = stack.receiver._build_stt_callbacks()
+        provider2 = FakeProviderSocket()
+        stack.receiver.stt_socket = GatedSTTSocket(provider2, gate=None, send_tracker=epoch2)
+        piece = _phrase(3, 0.5)
+        assert stack.receiver.stt_socket.send(piece, start_sample=4 * RATE)
+        assert stack.receiver.stt_socket.send(piece, start_sample=8 * RATE)
+        rejected_before = epoch2.rejected_segments
+        callbacks2([_provider_segment(0.0, 1.0, 'gap-spanning words')])
+        assert epoch2.rejected_segments == rejected_before + 1
+        bridged = stack.segments_collected[-1]
+        assert bridged['start'] == 0.0
+        assert bridged['end'] == 1.0
+        assert bridged['text'] == 'gap-spanning words'
+        assert bridged.get('_capture_abs_start') is None
+        assert 'audio_capture_start' not in bridged
+        assert bridged.get('_capture_window_unavailable') is True
+        assert stack.receiver.capture_timeline_v2 is False
     finally:
         stack.restore()

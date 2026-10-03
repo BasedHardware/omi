@@ -17,6 +17,28 @@ def audio_timeline_v2_enabled() -> bool:
     return os.getenv('AUDIO_TIMELINE_V2', '').strip().lower() in _TRUTHY
 
 
+def audio_timeline_spans_enabled() -> bool:
+    """Read AUDIO_TIMELINE_SPANS at the call boundary. Default off.
+
+    Storage half of the v2 split: an eligible single-channel server-STT
+    session negotiates the existing audio_timeline=2 producer path so the
+    pusher writes span-bearing chunks, while segment translation stays
+    legacy pass-through. Admits new eligible recordings only.
+    """
+    return os.getenv('AUDIO_TIMELINE_SPANS', '').strip().lower() in _TRUTHY
+
+
+def live_speaker_span_resolution_enabled() -> bool:
+    """Read LIVE_SPEAKER_SPAN_RESOLUTION at the call boundary. Default off.
+
+    Consumer half: conversation speaker resolution may trust capture windows
+    that fall inside validated span-bearing chunk coverage. Off keeps the
+    legacy sync/own-scope gate; a cache carrying capture-span keys is never
+    pruned or re-embedded while off.
+    """
+    return os.getenv('LIVE_SPEAKER_SPAN_RESOLUTION', '').strip().lower() in _TRUTHY
+
+
 def soniox_elapsed_axis_mode() -> str:
     """Select Soniox's unverified elapsed send axis; default to measurement only."""
     value = os.getenv('SONIOX_ELAPSED_AXIS', 'shadow').strip().lower()

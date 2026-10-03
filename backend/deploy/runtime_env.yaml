@@ -14,6 +14,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -447,6 +453,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -829,6 +841,12 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1117,6 +1135,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1370,6 +1394,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1576,6 +1606,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -2025,6 +2061,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2474,6 +2516,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2740,6 +2788,12 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3045,6 +3099,12 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3288,6 +3348,12 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3505,6 +3571,12 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
