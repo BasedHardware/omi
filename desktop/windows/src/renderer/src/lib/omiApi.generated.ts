@@ -2616,40 +2616,6 @@ export type JITDecisionReason = "evaluated" | "rollout_enabled" | "rollout_disab
 
 export type JITErrorClass = "none" | "timeout" | "configuration" | "malformed" | "provider" | "absent";
 
-export interface JITProactivityEventReceipt {
-  account_generation: number;
-  budget_day: string;
-  budget_timezone?: string;
-  candidate_id: string;
-  created_at: string;
-  device_id: string;
-  event_id: string;
-  feedback_id?: string | null;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  request_hash: string;
-  schema_version?: "jit_proactivity_event.v1";
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-  uid: string;
-}
-
-export interface JITProactivityReservationEnvelope {
-  receipt: JITProactivityEventReceipt;
-  reserved: boolean;
-}
-
-export interface JITProactivityReservationRequest {
-  account_generation: number;
-  candidate_id: string;
-  device_id: string;
-  event_id: string;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-}
-
 export interface JITRolloutDecisionEnvelope {
   budget_contract_version?: string | null;
   cache_hit: boolean;
@@ -2664,40 +2630,6 @@ export interface JITRolloutDecisionEnvelope {
 export interface JITTriggerActionEnvelope {
   prompt: string;
   type: string;
-}
-
-export interface JITTriggerFeedbackEnvelope {
-  applied: boolean;
-  receipt: JITTriggerFeedbackReceipt;
-  trigger_memory_id: string;
-  trigger_revision: number;
-  trigger_status: string;
-}
-
-export interface JITTriggerFeedbackReceipt {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  applied_trigger_revision?: number | null;
-  event_id: string;
-  expected_trigger_revision: number;
-  feedback_id: string;
-  recorded_at: string;
-  request_hash: string;
-  schema_version?: "jit_trigger_feedback.v1";
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  uid: string;
-}
-
-export interface JITTriggerFeedbackRequest {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  event_id: string;
-  feedback_id: string;
-  recorded_at: string;
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  trigger_revision: number;
 }
 
 export interface JITTriggerSnapshotEnvelope {
@@ -5750,14 +5682,8 @@ export interface OmiApiSchemas {
   "InterventionSurface": InterventionSurface;
   "JITDecisionReason": JITDecisionReason;
   "JITErrorClass": JITErrorClass;
-  "JITProactivityEventReceipt": JITProactivityEventReceipt;
-  "JITProactivityReservationEnvelope": JITProactivityReservationEnvelope;
-  "JITProactivityReservationRequest": JITProactivityReservationRequest;
   "JITRolloutDecisionEnvelope": JITRolloutDecisionEnvelope;
   "JITTriggerActionEnvelope": JITTriggerActionEnvelope;
-  "JITTriggerFeedbackEnvelope": JITTriggerFeedbackEnvelope;
-  "JITTriggerFeedbackReceipt": JITTriggerFeedbackReceipt;
-  "JITTriggerFeedbackRequest": JITTriggerFeedbackRequest;
   "JITTriggerSnapshotEnvelope": JITTriggerSnapshotEnvelope;
   "JITTriggerSnapshotRowEnvelope": JITTriggerSnapshotRowEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
@@ -8392,9 +8318,35 @@ export interface OmiApiPaths {
     post: {
       operationId: "reserve_jit_proactivity_v1_jit_proactivity_reservations_post";
       responses: {
-        "200": JITProactivityReservationEnvelope;
+        "200": {
+  receipt: {
+  account_generation: number;
+  budget_day: string;
+  budget_timezone?: string;
+  candidate_id: string;
+  created_at: string;
+  device_id: string;
+  event_id: string;
+  feedback_id?: string | null;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  request_hash: string;
+  schema_version?: "jit_proactivity_event.v1";
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+  uid: string;
+};
+  reserved: boolean;
+};
         "401": void;
-        "422": HTTPValidationError;
+        "410": unknown;
+        "422": {
+  detail?: Array<{
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+}>;
+};
       };
     };
   };
@@ -8412,9 +8364,35 @@ export interface OmiApiPaths {
     post: {
       operationId: "post_jit_trigger_feedback_v1_jit_trigger_feedback_post";
       responses: {
-        "200": JITTriggerFeedbackEnvelope;
+        "200": {
+  applied: boolean;
+  receipt: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  applied_trigger_revision?: number | null;
+  event_id: string;
+  expected_trigger_revision: number;
+  feedback_id: string;
+  recorded_at: string;
+  request_hash: string;
+  schema_version?: "jit_trigger_feedback.v1";
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  uid: string;
+};
+  trigger_memory_id: string;
+  trigger_revision: number;
+  trigger_status: string;
+};
         "401": void;
-        "422": HTTPValidationError;
+        "410": unknown;
+        "422": {
+  detail?: Array<{
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+}>;
+};
       };
     };
   };
@@ -15319,7 +15297,35 @@ export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledg
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITProactivityReservationRequest, init?: OmiApiClientInit): Promise<JITProactivityReservationEnvelope> {
+export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
+  account_generation: number;
+  candidate_id: string;
+  device_id: string;
+  event_id: string;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+}, init?: OmiApiClientInit): Promise<{
+  receipt: {
+  account_generation: number;
+  budget_day: string;
+  budget_timezone?: string;
+  candidate_id: string;
+  created_at: string;
+  device_id: string;
+  event_id: string;
+  feedback_id?: string | null;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  request_hash: string;
+  schema_version?: "jit_proactivity_event.v1";
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+  uid: string;
+};
+  reserved: boolean;
+}> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/proactivity/reservations`;
   const _search = "";
@@ -15359,7 +15365,35 @@ export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITTriggerFeedbackRequest, init?: OmiApiClientInit): Promise<JITTriggerFeedbackEnvelope> {
+export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  event_id: string;
+  feedback_id: string;
+  recorded_at: string;
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  trigger_revision: number;
+}, init?: OmiApiClientInit): Promise<{
+  applied: boolean;
+  receipt: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  applied_trigger_revision?: number | null;
+  event_id: string;
+  expected_trigger_revision: number;
+  feedback_id: string;
+  recorded_at: string;
+  request_hash: string;
+  schema_version?: "jit_trigger_feedback.v1";
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  uid: string;
+};
+  trigger_memory_id: string;
+  trigger_revision: number;
+  trigger_status: string;
+}> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/trigger-feedback`;
   const _search = "";
