@@ -38,7 +38,7 @@ class FirestoreContentionExhausted(RuntimeError):
 
 
 def is_transaction_contention(error: BaseException) -> bool:
-    """Return True if error or any wrapped cause/context signals transaction contention."""
+    """Return True if error or any wrapped cause signals transaction contention."""
     if not isinstance(error, BaseException):
         return False
 
@@ -57,19 +57,32 @@ def is_transaction_contention(error: BaseException) -> bool:
             return True
 
         name = type(curr).__name__
-        if name in ("Aborted", "Conflict", "FirestoreAborted"):
-            return True
+        mod = getattr(type(curr), "__module__", "") or ""
+
+        # Narrow check to Aborted (contention), never generic Conflict or HTTPException
+        if name in ("Aborted", "FirestoreAborted"):
+            if not any(pkg in mod for pkg in ("fastapi", "starlette", "requests", "httpx")):
+                return True
 
         # 2. Status code or gRPC code match
-        code = getattr(curr, "code", None)
-        status_code = getattr(curr, "status_code", None)
-        grpc_status_code = getattr(curr, "grpc_status_code", None)
+        raw_code = getattr(curr, "code", None)
+        if callable(raw_code):
+            try:
+                grpc_code = raw_code()
+            except Exception:
+                grpc_code = None
+        else:
+            grpc_code = raw_code
 
-        if code in (409, "409", "ABORTED", 10):
-            return True
-        if status_code in (409, "409", 10):
-            return True
-        if grpc_status_code in (10, "10", 409):
+        if grpc_code is not None:
+            code_name = getattr(grpc_code, "name", None)
+            if code_name == "ABORTED" or str(grpc_code) in ("10", "ABORTED", "StatusCode.ABORTED"):
+                return True
+            if grpc_code == 10:
+                return True
+
+        grpc_status = getattr(curr, "grpc_status_code", None)
+        if grpc_status in (10, "10", "ABORTED"):
             return True
 
         # 3. Traverse explicit cause (__cause__)
@@ -160,7 +173,7 @@ def run_with_transaction_contention_retry(
                 raw_rnd = float(random_value())
                 if math.isnan(raw_rnd) or math.isinf(raw_rnd):
                     raw_rnd = 0.5
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 raw_rnd = 0.5
 
             jitter = min(max(raw_rnd, 0.0), 1.0)

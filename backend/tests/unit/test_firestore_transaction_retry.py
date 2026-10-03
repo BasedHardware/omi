@@ -26,10 +26,19 @@ class DummyStatusError(Exception):
         self.grpc_status_code = grpc_status_code
 
 
-class DummyExceptionGroup(Exception):
-    def __init__(self, message: str, exceptions: list[BaseException]):
-        super().__init__(message)
-        self.exceptions = exceptions
+class DummyGrpcStatus:
+    def __init__(self, name="ABORTED", value=10):
+        self.name = name
+        self.value = value
+
+
+class DummyGrpcError(Exception):
+    def __init__(self, status):
+        super().__init__(f"gRPC error: {status}")
+        self._status = status
+
+    def code(self):
+        return self._status
 
 
 class DummyTransaction:
@@ -51,32 +60,40 @@ def test_is_transaction_contention_direct_types():
         pass
     assert is_transaction_contention(Aborted("contention"))
 
-    class Conflict(Exception):
+    class FirestoreAbortedNamed(Exception):
         pass
-    assert is_transaction_contention(Conflict("conflict"))
+    FirestoreAbortedNamed.__name__ = "FirestoreAborted"
+    assert is_transaction_contention(FirestoreAbortedNamed("contention"))
 
 
 def test_is_transaction_contention_status_codes():
     # code attribute matches
-    assert is_transaction_contention(DummyStatusError(code=409))
-    assert is_transaction_contention(DummyStatusError(code="409"))
     assert is_transaction_contention(DummyStatusError(code="ABORTED"))
     assert is_transaction_contention(DummyStatusError(code=10))
-
-    # status_code attribute matches
-    assert is_transaction_contention(DummyStatusError(status_code=409))
-    assert is_transaction_contention(DummyStatusError(status_code="409"))
-    assert is_transaction_contention(DummyStatusError(status_code=10))
 
     # grpc_status_code attribute matches
     assert is_transaction_contention(DummyStatusError(grpc_status_code=10))
     assert is_transaction_contention(DummyStatusError(grpc_status_code="10"))
-    assert is_transaction_contention(DummyStatusError(grpc_status_code=409))
+    assert is_transaction_contention(DummyStatusError(grpc_status_code="ABORTED"))
 
     # non-contention codes
     assert not is_transaction_contention(DummyStatusError(code=500))
     assert not is_transaction_contention(DummyStatusError(status_code=404))
     assert not is_transaction_contention(DummyStatusError(grpc_status_code=14))
+
+
+def test_is_transaction_contention_native_grpc():
+    assert is_transaction_contention(DummyGrpcError(DummyGrpcStatus("ABORTED", 10)))
+    assert not is_transaction_contention(DummyGrpcError(DummyGrpcStatus("NOT_FOUND", 5)))
+
+
+def test_is_transaction_contention_excludes_unrelated_http_errors():
+    class HTTPException(Exception):
+        __module__ = "starlette.exceptions"
+        def __init__(self, status_code=409):
+            self.status_code = status_code
+
+    assert not is_transaction_contention(HTTPException(409))
 
 
 def test_is_transaction_contention_cause_traversal():
@@ -91,7 +108,7 @@ def test_is_transaction_contention_cause_traversal():
 
 def test_is_transaction_contention_context_does_not_retry():
     # Implicit __context__ from an except block should NOT make replacement errors retryable
-    root = DummyStatusError(code=409)
+    root = DummyStatusError(code="ABORTED")
     try:
         try:
             raise root
@@ -111,15 +128,15 @@ def test_is_transaction_contention_circular_references():
     assert not is_transaction_contention(err1)
 
     # Now link one in cycle to a contention cause
-    err3 = DummyStatusError(code=409)
+    err3 = DummyStatusError(code="ABORTED")
     err2.__cause__ = err3
     assert is_transaction_contention(err1)
 
 
-def test_is_transaction_contention_exception_group():
+def test_is_transaction_contention_native_exception_group():
     err1 = ValueError("irrelevant")
-    err2 = DummyStatusError(status_code=409)
-    group = DummyExceptionGroup("group", [err1, err2])
+    err2 = DummyStatusError(code="ABORTED")
+    group = ExceptionGroup("group", (err1, err2))
 
     assert is_transaction_contention(group)
 
@@ -170,7 +187,7 @@ def test_retry_recovers_after_contention():
         nonlocal attempts
         attempts += 1
         if attempts < 3:
-            raise DummyStatusError(code=409)
+            raise DummyStatusError(code="ABORTED")
         return "recovered"
 
     slept = []
@@ -185,6 +202,29 @@ def test_retry_recovers_after_contention():
     assert res == "recovered"
     assert attempts == 3
     assert len(slept) == 2
+
+
+def test_retry_backoff_progression_and_cap():
+    calls = 0
+
+    def op(t):
+        nonlocal calls
+        calls += 1
+        if calls < 6:
+            raise FirestoreAborted("retry")
+        return "done"
+
+    slept = []
+    run_with_transaction_contention_retry(
+        transaction_factory=lambda: None,
+        operation=op,
+        operation_name="test_backoff",
+        max_attempts=6,
+        sleep=slept.append,
+        random_value=lambda: 1.0,
+    )
+    # 0.2, 0.4, 0.8, 1.0 (capped), 1.0 (capped)
+    assert slept == [0.2, 0.4, 0.8, 1.0, 1.0]
 
 
 def test_retry_exhausted_raises_exception():
@@ -301,7 +341,8 @@ def test_retry_non_callable_arguments():
         )
 
 
-def test_retry_nan_inf_jitter_safety():
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf"), float("-inf"), 1e309])
+def test_retry_nan_inf_jitter_safety(bad_val):
     attempts = 0
 
     def op(t):
@@ -312,13 +353,41 @@ def test_retry_nan_inf_jitter_safety():
         return "done"
 
     slept = []
-    # Test NaN returned by random_value
     res = run_with_transaction_contention_retry(
         transaction_factory=lambda: None,
         operation=op,
-        operation_name="jitter_nan",
+        operation_name="jitter_bad",
         sleep=slept.append,
-        random_value=lambda: float("nan"),
+        random_value=lambda: bad_val,
+    )
+    assert res == "done"
+    assert len(slept) == 1
+    assert not math.isnan(slept[0])
+    assert not math.isinf(slept[0])
+    assert slept[0] > 0
+
+
+def test_retry_overflow_jitter_safety():
+    attempts = 0
+
+    def op(t):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise FirestoreAborted("retry")
+        return "done"
+
+    class OverflowNumber:
+        def __float__(self):
+            raise OverflowError("too large")
+
+    slept = []
+    res = run_with_transaction_contention_retry(
+        transaction_factory=lambda: None,
+        operation=op,
+        operation_name="jitter_overflow",
+        sleep=slept.append,
+        random_value=lambda: OverflowNumber(),
     )
     assert res == "done"
     assert len(slept) == 1
