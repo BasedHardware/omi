@@ -145,6 +145,9 @@ def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
     redis_db.r.delete(f'{_STATE_PREFIX}{state}')
     if isinstance(raw, bytes):
         raw = raw.decode('utf-8')
+    # JSON is the primary serialized format; check for JSON-object prefix first.
+    # Note: legacy newline-delimited payloads with a uid starting with '{' are safely
+    # handled by falling back to parts.split('\n') if JSON parsing fails or keys are missing.
     if raw.startswith('{'):
         try:
             parsed = json.loads(raw)

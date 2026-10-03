@@ -28,6 +28,24 @@ def test_is_safe_redirect_url_rejects_unsafe_schemes():
     assert is_safe_redirect_url('https://malicious-site.com/steal') is False
     assert is_safe_redirect_url('file:///etc/passwd') is False
     assert is_safe_redirect_url('ftp://evil.com') is False
+    assert is_safe_redirect_url('blob:https://evil.com/uuid') is False
+    assert is_safe_redirect_url('ws://localhost:8000/ws') is False
+    assert is_safe_redirect_url('wss://localhost:8000/ws') is False
+    assert is_safe_redirect_url('intent://evil.com/#Intent;scheme=http;end') is False
+
+
+def test_is_safe_redirect_url_rejects_userinfo_and_open_redirect():
+    # Userinfo embedded before localhost prefix should never resolve to attacker origin
+    assert is_safe_redirect_url('http://localhost:8080@evil.com/steal') is False
+    assert is_safe_redirect_url('http://127.0.0.1:3000@evil.com/x') is False
+    assert is_safe_redirect_url('http://user:pass@localhost:8000/callback') is False
+    assert is_safe_redirect_url('omi://user@x/callback') is False
+
+
+def test_is_safe_redirect_url_rejects_backslashes():
+    assert is_safe_redirect_url('http://localhost:8080\\evil.com') is False
+    assert is_safe_redirect_url('omi://x\\callback') is False
+    assert is_safe_redirect_url('http:\\\\localhost:8000\\callback') is False
 
 
 def test_is_safe_redirect_url_rejects_control_characters():
@@ -56,7 +74,7 @@ def test_redirect_html_escapes_script_breakout():
     resp = _redirect_html(malicious, True, 'OK')
     html_content = resp.body.decode('utf-8')
     assert '</script><script>alert(1)</script>' not in html_content
-    assert r'<\/script>' in html_content or DEFAULT_DEEP_LINK in html_content
+    assert r'<\/script>' in html_content
 
 
 def test_redirect_html_escapes_message_content():
@@ -97,6 +115,7 @@ def test_x_oauth_url_sanitizes_internal_exception(caplog):
         res = x_oauth_url(success_redirect_url=None, uid='test_user')
         assert res.success is False
         assert res.error == 'internal_error'
+        assert 'sensitive_token_abc123' not in caplog.text
 
 
 def test_oauth_state_json_serialization_roundtrip():

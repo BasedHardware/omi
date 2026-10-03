@@ -31,6 +31,8 @@ from utils.other import endpoints as auth
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+from urllib.parse import urlsplit
+
 DEFAULT_DEEP_LINK = 'omi://x/callback'
 ALLOWED_REDIRECT_PREFIXES = (
     'omi://',
@@ -38,17 +40,48 @@ ALLOWED_REDIRECT_PREFIXES = (
     'http://localhost:',
     'http://127.0.0.1:',
 )
+ALLOWED_REDIRECT_SCHEMES = (
+    'omi',
+    'omi-computer-dev',
+)
+ALLOWED_LOCAL_HOSTS = (
+    'localhost',
+    '127.0.0.1',
+)
 X_POST_KINDS = (x_posts_db.KIND_TWEET, x_posts_db.KIND_BOOKMARK, x_posts_db.KIND_LIKE)
 
 
 def is_safe_redirect_url(url: Optional[str]) -> bool:
-    """Validate that the redirect URL uses an allowed Omi application scheme or local dev origin."""
+    """Validate that the redirect URL uses an allowed Omi application scheme or local dev origin.
+
+    Rejects URLs with userinfo, backslashes, control characters, or unapproved schemes/hosts
+    to prevent open redirect and parser differential attacks.
+    """
     if not url or not isinstance(url, str):
         return False
-    if any(ch in url for ch in ('\r', '\n', '\t', '\0')):
+    if any(ch in url for ch in ('\r', '\n', '\t', '\0', '\\', '@')):
         return False
     trimmed = url.strip()
-    return any(trimmed.startswith(prefix) for prefix in ALLOWED_REDIRECT_PREFIXES)
+    try:
+        parts = urlsplit(trimmed)
+    except Exception:
+        return False
+
+    if parts.username or parts.password:
+        return False
+
+    scheme = (parts.scheme or '').lower()
+    if scheme in ALLOWED_REDIRECT_SCHEMES:
+        return True
+
+    if scheme in ('http', 'https'):
+        hostname = (parts.hostname or '').lower()
+        if hostname in ALLOWED_LOCAL_HOSTS:
+            if parts.port is not None:
+                return True
+        return False
+
+    return False
 
 
 class OAuthUrlResponse(BaseModel):
