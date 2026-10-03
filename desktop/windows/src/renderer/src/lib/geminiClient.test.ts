@@ -48,7 +48,7 @@ describe('renderer geminiClient — attribution transport', () => {
       Authorization: 'Bearer firebase-token',
       'X-Omi-Lane': 'live_notes',
       'X-Omi-Workload': 'extraction',
-      'X-App-Platform': 'windows'
+      'X-Omi-Client-Platform': 'windows'
     })
     const body = JSON.parse(init.body as string)
     expect(body.contents).toEqual([{ role: 'user', parts: [{ text: 'prompt' }] }])
@@ -66,7 +66,7 @@ describe('renderer geminiClient — attribution transport', () => {
       workload: 'extraction'
     })
     const [, init] = h.fetch.mock.calls[0] as [string, RequestInit]
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe('linux')
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe('linux')
   })
 
   it('degrades to unknown when the preload bridge is absent', async () => {
@@ -79,6 +79,6 @@ describe('renderer geminiClient — attribution transport', () => {
       workload: 'extraction'
     })
     const [, init] = h.fetch.mock.calls[0] as [string, RequestInit]
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe('unknown')
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe('unknown')
   })
 })

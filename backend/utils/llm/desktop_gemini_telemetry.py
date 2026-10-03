@@ -25,6 +25,7 @@ from config.desktop_gemini_attribution_generated import (
 )
 from config.vertex_reservations import State
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
+from llm_gateway.gateway.request_context import resolve_request_id
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
@@ -42,7 +43,6 @@ _DIRECT_LEDGER_ROUTES = frozenset({'vertex_ai', 'ai_studio', 'ai_studio_byok'})
 # rate cards (`provider: gemini`), so one query covers gateway and direct rows.
 _LEDGER_PROVIDER = 'gemini'
 
-_REQUEST_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,63}$')
 _REVISION_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$')
 _TRACE_PATTERN = re.compile(r'^([0-9a-fA-F]{32})(?:/[^;]+)?(?:;o=[01])?$')
 
@@ -106,7 +106,7 @@ def _status_class(status: int | None) -> str:
 class ProxyTelemetry:
     def __init__(self, request: Request, *, streaming: bool) -> None:
         supplied_request_id = request.headers.get('x-omi-request-id') or request.headers.get('x-request-id') or ''
-        self.request_id = supplied_request_id if _REQUEST_ID_PATTERN.fullmatch(supplied_request_id) else str(uuid4())
+        self.request_id = resolve_request_id(supplied_request_id)
         trace_header = request.headers.get('x-cloud-trace-context', '')
         trace_match = _TRACE_PATTERN.fullmatch(trace_header)
         self.trace_id = trace_match.group(1).lower() if trace_match else ''
@@ -120,9 +120,14 @@ class ProxyTelemetry:
         self.lane = supplied_lane if supplied_lane in GEMINI_LANES else 'unknown'
         supplied_workload = request.headers.get('x-omi-workload', '').strip().lower()
         self.workload_class = supplied_workload if supplied_workload in _ALLOWED_WORKLOADS else 'unknown'
-        self.client_platform = _PLATFORM_BY_CLIENT_KIND.get(
-            resolve_client_kind_from_headers(request.headers), 'unknown'
-        )
+        platform_header = request.headers.get('x-omi-client-platform')
+        if platform_header is not None:
+            platform = platform_header.strip().lower()
+            self.client_platform = 'other' if platform == 'linux' else platform
+        else:
+            self.client_platform = _PLATFORM_BY_CLIENT_KIND.get(
+                resolve_client_kind_from_headers(request.headers), 'unknown'
+            )
         if self.client_platform not in GEMINI_CLIENT_PLATFORMS:
             self.client_platform = 'unknown'
         self.prompt_token_count: int | None = None
@@ -273,6 +278,8 @@ class ProxyTelemetry:
                 feature=desktop_gemini_gateway.DESKTOP_GATEWAY_FEATURE,
                 api_surface=f'gemini_{self.action}' if self.action in ALLOWED_ACTIONS else 'gemini_unknown',
                 payer=self.payer,
+                product_lane=self.lane,
+                client_platform=self.client_platform,
                 provider=_LEDGER_PROVIDER,
                 configured_model=self.model,
                 outcome=outcome,

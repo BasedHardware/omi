@@ -50,8 +50,9 @@ describe('geminiProxyFetch — transport contract', () => {
       Authorization: 'Bearer tok-1',
       'X-Omi-Lane': 'focus',
       'X-Omi-Workload': 'extraction',
-      'X-App-Platform': 'windows'
+      'X-Omi-Client-Platform': 'windows'
     })
+    expect(init.headers).not.toHaveProperty('X-App-Platform')
     expect(init.body).toBe('{"contents":[]}')
     expect(init.signal).toBe(signal)
   })
@@ -129,18 +130,7 @@ describe('canonical attribution contract', () => {
     expect(canonical.platforms).toContain('other')
   })
 
-  it('wire platform values resolve to a known client kind on the backend', () => {
-    // journey_metrics_contract._PLATFORM_CLIENT_KIND recognizes these wire
-    // values; 'other' is server-side only — a client sending it records
-    // client_platform: unknown. The wire set stays {windows, macos, linux,
-    // unknown}, the server enum {macos, windows, other, unknown}.
-    const wireValues = ['windows', 'macos', 'linux']
-    const resolverKeys = ['android', 'ios', 'macos', 'windows', 'linux', 'desktop', 'mobile', 'web']
-    for (const value of wireValues) {
-      expect(resolverKeys).toContain(value)
-    }
-    expect(wireValues).not.toContain('other')
-  })
+
 })
 
 describe('transport ownership ratchet', () => {

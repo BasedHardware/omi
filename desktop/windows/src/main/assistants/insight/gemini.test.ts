@@ -156,7 +156,7 @@ describe('runTwoPhasePipeline', () => {
       'X-Omi-Lane': 'insight',
       'X-Omi-Workload': 'extraction'
     })
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe(
       geminiClientPlatform(process.platform)
     )
   })

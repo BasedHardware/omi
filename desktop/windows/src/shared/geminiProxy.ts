@@ -8,12 +8,8 @@ export const GEMINI_PROXY_ACTIONS = [
 ] as const
 export type GeminiProxyAction = (typeof GEMINI_PROXY_ACTIONS)[number]
 
-// Wire values for X-App-Platform. These are client identities the backend
-// resolver (journey_metrics_contract._PLATFORM_CLIENT_KIND) normalizes: the
-// terminal event's client_platform enum — {macos, windows, other, unknown} —
-// is the generated server-side contract, and 'linux' on the wire maps to
-// 'other' there via desktop_linux. Do not send 'other' from a client; the
-// resolver does not recognize it and would record client_platform: unknown.
+// Telemetry-only platform identity. The proxy maps Linux to the generated
+// 'other' value. This header must not activate auth's platform persistence.
 export type GeminiClientPlatform = 'windows' | 'macos' | 'linux' | 'unknown'
 
 export function geminiClientPlatform(platform: string | undefined | null): GeminiClientPlatform {
@@ -59,7 +55,7 @@ export function geminiProxyFetch(
       Authorization: `Bearer ${req.token}`,
       'X-Omi-Lane': req.lane,
       'X-Omi-Workload': req.workload,
-      'X-App-Platform': req.platform
+      'X-Omi-Client-Platform': req.platform
     },
     body: req.body,
     signal: req.signal

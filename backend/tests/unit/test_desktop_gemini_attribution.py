@@ -345,7 +345,7 @@ def _body() -> bytes:
 
 def _success_headers(**extra):
     return {
-        'x-app-platform': 'macos',
+        'x-omi-client-platform': 'macos',
         'x-omi-lane': 'focus',
         'x-omi-workload': 'extraction',
         'content-length': str(len(_body())),
@@ -505,7 +505,10 @@ def test_rejection_emits_one_fully_attributed_terminal(no_dispatch, capsys, monk
 def test_gateway_success_reuses_one_telemetry(client_app, capsys, monkeypatch):
     monkeypatch.setattr(desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: True)
 
-    async def fake_chat(body, *, model, action, uid):
+    async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
+        assert product_lane == 'focus'
+        assert client_platform == 'macos'
+        assert request_id
         return desktop_gemini_gateway.GatewayChatResult(
             gemini_payload={'candidates': [{'content': {'parts': [{'text': 'hi'}]}}]}
         )
@@ -529,7 +532,7 @@ def test_gateway_success_reuses_one_telemetry(client_app, capsys, monkeypatch):
 def test_gateway_failure_reuses_one_telemetry(client_app, capsys, monkeypatch):
     monkeypatch.setattr(desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: True)
 
-    async def fake_chat(body, *, model, action, uid):
+    async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         raise desktop_gemini_gateway.DesktopGeminiGatewayError(
             status_code=500, code='gateway_unavailable', message='gateway is down'
         )
@@ -624,7 +627,7 @@ def test_arbitrary_headers_never_reach_the_event(client_app, capsys):
     ],
 )
 def test_platform_mapping(client_app, capsys, headers, expected):
-    sent = {k: v for k, v in _success_headers().items() if k != 'x-app-platform'}
+    sent = {k: v for k, v in _success_headers().items() if k != 'x-omi-client-platform'}
     sent.update(headers)
     response = TestClient(client_app).post(
         '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
@@ -697,7 +700,7 @@ def test_streaming_unfinished_iterator_reports_incomplete(client_app, capsys, mo
 async def test_streaming_routing_failure_keeps_structured_outcome(capsys, monkeypatch):
     """Overflow recovery resolves the next route inside the stream body
     iterator. A RoutingFailure raised there must surface its structured
-    routing outcome, not a generic 500 stream_iterator_error."""
+    routing outcome while propagating the exception to the client."""
     routed = False
 
     async def route_refused_on_recovery(*_args, **_kwargs):
@@ -749,19 +752,22 @@ async def test_streaming_routing_failure_keeps_structured_outcome(capsys, monkey
     telemetry = _telemetry()
     telemetry.identify('models/gemini-2.5-flash:streamGenerateContent')
     primary = await route_refused_on_recovery('p', 'gemini-2.5-flash', 'streamGenerateContent', {})
-    emitted = [
-        chunk
-        async for chunk in desktop_proxy._stream_provider(
-            _telemetry_request(),
-            primary,
-            _body(),
-            telemetry,
-            model='gemini-2.5-flash',
-            action='streamGenerateContent',
-            query={},
-        )
-    ]
-    assert b'no_provider_credentials' in b''.join(emitted)
+    emitted = []
+    source = desktop_proxy._stream_provider(
+        _telemetry_request(),
+        primary,
+        _body(),
+        telemetry,
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        query={},
+    )
+    guarded = desktop_gemini_telemetry._terminal_stream_guard(source, telemetry)
+    with pytest.raises(desktop_proxy.RoutingFailure) as failure:
+        async for chunk in guarded:
+            emitted.append(chunk)
+    assert failure.value.code == 'no_provider_credentials'
+    assert emitted == []
     events = _events(capsys)
     assert len(events) == 1
     assert events[0]['outcome'] == 'no_provider_credentials'

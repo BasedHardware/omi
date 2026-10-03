@@ -12,7 +12,8 @@ final class GeminiLaneTelemetryTests: XCTestCase {
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
     XCTAssertEqual(request.value(forHTTPHeaderField: "X-Omi-Lane"), "memory")
     XCTAssertEqual(request.value(forHTTPHeaderField: "X-Omi-Workload"), "extraction")
-    XCTAssertEqual(request.value(forHTTPHeaderField: "X-App-Platform"), "macos")
+    XCTAssertEqual(request.value(forHTTPHeaderField: "X-Omi-Client-Platform"), "macos")
+    XCTAssertNil(request.value(forHTTPHeaderField: "X-App-Platform"))
   }
 
   func testHeaderHelperOverwritesStaleAttribution() throws {

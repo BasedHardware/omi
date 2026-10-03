@@ -80,7 +80,7 @@ describe('analyzeScreenshot — retry classification', () => {
       'X-Omi-Lane': 'focus',
       'X-Omi-Workload': 'extraction'
     })
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe(
       geminiClientPlatform(process.platform)
     )
   })

@@ -2294,7 +2294,7 @@ async def test_company_paid_generate_content_hops_the_gateway_never_vertex_direc
     class FakeResult:
         gemini_payload = {"candidates": [{"content": {"parts": [{"text": "gateway answer"}]}}]}
 
-    async def fake_chat(body, *, model, action, uid):
+    async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         captured.update(body=json.loads(body), model=model, action=action, uid=uid)
         return FakeResult()
 
@@ -2322,7 +2322,7 @@ async def test_company_paid_embed_content_hops_the_gateway_embeddings_surface(mo
     class FakeEmbedding:
         values = [0.1, 0.2]
 
-    async def fake_embed(body, *, uid):
+    async def fake_embed(body, *, uid, request_id, product_lane, client_platform):
         captured.update(body=json.loads(body), uid=uid)
         return FakeEmbedding()
 
@@ -2371,7 +2371,7 @@ async def test_gateway_error_maps_to_the_retryable_proxy_envelope(monkeypatch):
     _gateway_feature_mode(monkeypatch)
     _install_gateway_doubles(monkeypatch)
 
-    async def failing_chat(body, *, model, action, uid):
+    async def failing_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         raise DesktopGeminiGatewayError(
             status_code=503, code="provider_unavailable", message="Gemini gateway is temporarily unavailable"
         )

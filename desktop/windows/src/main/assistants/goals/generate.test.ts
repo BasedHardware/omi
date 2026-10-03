@@ -294,7 +294,7 @@ describe('generateSuggestionText — proxy transport', () => {
       'X-Omi-Lane': 'goals',
       'X-Omi-Workload': 'interactive'
     })
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe(
       geminiClientPlatform(process.platform)
     )
   })
