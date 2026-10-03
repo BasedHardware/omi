@@ -1,1 +1,1 @@
-# IQ Rating Plugin
+from .iq_auth import require_iq_auth
