@@ -2,7 +2,9 @@ import { readdir, stat, readFile } from 'fs/promises'
 import { join } from 'path'
 import { nativeImage } from 'electron'
 import { rewindRoot } from './paths'
-import { rewindImagePathsBetween, insertRewindFrame } from '../ipc/db'
+import { rewindImagePathsBetween, insertRewindFrame, framesInChunk } from '../ipc/db'
+import { listChunkFiles, readChunkFile } from './chunks/chunkFiles'
+import { REBUILT_CHUNK_FRAME_INDEXED, selectChunkFramesToRebuild } from './chunks/chunkRebuild'
 import { deriveKeepSetWindow, parseFrameTs } from './orphanSelection'
 import { selectFramesToReindex, type DiskFrameFile } from './rebuildSelection'
 import { signalRewindOcrPending } from './ocrService'
@@ -96,6 +98,56 @@ async function rebuildDayDir(dayName: string): Promise<number> {
   return inserted
 }
 
+/**
+ * Re-create rows for frames stored in chunks.
+ *
+ * Reads only each chunk's record headers, so recovering a day of chunks does not
+ * pull a day of encoded video through memory, and skips offsets that already
+ * have a row so a re-run inserts nothing. Selection is pure and lives in
+ * `chunks/chunkRebuild.ts`.
+ */
+async function rebuildFromChunks(): Promise<number> {
+  const root = rewindRoot()
+  let onDisk: { relativePath: string }[]
+  try {
+    onDisk = await listChunkFiles(root)
+  } catch {
+    return 0
+  }
+  let inserted = 0
+  for (const { relativePath } of onDisk) {
+    let bytes: Uint8Array
+    try {
+      bytes = await readChunkFile(root, relativePath)
+    } catch {
+      continue // vanished or unreadable — fail-open, same as a stray JPEG
+    }
+    const known = new Set(framesInChunk(relativePath).map((f) => f.chunkOffset))
+    for (const target of selectChunkFramesToRebuild({ relativePath, bytes }, known)) {
+      try {
+        insertRewindFrame({
+          ts: target.ts,
+          app: '',
+          windowTitle: '',
+          processName: '',
+          ocrText: '',
+          // No JPEG of its own: the pixels are frame `chunkOffset` of the chunk.
+          imagePath: '',
+          width: target.width,
+          height: target.height,
+          indexed: REBUILT_CHUNK_FRAME_INDEXED,
+          chunkPath: target.chunkPath,
+          chunkOffset: target.chunkOffset
+        })
+        inserted++
+      } catch {
+        /* one bad row must not abandon the rest of the recovery */
+      }
+    }
+  }
+  return inserted
+}
+
 // Single-flight guard. A rebuild snapshots each day dir's existing image paths and
 // THEN inserts the missing rows; two rebuilds overlapping would share the same
 // pre-insert snapshot and each insert the same orphans → duplicate rows (the exact
@@ -128,6 +180,12 @@ async function runRebuild(): Promise<number> {
   }
   let total = 0
   for (const day of dayNames) total += await rebuildDayDir(day)
+  // Compacted frames live in chunks rather than in files named for their
+  // timestamp, so they need their own pass. Without it a database wipe would
+  // leave every compacted frame unreachable and the chunk sweep would
+  // eventually delete files whose pixels were perfectly intact.
+  const fromChunks = await rebuildFromChunks()
+  total += fromChunks
   if (total > 0) {
     console.log(`[rewind] index rebuild inserted ${total} row(s) from disk`)
     // These rows are inserted indexed=0 for the OCR backlog sweep to re-OCR. The

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  RewindEncodeChunkRequest,
+  RewindEncodeChunkResponse,
   OmiBridgeApi,
   OmiOverlayApi,
   OmiBarApi,
@@ -364,6 +366,15 @@ const omi: OmiBridgeApi = {
   rewindSetEmbedSession: (session: { desktopApiBase: string; token: string } | null) =>
     ipcRenderer.invoke('rewind:setEmbedSession', session),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  rewindChunkBytes: (chunkPath: string) => ipcRenderer.invoke('rewind:chunkBytes', chunkPath),
+  rewindCompactNow: () => ipcRenderer.invoke('rewind:compactNow'),
+  onRewindEncodeChunk: (cb: (request: RewindEncodeChunkRequest) => void) => {
+    const h = (_e: unknown, request: RewindEncodeChunkRequest): void => cb(request)
+    ipcRenderer.on('rewind:encode-chunk', h)
+    return () => ipcRenderer.removeListener('rewind:encode-chunk', h)
+  },
+  rewindChunkEncoded: (response: RewindEncodeChunkResponse) =>
+    ipcRenderer.send('rewind:chunk-encoded', response),
   // --- Track 4 --- per-line OCR boxes for the on-image search highlight overlay
   rewindFrameOcrLines: (frameId: number) => ipcRenderer.invoke('rewind:frameOcrLines', frameId),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),

@@ -89,6 +89,45 @@ export const MIGRATIONS: Migration[] = [
       if (!hasFts) return
       d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
+  },
+  {
+    version: 3,
+    name: 'rewind_video_chunks',
+    up: (d) => {
+      // The abandoned-chunk table stands alone, so it is created either way.
+      // The database half of abandoned-chunk recovery, ported from macOS'
+      // `RewindAbandonedVideoChunkQuarantine`. A chunk found corrupt at read
+      // time is tombstoned here so a later claim cannot point a frame back into
+      // a file recovery has already given up on.
+      d.exec(
+        `CREATE TABLE IF NOT EXISTS rewind_abandoned_chunks (
+           chunk_path TEXT PRIMARY KEY NOT NULL
+         )`
+      )
+      // Guard on existence, for the same reason migration 2 does: db.ts's
+      // bootstrap creates rewind_frames before migrations run in production,
+      // but the migration-only harness (dbMigrations.test.ts) seeds only
+      // local_conversation, and a migration that assumes a table it did not
+      // create fails the whole chain there.
+      const hasFrames = d
+        .prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='rewind_frames'")
+        .get() as { x: number } | undefined
+      if (!hasFrames) return
+      // Where a frame lives once it has been compacted into a video chunk:
+      // `chunk_path` is the chunk's `<day>/<name>.omichunk` relative path and
+      // `chunk_offset` is its position inside it. Both stay NULL for a frame
+      // still stored as its own JPEG, which is every existing row — the column
+      // being NULL is what `chunkSql.ts` filters compaction candidates on, so
+      // the default is the migration's whole behaviour for existing data.
+      addColumnIfMissing(d, 'rewind_frames', 'chunk_path', 'TEXT')
+      addColumnIfMissing(d, 'rewind_frames', 'chunk_offset', 'INTEGER')
+      // Partial index: only chunk-backed rows are in it, so it stays small on a
+      // database that has never compacted anything, and the retention sweep's
+      // DISTINCT over chunk_path does not scan the whole table.
+      d.exec(
+        'CREATE INDEX IF NOT EXISTS idx_rewind_frames_chunk ON rewind_frames(chunk_path) WHERE chunk_path IS NOT NULL'
+      )
+    }
   }
 ]
 
