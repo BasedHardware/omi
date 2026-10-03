@@ -575,18 +575,10 @@ struct FloatingControlBarView: View {
 
   /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
   /// normal notification card.
-  private enum JITFeedbackPresentation {
-    case planned(JITTriggerFeedbackContext)
-    case ambient(JITAmbientFeedbackContext)
-  }
 
   @ViewBuilder
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
-    if let feedbackContext = notification.jitFeedbackContext {
-      jitFeedbackCard(notification, presentation: .planned(feedbackContext))
-    } else if let ambientFeedbackContext = notification.jitAmbientFeedbackContext {
-      jitFeedbackCard(notification, presentation: .ambient(ambientFeedbackContext))
-    } else if notification.assistantId == "reach_error" {
+    if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
     } else if notification.assistantId == NotchMoment.receiptAssistantId {
       notchReceiptCard(notification)
@@ -620,134 +612,6 @@ struct FloatingControlBarView: View {
   /// Concrete, explicit-only controls for a planned trigger. Each action is
   /// submitted through the delivery actor; dismissing or ignoring the card
   /// never calls this path.
-  private func jitFeedbackCard(
-    _ notification: FloatingBarNotification,
-    presentation: JITFeedbackPresentation
-  ) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      Button {
-        FloatingControlBarManager.shared.openNotificationAsChat(notification)
-      } label: {
-        HStack(alignment: .top, spacing: OmiSpacing.md) {
-          Image(systemName: "bell.badge.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-
-          VStack(alignment: .leading, spacing: 3) {
-            Text(notification.title)
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(.white)
-              .lineLimit(1)
-            Text(notification.message)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(0.78))
-              .lineLimit(3)
-              .multilineTextAlignment(.leading)
-            if InterjectFeature.isEnabled {
-              Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
-                .scaledFont(size: OmiType.micro, weight: .medium)
-                .foregroundColor(.white.opacity(0.45))
-                .lineLimit(1)
-            }
-          }
-          Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-
-      HStack(spacing: OmiSpacing.xs) {
-        jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
-          submitJITFeedback(.useful, notification: notification, presentation: presentation)
-        }
-        jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
-          submitJITFeedback(.falsePositive, notification: notification, presentation: presentation)
-        }
-        if case .planned = presentation {
-          jitFeedbackButton("Snooze", systemImage: "zzz") {
-            submitJITFeedback(
-              .snooze, notification: notification, presentation: presentation,
-              snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
-          }
-          jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
-            submitJITFeedback(.disable, notification: notification, presentation: presentation)
-          }
-          jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
-            submitJITFeedback(.missedOrLate, notification: notification, presentation: presentation)
-          }
-        }
-      }
-    }
-    .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.md + 2)
-    .notchDismissOverlay(accessibilityLabel: "Dismiss notification")
-  }
-
-  private func jitFeedbackButton(
-    _ title: String,
-    systemImage: String,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      Label(title, systemImage: systemImage)
-        .scaledFont(size: OmiType.micro, weight: .semibold)
-        .foregroundColor(.white.opacity(0.9))
-        .padding(.horizontal, OmiSpacing.xs)
-        .padding(.vertical, OmiSpacing.xxs)
-        .background(Color.white.opacity(0.12))
-        .clipShape(Capsule())
-    }
-    .buttonStyle(.plain)
-  }
-
-  private func submitJITFeedback(
-    _ action: JITTriggerFeedbackAction,
-    notification: FloatingBarNotification,
-    presentation: JITFeedbackPresentation,
-    snoozedUntil: Date? = nil
-  ) {
-    let ownerID: String
-    switch presentation {
-    case .planned(let context): ownerID = context.ownerID
-    case .ambient(let context): ownerID = context.ownerID
-    }
-    guard
-      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: ownerID
-      )
-    else { return }
-    let accountGeneration = AccountCutoverControlManager.shared.control.accountGeneration
-    let notificationID = notification.id
-    Task {
-      switch presentation {
-      case .planned(let context):
-        await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
-          identity: notification.feedbackIdentity,
-          verb: action.interjectVerb)
-        await JITTriggerFeedbackActionRouter.record(
-          action,
-          context: context,
-          snoozedUntil: snoozedUntil,
-          authorizationSnapshot: authorizationSnapshot)
-      case .ambient(let context):
-        await JITAmbientFeedbackActionRouter.record(
-          action,
-          context: context,
-          authorizationSnapshot: authorizationSnapshot,
-          currentAccountGeneration: accountGeneration,
-          presentationCurrent: {
-            FloatingControlBarManager.shared.isCurrentNotification(notificationID)
-          })
-      }
-      await MainActor.run {
-        guard FloatingControlBarManager.shared.isCurrentNotification(notificationID) else { return }
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      }
-    }
-  }
 
   /// Live proactive suggestion. Monochrome and quiet by design — this card interrupts
   /// unprompted, so it earns attention with the sentence, not with chrome.

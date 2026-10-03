@@ -1072,7 +1072,6 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
-    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
       effects: [.localState],
@@ -3989,13 +3988,11 @@ final class DesktopAutomationActionRegistry {
       params: []
     ) { _ in
       let task = TaskAssistantSettings.shared
-      let insight = InsightAssistantSettings.shared
       let memory = MemoryAssistantSettings.shared
       let assistant = AssistantSettings.shared
       return [
         "task_enabled": task.isEnabled ? "true" : "false",
         "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
-        "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",

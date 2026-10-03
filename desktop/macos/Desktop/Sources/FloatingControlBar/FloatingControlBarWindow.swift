@@ -3276,7 +3276,6 @@ class FloatingControlBarManager {
     window?.state.interjectBarHovering = false
     interjectBarHovering = false
     interjectPTTHoldActive = false
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
@@ -3743,10 +3742,7 @@ class FloatingControlBarManager {
     kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
-    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
-    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
@@ -3771,10 +3767,7 @@ class FloatingControlBarManager {
       kind: kind,
       context: context,
       action: action,
-      jitFeedbackContext: jitFeedbackContext,
-      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity ?? jitAmbientFeedbackContext?.suggestionIdentity,
-      insightDeliveryID: insightDeliveryID,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       screenshotData: screenshotData,
       isPersistent: FloatingBarNoticePolicy.persists(kind: kind, requestedPersistent: isPersistent)
     )
@@ -4076,18 +4069,6 @@ class FloatingControlBarManager {
   /// Flag-off must stay byte-identical: no store row, no
   /// `Suggestion Feedback Recorded`. The pre-existing
   /// `JITTriggerFeedbackActionRouter.record` call is unchanged.
-  func recordInterjectJITVerdictIfEnabled(
-    identity: SuggestionAssistantTelemetry.NotificationIdentity,
-    verb: InterjectFeedbackVerb
-  ) async {
-    guard InterjectFeature.isEnabled else { return }
-    _ = await InterjectSuggestionFeedbackMutation.record(
-      evaluationID: identity.evaluationID,
-      suggestionID: identity.suggestionID,
-      verb: verb
-    )
-    SuggestionTaskNudgeEngagement.record(fromContinuityKey: recentInterjectReplyCard()?.messageClientTurnId)
-  }
 
   func consumeInterjectVoiceReplyAsync(_ text: String) async {
     guard InterjectFeature.isEnabled else { return }
@@ -4159,8 +4140,6 @@ class FloatingControlBarManager {
         notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
         notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
         log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-        Self.recordInsightDeliveryOutcome(
-          for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
       if presentNotification(nextNotification, in: window) { return }
@@ -4777,18 +4756,6 @@ class FloatingControlBarManager {
       notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
       notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
       log("FloatingControlBarManager: refusing to present stale-owner notification")
-      Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
-      return false
-    }
-    guard
-      NotificationService.jitFeedbackGenerationsMatch(
-        jitFeedbackContext: notification.jitFeedbackContext,
-        jitAmbientFeedbackContext: notification.jitAmbientFeedbackContext,
-        currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
-    else {
-      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
-      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
-      log("FloatingControlBarManager: refusing to present stale JIT generation")
       return false
     }
     persistNotificationMessageIfNeeded(notification)
@@ -4846,7 +4813,6 @@ class FloatingControlBarManager {
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
-    Self.recordAdvicePresentation(notification)
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4913,8 +4879,6 @@ class FloatingControlBarManager {
           notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
           notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
           log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-          Self.recordInsightDeliveryOutcome(
-            for: nextNotification, outcome: .suppressed, reason: .staleOwner)
           continue
         }
         if presentNotification(nextNotification, in: window) { return }
@@ -5250,8 +5214,6 @@ class FloatingControlBarManager {
       return false
     }
     cancelNotificationDismissTimer()
-    let cancelledNotifications = pendingNotifications.filter { $0.id == notificationID }
-    Self.recordQueuedInsightOutcomes(cancelledNotifications, reason: .queueCancelled)
     pendingNotifications.removeAll { $0.id == notificationID }
     if window.state.currentNotification != nil {
       window.dismissNotification()
@@ -5836,12 +5798,7 @@ class FloatingControlBarManager {
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
-    let durableProvenance: String? =
-      if let ref = pendingNotificationContext.context?.provenanceRef {
-        await ContextBucketStore.shared.deliveryProvenance(id: ref)
-      } else {
-        nil
-      }
+    let durableProvenance: String? = nil
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     let block = notificationContextSuffix(
       message: pendingNotificationContext.message,

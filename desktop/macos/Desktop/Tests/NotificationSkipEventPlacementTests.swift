@@ -61,12 +61,6 @@ final class NotificationSkipEventPlacementTests: XCTestCase {
   /// The context-director preflight is the real drop for that path: both
   /// engines abort unless it returns `.queued`, so anything reported after it
   /// is never reached.
-  func testContextDirectorPreflightReportsItsOwnUnauthorizedDrop() throws {
-    let body = try functionBody("contextDirectorPresentationPreflight", in: notificationServiceSource())
-    XCTAssertTrue(
-      body.contains(Self.reporter),
-      "the engines bail on a non-.queued preflight, so an unauthorized drop must be reported inside it")
-  }
 
   /// The regression itself: `deliverNotification` runs only *after* every
   /// authorization gate has passed, so an unauthorized drop can never be

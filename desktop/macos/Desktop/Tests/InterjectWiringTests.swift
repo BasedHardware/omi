@@ -369,51 +369,6 @@ final class InterjectWiringTests: XCTestCase {
   }
 
   @MainActor
-  func testFlagOffJITVerdictWritesNoLedgerAndEmitsNoAnalytics() async throws {
-    try await withInterjectHarness {
-      InterjectFeature.testOverride = false
-      var events: [String] = []
-      AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests { event, _ in
-        events.append(event)
-      }
-      defer { AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests(nil) }
-
-      let evaluation = try XCTUnwrap(UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"))
-      let suggestion = try XCTUnwrap(UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff"))
-      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
-        identity: SuggestionAssistantTelemetry.NotificationIdentity(
-          evaluationID: evaluation, suggestionID: suggestion),
-        verb: .useful
-      )
-
-      let record = await InterjectSuggestionFeedbackStore.shared.current(
-        evaluationID: evaluation, suggestionID: suggestion)
-      XCTAssertNil(record, "flag-off JIT must not write the Interject store")
-      XCTAssertFalse(
-        events.contains("Suggestion Feedback Recorded"),
-        "flag-off JIT must not emit Suggestion Feedback Recorded")
-    }
-  }
-
-  func testContextDirectorFeedbackIdentityDoesNotNeedSuggestionTelemetry() {
-    let delivery = UUID()
-    let card = FloatingBarNotification(
-      ownerID: ownerID,
-      title: "Insight",
-      message: "Body",
-      assistantId: "context-director",
-      kind: .insight,
-      context: FloatingBarNotificationContext(
-        sourceTitle: "Insight",
-        assistantId: "context-director",
-        provenanceRef: delivery.uuidString)
-    )
-    XCTAssertEqual(card.feedbackIdentity.evaluationID, delivery)
-    XCTAssertEqual(JITTriggerFeedbackAction.useful.interjectVerb, .useful)
-    XCTAssertEqual(JITTriggerFeedbackAction.missedOrLate.interjectVerb, .missed)
-  }
-
-  @MainActor
   private func withInterjectHarness(_ body: () async throws -> Void) async throws {
     let defaults = UserDefaults.standard
     let previousOwner = defaults.object(forKey: .authUserId)

@@ -338,216 +338,6 @@ extension SettingsContentView {
     }
   }
 
-  var insightAssistantSubsection: some View {
-    VStack(spacing: OmiSpacing.xl) {
-      settingsCard(settingId: "advanced.insightassistant") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: ProactiveNotificationBadge.insightSystemImage)
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(Ink.secondary)
-
-            Text("Insight Assistant")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(Ink.primary)
-
-            Spacer()
-
-            Toggle("", isOn: $insightEnabled)
-              .toggleStyle(OmiToggleStyle())
-              .labelsHidden()
-              .onChange(of: insightEnabled) { _, newValue in
-                InsightAssistantSettings.shared.isEnabled = newValue
-                SettingsSyncManager.shared.pushPartialUpdate(
-                  AssistantSettingsResponse(insight: InsightSettingsResponse(enabled: newValue)))
-              }
-          }
-
-          Text("Get proactive insights and suggestions")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-
-          if insightEnabled {
-            GlassSeparator()
-
-            // Frequency Slider
-            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-              HStack {
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text("Frequency")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(Ink.secondary)
-                  Text("How often to check for insight opportunities")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-
-                Spacer()
-
-                Text(formatExtractionInterval(insightExtractionInterval))
-                  .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 80, alignment: .trailing)
-              }
-
-              Slider(
-                value: Binding(
-                  get: { Double(insightIntervalSliderIndex) },
-                  set: {
-                    if let step = SettingsControlMetrics.ladderValue(
-                      at: Int($0), in: extractionIntervalOptions)
-                    {
-                      insightExtractionInterval = step
-                    }
-                  }
-                ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
-              )
-              .tint(SettingsSelection.valueFill)
-              .onChange(of: insightExtractionInterval) { _, newValue in
-                performStepHaptic()
-                InsightAssistantSettings.shared.extractionInterval = newValue
-                SettingsSyncManager.shared.pushPartialUpdate(
-                  AssistantSettingsResponse(
-                    insight: InsightSettingsResponse(extractionInterval: newValue)))
-              }
-
-              offLadderStepNote(for: insightExtractionInterval, in: extractionIntervalOptions)
-            }
-
-            // Minimum Confidence Slider
-            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-              HStack {
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text("Minimum Confidence")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(Ink.secondary)
-                  Text("Only show insights above this confidence level")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-
-                Spacer()
-
-                Text("\(Int(insightMinConfidence * 100))%")
-                  .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 40, alignment: .trailing)
-              }
-
-              Slider(value: $insightMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(SettingsSelection.valueFill)
-                .onChange(of: insightMinConfidence) { _, newValue in
-                  performStepHaptic()
-                  InsightAssistantSettings.shared.minConfidence = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      insight: InsightSettingsResponse(minConfidence: newValue)))
-                }
-            }
-
-            settingRow(
-              title: "Insight Prompt", subtitle: "Customize AI instructions for insights",
-              settingId: "advanced.insightassistant.prompt"
-            ) {
-              HStack(spacing: OmiSpacing.sm) {
-                Button(action: {
-                  InsightTestRunnerWindow.show()
-                }) {
-                  HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "play.circle")
-                      .scaledFont(size: OmiType.caption)
-                    Text("Test Run")
-                      .scaledFont(size: OmiType.caption)
-                  }
-                }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                Button(action: {
-                  InsightPromptEditorWindow.show()
-                }) {
-                  HStack(spacing: OmiSpacing.xxs) {
-                    Text("Edit")
-                      .scaledFont(size: OmiType.caption)
-                    Image(systemName: "arrow.up.right.square")
-                      .scaledFont(size: OmiType.caption)
-                  }
-                }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              }
-            }
-
-            GlassSeparator()
-
-            // Excluded Apps for Advice
-            VStack(alignment: .leading, spacing: OmiSpacing.md) {
-              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("Excluded Apps")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                Text("Advice won't be generated from these apps")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(Ink.secondary)
-              }
-
-              // Built-in system exclusions (non-removable, shared with Task Extractor)
-              DisclosureGroup {
-                LazyVStack(spacing: OmiSpacing.xxs) {
-                  ForEach(Array(TaskAssistantSettings.builtInExcludedApps).sorted(), id: \.self) {
-                    appName in
-                    HStack(spacing: OmiSpacing.md) {
-                      AppIconView(appName: appName, size: 20)
-
-                      Text(appName)
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(Ink.secondary)
-
-                      Spacer()
-                    }
-                    .padding(.horizontal, OmiSpacing.md)
-                    .padding(.vertical, OmiSpacing.xxs)
-                  }
-                }
-              } label: {
-                Text(
-                  "System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))"
-                )
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-              }
-              .tint(Ink.secondary)
-
-              if !insightExcludedApps.isEmpty {
-                LazyVStack(spacing: OmiSpacing.sm) {
-                  ForEach(Array(insightExcludedApps).sorted(), id: \.self) { appName in
-                    ExcludedAppRow(
-                      appName: appName,
-                      onRemove: {
-                        InsightAssistantSettings.shared.includeApp(appName)
-                        insightExcludedApps = InsightAssistantSettings.shared.excludedApps
-                      }
-                    )
-                  }
-                }
-              }
-
-              AppRuleEditorView(
-                title: "Add App to Exclusion List",
-                placeholder: "App name (e.g., Passwords)",
-                addButtonTitle: "Add",
-                existingApps: insightExcludedApps,
-                builtInApps: TaskAssistantSettings.builtInExcludedApps,
-                onAdd: { appName in
-                  InsightAssistantSettings.shared.excludeApp(appName)
-                  insightExcludedApps = InsightAssistantSettings.shared.excludedApps
-                }
-              )
-            }
-          }  // end if insightEnabled
-        }
-      }
-    }
-  }
-
   var memoryAssistantSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.memoryassistant") {
@@ -1035,10 +825,6 @@ extension SettingsContentView {
     taskMinConfidence = values.taskMinConfidence
     taskAllowedApps = values.taskAllowedApps
     taskBrowserKeywords = values.taskBrowserKeywords
-    insightEnabled = values.insightEnabled
-    insightExtractionInterval = values.insightExtractionInterval
-    insightMinConfidence = values.insightMinConfidence
-    insightExcludedApps = values.insightExcludedApps
     memoryEnabled = values.memoryEnabled
     memoryExtractionInterval = values.memoryExtractionInterval
     memoryMinConfidence = values.memoryMinConfidence
@@ -1064,10 +850,6 @@ struct AssistantControlValues: Equatable {
   var taskMinConfidence: Double
   var taskAllowedApps: Set<String>
   var taskBrowserKeywords: [String]
-  var insightEnabled: Bool
-  var insightExtractionInterval: TimeInterval
-  var insightMinConfidence: Double
-  var insightExcludedApps: Set<String>
   var memoryEnabled: Bool
   var memoryExtractionInterval: TimeInterval
   var memoryMinConfidence: Double
@@ -1082,10 +864,6 @@ struct AssistantControlValues: Equatable {
       taskMinConfidence: TaskAssistantSettings.shared.minConfidence,
       taskAllowedApps: TaskAssistantSettings.shared.allowedApps,
       taskBrowserKeywords: TaskAssistantSettings.shared.browserKeywords,
-      insightEnabled: InsightAssistantSettings.shared.isEnabled,
-      insightExtractionInterval: InsightAssistantSettings.shared.extractionInterval,
-      insightMinConfidence: InsightAssistantSettings.shared.minConfidence,
-      insightExcludedApps: InsightAssistantSettings.shared.excludedApps,
       memoryEnabled: MemoryAssistantSettings.shared.isEnabled,
       memoryExtractionInterval: MemoryAssistantSettings.shared.extractionInterval,
       memoryMinConfidence: MemoryAssistantSettings.shared.minConfidence,

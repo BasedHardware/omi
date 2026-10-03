@@ -262,15 +262,12 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let action: FloatingBarNotificationAction?
   /// Explicit feedback controls for a planned JIT trigger. This is opaque
   /// provenance only; action labels are rendered by the card.
-  let jitFeedbackContext: JITTriggerFeedbackContext?
   /// Ambient JIT feedback is delivery-scoped and has no standing trigger.
-  let jitAmbientFeedbackContext: JITAmbientFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   /// Optional opaque Advice delivery key. It is consumed only at the actual
   /// floating-bar presentation boundary and carries no advice or screen content.
-  let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
   /// A persistent card never times out: it stays presented until the user
@@ -286,10 +283,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     kind: ProactiveNotificationKind,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
-    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
-    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false
   ) {
@@ -303,10 +297,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.kind = kind
     self.context = context
     self.action = action
-    self.jitFeedbackContext = jitFeedbackContext
-    self.jitAmbientFeedbackContext = jitAmbientFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
-    self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
   }
@@ -317,8 +308,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
     if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
     let evaluationID =
-      insightDeliveryID
-      ?? UUID(uuidString: context?.provenanceRef ?? "")
+      UUID(uuidString: context?.provenanceRef ?? "")
       ?? id
     return SuggestionAssistantTelemetry.NotificationIdentity(
       evaluationID: evaluationID, suggestionID: id)
