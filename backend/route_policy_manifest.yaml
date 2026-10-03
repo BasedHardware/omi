@@ -255,7 +255,7 @@ routes:
           - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none
@@ -279,7 +279,7 @@ routes:
           - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none
@@ -303,7 +303,7 @@ routes:
           - admin_key_uid_prefix
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none

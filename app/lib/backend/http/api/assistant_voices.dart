@@ -1,22 +1,15 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
+/// A selectable assistant voice from the served catalog.
 class AssistantVoice {
   const AssistantVoice({required this.id, required this.name});
 
   final String id;
   final String name;
-
-  factory AssistantVoice.fromJson(Map<String, dynamic> json) {
-    final id = json['id'];
-    final name = json['name'];
-    if (id is! String || id.isEmpty || name is! String || name.isEmpty) {
-      throw const FormatException('invalid assistant voice');
-    }
-    return AssistantVoice(id: id, name: name);
-  }
 }
 
 class AssistantVoiceCatalog {
@@ -25,24 +18,16 @@ class AssistantVoiceCatalog {
   final List<AssistantVoice> voices;
   final String defaultVoiceId;
 
-  factory AssistantVoiceCatalog.fromJson(Map<String, dynamic> json) {
-    final voices = json['voices'];
-    final defaultVoiceId = json['default_voice_id'];
-    if (voices is! List || voices.isEmpty || defaultVoiceId is! String || defaultVoiceId.isEmpty) {
-      throw const FormatException('invalid voice catalog');
-    }
-    final deduped = <String, AssistantVoice>{};
-    for (final row in voices) {
-      if (row is! Map) throw const FormatException('invalid voice catalog');
-      final voice = AssistantVoice.fromJson(Map<String, dynamic>.from(row));
-      deduped[voice.id] = voice;
-    }
-    if (!deduped.containsKey(defaultVoiceId)) {
+  static AssistantVoiceCatalog fromGeneratedWireJson(wire.GeneratedTtsVoiceCatalog generated) {
+    final deduped = <String, AssistantVoice>{
+      for (final voice in generated.voices) voice.id: AssistantVoice(id: voice.id, name: voice.name),
+    };
+    if (deduped.isEmpty || !deduped.containsKey(generated.defaultVoiceId)) {
       throw const FormatException('invalid voice catalog');
     }
     return AssistantVoiceCatalog(
       voices: deduped.values.toList(growable: false),
-      defaultVoiceId: defaultVoiceId,
+      defaultVoiceId: generated.defaultVoiceId,
     );
   }
 }
@@ -52,12 +37,11 @@ class AssistantVoicePreference {
 
   final String voiceId;
 
-  factory AssistantVoicePreference.fromJson(Map<String, dynamic> json) {
-    final voiceId = json['voice_id'];
-    if (voiceId is! String || voiceId.isEmpty) {
+  static AssistantVoicePreference fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference generated) {
+    if (generated.voiceId.isEmpty) {
       throw const FormatException('invalid voice preference');
     }
-    return AssistantVoicePreference(voiceId);
+    return AssistantVoicePreference(generated.voiceId);
   }
 }
 
@@ -72,7 +56,7 @@ class AssistantVoicesApi {
         decode: (body) {
           final row = jsonDecode(body);
           if (row is! Map<String, dynamic>) throw const FormatException('invalid voice catalog');
-          return AssistantVoiceCatalog.fromJson(row);
+          return AssistantVoiceCatalog.fromGeneratedWireJson(wire.GeneratedTtsVoiceCatalog.fromJson(row));
         },
       );
 
@@ -82,7 +66,7 @@ class AssistantVoicesApi {
         decode: (body) {
           final row = jsonDecode(body);
           if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
-          return AssistantVoicePreference.fromJson(row);
+          return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
         },
       );
 
@@ -96,7 +80,7 @@ class AssistantVoicesApi {
         decode: (body) {
           final row = jsonDecode(body);
           if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
-          return AssistantVoicePreference.fromJson(row);
+          return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
         },
       );
 }

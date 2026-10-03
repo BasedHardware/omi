@@ -40,7 +40,6 @@ extension APIClient {
   ) async throws -> AssistantVoiceCatalogResponse {
     try await get(
       "v1/tts/voices",
-      customBaseURL: rustBackendURL,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
   }
@@ -51,7 +50,6 @@ extension APIClient {
   ) async throws -> AssistantVoicePreferenceResponse {
     try await get(
       "v1/users/voice",
-      customBaseURL: rustBackendURL,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
   }
@@ -64,7 +62,6 @@ extension APIClient {
     try await patch(
       "v1/users/voice",
       body: AssistantVoicePreferenceUpdate(voiceId: voiceId),
-      customBaseURL: rustBackendURL,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
   }

@@ -183,7 +183,16 @@ async def _openai_tts(payload: dict[str, str], api_key: str) -> httpx.Response:
         raise HTTPException(status_code=502, detail="OpenAI TTS request failed")
 
 
-@router.post("/v1/tts/synthesize", responses={200: {"content": {"audio/mpeg": {}}}})
+@router.post(
+    "/v1/tts/synthesize",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "MP3 audio stream.",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_current_user_uid)):
     text = request.text.strip()
     if not text:
