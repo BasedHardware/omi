@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Lightbulb, FileText, Settings, Filter, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MemoryCategory } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface MemoryFiltersProps {
   activeCategories: MemoryCategory[];
@@ -17,20 +18,28 @@ interface FilterOption {
 }
 
 const filterOptions: FilterOption[] = [
-  { category: 'all', label: 'All', icon: null },
+  { category: 'all', get label() {
+    return t('All')
+  }, icon: null },
   {
     category: 'interesting',
-    label: 'Interesting',
+    get label() {
+      return t('Interesting');
+    },
     icon: <Lightbulb className="w-3.5 h-3.5" />,
   },
   {
     category: 'manual',
-    label: 'Manual',
+    get label() {
+      return t('Manual');
+    },
     icon: <FileText className="w-3.5 h-3.5" />,
   },
   {
     category: 'system',
-    label: 'System',
+    get label() {
+      return t('System');
+    },
     icon: <Settings className="w-3.5 h-3.5" />,
   },
 ];

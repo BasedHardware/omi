@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { KnowledgeGraph, KnowledgeGraphNode, KnowledgeGraphEdge, KnowledgeGraphNodeType } from '@/types/conversation';
 import { getKnowledgeGraph } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 // Node colors matching mobile app
 export const NODE_COLORS: Record<KnowledgeGraphNodeType | 'user', string> = {
@@ -71,7 +72,7 @@ export function useKnowledgeGraph(): UseKnowledgeGraphReturn {
     // Create user node as the center - make it large and white
     const userNode: GraphNode = {
       id: 'user',
-      label: 'You',
+      label: t('You'),
       nodeType: 'user',
       color: '#FFFFFF', // Pure white
       aliases: [],
@@ -112,7 +113,7 @@ export function useKnowledgeGraph(): UseKnowledgeGraphReturn {
           id: `user-${node.id}`,
           source: 'user',
           target: node.id,
-          label: 'related to',
+          label: t('related to'),
           memoryIds: node.memory_ids,
         });
       }

@@ -1,31 +1,40 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 const STAGE_META: Record<
   string,
   { label: string; dot: string; text: string; bg: string }
 > = {
   none: {
-    label: 'Normal',
+    get label() {
+      return t('Normal');
+    },
     dot: 'bg-green-400',
     text: 'text-green-400',
     bg: 'bg-green-500/[0.06]',
   },
   warning: {
-    label: 'Warning',
+    get label() {
+      return t('Warning');
+    },
     dot: 'bg-amber-400',
     text: 'text-amber-400',
     bg: 'bg-amber-500/[0.06]',
   },
   throttle: {
-    label: 'Throttled',
+    get label() {
+      return t('Throttled');
+    },
     dot: 'bg-orange-400',
     text: 'text-orange-400',
     bg: 'bg-orange-500/[0.06]',
   },
   restrict: {
-    label: 'Restricted',
+    get label() {
+      return t('Restricted');
+    },
     dot: 'bg-red-400',
     text: 'text-red-400',
     bg: 'bg-red-500/[0.06]',
@@ -76,13 +85,13 @@ export function CaseStatusView({
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
-          <h1 className="text-lg font-semibold text-white mb-2">Case Not Found</h1>
+          <h1 className="text-lg font-semibold text-white mb-2">{t('Case Not Found')}</h1>
           <p className="text-sm text-zinc-400 mb-1">
-            No case found for reference{' '}
+            {t('No case found for reference')}{' '}
             <span className="font-mono text-zinc-300">{caseRef}</span>
           </p>
           <p className="text-xs text-zinc-500 mt-4">
-            If you believe this is an error, contact{' '}
+            {t('If you believe this is an error, contact')}{' '}
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
               className="text-text-secondary hover:text-text-secondary"
@@ -104,7 +113,7 @@ export function CaseStatusView({
       <div className="max-w-md w-full space-y-5">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-white">Case Status</h1>
+          <h1 className="text-lg font-semibold text-white">{t('Case Status')}</h1>
           <p className="text-xs text-zinc-500 font-mono mt-1">{status.case_ref}</p>
         </div>
 
@@ -127,14 +136,14 @@ export function CaseStatusView({
           {/* Details */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-xs text-zinc-500">Created</span>
+              <span className="text-xs text-zinc-500">{t('Created')}</span>
               <span className="text-sm text-zinc-300">
                 {formatDate(status.created_at)}
               </span>
             </div>
             <div className="h-px bg-zinc-800" />
             <div className="flex justify-between items-center">
-              <span className="text-xs text-zinc-500">Last Updated</span>
+              <span className="text-xs text-zinc-500">{t('Last Updated')}</span>
               <span className="text-sm text-zinc-300">
                 {formatDate(status.updated_at)}
               </span>
@@ -154,8 +163,7 @@ export function CaseStatusView({
         {updatedDays >= 3 && (
           <div className="rounded-xl bg-zinc-900/50 px-4 py-3">
             <p className="text-xs text-zinc-400 leading-relaxed">
-              This case hasn&apos;t been updated in {updatedDays} days. If you need
-              assistance, please contact{' '}
+              {t('This case hasn\'t been updated in')}{' '}{updatedDays} {t('days. If you need assistance, please contact')}{' '}
               <a
                 href={`mailto:${email}`}
                 className="text-text-secondary hover:text-text-secondary"
@@ -168,7 +176,7 @@ export function CaseStatusView({
 
         {/* Footer */}
         <p className="text-center text-xs text-zinc-600">
-          Need help?{' '}
+          {t('Need help?')}{' '}
           <a
             href={`mailto:${email}`}
             className="text-text-secondary hover:text-text-secondary"

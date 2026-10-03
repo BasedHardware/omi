@@ -34,6 +34,7 @@ import { TasksSection } from './sections/TasksSection';
 import { InsightsSection } from './sections/InsightsSection';
 import { LocationsSection } from './sections/LocationsSection';
 import { ConversationPreviewPanel } from './ConversationPreviewPanel';
+import { t } from '@/lib/i18n';
 
 interface RecapDetailPanelProps {
   recapId: string;
@@ -194,7 +195,7 @@ function JourneyTimeline({
       <div className="border-b border-white/[0.04] p-4">
         <h4 className="flex items-center gap-2 text-sm font-medium text-text-primary">
           <Clock className="h-4 w-4 text-white" />
-          Your Journey
+          {t('Your Journey')}
         </h4>
       </div>
 
@@ -423,7 +424,7 @@ export function RecapDetailPanel({
     return (
       <div className="flex h-full flex-col bg-bg-secondary">
         <div className="flex flex-1 items-center justify-center">
-          <p className="text-text-tertiary">Recap not found</p>
+          <p className="text-text-tertiary">{t('Recap not found')}</p>
         </div>
       </div>
     );
@@ -452,7 +453,7 @@ export function RecapDetailPanel({
                   <button
                     onClick={onBack}
                     className="-ml-2 rounded-lg p-2 transition-colors hover:bg-bg-tertiary lg:hidden"
-                    aria-label="Back to list"
+                    aria-label={t('Back to list')}
                   >
                     <ArrowLeft className="h-5 w-5 text-text-secondary" />
                   </button>
@@ -464,7 +465,7 @@ export function RecapDetailPanel({
                 <div>
                   {/* Headline */}
                   <h2 className="mb-1 text-xl font-semibold text-text-primary">
-                    {recap.headline || 'Daily Recap'}
+                    {recap.headline || t('Daily Recap')}
                   </h2>
                   {/* Date */}
                   <p className="text-sm text-text-tertiary">
@@ -481,7 +482,7 @@ export function RecapDetailPanel({
                 <span className="text-sm font-medium">
                   {recap.stats.total_conversations}
                 </span>
-                <span className="text-xs text-text-tertiary">conversations</span>
+                <span className="text-xs text-text-tertiary">{t('conversations')}</span>
               </div>
               {recap.stats.total_duration_minutes > 0 && (
                 <div className="flex items-center gap-1.5 text-text-secondary">
@@ -489,7 +490,7 @@ export function RecapDetailPanel({
                   <span className="text-sm font-medium">
                     {formatDuration(recap.stats.total_duration_minutes)}
                   </span>
-                  <span className="text-xs text-text-tertiary">recorded</span>
+                  <span className="text-xs text-text-tertiary">{t('recorded')}</span>
                 </div>
               )}
               {recap.stats.action_items_count > 0 && (
@@ -498,7 +499,7 @@ export function RecapDetailPanel({
                   <span className="text-sm font-medium">
                     {recap.stats.action_items_count}
                   </span>
-                  <span className="text-xs text-text-tertiary">tasks</span>
+                  <span className="text-xs text-text-tertiary">{t('tasks')}</span>
                 </div>
               )}
             </div>
@@ -515,7 +516,7 @@ export function RecapDetailPanel({
                       : 'text-text-tertiary hover:text-text-secondary',
                   )}
                 >
-                  Recap
+                  {t('Recap')}
                 </button>
                 <button
                   onClick={() => {
@@ -531,7 +532,7 @@ export function RecapDetailPanel({
                   )}
                 >
                   <MapPin className="h-3.5 w-3.5" />
-                  Journey
+                  {t('Journey')}
                 </button>
               </div>
             )}
@@ -569,7 +570,7 @@ export function RecapDetailPanel({
                     <button
                       onClick={() => setActiveTab('journey')}
                       className="absolute right-3 top-3 rounded-lg bg-bg-tertiary/80 p-2 text-text-secondary opacity-0 backdrop-blur-sm transition-all hover:bg-bg-tertiary hover:text-text-primary group-hover:opacity-100"
-                      title="View full journey"
+                      title={t('View full journey')}
                     >
                       <Maximize2 className="h-4 w-4" />
                     </button>
@@ -580,7 +581,7 @@ export function RecapDetailPanel({
 
             {/* Standalone Overview (only when no locations) */}
             {recap.overview && !hasLocations && (
-              <Section title="Overview" icon={Calendar}>
+              <Section title={t('Overview')} icon={Calendar}>
                 <div
                   className={cn(
                     'noise-overlay rounded-xl p-4',
@@ -597,7 +598,7 @@ export function RecapDetailPanel({
 
             {/* Highlights */}
             {hasHighlights && (
-              <Section title="Highlights" icon={Sparkles}>
+              <Section title={t('Highlights')} icon={Sparkles}>
                 <HighlightsSection
                   highlights={recap.highlights}
                   onConversationClick={handleConversationClick}
@@ -607,7 +608,7 @@ export function RecapDetailPanel({
 
             {/* Insights */}
             {hasInsights && (
-              <Section title="Insights" icon={Lightbulb}>
+              <Section title={t('Insights')} icon={Lightbulb}>
                 <InsightsSection
                   questions={recap.unresolved_questions || []}
                   decisions={recap.decisions_made || []}
@@ -619,7 +620,7 @@ export function RecapDetailPanel({
 
             {/* Tasks */}
             {hasTasks && (
-              <Section title="Tasks" icon={CheckSquare}>
+              <Section title={t('Tasks')} icon={CheckSquare}>
                 <TasksSection
                   tasks={recap.action_items}
                   onConversationClick={handleConversationClick}
@@ -629,7 +630,7 @@ export function RecapDetailPanel({
 
             {/* Standalone Locations (only when no overview) */}
             {hasLocations && !recap.overview && (
-              <Section title="Locations" icon={MapPin}>
+              <Section title={t('Locations')} icon={MapPin}>
                 <LocationsSection
                   locations={recap.locations}
                   onConversationClick={handleConversationClick}

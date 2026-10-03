@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Check, Clock, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { t as i18n } from '@/lib/i18n';
 
 interface UpcomingTasksCardProps {
   tasks: ActionItem[];
@@ -70,10 +71,10 @@ export function UpcomingTasksCard({
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-text-primary flex items-center gap-2">
           <ArrowRight className="w-4 h-4 text-white flex-shrink-0" />
-          Coming Up
+          {i18n('Coming Up')}
         </h3>
         <span className="text-xs text-text-quaternary flex-shrink-0">
-          Next {upcomingTasks.length}
+          {i18n('Next')}{' '}{upcomingTasks.length}
         </span>
       </div>
 

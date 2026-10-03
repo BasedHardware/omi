@@ -4,6 +4,7 @@ import Link from '@tschk/moonshine-next/link';
 import { Check } from 'lucide-react';
 import type { ActionItem } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 /**
  * The middle of the hub: what is actually waiting on you.
@@ -36,13 +37,13 @@ export function HomeTaskList({ items, loading, error, onComplete }: HomeTaskList
   }
 
   if (error) {
-    return <p className="text-center text-sm text-error">Could not load tasks.</p>;
+    return <p className="text-center text-sm text-error">{t('Could not load tasks.')}</p>;
   }
 
   if (items.length === 0) {
     return (
       <p className="text-center text-sm text-text-quaternary">
-        Nothing&apos;s waiting on you.
+        {t("Nothing's waiting on you.")}
       </p>
     );
   }
@@ -64,7 +65,9 @@ export function HomeTaskList({ items, loading, error, onComplete }: HomeTaskList
               <button
                 type="button"
                 onClick={() => onComplete(item.id)}
-                aria-label={`Complete: ${item.description}`}
+                aria-label={t('Complete: {description}', {
+                  description: item.description,
+                })}
                 className={cn(
                   'flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center',
                   'rounded-full border border-stroke text-transparent',
@@ -89,7 +92,7 @@ export function HomeTaskList({ items, loading, error, onComplete }: HomeTaskList
           href="/tasks"
           className="mt-2 block px-3 text-xs text-text-quaternary transition-colors hover:text-text-secondary"
         >
-          {overflow} more in Tasks
+          {overflow} {t('more in Tasks')}
         </Link>
       )}
     </div>

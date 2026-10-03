@@ -55,6 +55,7 @@ import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSection
 import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
 import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
 import { OpenSurface } from '@/components/ui/OpenSurface';
+import { t } from '@/lib/i18n';
 
 /** How long the banner takes to swell and pop, and the burst to clear it. */
 const BANNER_BURST_MS = 420;
@@ -85,22 +86,30 @@ interface NavItem {
 // no row of its own on either client — it is what Home opens into.
 const navItems: NavItem[] = [
   {
-    label: 'Home',
+    get label() {
+      return t('Home');
+    },
     href: '/home',
     icon: <House className="w-5 h-5" />,
   },
   {
-    label: 'Conversations',
+    get label() {
+      return t('Conversations');
+    },
     href: '/conversations',
     icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
-    label: 'Memories',
+    get label() {
+      return t('Memories');
+    },
     href: '/memories',
     icon: <Brain className="w-5 h-5" />,
   },
   {
-    label: 'Tasks',
+    get label() {
+      return t('Tasks');
+    },
     href: '/tasks',
     icon: <ListChecks className="w-5 h-5" />,
   },
@@ -189,7 +198,7 @@ function ProfileMenuRows({
         <MenuRow
           href="/connectors"
           icon={Puzzle}
-          label="Connectors"
+          label={t('Connectors')}
           onNavigate={onNavigate}
         />
         {settingsMenuItems.map((item) => (
@@ -207,22 +216,22 @@ function ProfileMenuRows({
         <MenuRow
           href="https://omi.me/download"
           icon={Download}
-          label="Download"
+          label={t('Download')}
           external
           onNavigate={onNavigate}
         />
-        <MenuRow href="/help" icon={LifeBuoy} label="Help" onNavigate={onNavigate} />
+        <MenuRow href="/help" icon={LifeBuoy} label={t('Help')} onNavigate={onNavigate} />
         <MenuRow
           href="https://feedback.omi.me"
           icon={MessageSquare}
-          label="Feedback"
+          label={t('Feedback')}
           external
           onNavigate={onNavigate}
         />
         <MenuRow
           href="http://discord.omi.me"
           icon={DiscordIcon}
-          label="Discord"
+          label={t('Discord')}
           external
           onNavigate={onNavigate}
         />
@@ -235,7 +244,7 @@ function ProfileMenuRows({
           )}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span className="whitespace-nowrap text-sm">Sign Out</span>
+          <span className="whitespace-nowrap text-sm">{t('Sign Out')}</span>
         </button>
       </div>
     </>
@@ -422,11 +431,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link
               href="/conversations"
               className="flex h-6 items-center gap-2 px-2"
-              aria-label="Omi"
+              aria-label={t('Omi')}
             >
               <Image
                 src="/omi-white.webp"
-                alt="Omi"
+                alt={t('Omi')}
                 width={60}
                 height={24}
                 className="h-[18px] w-auto flex-shrink-0 object-contain"
@@ -439,7 +448,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   showText ? 'opacity-100 delay-75' : 'opacity-0',
                 )}
               >
-                Beta
+                {t('Beta')}
               </span>
             </Link>
 
@@ -457,8 +466,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   'flex items-center justify-center p-2 rounded-element transition-colors',
                   'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                 )}
-                title="Notifications"
-                aria-label="Notifications"
+                title={t('Notifications')}
+                aria-label={t('Notifications')}
               >
                 <div className="relative">
                   <Bell className="w-5 h-5" />
@@ -488,8 +497,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     'flex items-center justify-center p-2 rounded-element transition-colors',
                     'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                   )}
-                  title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-                  aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                  title={isExpanded ? t('Collapse sidebar') : t('Expand sidebar')}
+                  aria-label={isExpanded ? t('Collapse sidebar') : t('Expand sidebar')}
                 >
                   <span className="t-icon-swap" data-state={isExpanded ? 'a' : 'b'}>
                     <span className="t-icon" data-icon="a">
@@ -507,7 +516,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <button
                   onClick={onClose}
                   className="p-2 rounded-element hover:bg-bg-tertiary transition-colors"
-                  aria-label="Close menu"
+                  aria-label={t('Close menu')}
                 >
                   <X className="w-5 h-5 text-text-secondary" />
                 </button>
@@ -647,7 +656,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       <button
                         onClick={handleDismissMobileApp}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
-                        aria-label="Dismiss"
+                        aria-label={t('Dismiss')}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -722,7 +731,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               showText ? 'p-3' : 'h-12 justify-center p-0',
               showText && 'hover:bg-bg-tertiary/60',
             )}
-            title={!showText ? 'Settings' : undefined}
+            title={!showText ? t('Settings') : undefined}
           >
             {/* Avatar */}
             <div
@@ -734,7 +743,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
-                  alt={user.displayName || 'User'}
+                  alt={user.displayName || t('User')}
                   width={36}
                   height={36}
                   className="object-cover"
@@ -758,7 +767,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 {/* Name & email */}
                 <div className="flex-1 min-w-0 text-left">
                   <p className="truncate whitespace-nowrap text-sm font-medium text-text-primary">
-                    {user?.displayName || 'User'}
+                    {user?.displayName || t('User')}
                   </p>
                   <p className="truncate whitespace-nowrap text-xs text-text-quaternary">
                     {user?.email}

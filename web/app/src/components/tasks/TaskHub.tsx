@@ -13,6 +13,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { copyTasksToClipboard, downloadTasks } from '@/lib/taskExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { t as i18n } from '@/lib/i18n';
 
 type ViewMode = 'hub' | 'list';
 
@@ -370,7 +371,7 @@ export function TaskHub() {
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
-          placeholder: 'Search tasks...',
+          placeholder: i18n('Search tasks...'),
         }}
         controls={
           <>
@@ -387,7 +388,7 @@ export function TaskHub() {
                 )}
               >
                 <LayoutGrid className="w-4 h-4" />
-                Hub
+                {i18n('Hub')}
               </button>
               <button
                 onClick={() => {
@@ -403,7 +404,7 @@ export function TaskHub() {
                 )}
               >
                 <List className="w-4 h-4" />
-                List
+                {i18n('List')}
               </button>
             </div>
 
@@ -422,12 +423,12 @@ export function TaskHub() {
                 {isSelectMode ? (
                   <>
                     <CheckSquare className="w-4 h-4" />
-                    <span>Selecting</span>
+                    <span>{i18n('Selecting')}</span>
                   </>
                 ) : (
                   <>
                     <Square className="w-4 h-4" />
-                    <span>Select</span>
+                    <span>{i18n('Select')}</span>
                   </>
                 )}
               </button>
@@ -489,11 +490,10 @@ export function TaskHub() {
                   <CheckSquare className="w-8 h-8 text-text-quaternary" />
                 </div>
                 <h3 className="text-lg font-medium text-text-primary mb-2">
-                  No tasks yet
+                  {i18n('No tasks yet')}
                 </h3>
                 <p className="text-text-tertiary text-sm max-w-xs">
-                  Add a task above or they&apos;ll appear automatically from your
-                  conversations
+                  {i18n('Add a task above or they\'ll appear automatically from your conversations')}
                 </p>
               </div>
             )}
@@ -505,13 +505,13 @@ export function TaskHub() {
                 {searchQuery && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-secondary">
-                      Showing tasks matching &quot;{searchQuery}&quot;
+                      {i18n('Showing tasks matching "')}{searchQuery}{i18n('"')}
                     </span>
                     <button
                       onClick={() => setSearchQuery('')}
                       className="text-xs text-white hover:underline"
                     >
-                      Clear search
+                      {i18n('Clear search')}
                     </button>
                   </div>
                 )}
@@ -520,13 +520,13 @@ export function TaskHub() {
                 {viewMode === 'hub' && selectedDate && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-secondary">
-                      Showing tasks for {filteredView?.dateLabel}
+                      {i18n('Showing tasks for')}{' '}{filteredView?.dateLabel}
                     </span>
                     <button
                       onClick={() => setSelectedDate(null)}
                       className="text-xs text-white hover:underline"
                     >
-                      Show all
+                      {i18n('Show all')}
                     </button>
                   </div>
                 )}
@@ -557,7 +557,7 @@ export function TaskHub() {
                   <div className="space-y-4">
                     {filteredView.pending.length > 0 && (
                       <TaskGroup
-                        title="Pending"
+                        title={i18n('Pending')}
                         icon="📋"
                         tasks={filteredView.pending}
                         {...taskGroupProps}
@@ -565,7 +565,7 @@ export function TaskHub() {
                     )}
                     {filteredView.completed.length > 0 && (
                       <TaskGroup
-                        title="Completed"
+                        title={i18n('Completed')}
                         icon="✓"
                         tasks={filteredView.completed}
                         collapsible
@@ -576,7 +576,7 @@ export function TaskHub() {
                     {filteredView.pending.length === 0 &&
                       filteredView.completed.length === 0 && (
                         <div className="text-center py-8 text-text-tertiary text-sm">
-                          No tasks for this date
+                          {i18n('No tasks for this date')}
                         </div>
                       )}
                   </div>
@@ -584,25 +584,25 @@ export function TaskHub() {
                   /* Hub view - all task groups */
                   <div className="space-y-4">
                     <TaskGroup
-                      title="Priority Tasks"
+                      title={i18n('Priority Tasks')}
                       icon="🔥"
                       tasks={filteredGroupedItems.overdue}
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="Today"
+                      title={i18n('Today')}
                       icon="📅"
                       tasks={filteredGroupedItems.today}
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="Tomorrow"
+                      title={i18n('Tomorrow')}
                       icon="📆"
                       tasks={filteredGroupedItems.tomorrow}
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="This Week"
+                      title={i18n('This Week')}
                       icon="🗓"
                       tasks={filteredGroupedItems.thisWeek}
                       collapsible
@@ -610,7 +610,7 @@ export function TaskHub() {
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="Later"
+                      title={i18n('Later')}
                       icon="📋"
                       tasks={filteredGroupedItems.later}
                       collapsible
@@ -618,7 +618,7 @@ export function TaskHub() {
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="No Due Date"
+                      title={i18n('No Due Date')}
                       icon="📭"
                       tasks={filteredGroupedItems.noDueDate}
                       collapsible
@@ -626,7 +626,7 @@ export function TaskHub() {
                       {...taskGroupProps}
                     />
                     <TaskGroup
-                      title="Completed"
+                      title={i18n('Completed')}
                       icon="✓"
                       tasks={filteredGroupedItems.completed}
                       collapsible

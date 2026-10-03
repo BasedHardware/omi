@@ -5,6 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { App } from '@/types/apps';
 import { AppCard } from './AppCard';
+import { t } from '@/lib/i18n';
 
 interface AppGridSectionProps {
   title: string;
@@ -35,7 +36,7 @@ export function AppGridSection({
               'hover:underline',
             )}
           >
-            View all ({totalCount})
+            {t('View all ({count})', { count: totalCount })}
             <ChevronRight className="w-4 h-4" />
           </Link>
         )}

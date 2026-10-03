@@ -6,6 +6,7 @@ import { Play, Pause, RotateCcw } from 'lucide-react';
 import type { LocationPin } from '@/types/recap';
 import { getConversation } from '@/lib/api';
 import { StaticMapPreview } from '@/components/ui/StaticMapPreview';
+import { t } from '@/lib/i18n';
 
 // Conversation info cache type
 interface ConversationInfo {
@@ -293,7 +294,7 @@ export default function LocationMap({
         <button
           type="button"
           onClick={() => onConversationClick(singleStopConversationId)}
-          aria-label="View conversation for this location"
+          aria-label={t('View conversation for this location')}
           className="block h-full w-full"
         >
           <StaticMapPreview pins={sortedLocations} alt="" />
@@ -374,7 +375,7 @@ export default function LocationMap({
                   <span className="w-12 text-right text-xs text-text-tertiary">
                     {currentIndex >= 0
                       ? `${currentIndex + 1}/${sortedLocations.length}`
-                      : 'All'}
+                      : t('All')}
                   </span>
                 </div>
 
@@ -390,7 +391,7 @@ export default function LocationMap({
                 <button
                   onClick={handleReset}
                   className="p-1.5 text-text-tertiary transition-colors hover:text-text-primary"
-                  title="Reset"
+                  title={t('Reset')}
                 >
                   <RotateCcw className="h-4 w-4" />
                 </button>

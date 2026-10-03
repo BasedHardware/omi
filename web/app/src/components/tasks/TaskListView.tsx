@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TaskRow } from './TaskRow';
 import type { ActionItem } from '@/types/conversation';
+import { t as i18n, tn } from '@/lib/i18n';
 
 interface TaskListViewProps {
   pendingTasks: ActionItem[];
@@ -63,9 +64,9 @@ export function TaskListView({
         <div className="w-16 h-16 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
           <span className="text-2xl">✓</span>
         </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">All caught up!</h3>
+        <h3 className="text-lg font-medium text-text-primary mb-2">{i18n('All caught up!')}</h3>
         <p className="text-sm text-text-tertiary">
-          No tasks to show. Add a new task to get started.
+          {i18n('No tasks to show. Add a new task to get started.')}
         </p>
       </div>
     );
@@ -75,7 +76,7 @@ export function TaskListView({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-sm text-text-tertiary">
-          No tasks match &quot;{searchQuery}&quot;
+          {i18n('No tasks match "')}{searchQuery}{i18n('"')}
         </p>
       </div>
     );
@@ -105,7 +106,7 @@ export function TaskListView({
 
         {filteredPending.length === 0 && (
           <div className="px-4 py-8 text-center text-text-tertiary text-sm">
-            No pending tasks
+            {i18n('No pending tasks')}
           </div>
         )}
       </div>
@@ -127,8 +128,17 @@ export function TaskListView({
               <ChevronDown className="w-4 h-4" />
             )}
             <span>
-              {showCompleted ? 'Hide' : 'Show'} {filteredCompleted.length} completed task
-              {filteredCompleted.length !== 1 ? 's' : ''}
+              {showCompleted
+                ? tn(
+                    filteredCompleted.length,
+                    'Hide {count} completed task',
+                    'Hide {count} completed tasks',
+                  )
+                : tn(
+                    filteredCompleted.length,
+                    'Show {count} completed task',
+                    'Show {count} completed tasks',
+                  )}
             </span>
           </button>
 

@@ -39,6 +39,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { t, tn } from '@/lib/i18n';
 
 // Lazy load heavy components for better performance
 const KnowledgeGraph = lazy(() =>
@@ -52,10 +53,30 @@ type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'score', label: 'Relevance' },
-  { value: 'created_desc', label: 'Newest First' },
-  { value: 'created_asc', label: 'Oldest First' },
-  { value: 'updated_desc', label: 'Recently Updated' },
+  {
+    value: 'score',
+    get label() {
+      return t('Relevance');
+    },
+  },
+  {
+    value: 'created_desc',
+    get label() {
+      return t('Newest First');
+    },
+  },
+  {
+    value: 'created_asc',
+    get label() {
+      return t('Oldest First');
+    },
+  },
+  {
+    value: 'updated_desc',
+    get label() {
+      return t('Recently Updated');
+    },
+  },
 ];
 
 export function MemoriesPage() {
@@ -356,7 +377,7 @@ export function MemoriesPage() {
             ? {
                 value: searchQuery,
                 onChange: setSearchQuery,
-                placeholder: 'Search memories...',
+                placeholder: t('Search memories...'),
               }
             : undefined
         }
@@ -376,7 +397,7 @@ export function MemoriesPage() {
                   )}
                 >
                   <List className="h-4 w-4" />
-                  List
+                  {t('List')}
                 </button>
                 <button
                   onClick={() => setViewMode('graph')}
@@ -389,7 +410,7 @@ export function MemoriesPage() {
                   )}
                 >
                   <Network className="h-4 w-4" />
-                  Graph
+                  {t('Graph')}
                 </button>
                 <button
                   onClick={() => setViewMode('tags')}
@@ -402,7 +423,7 @@ export function MemoriesPage() {
                   )}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Insights
+                  {t('Insights')}
                 </button>
               </div>
 
@@ -421,12 +442,12 @@ export function MemoriesPage() {
                   {isSelectMode ? (
                     <>
                       <CheckSquare className="h-4 w-4" />
-                      <span>Selecting</span>
+                      <span>{t('Selecting')}</span>
                     </>
                   ) : (
                     <>
                       <Square className="h-4 w-4" />
-                      <span>Select</span>
+                      <span>{t('Select')}</span>
                     </>
                   )}
                 </button>
@@ -497,7 +518,7 @@ export function MemoriesPage() {
                   {beliefEnabled === true && (
                     <div
                       className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1"
-                      aria-label="Memory view"
+                      aria-label={t('Memory view')}
                     >
                       {(
                         [
@@ -575,14 +596,15 @@ export function MemoriesPage() {
                     className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning"
                   >
                     <span>
-                      This memory view is partial. The server stopped before reaching its
-                      read budget, so it is not the complete history.
+                      {t(
+                        'This memory view is partial. The server stopped before reaching its read budget, so it is not the complete history.',
+                      )}
                     </span>
                     <button
                       onClick={() => refresh()}
                       className="shrink-0 text-white hover:underline"
                     >
-                      Retry
+                      {t('Retry')}
                     </button>
                   </div>
                 )}
@@ -591,13 +613,13 @@ export function MemoriesPage() {
                 {selectedTag && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-secondary">
-                      Showing memories tagged with &quot;{selectedTag}&quot;
+                      {t('Showing memories tagged with "{tag}"', { tag: selectedTag })}
                     </span>
                     <button
                       onClick={() => setSelectedTag(null)}
                       className="text-xs text-white hover:underline"
                     >
-                      Clear filter
+                      {t('Clear filter')}
                     </button>
                   </div>
                 )}
@@ -663,7 +685,9 @@ export function MemoriesPage() {
                 fallback={
                   <div className="flex h-full items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="ml-2 text-text-tertiary">Loading graph...</span>
+                    <span className="ml-2 text-text-tertiary">
+                      {t('Loading graph...')}
+                    </span>
                   </div>
                 }
               >
@@ -674,7 +698,9 @@ export function MemoriesPage() {
                 fallback={
                   <div className="flex h-full items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="ml-2 text-text-tertiary">Loading insights...</span>
+                    <span className="ml-2 text-text-tertiary">
+                      {t('Loading insights...')}
+                    </span>
                   </div>
                 }
               >
@@ -705,7 +731,7 @@ export function MemoriesPage() {
                   <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                       <TrendingUp className="h-4 w-4 text-white" />
-                      Insights
+                      {t('Insights')}
                     </h3>
 
                     {/* Total memories */}
@@ -713,10 +739,12 @@ export function MemoriesPage() {
                       <div className="text-2xl font-bold text-white">
                         {memories.length}
                       </div>
-                      <div className="text-sm text-text-secondary">Total Memories</div>
+                      <div className="text-sm text-text-secondary">
+                        {t('Total Memories')}
+                      </div>
                       {recentMemoriesCount > 0 && (
                         <div className="mt-1 text-xs text-green-400">
-                          +{recentMemoriesCount} this week
+                          {t('+{count} this week', { count: recentMemoriesCount })}
                         </div>
                       )}
                     </div>
@@ -727,7 +755,7 @@ export function MemoriesPage() {
                         <div className="flex items-center gap-1.5 rounded-lg bg-orange-500/10 px-2.5 py-1">
                           <Flame className="h-3.5 w-3.5 text-orange-500" />
                           <span className="text-sm font-medium text-orange-500">
-                            {todayMemories.length} today
+                            {t('{count} today', { count: todayMemories.length })}
                           </span>
                         </div>
                       </div>
@@ -737,10 +765,10 @@ export function MemoriesPage() {
                     <div>
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-xs text-text-quaternary">
-                          Activity (30 days)
+                          {t('Activity (30 days)')}
                         </span>
                         <span className="text-xs text-text-quaternary">
-                          {recentMemoriesCount} memories
+                          {tn(recentMemoriesCount, '{count} memory', '{count} memories')}
                         </span>
                       </div>
                       <div className="flex h-10 items-end gap-0.5">
@@ -751,7 +779,10 @@ export function MemoriesPage() {
                             style={{
                               height: `${Math.max((day.count / maxActivity) * 100, 4)}%`,
                             }}
-                            title={`${day.date}: ${day.count} memories`}
+                            title={t('{date}: {count} memories', {
+                              date: day.date,
+                              count: day.count,
+                            })}
                           />
                         ))}
                       </div>
@@ -763,7 +794,7 @@ export function MemoriesPage() {
                     <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
                       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                         <Sparkles className="h-4 w-4 text-white" />
-                        Life Balance
+                        {t('Life Balance')}
                       </h3>
                       <LifeBalanceChart data={lifeBalance} compact />
                     </div>
@@ -774,7 +805,7 @@ export function MemoriesPage() {
                     <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
                       <h3 className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                         <TrendingUp className="h-4 w-4 text-white" />
-                        Trending
+                        {t('Trending')}
                       </h3>
                       <TrendingSidebar
                         risingTags={risingTags}
@@ -790,7 +821,7 @@ export function MemoriesPage() {
                       <div className="mb-3 flex items-center justify-between">
                         <h3 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                           <Tag className="h-4 w-4 text-white" />
-                          Top Tags
+                          {t('Top Tags')}
                         </h3>
                         <button
                           onClick={() => setViewMode('tags')}
@@ -798,7 +829,7 @@ export function MemoriesPage() {
                             'rounded-md p-1.5 transition-colors',
                             'text-text-quaternary hover:bg-white/10 hover:text-white',
                           )}
-                          title="View all tags"
+                          title={t('View all tags')}
                         >
                           <Network className="h-4 w-4" />
                         </button>
@@ -842,7 +873,7 @@ export function MemoriesPage() {
                     <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
                       <h3 className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                         <Plus className="h-4 w-4 text-white" />
-                        Added Today
+                        {t('Added Today')}
                       </h3>
                       <div className="space-y-2">
                         {todayMemories.slice(0, 3).map((memory) => (
@@ -856,7 +887,9 @@ export function MemoriesPage() {
                         ))}
                         {todayMemories.length > 3 && (
                           <p className="pt-1 text-center text-xs text-text-quaternary">
-                            +{todayMemories.length - 3} more today
+                            {t('+{count} more today', {
+                              count: todayMemories.length - 3,
+                            })}
                           </p>
                         )}
                       </div>
@@ -873,12 +906,17 @@ export function MemoriesPage() {
       <ConfirmDialog
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
-        title="Delete Memories"
-        description={`Are you sure you want to delete ${selectedIds.length} ${
-          selectedIds.length === 1 ? 'memory' : 'memories'
-        }? This action cannot be undone.`}
-        confirmLabel={isDeleting ? 'Deleting...' : 'Delete'}
-        cancelLabel="Cancel"
+        title={t('Delete Memories')}
+        description={
+          selectedIds.length === 1
+            ? t('Are you sure you want to delete 1 memory? This action cannot be undone.')
+            : t(
+                'Are you sure you want to delete {count} memories? This action cannot be undone.',
+                { count: selectedIds.length },
+              )
+        }
+        confirmLabel={isDeleting ? t('Deleting...') : t('Delete')}
+        cancelLabel={t('Cancel')}
         variant="danger"
         onConfirm={executeBulkDelete}
         isLoading={isDeleting}

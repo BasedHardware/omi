@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ChatEvidenceEnvelope, ChatEvidenceReference } from '@/lib/chatEvidence';
+import { t } from '@/lib/i18n';
 
 type EvidenceStatus = {
   label: string;
@@ -29,26 +30,26 @@ const KIND_LABELS: Record<ChatEvidenceReference['kind'], string> = {
 function statusFor(state: ChatEvidenceReference['state']): EvidenceStatus {
   switch (state) {
     case 'available':
-      return { label: 'Available', Icon: CheckCircle2, className: 'text-emerald-300' };
+      return { label: t('Available'), Icon: CheckCircle2, className: 'text-emerald-300' };
     case 'loading':
-      return { label: 'Loading', Icon: Loader2, className: 'text-text-secondary' };
+      return { label: t('Loading'), Icon: Loader2, className: 'text-text-secondary' };
     case 'offline':
       return {
-        label: 'Unavailable offline',
+        label: t('Unavailable offline'),
         Icon: CloudOff,
         className: 'text-amber-300',
       };
     case 'pruned':
       return {
-        label: 'No longer available',
+        label: t('No longer available'),
         Icon: CircleSlash,
         className: 'text-text-quaternary',
       };
     case 'failed':
-      return { label: 'Failed to load', Icon: AlertCircle, className: 'text-red-300' };
+      return { label: t('Failed to load'), Icon: AlertCircle, className: 'text-red-300' };
     case 'unknown':
       return {
-        label: 'Unavailable',
+        label: t('Unavailable'),
         Icon: FileWarning,
         className: 'text-text-quaternary',
       };
@@ -98,7 +99,7 @@ export function ChatEvidenceCard({
   if (!envelope || envelope.references.length === 0) return null;
 
   return (
-    <section aria-label="Supporting evidence" className="mt-2 flex flex-col gap-1.5">
+    <section aria-label={t('Supporting evidence')} className="mt-2 flex flex-col gap-1.5">
       {envelope.references.map((reference, index) => (
         <ChatEvidenceReferenceCard
           key={`${reference.id}-${index}`}

@@ -21,6 +21,7 @@ import type {
 import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
+import { t } from '@/lib/i18n';
 
 interface PlansSheetProps {
   open: boolean;
@@ -253,7 +254,7 @@ export function PlansSheet({
                     <Dialog.Close asChild>
                       <button
                         className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
-                        aria-label="Close"
+                        aria-label={t('Close')}
                       >
                         <X className="w-4 h-4 text-text-quaternary" />
                       </button>
@@ -266,16 +267,16 @@ export function PlansSheet({
                       <div>
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
                           {isUnknownPlan
-                            ? 'Plan unavailable'
+                            ? t('Plan unavailable')
                             : isUnlimited && !isCanceling_
-                            ? 'Manage Your Plan'
-                            : 'Choose Your Plan'}
+                            ? t('Manage Your Plan')
+                            : t('Choose Your Plan')}
                         </Dialog.Title>
                         {isUnlimited && subscription?.current_period_end && (
                           <p className="text-xs text-text-quaternary">
                             {isCanceling_
-                              ? `Cancels on ${formatDate(subscription.current_period_end)}`
-                              : `Renews ${formatDate(subscription.current_period_end)}`}
+                              ? t('Cancels on {value}', { value: formatDate(subscription.current_period_end) })
+                              : t('Renews {value}', { value: formatDate(subscription.current_period_end) })}
                           </p>
                         )}
                       </div>
@@ -287,9 +288,7 @@ export function PlansSheet({
                     {isUnknownPlan ? (
                       <div className="py-8 text-center">
                         <p className="text-sm text-text-secondary">
-                          This account uses a plan that this version of Omi does not
-                          recognize yet. Plan options are unavailable until the plan can
-                          be identified.
+                          {t('This account uses a plan that this version of Omi does not recognize yet. Plan options are unavailable until the plan can be identified.')}
                         </p>
                       </div>
                     ) : isLoadingPlans ? (
@@ -326,7 +325,7 @@ export function PlansSheet({
                               >
                                 {isAnnual && (
                                   <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
-                                    POPULAR
+                                    {t('POPULAR')}
                                   </span>
                                 )}
 
@@ -345,7 +344,7 @@ export function PlansSheet({
                                 {isCurrent && (
                                   <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-success/10 text-success text-xs rounded-full">
                                     <Check className="w-3 h-3" />
-                                    Current
+                                    {t('Current')}
                                   </span>
                                 )}
                               </button>
@@ -355,15 +354,14 @@ export function PlansSheet({
 
                         {isCanceling_ && subscription?.current_period_end && (
                           <p className="text-sm text-text-tertiary">
-                            You can reactivate your current plan now. Plan changes are
-                            available after {formatDate(subscription.current_period_end)}.
+                            {t('You can reactivate your current plan now. Plan changes are available after')}{' '}{formatDate(subscription.current_period_end)}.
                           </p>
                         )}
 
                         {/* Features List */}
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-text-secondary">
-                            Features:
+                            {t('Features:')}
                           </h4>
                           <ul className="space-y-2">
                             {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
@@ -403,18 +401,18 @@ export function PlansSheet({
                           {isLoading ? (
                             <span className="flex items-center justify-center gap-2">
                               <Loader2 className="w-4 h-4 animate-spin" />
-                              Processing...
+                              {t('Processing...')}
                             </span>
                           ) : isCanceling_ ? (
-                            'Reactivate Subscription'
+                            t('Reactivate Subscription')
                           ) : isUnlimited ? (
                             selectedOption?.is_active ? (
-                              'Current Plan'
+                              t('Current Plan')
                             ) : (
-                              'Change Plan'
+                              t('Change Plan')
                             )
                           ) : (
-                            'Continue to Payment'
+                            t('Continue to Payment')
                           )}
                         </button>
 
@@ -425,7 +423,7 @@ export function PlansSheet({
                             className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                           >
                             <CreditCard className="w-4 h-4" />
-                            <span className="text-sm">Manage Billing &amp; Invoices</span>
+                            <span className="text-sm">{t('Manage Billing & Invoices')}</span>
                           </button>
                         )}
 
@@ -439,7 +437,7 @@ export function PlansSheet({
                             >
                               <CreditCard className="w-4 h-4" />
                               <span className="text-sm">
-                                Manage Billing &amp; Invoices
+                                {t('Manage Billing & Invoices')}
                               </span>
                             </button>
 
@@ -449,7 +447,7 @@ export function PlansSheet({
                                 disabled={isLoading}
                                 className="w-full py-2.5 text-sm text-error/70 hover:text-error transition-colors"
                               >
-                                Cancel Subscription
+                                {t('Cancel Subscription')}
                               </button>
                             )}
                           </div>
@@ -468,14 +466,14 @@ export function PlansSheet({
       <ConfirmDialog
         open={showCancelConfirm}
         onOpenChange={setShowCancelConfirm}
-        title="Cancel Subscription?"
+        title={t('Cancel Subscription?')}
         description={
           subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(subscription.current_period_end)}. After that, you'll be moved to the Free plan.`
-            : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
+            ? t('Your subscription will remain active until {value}. After that, you\'ll be moved to the Free plan.', { value: formatDate(subscription.current_period_end) })
+            : t('Are you sure you want to cancel your subscription? You\'ll lose access to unlimited features.')
         }
-        confirmLabel="Cancel Subscription"
-        cancelLabel="Keep Subscription"
+        confirmLabel={t('Cancel Subscription')}
+        cancelLabel={t('Keep Subscription')}
         variant="danger"
         onConfirm={handleCancelSubscription}
         isLoading={isCanceling}

@@ -6,6 +6,7 @@ import { Pause, Play, Square } from 'lucide-react';
 import type { TranscriptSegment } from '@/components/recording/RecordingContext';
 import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 /**
  * What a live capture looks like from inside the chat.
@@ -78,7 +79,7 @@ export function RecordingStage({
           size={42}
           level={level}
           active={!isPaused && !isInitializing}
-          label="Omi live"
+          label={t('Omi live')}
           testId="omi-live-mark"
         />
 
@@ -94,7 +95,7 @@ export function RecordingStage({
             onClick={isPaused ? onResume : onPause}
             disabled={isInitializing}
             className="flex h-9 w-9 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary disabled:pointer-events-none disabled:opacity-40"
-            aria-label={isPaused ? 'Resume recording' : 'Pause recording'}
+            aria-label={isPaused ? t('Resume recording') : t('Pause recording')}
           >
             {isPaused ? (
               <Play className="h-4 w-4 fill-current" />
@@ -106,7 +107,7 @@ export function RecordingStage({
             onClick={onStop}
             disabled={isInitializing}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25 disabled:pointer-events-none disabled:opacity-40"
-            aria-label="Stop recording"
+            aria-label={t('Stop recording')}
           >
             <Square className="h-3.5 w-3.5 fill-current" />
           </button>
@@ -124,10 +125,10 @@ export function RecordingStage({
         {segments.length === 0 ? (
           <p className="text-sm text-text-quaternary">
             {isInitializing
-              ? 'Starting capture...'
+              ? t('Starting capture...')
               : isPaused
-                ? 'Paused.'
-                : 'Listening for speech...'}
+                ? t('Paused.')
+                : t('Listening for speech...')}
           </p>
         ) : (
           <div className="space-y-1.5">

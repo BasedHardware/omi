@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface MonthCalendarProps {
   items: ActionItem[];
@@ -130,7 +131,7 @@ export function MonthCalendar({
               'transition-colors',
             )}
           >
-            Today
+            {t('Today')}
           </button>
           <button
             onClick={goToPreviousMonth}

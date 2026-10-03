@@ -10,6 +10,7 @@ import {
   type ActivityDay,
   type UseInsightsDashboardReturn,
 } from '@/hooks/useInsightsDashboard';
+import { t as i18n } from '@/lib/i18n';
 
 interface InsightsDashboardProps {
   insights: UseInsightsDashboardReturn;
@@ -82,9 +83,9 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
         <div className="w-20 h-20 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
           <Sparkles className="w-10 h-10 text-text-quaternary" />
         </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">No insights yet</h3>
+        <h3 className="text-lg font-medium text-text-primary mb-2">{i18n('No insights yet')}</h3>
         <p className="text-sm text-text-tertiary max-w-sm">
-          Add more memories to see insights about your life patterns and themes.
+          {i18n('Add more memories to see insights about your life patterns and themes.')}
         </p>
       </div>
     );
@@ -99,7 +100,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
           animate={{ opacity: 1, y: 0 }}
           className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary"
         >
-          <h2 className="text-sm font-medium text-text-tertiary mb-4">ACTIVITY</h2>
+          <h2 className="text-sm font-medium text-text-tertiary mb-4">{i18n('ACTIVITY')}</h2>
           <ActivityHeatmap data={activityCalendar} />
         </motion.div>
 
@@ -113,7 +114,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-white" />
-              <h2 className="text-sm font-medium text-text-tertiary">ALL TAGS</h2>
+              <h2 className="text-sm font-medium text-text-tertiary">{i18n('ALL TAGS')}</h2>
               <span className="text-xs text-text-quaternary">({allTags.length})</span>
             </div>
             <div className="relative">
@@ -122,7 +123,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tags..."
+                placeholder={i18n('Search tags...')}
                 className={cn(
                   'pl-9 pr-4 py-1.5 rounded-lg w-48',
                   'bg-bg-tertiary border border-bg-quaternary',
@@ -153,13 +154,13 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
             ))}
             {allTags.length > 50 && !searchQuery && (
               <span className="inline-flex items-center px-3 py-1.5 text-sm text-text-quaternary">
-                +{allTags.length - 50} more
+                +{allTags.length - 50} {i18n('more')}
               </span>
             )}
           </div>
           {filteredTags.length === 0 && searchQuery && (
             <p className="text-center text-text-quaternary py-4">
-              No tags match &quot;{searchQuery}&quot;
+              {i18n('No tags match "')}{searchQuery}{i18n('"')}
             </p>
           )}
         </motion.div>
@@ -342,7 +343,7 @@ export function TrendingSidebar({
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-400">Rising</span>
+            <span className="text-xs font-medium text-emerald-400">{i18n('Rising')}</span>
           </div>
           <div className="space-y-1">
             {risingTags.slice(0, 3).map((tag) => (
@@ -362,7 +363,7 @@ export function TrendingSidebar({
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
-            <span className="text-xs font-medium text-rose-400">Fading</span>
+            <span className="text-xs font-medium text-rose-400">{i18n('Fading')}</span>
           </div>
           <div className="space-y-1">
             {fadingTags.slice(0, 3).map((tag) => (
@@ -467,7 +468,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
                     'w-[10px] h-[10px] rounded-sm',
                     day ? getColor(day.count) : 'bg-transparent',
                   )}
-                  title={day ? `${day.date}: ${day.count} memories` : undefined}
+                  title={day ? i18n('{date}: {count} memories', { date: day.date, count: day.count }) : undefined}
                 />
               );
             })}
@@ -477,7 +478,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
 
       {/* Legend */}
       <div className="flex items-center gap-2 mt-3 text-xs text-text-quaternary">
-        <span>Less</span>
+        <span>{i18n('Less')}</span>
         <div className="flex gap-0.5">
           <div className="w-[10px] h-[10px] rounded-sm bg-bg-tertiary" />
           <div className="w-[10px] h-[10px] rounded-sm bg-white/20" />
@@ -485,7 +486,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
           <div className="w-[10px] h-[10px] rounded-sm bg-white/60" />
           <div className="w-[10px] h-[10px] rounded-sm bg-white" />
         </div>
-        <span>More</span>
+        <span>{i18n('More')}</span>
       </div>
     </div>
   );

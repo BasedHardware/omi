@@ -14,6 +14,7 @@ import {
 } from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
+import { t } from '@/lib/i18n';
 
 /**
  * The chat transcript, with no chrome of its own.
@@ -35,7 +36,7 @@ function formatMessageTime(isoDate: string): string {
 function OmiAvatar() {
   return (
     <div className="flex-shrink-0 w-10 h-10">
-      <Image src="/logo.png" alt="Omi" width={40} height={40} className="rounded-full" />
+      <Image src="/logo.png" alt={t('Omi')} width={40} height={40} className="rounded-full" />
     </div>
   );
 }
@@ -189,7 +190,7 @@ export function ChatTranscript({
             <div className="rounded-2xl px-5 py-3 bg-bg-secondary/50 border border-stroke">
               <div className="flex items-center gap-2 text-text-secondary mb-2">
                 <Brain className="w-4 h-4" />
-                <span className="text-sm font-medium">Thinking...</span>
+                <span className="text-sm font-medium">{t('Thinking...')}</span>
               </div>
               <p className="text-xs text-text-quaternary whitespace-pre-wrap line-clamp-4">
                 {currentThinking}

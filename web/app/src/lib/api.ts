@@ -58,6 +58,7 @@ import type {
   NotificationScope,
   PaymentPlan,
 } from '@/types/apps';
+import { t } from '@/lib/i18n';
 
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
 const API_BASE_URL = '/api/proxy';
@@ -2306,42 +2307,54 @@ const INTEGRATION_DEFINITIONS: Array<{
     id: 'google_calendar',
     appKey: 'google_calendar',
     name: 'Google Calendar',
-    description: 'Sync with your calendar',
+    get description() {
+      return t('Sync with your calendar');
+    },
     logo: '/integrations/google-calendar.png',
   },
   {
     id: 'whoop',
     appKey: 'whoop',
     name: 'Whoop',
-    description: 'Health & fitness tracking',
+    get description() {
+      return t('Health & fitness tracking');
+    },
     logo: '/integrations/whoop.png',
   },
   {
     id: 'notion',
     appKey: 'notion',
     name: 'Notion',
-    description: 'Sync notes to Notion',
+    get description() {
+      return t('Sync notes to Notion');
+    },
     logo: '/integrations/notion-logo.png',
   },
   {
     id: 'github',
     appKey: 'github',
     name: 'GitHub',
-    description: 'Create issues and notes',
+    get description() {
+      return t('Create issues and notes');
+    },
     logo: '/integrations/github-logo.png',
   },
   {
     id: 'twitter',
     appKey: 'twitter',
     name: 'X (Twitter)',
-    description: 'Share to Twitter',
+    get description() {
+      return t('Share to Twitter');
+    },
     logo: '/integrations/x-logo.avif',
   },
   {
     id: 'gmail',
     appKey: 'gmail',
     name: 'Gmail',
-    description: 'Email integrations',
+    get description() {
+      return t('Email integrations');
+    },
     logo: '/integrations/gmail-logo.jpeg',
   },
 ];

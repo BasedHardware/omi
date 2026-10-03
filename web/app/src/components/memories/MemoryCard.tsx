@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
 import type { MemoryUseAction } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 type MemoryBeliefView = Memory & {
   belief_class?: string | null;
@@ -48,24 +49,32 @@ const categoryConfig: Partial<
 > = {
   interesting: {
     icon: <Lightbulb className="h-4 w-4" />,
-    label: 'Interesting',
+    get label() {
+      return t('Interesting');
+    },
     color: 'text-white',
   },
   manual: {
     icon: <FileText className="h-4 w-4" />,
-    label: 'Manual',
+    get label() {
+      return t('Manual');
+    },
     color: 'text-blue-400',
   },
   system: {
     icon: <Settings className="h-4 w-4" />,
-    label: 'System',
+    get label() {
+      return t('System');
+    },
     color: 'text-text-quaternary',
   },
 };
 
 const DEFAULT_CATEGORY_CONFIG = {
   icon: <FileText className="h-4 w-4" />,
-  label: 'Memory',
+  get label() {
+    return t('Memory');
+  },
   color: 'text-text-quaternary',
 };
 
@@ -259,7 +268,7 @@ export const MemoryCard = memo(function MemoryCard({
                 ? 'border-white bg-white'
                 : 'border-text-quaternary hover:border-white',
             )}
-            aria-label={isSelected ? 'Deselect memory' : 'Select memory'}
+            aria-label={isSelected ? t('Deselect memory') : t('Select memory')}
           >
             <AnimatePresence>
               {isSelected && (
@@ -314,7 +323,7 @@ export const MemoryCard = memo(function MemoryCard({
                 'leading-relaxed text-text-primary outline-none',
                 'focus:ring-1 focus:ring-white/30',
               )}
-              placeholder="Enter memory content..."
+              placeholder={t('Enter memory content...')}
               rows={1}
             />
           ) : (
@@ -322,7 +331,7 @@ export const MemoryCard = memo(function MemoryCard({
               <p
                 ref={contentRef}
                 onDoubleClick={handleTextDoubleClick}
-                title="Double-click to edit"
+                title={t('Double-click to edit')}
                 className={cn(
                   'break-words text-sm leading-relaxed text-text-primary [overflow-wrap:anywhere]',
                   'cursor-text select-none',
@@ -337,7 +346,7 @@ export const MemoryCard = memo(function MemoryCard({
                   onClick={() => setIsExpanded(!isExpanded)}
                   className="mt-1 text-xs text-text-quaternary transition-colors hover:text-white"
                 >
-                  {isExpanded ? 'Show less' : 'Show more'}
+                  {isExpanded ? t('Show less') : t('Show more')}
                 </button>
               )}
             </div>
@@ -387,10 +396,11 @@ export const MemoryCard = memo(function MemoryCard({
                     className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 text-xs capitalize text-text-secondary"
                     title={
                       beliefMemory.belief_computed_at
-                        ? `Assessed ${
-                            formatEvidenceDate(beliefMemory.belief_computed_at) ||
-                            'recently'
-                          }`
+                        ? t('Assessed {value}', {
+                            value:
+                              formatEvidenceDate(beliefMemory.belief_computed_at) ||
+                              'recently',
+                          })
                         : undefined
                     }
                   >
@@ -400,7 +410,7 @@ export const MemoryCard = memo(function MemoryCard({
 
                 {beliefMemory.as_of && (
                   <span className="text-xs text-text-quaternary">
-                    Evidence{' '}
+                    {t('Evidence')}{' '}
                     {formatEvidenceDate(beliefMemory.as_of) || beliefMemory.as_of}
                   </span>
                 )}
@@ -421,7 +431,7 @@ export const MemoryCard = memo(function MemoryCard({
                       'cursor-pointer rounded p-0.5 transition-colors',
                       'text-text-quaternary hover:text-text-tertiary',
                     )}
-                    title="Private memory (click to make public)"
+                    title={t('Private memory (click to make public)')}
                   >
                     <Lock className="h-3 w-3" />
                   </button>
@@ -429,7 +439,9 @@ export const MemoryCard = memo(function MemoryCard({
 
                 {/* Edited indicator */}
                 {memory.edited && (
-                  <span className="text-xs italic text-text-quaternary">edited</span>
+                  <span className="text-xs italic text-text-quaternary">
+                    {t('edited')}
+                  </span>
                 )}
               </div>
             </div>
@@ -460,11 +472,11 @@ export const MemoryCard = memo(function MemoryCard({
                   )}
                   title={
                     isSuppressed
-                      ? 'Allow Omi to use this memory'
-                      : "Don't use this memory"
+                      ? t('Allow Omi to use this memory')
+                      : t("Don't use this memory")
                   }
                 >
-                  {isSuppressed ? 'Allow use' : "Don't use"}
+                  {isSuppressed ? t('Allow use') : t("Don't use")}
                 </button>
                 {!isSuppressed && !needsReview && (
                   <button
@@ -475,8 +487,8 @@ export const MemoryCard = memo(function MemoryCard({
                         ? 'text-success hover:bg-success/10'
                         : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                     )}
-                    title="Mark memory useful"
-                    aria-label="Mark memory useful"
+                    title={t('Mark memory useful')}
+                    aria-label={t('Mark memory useful')}
                   >
                     <ThumbsUp className="h-4 w-4" />
                   </button>
@@ -493,7 +505,7 @@ export const MemoryCard = memo(function MemoryCard({
                     'text-error hover:bg-error/10',
                     'transition-colors',
                   )}
-                  title="Reject memory"
+                  title={t('Reject memory')}
                 >
                   <ThumbsDown className="h-4 w-4" />
                 </button>
@@ -504,7 +516,7 @@ export const MemoryCard = memo(function MemoryCard({
                     'text-success hover:bg-success/10',
                     'transition-colors',
                   )}
-                  title="Accept memory"
+                  title={t('Accept memory')}
                 >
                   <ThumbsUp className="h-4 w-4" />
                 </button>
@@ -519,7 +531,7 @@ export const MemoryCard = memo(function MemoryCard({
                     'text-text-tertiary hover:text-text-primary',
                     'transition-colors hover:bg-bg-tertiary',
                   )}
-                  title="Edit memory"
+                  title={t('Edit memory')}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -532,7 +544,7 @@ export const MemoryCard = memo(function MemoryCard({
                     'transition-colors hover:bg-error/10',
                     isDeleting && 'cursor-not-allowed opacity-50',
                   )}
-                  title="Delete memory"
+                  title={t('Delete memory')}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { CreateGoalParams } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 interface GoalComposerProps {
   open: boolean;
@@ -65,14 +66,14 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-lg font-semibold text-text-primary">
-                Set a goal
+                {t('Set a goal')}
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-text-quaternary">
-                Omi tracks progress against it as you go.
+                {t('Omi tracks progress against it as you go.')}
               </Dialog.Description>
             </div>
             <Dialog.Close
-              aria-label="Close"
+              aria-label={t('Close')}
               className="rounded-element p-1.5 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
             >
               <X className="h-4 w-4" />
@@ -82,7 +83,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
           <div className="mt-5 space-y-4">
             <label className="block">
               <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                Goal
+                {t('Goal')}
               </span>
               <input
                 autoFocus
@@ -91,7 +92,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') void submit();
                 }}
-                placeholder="Read 12 books this year"
+                placeholder={t('Read 12 books this year')}
                 maxLength={500}
                 className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
               />
@@ -100,7 +101,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                  Target
+                  {t('Target')}
                 </span>
                 <input
                   type="number"
@@ -112,7 +113,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
               </label>
               <label className="block">
                 <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                  Unit
+                  {t('Unit')}
                 </span>
                 <input
                   value={unit}
@@ -133,7 +134,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
               onClick={() => close(false)}
               className="rounded-control px-4 py-2 text-sm text-text-quaternary transition-colors hover:text-text-secondary"
             >
-              Cancel
+              {t('Cancel')}
             </button>
             <button
               type="button"
@@ -141,7 +142,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
               disabled={!canSubmit}
               className="rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              {submitting ? 'Saving…' : 'Set goal'}
+              {submitting ? t('Saving…') : t('Set goal')}
             </button>
           </div>
         </Dialog.Content>

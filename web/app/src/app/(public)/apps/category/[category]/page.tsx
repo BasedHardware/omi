@@ -11,6 +11,7 @@ import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
 import { getCategoryMetadata } from '@/components/marketplace/category';
 import { BreadcrumbJsonLd, CollectionPageJsonLd } from '@/components/seo/JsonLd';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t } from '@/lib/i18n';
 
 // ISR configuration
 export const revalidate = 300; // Revalidate every 5 minutes
@@ -100,7 +101,10 @@ export default function CategoryPage() {
       />
       <CollectionPageJsonLd
         name={`${categoryMeta.displayName} Apps`}
-        description={`${categoryMeta.description} Browse ${categoryMeta.displayName} apps for your Omi.`}
+        description={t('{description} Browse {displayName} apps for your Omi.', {
+          description: categoryMeta.description,
+          displayName: categoryMeta.displayName,
+        })}
         url={`/apps/category/${category}`}
       />
       {/* Fixed Header and Navigation */}
@@ -134,8 +138,8 @@ export default function CategoryPage() {
               <section className="pt-4 sm:pt-6 md:pt-8">
                 <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
                   {newOrRecentApps.some((p) => p.installs === 0)
-                    ? 'New This Week'
-                    : 'Recently Added'}
+                    ? t('New This Week')
+                    : t('Recently Added')}
                 </h3>
                 <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 lg:gap-4">
                   {newOrRecentApps.map((plugin) => (
@@ -149,7 +153,7 @@ export default function CategoryPage() {
             {mostPopular.length > 0 && (
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
-                  Most Popular
+                  {t('Most Popular')}
                 </h3>
                 <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
                   {mostPopular.map((plugin, index) => (
@@ -166,7 +170,7 @@ export default function CategoryPage() {
             {/* All Apps Section */}
             <section>
               <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
-                All Apps
+                {t('All Apps')}
               </h3>
               <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
                 {allApps.map((plugin, index) => (

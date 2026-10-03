@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 /**
  * The settings sections, in nav order.
  *
@@ -11,21 +12,39 @@
 export const SETTINGS_SECTIONS = [
   {
     id: 'account',
-    label: 'Account',
-    title: 'Account',
-    description: 'Profile, language, notifications, plan, and usage',
+    get label() {
+      return t('Account');
+    },
+    get title() {
+      return t('Account');
+    },
+    get description() {
+      return t('Profile, language, notifications, plan, and usage');
+    },
   },
   {
     id: 'privacy',
-    label: 'Privacy',
-    title: 'Privacy',
-    description: 'Data permissions and training settings',
+    get label() {
+      return t('Privacy');
+    },
+    get title() {
+      return t('Privacy');
+    },
+    get description() {
+      return t('Data permissions and training settings');
+    },
   },
   {
     id: 'developer',
-    label: 'Developer',
-    title: 'Developer',
-    description: 'API keys, webhooks, and data export',
+    get label() {
+      return t('Developer');
+    },
+    get title() {
+      return t('Developer');
+    },
+    get description() {
+      return t('API keys, webhooks, and data export');
+    },
   },
 ] as const;
 

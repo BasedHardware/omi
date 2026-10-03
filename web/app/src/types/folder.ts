@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 // Folder Types
 
 export interface Folder {
@@ -44,14 +45,62 @@ export interface ReorderFoldersRequest {
 
 // Predefined folder colors
 export const FOLDER_COLORS = [
-  { id: 'slate', value: '#64748B', label: 'Slate' },
-  { id: 'blue', value: '#3B82F6', label: 'Blue' },
-  { id: 'green', value: '#10B981', label: 'Green' },
-  { id: 'yellow', value: '#F59E0B', label: 'Yellow' },
-  { id: 'red', value: '#EF4444', label: 'Red' },
-  { id: 'pink', value: '#EC4899', label: 'Pink' },
-  { id: 'orange', value: '#F97316', label: 'Orange' },
-  { id: 'teal', value: '#14B8A6', label: 'Teal' },
+  {
+    id: 'slate',
+    value: '#64748B',
+    get label() {
+      return t('Slate');
+    },
+  },
+  {
+    id: 'blue',
+    value: '#3B82F6',
+    get label() {
+      return t('Blue');
+    },
+  },
+  {
+    id: 'green',
+    value: '#10B981',
+    get label() {
+      return t('Green');
+    },
+  },
+  {
+    id: 'yellow',
+    value: '#F59E0B',
+    get label() {
+      return t('Yellow');
+    },
+  },
+  {
+    id: 'red',
+    value: '#EF4444',
+    get label() {
+      return t('Red');
+    },
+  },
+  {
+    id: 'pink',
+    value: '#EC4899',
+    get label() {
+      return t('Pink');
+    },
+  },
+  {
+    id: 'orange',
+    value: '#F97316',
+    get label() {
+      return t('Orange');
+    },
+  },
+  {
+    id: 'teal',
+    value: '#14B8A6',
+    get label() {
+      return t('Teal');
+    },
+  },
 ] as const;
 
 // Predefined folder emojis (matching mobile app)

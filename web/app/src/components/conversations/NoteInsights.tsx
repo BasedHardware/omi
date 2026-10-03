@@ -2,6 +2,7 @@
 
 import { Brain, History, Sparkles, Target, User } from 'lucide-react';
 import type { NoteInsight, NoteInsightKind } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 const KIND_ICONS: Record<NoteInsightKind, typeof Sparkles> = {
   prior_meeting: History,
@@ -23,7 +24,7 @@ export function NoteInsights({ insights }: NoteInsightsProps) {
   return (
     <div className="mb-5 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary/50 p-3.5">
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-quaternary">
-        For you · only visible to you
+        {t('For you · only visible to you')}
       </p>
       <ul className="space-y-1.5">
         {items.map((insight, index) => {

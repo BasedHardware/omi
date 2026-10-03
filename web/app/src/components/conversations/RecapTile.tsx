@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { CalendarDays, CheckSquare, Clock, MapPin, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DailySummary, DailySummaryStats } from '@/types/recap';
+import { t } from '@/lib/i18n';
 
 interface RecapTileProps {
   recap: DailySummary;
@@ -72,13 +73,13 @@ export const RecapTile = memo(function RecapTile({
           ? 'bg-bg-quaternary border-white/40'
           : 'bg-bg-raised border-white/15 hover:bg-bg-tertiary hover:border-white/30',
       )}
-      aria-label={`Recap: ${recap.headline}`}
+      aria-label={t('Recap: {headline}', { headline: recap.headline })}
       aria-pressed={isSelected}
     >
       <div className="flex items-center gap-1.5 mb-2">
         <CalendarDays className="w-3.5 h-3.5 text-text-secondary" />
         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-text-secondary">
-          Day recap
+          {t('Day recap')}
         </span>
       </div>
 
@@ -90,7 +91,7 @@ export const RecapTile = memo(function RecapTile({
         {/* Spans, not a heading and a paragraph: a button may only contain
             phrasing content, so the native element stays valid HTML. */}
         <span className="flex-1 min-w-0 text-base font-semibold leading-snug text-text-primary line-clamp-2">
-          {recap.headline || 'Daily Recap'}
+          {recap.headline || t('Daily Recap')}
         </span>
       </div>
 

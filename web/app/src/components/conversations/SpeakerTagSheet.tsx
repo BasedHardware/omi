@@ -9,6 +9,7 @@ import { usePeople } from '@/hooks/usePeople';
 import { assignBulkTranscriptSegments } from '@/lib/api';
 import type { TranscriptSegment } from '@/types/conversation';
 import type { Person } from '@/types/user';
+import { t } from '@/lib/i18n';
 
 interface SpeakerTagSheetProps {
   isOpen: boolean;
@@ -251,10 +252,10 @@ export function SpeakerTagSheet({
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-text-primary">
-                  Tag Speaker {(segment.speaker_id ?? 0) + 1}
+                  {t('Tag Speaker')}{' '}{(segment.speaker_id ?? 0) + 1}
                 </h2>
                 <p className="text-sm text-text-tertiary truncate mt-0.5">
-                  &quot;{segment.text.slice(0, 50)}...&quot;
+                  {t('"{text}..."', { text: segment.text.slice(0, 50) })}
                 </p>
               </div>
               <button
@@ -278,14 +279,14 @@ export function SpeakerTagSheet({
               {showAddPerson && (
                 <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
                   <p className="text-sm font-medium text-text-primary mb-2">
-                    Add New Person
+                    {t('Add New Person')}
                   </p>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={newPersonName}
                       onChange={(e) => setNewPersonName(e.target.value)}
-                      placeholder="Enter name..."
+                      placeholder={t('Enter name...')}
                       autoFocus
                       className={cn(
                         'flex-1 px-3 py-2 rounded-lg',
@@ -311,7 +312,7 @@ export function SpeakerTagSheet({
                       {creatingPerson ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        'Add'
+                        t('Add')
                       )}
                     </button>
                     <button
@@ -321,7 +322,7 @@ export function SpeakerTagSheet({
                       }}
                       className="px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-quaternary transition-colors"
                     >
-                      Cancel
+                      {t('Cancel')}
                     </button>
                   </div>
                 </div>
@@ -330,12 +331,12 @@ export function SpeakerTagSheet({
               {/* Person Selection */}
               <div className="mb-4">
                 <p className="text-sm font-medium text-text-secondary mb-3">
-                  Select Person
+                  {t('Select Person')}
                 </p>
                 {loadingPeople ? (
                   <div className="flex items-center gap-2 text-text-tertiary">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Loading people...</span>
+                    <span className="text-sm">{t('Loading people...')}</span>
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -377,12 +378,14 @@ export function SpeakerTagSheet({
                       />
                       <div>
                         <p className="text-sm font-medium text-text-primary">
-                          Tag other segments from this speaker
+                          {t('Tag other segments from this speaker')}
                         </p>
                         <p className="text-xs text-text-tertiary">
                           {tagOtherSegments
-                            ? `${selectedCount}/${totalUntagged} selected`
-                            : `${totalUntagged} untagged segment${totalUntagged !== 1 ? 's' : ''}`}
+                            ? t('{selectedCount}/{totalUntagged} selected', { selectedCount, totalUntagged })
+                            : totalUntagged === 1
+                              ? t('{count} untagged segment', { count: totalUntagged })
+                              : t('{count} untagged segments', { count: totalUntagged })}
                         </p>
                       </div>
                     </div>
@@ -443,7 +446,7 @@ export function SpeakerTagSheet({
                     )}
                   >
                     <Settings className="w-4 h-4" />
-                    <span>Manage People</span>
+                    <span>{t('Manage People')}</span>
                   </button>
                 </div>
               )}
@@ -464,13 +467,12 @@ export function SpeakerTagSheet({
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
+                    <span>{t('Saving...')}</span>
                   </>
                 ) : (
                   <span>
-                    Save
-                    {tagOtherSegments && selectedCount > 0
-                      ? ` (${selectedCount + 1} segments)`
+                    {t('Save')}{tagOtherSegments && selectedCount > 0
+                      ? ` ${t('({count} segments)', { count: selectedCount + 1 })}`
                       : ''}
                   </span>
                 )}

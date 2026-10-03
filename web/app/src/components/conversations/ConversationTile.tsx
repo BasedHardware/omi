@@ -8,6 +8,7 @@ import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
 import { PostHogManager } from '@/lib/analytics/posthog';
+import { t } from '@/lib/i18n';
 
 interface ConversationTileProps {
   conversation: Conversation;
@@ -99,7 +100,7 @@ export const ConversationTile = memo(function ConversationTile({
       )}
       tabIndex={0}
       role="button"
-      aria-label={`Conversation: ${conversation.structured.title}`}
+      aria-label={t('Conversation: {title}', { title: conversation.structured.title })}
       aria-selected={isSelected || isChecked}
     >
       {/* Top row: Time + Star */}
@@ -121,7 +122,7 @@ export const ConversationTile = memo(function ConversationTile({
             isStarred || isHovered ? 'opacity-100' : 'opacity-0',
             'hover:bg-bg-quaternary',
           )}
-          aria-label={isStarred ? 'Unstar conversation' : 'Star conversation'}
+          aria-label={isStarred ? t('Unstar conversation') : t('Star conversation')}
         >
           <Star
             className={cn(
@@ -159,7 +160,7 @@ export const ConversationTile = memo(function ConversationTile({
         </div>
 
         <h3 className="flex-1 min-w-0 text-sm font-medium leading-snug text-text-primary line-clamp-2">
-          {conversation.structured.title || 'Untitled conversation'}
+          {conversation.structured.title || t('Untitled conversation')}
         </h3>
       </div>
 
@@ -192,7 +193,7 @@ export const ConversationTile = memo(function ConversationTile({
         {conversation.status === 'processing' && (
           <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-chip bg-bg-tertiary text-[10px] text-text-secondary">
             <span className="w-1.5 h-1.5 rounded-full bg-text-primary animate-pulse" />
-            Processing
+            {t('Processing')}
           </span>
         )}
       </div>

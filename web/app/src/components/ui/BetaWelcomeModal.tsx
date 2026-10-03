@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, MessageSquare, Bug, X, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import confetti from 'canvas-confetti';
+import { t } from '@/lib/i18n';
 
 // Discord icon component
 function DiscordIcon({ className }: { className?: string }) {
@@ -102,7 +103,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
         {/* Close button */}
         <button
           onClick={handleClose}
-          aria-label="Close"
+          aria-label={t('Close')}
           className="absolute right-3 top-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
           <X className="h-5 w-5" />
@@ -116,9 +117,11 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               <Sparkles className="h-8 w-8 text-text-primary" />
             </div>
             <h2 className="mb-2 text-2xl font-semibold text-text-primary">
-              Welcome to Omi Web Beta
+              {t('Welcome to Omi Web Beta')}
             </h2>
-            <p className="text-text-tertiary">Thanks for being an early adopter!</p>
+            <p className="text-text-tertiary">
+              {t('Thanks for being an early adopter!')}
+            </p>
           </div>
         </div>
 
@@ -132,10 +135,10 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               </div>
               <div>
                 <p className="text-sm font-medium text-text-primary">
-                  Early Access Features
+                  {t('Early Access Features')}
                 </p>
                 <p className="text-xs text-text-tertiary">
-                  Features may change as we improve the experience
+                  {t('Features may change as we improve the experience')}
                 </p>
               </div>
             </div>
@@ -145,9 +148,11 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
                 <Bug className="h-4 w-4 text-text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-text-primary">Error Tracking</p>
+                <p className="text-sm font-medium text-text-primary">
+                  {t('Error Tracking')}
+                </p>
                 <p className="text-xs text-text-tertiary">
-                  We capture errors to improve stability
+                  {t('We capture errors to improve stability')}
                 </p>
               </div>
             </div>
@@ -158,10 +163,10 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               </div>
               <div>
                 <p className="text-sm font-medium text-text-primary">
-                  Your Feedback Matters
+                  {t('Your Feedback Matters')}
                 </p>
                 <p className="text-xs text-text-tertiary">
-                  Help us build the best experience possible
+                  {t('Help us build the best experience possible')}
                 </p>
               </div>
             </div>
@@ -169,7 +174,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
 
           {/* Feedback links */}
           <div className="space-y-2 pt-2">
-            <p className="text-xs text-text-quaternary">Share your feedback:</p>
+            <p className="text-xs text-text-quaternary">{t('Share your feedback:')}</p>
             <div className="flex items-center gap-4">
               <a
                 href="https://feedback.omi.me"
@@ -178,7 +183,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
                 className="flex items-center gap-1.5 text-sm text-text-tertiary transition-colors hover:text-text-primary"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                <span>feedback.omi.me</span>
+                <span>{t('feedback.omi.me')}</span>
               </a>
               <a
                 href="http://discord.omi.me"
@@ -187,7 +192,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
                 className="flex items-center gap-1.5 text-sm text-text-tertiary transition-colors hover:text-text-primary"
               >
                 <DiscordIcon className="h-3.5 w-3.5" />
-                <span>Discord</span>
+                <span>{t('Discord')}</span>
               </a>
             </div>
           </div>
@@ -198,7 +203,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               onClick={handleClose}
               className="block w-full rounded-xl bg-text-primary px-4 py-3 text-center font-medium text-bg-primary transition-colors hover:bg-text-primary/90"
             >
-              Got it, let&apos;s go!
+              {t("Got it, let's go!")}
             </button>
           </div>
         </div>

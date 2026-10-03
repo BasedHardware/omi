@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatDueStatus } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
 import { formatDateInputValue } from '@/lib/dateInput';
+import { t } from '@/lib/i18n';
 
 interface TaskCardProps {
   task: ActionItem;
@@ -179,7 +180,7 @@ export function TaskCard({
                 ? 'bg-white border-white'
                 : 'border-text-quaternary hover:border-white',
             )}
-            aria-label={isSelected ? 'Deselect task' : 'Select task'}
+            aria-label={isSelected ? t('Deselect task') : t('Select task')}
           >
             <AnimatePresence>
               {isSelected && (
@@ -210,7 +211,7 @@ export function TaskCard({
                   ? 'border-white hover:bg-white/20'
                   : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary',
             )}
-            aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
+            aria-label={task.completed ? t('Mark incomplete') : t('Mark complete')}
           >
             <AnimatePresence>
               {(task.completed || isCompleting) && (
@@ -254,7 +255,7 @@ export function TaskCard({
                   : 'text-text-primary',
                 !task.completed && onUpdateDescription && 'hover:text-white cursor-text',
               )}
-              title={!task.completed ? 'Double-click to edit' : undefined}
+              title={!task.completed ? t('Double-click to edit') : undefined}
             >
               {task.description}
             </p>
@@ -270,7 +271,7 @@ export function TaskCard({
                   'hover:text-white transition-colors',
                   isOverdue ? 'text-error hover:text-error' : 'text-text-quaternary',
                 )}
-                title="Click to change date"
+                title={t('Click to change date')}
               >
                 <Clock className="w-3 h-3" />
                 <span
@@ -288,7 +289,7 @@ export function TaskCard({
               {/* Replaces the coloured left edge bar: overdue stays legible as text. */}
               {isOverdue && (
                 <span className="px-1.5 py-0.5 rounded-badge bg-bg-quaternary text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                  Overdue
+                  {t('Overdue')}
                 </span>
               )}
 
@@ -332,7 +333,7 @@ export function TaskCard({
                           }}
                           className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
-                          Today
+                          {t('Today')}
                         </button>
                         <button
                           onClick={(e) => {
@@ -346,7 +347,7 @@ export function TaskCard({
                           }}
                           className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
-                          Tomorrow
+                          {t('Tomorrow')}
                         </button>
                       </div>
                       {task.due_at && (
@@ -355,7 +356,7 @@ export function TaskCard({
                           className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-error/10 hover:bg-error/20 rounded text-error"
                         >
                           <X className="w-3 h-3" />
-                          Remove date
+                          {t('Remove date')}
                         </button>
                       )}
                     </div>
@@ -376,7 +377,7 @@ export function TaskCard({
                 )}
               >
                 <Calendar className="w-3 h-3" />
-                <span>Add due date</span>
+                <span>{t('Add due date')}</span>
               </button>
 
               {/* Date picker popover */}
@@ -416,7 +417,7 @@ export function TaskCard({
                           }}
                           className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
-                          Today
+                          {t('Today')}
                         </button>
                         <button
                           onClick={(e) => {
@@ -430,7 +431,7 @@ export function TaskCard({
                           }}
                           className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
-                          Tomorrow
+                          {t('Tomorrow')}
                         </button>
                       </div>
                     </div>
@@ -445,7 +446,7 @@ export function TaskCard({
             <div className="flex items-center gap-1.5 mt-1">
               <Check className="w-3 h-3 text-success" />
               <span className="text-xs text-text-quaternary">
-                Completed{' '}
+                {t('Completed')}{' '}
                 {new Date(task.completed_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -473,9 +474,9 @@ export function TaskCard({
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
-                title="Set due to today"
+                title={t('Set due to today')}
               >
-                Today
+                {t('Today')}
               </button>
               <button
                 onClick={(e) => handleSnooze(e, 1)}
@@ -484,9 +485,9 @@ export function TaskCard({
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
-                title="Snooze 1 day"
+                title={t('Snooze 1 day')}
               >
-                +1 day
+                {t('+1 day')}
               </button>
               <button
                 onClick={(e) => handleSnooze(e, 7)}
@@ -495,9 +496,9 @@ export function TaskCard({
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
-                title="Snooze 7 days"
+                title={t('Snooze 7 days')}
               >
-                +7 days
+                {t('+7 days')}
               </button>
 
               {/* Delete button */}
@@ -508,7 +509,7 @@ export function TaskCard({
                   'bg-bg-secondary hover:bg-error/20 hover:text-error',
                   'text-text-quaternary transition-colors',
                 )}
-                title="Delete task"
+                title={t('Delete task')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -525,7 +526,7 @@ export function TaskCard({
               'hover:bg-error/20 hover:text-error',
               'text-text-quaternary transition-all',
             )}
-            title="Delete task"
+            title={t('Delete task')}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

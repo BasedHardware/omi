@@ -3,6 +3,7 @@
 import { User, Plus, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Person } from '@/types/user';
+import { t } from '@/lib/i18n';
 
 // Speaker avatar colors matching mobile app
 const SPEAKER_COLORS = [
@@ -94,7 +95,7 @@ export function YouChip({ selected = false, onClick, className }: YouChipProps) 
       >
         <User className="w-3 h-3 text-text-primary" />
       </div>
-      <span>You</span>
+      <span>{t('You')}</span>
       {selected && <Check className="w-3.5 h-3.5" />}
     </button>
   );
@@ -122,7 +123,7 @@ export function AddPersonChip({ onClick, className }: AddPersonChipProps) {
       )}
     >
       <Plus className="w-4 h-4" />
-      <span>Add Person</span>
+      <span>{t('Add Person')}</span>
     </button>
   );
 }

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Calendar, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDateInputValue } from '@/lib/dateInput';
+import { t } from '@/lib/i18n';
 
 interface TaskQuickAddProps {
   onAdd: (description: string, dueAt?: string) => Promise<void>;
@@ -85,7 +86,7 @@ export function TaskQuickAdd({
         )}
       >
         <Plus className="h-4 w-4" />
-        <span className="text-sm">Add new task...</span>
+        <span className="text-sm">{t('Add new task...')}</span>
       </button>
     );
   }
@@ -106,7 +107,7 @@ export function TaskQuickAdd({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="What needs to be done?"
+        placeholder={t('What needs to be done?')}
         disabled={isSubmitting}
         className={cn(
           'w-full bg-transparent',
@@ -158,7 +159,7 @@ export function TaskQuickAdd({
               'transition-colors',
             )}
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             type="submit"
@@ -171,14 +172,14 @@ export function TaskQuickAdd({
               'disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
-            {isSubmitting ? 'Adding...' : 'Add Task'}
+            {isSubmitting ? t('Adding...') : t('Add Task')}
           </button>
         </div>
       </div>
 
       {/* Hint */}
       <p className="text-[10px] text-text-quaternary">
-        Press Enter to add, Escape to cancel
+        {t('Press Enter to add, Escape to cancel')}
       </p>
     </motion.form>
   );

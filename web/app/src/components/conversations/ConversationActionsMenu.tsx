@@ -9,6 +9,7 @@ import type { Conversation, TranscriptSegment } from '@/types/conversation';
 import type { Person } from '@/types/user';
 import { PostHogManager } from '@/lib/analytics/posthog';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
+import { t } from '@/lib/i18n';
 
 interface ConversationActionsMenuProps {
   conversation: Conversation;
@@ -141,7 +142,7 @@ export function ConversationActionsMenu({
           'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
           isOpen && 'bg-bg-tertiary text-text-primary',
         )}
-        aria-label="Conversation actions"
+        aria-label={t('Conversation actions')}
       >
         <MoreVertical className="h-5 w-5" />
       </button>
@@ -175,7 +176,9 @@ export function ConversationActionsMenu({
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                <span>{copiedItem === 'transcript' ? 'Copied!' : 'Copy Transcript'}</span>
+                <span>
+                  {copiedItem === 'transcript' ? t('Copied!') : t('Copy Transcript')}
+                </span>
               </button>
             )}
 
@@ -194,7 +197,7 @@ export function ConversationActionsMenu({
                 ) : (
                   <FileText className="h-4 w-4" />
                 )}
-                <span>{copiedItem === 'summary' ? 'Copied!' : 'Copy Summary'}</span>
+                <span>{copiedItem === 'summary' ? t('Copied!') : t('Copy Summary')}</span>
               </button>
             )}
 
@@ -217,7 +220,7 @@ export function ConversationActionsMenu({
               >
                 <RefreshCw className={cn('h-4 w-4', isReprocessing && 'animate-spin')} />
                 <span>
-                  {isReprocessing ? 'Reprocessing...' : 'Reprocess Conversation'}
+                  {isReprocessing ? t('Reprocessing...') : t('Reprocess Conversation')}
                 </span>
               </button>
             )}
@@ -229,21 +232,21 @@ export function ConversationActionsMenu({
             {showDeleteConfirm ? (
               <div className="px-4 py-2">
                 <p className="mb-2 text-sm text-text-secondary">
-                  Delete this conversation?
+                  {t('Delete this conversation?')}
                 </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
                     className="flex-1 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
                   >
-                    Cancel
+                    {t('Cancel')}
                   </button>
                   <button
                     onClick={handleDelete}
                     disabled={isDeleting}
                     className="flex-1 rounded-lg bg-error/20 px-3 py-1.5 text-sm text-error transition-colors hover:bg-error/30 disabled:opacity-50"
                   >
-                    {isDeleting ? 'Deleting...' : 'Delete'}
+                    {isDeleting ? t('Deleting...') : t('Delete')}
                   </button>
                 </div>
               </div>
@@ -257,7 +260,7 @@ export function ConversationActionsMenu({
                 )}
               >
                 <Trash2 className="h-4 w-4" />
-                <span>Delete Conversation</span>
+                <span>{t('Delete Conversation')}</span>
               </button>
             )}
           </motion.div>

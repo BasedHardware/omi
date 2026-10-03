@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { getConversation } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
+import { t } from '@/lib/i18n';
 
 interface ConversationPreviewPanelProps {
   conversationIds: string[];
@@ -100,7 +101,7 @@ export function ConversationPreviewPanel({
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-text-primary" />
                 <span className="text-sm font-medium text-text-primary">
-                  Source Conversations
+                  {t('Source Conversations')}
                 </span>
                 <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-xs text-text-primary">
                   {conversationIds.length}
@@ -156,7 +157,7 @@ export function ConversationPreviewPanel({
                           {/* Title */}
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="line-clamp-1 text-sm font-medium text-text-primary transition-colors group-hover:text-text-primary">
-                              {conversation.structured.title || 'Untitled'}
+                              {conversation.structured.title || t('Untitled')}
                             </h4>
                             <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-text-quaternary transition-colors group-hover:text-text-primary" />
                           </div>
@@ -191,7 +192,9 @@ export function ConversationPreviewPanel({
                 })
               ) : (
                 <div className="flex h-32 items-center justify-center">
-                  <p className="text-sm text-text-tertiary">No conversations found</p>
+                  <p className="text-sm text-text-tertiary">
+                    {t('No conversations found')}
+                  </p>
                 </div>
               )}
             </div>

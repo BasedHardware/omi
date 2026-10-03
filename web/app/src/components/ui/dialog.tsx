@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { OpenSurface } from '@/components/ui/OpenSurface';
+import { t } from '@/lib/i18n';
 
 const Dialog = DialogPrimitive.Root;
 
@@ -55,7 +56,7 @@ const DialogContent = React.forwardRef<
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-element p-1 text-text-tertiary opacity-70 transition-opacity hover:bg-bg-tertiary hover:text-text-primary hover:opacity-100 focus:outline-none focus:ring-1 focus:ring-white/40 disabled:pointer-events-none">
           <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t('Close')}</span>
         </DialogPrimitive.Close>
       </OpenSurface>
     </DialogPrimitive.Content>
