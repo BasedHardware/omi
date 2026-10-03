@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'sync_live_dedupe_replay.py'
 
 LIVE = [
@@ -50,6 +52,7 @@ def reworded(text):
 PROOF_ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
 PROOF_SPF = 160
 PROOF_FRAMES = 100000
+AUDIO_ROOT = '00000000-0000-4000-8000-000000000001'
 
 
 def live_segments(**per_segment):
@@ -111,6 +114,61 @@ def proof(sync, frames=PROOF_FRAMES):
     }
 
 
+def audio_coverage(frame_samples, runs, **run_over):
+    return {
+        'live_received_ranges': (
+            [
+                dict(
+                    {
+                        'version': 1,
+                        'capability': 'source_position',
+                        'coverage': 'mapped',
+                        'origin': 'live',
+                        'conflicts': 0,
+                    },
+                    **run_over,
+                )
+            ]
+            if runs is None
+            else [
+                dict(
+                    {
+                        'version': 1,
+                        'capability': 'source_position',
+                        'coverage': 'mapped',
+                        'origin': 'live',
+                        'conflicts': 0,
+                        'runs': [
+                            dict(
+                                {
+                                    'capture_root': AUDIO_ROOT,
+                                    'clock_epoch': 0,
+                                    'rate_hz': 16000,
+                                    'channel': 'mono',
+                                },
+                                **run,
+                            )
+                            for run in runs
+                        ],
+                    },
+                    **run_over,
+                )
+            ]
+        ),
+        'wal_frames': [
+            {
+                'capture_root': AUDIO_ROOT,
+                'clock_epoch': 0,
+                'source_frame_start': 0,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'codec': 'pcm16',
+                'frame_samples': frame_samples,
+            }
+        ],
+    }
+
+
 def run_replay(tmp_path, payload, extra_args=()):
     input_path = tmp_path / 'input.json'
     input_path.write_text(json.dumps(payload), encoding='utf-8')
@@ -144,12 +202,19 @@ def test_proven_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_p
             [sync_segment(reworded(LIVE[i]), skew + i * 10.0) for i in range(7)]
             + [sync_segment(text, skew + 70.0 + i * 10.0) for i, text in enumerate(NEW)]
         )
-        payload = {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync)}
+        payload = {
+            'live_segments': live_segments(),
+            'sync_segments': sync,
+            'intake_sizes': [2, 3, 5],
+            **proof(sync),
+        }
         result = run_replay(tmp_path, payload)
         assert result.returncode == 0, result.stderr
         out = decisions(result)
         assert [row['decision'] for row in out['segments']] == ['dropped'] * 7 + ['kept'] * 3
         assert all(row['reason'] == 'lexical_repeat:source_frame_lexical' for row in out['segments'][:7])
+        assert all(row['partial_audio'] is False for row in out['segments'])
+        assert [intake['segment_count'] for intake in out['intakes']] == [2, 3, 5]
         assert out['totals'] == {
             'kept_segments': 3,
             'dropped_segments': 7,
@@ -184,7 +249,8 @@ def test_proven_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path
         'start': 70.0,
         'end': 73.0,
         'decision': 'dropped',
-        'reason': 'exact_retry',
+        'reason': 'exact_sync_retry',
+        'partial_audio': False,
     }
     assert out['segments'][1]['decision'] == 'kept'
 
@@ -213,17 +279,384 @@ def test_sync_scoped_live_lines_skip_lexical_but_still_exact_retry(tmp_path):
         'start': 10.0,
         'end': 20.0,
         'decision': 'dropped',
-        'reason': 'exact_retry',
+        'reason': 'exact_sync_retry',
+        'partial_audio': False,
     }
 
 
-def test_oversized_incoming_abstains_and_keeps_everything(tmp_path):
+def test_proven_oversized_upload_drops_only_the_proven_prefix(tmp_path):
     sync = with_ids([sync_segment(reworded(LIVE[i % 7]), i * 10.0 + 40) for i in range(65)])
     result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync[:64])})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert [row['decision'] for row in out['segments']] == ['kept'] * 65
-    assert out['totals']['dropped_segments'] == 0 and out['totals']['kept_segments'] == 65
+    assert [row['decision'] for row in out['segments']] == ['dropped'] * 64 + ['kept']
+    assert all(row['reason'] == 'lexical_repeat:source_frame_lexical' for row in out['segments'][:64])
+    assert out['segments'][64]['reason'] == 'not_proven_same_capture'
+    sizes = [intake['segment_count'] for intake in out['intakes']]
+    assert all(2 <= size <= 5 for size in sizes) and sum(sizes) == 65
+
+
+@pytest.mark.parametrize('count', [65, 100])
+def test_unproven_large_uploads_keep_everything(tmp_path, count):
+    sync = with_ids([sync_segment(reworded(LIVE[i % 7]), i * 10.0 + 40) for i in range(count)])
+    result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [row['decision'] for row in out['segments']] == ['kept'] * count
+    assert out['totals']['dropped_segments'] == 0 and out['totals']['kept_segments'] == count
+
+
+def test_cross_intake_same_scope_exact_retry_is_idempotent(tmp_path):
+    sync = with_ids(
+        [
+            sync_segment('hello world sync line', 0.0, speaker_id_scope='sync:WAL-9'),
+            sync_segment('different second utterance here', 10.0, speaker_id_scope='sync:WAL-9'),
+            sync_segment('hello world sync line', 0.0, speaker_id_scope='sync:WAL-9'),
+            sync_segment('tail filler', 30.0, speaker_id_scope='sync:WAL-9'),
+        ],
+        prefix='x',
+    )
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': sync, 'intake_sizes': [2]})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [intake['segment_count'] for intake in out['intakes']] == [2, 2]
+    assert [row['decision'] for row in out['segments']] == ['kept', 'kept', 'dropped', 'kept']
+    assert out['segments'][2]['reason'] == 'exact_sync_retry'
+
+
+def test_retained_unscoped_utterances_never_become_live_lexical_windows(tmp_path):
+    """One intake: a kept unscoped segment must not open a live lexical window."""
+    sync = with_ids(
+        [
+            sync_segment('a genuinely new remark about weekend hiking plans', 0.0),
+            sync_segment('Um, a genuinely new remark about weekend hiking plans!', 10.0),
+        ]
+    )
+    payload = {
+        'live_segments': [],
+        'sync_segments': sync,
+        'intake_sizes': [2],
+        **proof([sync[1]]),
+    }
+    result = run_replay(tmp_path, payload)
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [row['decision'] for row in out['segments']] == ['kept', 'kept']
+    assert out['segments'][1]['reason'] == 'not_proven_same_capture'
+
+
+def test_unscoped_exact_repeats_across_intakes_get_fresh_scopes_and_stay_kept(tmp_path):
+    """Identical unscoped text/range in a later intake is ordinary repetition, not a retry."""
+    sync = with_ids(
+        [
+            sync_segment('same spoken line again', 0.0),
+            sync_segment('same spoken line again', 0.0),
+            sync_segment('same spoken line again', 0.0),
+            sync_segment('same spoken line again', 0.0),
+        ]
+    )
+    payload = {
+        'live_segments': [],
+        'sync_segments': sync,
+        'intake_sizes': [2],
+        **proof(sync),
+    }
+    result = run_replay(tmp_path, payload)
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [row['decision'] for row in out['segments']] == ['kept', 'kept', 'kept', 'kept']
+    assert [row['segment_count'] for row in out['intakes']] == [2, 2]
+
+
+@pytest.mark.parametrize('skew', [40.0, 1200.0])
+def test_received_frames_drop_audio_candidates_and_plan_the_trim(tmp_path, skew):
+    sync = [
+        sync_segment(
+            f'w{i}',
+            skew + i * 0.5,
+            duration=0.5,
+            wal_index=0,
+            source_frame_start=i,
+            source_frame_end=i + 1,
+        )
+        for i in range(10)
+    ]
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 7,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 56000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    result = run_replay(
+        tmp_path,
+        {'live_segments': [], 'sync_segments': sync, 'intake_sizes': [2, 3, 5], 'audio_coverage': coverage},
+    )
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert [row['decision'] for row in out['segments']] == ['dropped'] * 7 + ['kept'] * 3
+    assert [row['reason'] for row in out['segments']] == ['audio_received_repeat'] * 7 + ['not_proven_same_capture'] * 3
+    assert all(row['partial_audio'] is False for row in out['segments'])
+    assert out['audio_coverage'] == {
+        'files': [
+            {
+                'wal_index': 0,
+                'decision': 'trimmed',
+                'kept_frame_ranges': [[7, 10]],
+                'kept_seconds': 1.5,
+                'dropped_seconds': 3.5,
+                'context_seconds': 0.0,
+            }
+        ],
+        'totals': {'kept_seconds': 1.5, 'dropped_seconds': 3.5, 'context_seconds': 0.0},
+    }
+
+
+def test_received_hole_leaves_unreceived_and_missed_frame_ranges(tmp_path):
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 3,
+                'source_frame_end': 7,
+                'decoded_sample_start': 24000,
+                'decoded_sample_end': 56000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['audio_coverage'] == {
+        'files': [
+            {
+                'wal_index': 0,
+                'decision': 'trimmed',
+                'kept_frame_ranges': [[0, 3], [7, 10]],
+                'kept_seconds': 3.0,
+                'dropped_seconds': 2.0,
+                'context_seconds': 0.0,
+            }
+        ],
+        'totals': {'kept_seconds': 3.0, 'dropped_seconds': 2.0, 'context_seconds': 0.0},
+    }
+
+
+def test_fully_received_wal_plans_empty_retention(tmp_path):
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 10,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 80000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['audio_coverage']['files'][0]['decision'] == 'covered'
+    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == []
+
+
+@pytest.mark.parametrize(
+    ('runs_over', 'expected'),
+    [
+        ({'runs': None}, 'kept'),
+        ({'runs': [{'capture_root': 'a1b2c3d4-1111-4222-8333-444455556666'}]}, 'kept'),
+        ({'conflicts': 1}, 'abstained'),
+    ],
+    ids=['no_matching_envelope', 'other_capture_root', 'conflicting_evidence'],
+)
+def test_missing_or_conflicting_evidence_retains_all(tmp_path, runs_over, expected):
+    run = {
+        'capture_root': AUDIO_ROOT,
+        'clock_epoch': 0,
+        'rate_hz': 16000,
+        'channel': 'mono',
+        'source_frame_start': 0,
+        'source_frame_end': 7,
+        'decoded_sample_start': 0,
+        'decoded_sample_end': 56000,
+        'samples_per_frame': 8000,
+    }
+    envelope = dict(
+        {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'origin': 'live',
+            'conflicts': 0,
+            'runs': [run],
+        },
+        **runs_over,
+    )
+    coverage = {
+        'live_received_ranges': [envelope],
+        'wal_frames': [
+            {
+                'capture_root': AUDIO_ROOT,
+                'clock_epoch': 0,
+                'source_frame_start': 0,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'codec': 'pcm16',
+                'frame_samples': [8000] * 10,
+            }
+        ],
+    }
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['audio_coverage']['files'][0]['decision'] == expected
+    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == [[0, 10]]
+    assert out['audio_coverage']['totals'] == {'kept_seconds': 5.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0}
+
+
+def test_context_expansion_retains_adjacent_covered_frames_and_marks_partial(tmp_path):
+    sync = [
+        sync_segment(
+            'a straddling utterance',
+            40.0,
+            duration=0.3,
+            wal_index=0,
+            source_frame_start=40,
+            source_frame_end=70,
+        )
+    ]
+    coverage = audio_coverage(
+        [160] * 100,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 70,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 11200,
+                'samples_per_frame': 160,
+            }
+        ],
+    )
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': sync, 'audio_coverage': coverage})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['audio_coverage'] == {
+        'files': [
+            {
+                'wal_index': 0,
+                'decision': 'trimmed',
+                'kept_frame_ranges': [[45, 100]],
+                'kept_seconds': 0.55,
+                'dropped_seconds': 0.45,
+                'context_seconds': 0.25,
+            }
+        ],
+        'totals': {'kept_seconds': 0.55, 'dropped_seconds': 0.45, 'context_seconds': 0.25},
+    }
+    assert out['segments'][0]['decision'] == 'kept'
+    assert out['segments'][0]['reason'] == 'partial_audio_candidate_retained'
+    assert out['segments'][0]['partial_audio'] is True
+
+
+@pytest.mark.parametrize(
+    'segment',
+    [
+        {'wal_index': 0},
+        {'wal_index': 0, 'source_frame_start': 0},
+        {'wal_index': 1, 'source_frame_start': 0, 'source_frame_end': 1},
+        {'wal_index': 0, 'source_frame_start': 9, 'source_frame_end': 11},
+        {'wal_index': 0, 'source_frame_start': -1, 'source_frame_end': 1},
+        {'wal_index': 0, 'source_frame_start': 2.5, 'source_frame_end': 4},
+    ],
+)
+def test_incomplete_or_out_of_range_capture_coordinates_exit_2(tmp_path, segment):
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 7,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 56000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    payload = {
+        'live_segments': [],
+        'sync_segments': [sync_segment('leaky transcript text', 0.0, **segment)],
+        'audio_coverage': coverage,
+    }
+    result = run_replay(tmp_path, payload)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert 'leaky transcript text' not in result.stdout and 'leaky transcript text' not in result.stderr
+
+
+@pytest.fixture(scope='module')
+def production_replay():
+    """Chargeable test call starts after imports and replay-module load complete."""
+    import importlib.util
+
+    from config import sync_lineage
+    from tests.unit import test_sync_lineage_dedupe_replay as helpers
+    from tests.unit.test_sync_cross_job_assignment import intake
+
+    spec = importlib.util.spec_from_file_location('replay_tool_under_test', SCRIPT)
+    replay_tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(replay_tool)
+    return sync_lineage, helpers, intake, replay_tool
+
+
+def test_cli_and_production_agree_appended_receipts_replace_live_proof(tmp_path, monkeypatch, production_replay):
+    """An append persists sync receipts over the live runs; later intake repeats keep."""
+    sync_lineage, helpers, intake, replay_tool = production_replay
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+
+    texts = [
+        helpers.NEW[0],
+        helpers.reworded(helpers.LIVE[0]),
+        helpers.reworded(helpers.LIVE[1]),
+        helpers.reworded(helpers.LIVE[2]),
+    ]
+    sync = with_ids([sync_segment(text, 40.0 + i * 10.0) for i, text in enumerate(texts)])
+    payload = {
+        'live_segments': [
+            {'start': i * 10.0, 'end': i * 10.0 + 10.0, 'text': helpers.LIVE[i]} for i in range(len(helpers.LIVE))
+        ],
+        'sync_segments': sync,
+        'intake_sizes': [2],
+        **proof(sync),
+    }
+    cli = replay_tool.replay(payload)
+    assert [row['decision'] for row in cli['segments']] == ['kept', 'dropped', 'kept', 'kept']
+    cli_kept_texts = [texts[i] for i, row in enumerate(cli['segments']) if row['decision'] == 'kept']
+
+    row = helpers.live_row()
+    row['capture_evidence'] = helpers.live_evidence()
+    receipts = helpers.sync_evidence(['s0', 's1', 's2', 's3'])['receipts']
+    store = helpers.seeded_store([row])
+    appended = []
+    for cursor, scope in ((0, 'sync:replay:0'), (2, 'sync:replay:1')):
+        chunk = helpers.wal(40 + 10 * cursor, texts[cursor : cursor + 2])
+        for i, segment in enumerate(chunk['transcript_segments']):
+            segment['id'] = f's{cursor + i}'
+            segment['speaker_id_scope'] = scope
+        chunk['capture_evidence'] = dict(helpers.sync_evidence([]), receipts=receipts[cursor : cursor + 2])
+        intake(store, chunk, target_id=helpers.LIVE_ID)
+    stored = helpers.texts_of(store, helpers.LIVE_ID)
+    appended = [text for text in stored if text not in helpers.LIVE]
+    assert appended == cli_kept_texts
+    persisted = store.rows[('users', 'u', 'conversations', helpers.LIVE_ID)]['capture_evidence']
+    assert persisted.get('receipts') and 'runs' not in persisted
+    assert cli['totals'] == {'kept_segments': 3, 'dropped_segments': 1, 'kept_seconds': 30.0, 'dropped_seconds': 10.0}
 
 
 def test_extra_metadata_is_ignored_and_the_input_is_never_mutated(tmp_path):
@@ -261,6 +694,27 @@ MALFORMED_PAYLOADS = [
     {'live_segments': [], 'sync_segments': [{'start': 0, 'end': float('nan'), 'text': 'nan end'}]},
     {'live_segments': [], 'sync_segments': [{'start': 0, 'end': 10}]},
     {'live_segments': [], 'sync_segments': [{'start': 0, 'end': 10, 'text': 42}]},
+    {'live_segments': [], 'sync_segments': [{'start': 0, 'end': 10, 'text': 'x'}], 'sync_capture_evidence': 'nope'},
+    {
+        'live_segments': [{'start': 0, 'end': 10, 'text': 'x'}],
+        'sync_segments': [
+            {'start': 0, 'end': 10, 'text': 'y', 'id': 's0'},
+            {'start': 10, 'end': 20, 'text': 'z', 'id': 's1'},
+        ],
+        'live_capture_evidence': 'not-an-envelope',
+        'sync_capture_evidence': {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'origin': 'sync_vad',
+            'receipts': [],
+        },
+    },
+    {'live_segments': [], 'sync_segments': [], 'intake_sizes': []},
+    {'live_segments': [], 'sync_segments': [], 'intake_sizes': [True]},
+    {'live_segments': [], 'sync_segments': [], 'intake_sizes': [1]},
+    {'live_segments': [], 'sync_segments': [], 'intake_sizes': [6]},
+    {'live_segments': [], 'sync_segments': [], 'audio_coverage': 'not-an-object'},
     'not an object at all',
 ]
 
