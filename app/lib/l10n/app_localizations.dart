@@ -21884,6 +21884,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Disclosure on the start-up failure screen that reveals the raw technical error for support.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get startupFailedDetails;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

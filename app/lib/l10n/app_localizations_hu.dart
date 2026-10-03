@@ -12269,4 +12269,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get startupFailedDetails => 'Részletek';
 }

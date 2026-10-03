@@ -12128,4 +12128,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
+
+  @override
+  String get startupFailedDetails => 'פרטים';
 }

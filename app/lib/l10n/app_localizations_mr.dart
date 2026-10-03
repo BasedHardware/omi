@@ -12232,4 +12232,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'या आवाजाचे $duration';
   }
+
+  @override
+  String get startupFailedDetails => 'तपशील';
 }

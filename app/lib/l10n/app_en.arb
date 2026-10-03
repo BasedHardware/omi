@@ -14575,5 +14575,9 @@
                 "type": "String"
             }
         }
+    },
+    "startupFailedDetails": "Details",
+    "@startupFailedDetails": {
+        "description": "Disclosure on the start-up failure screen that reveals the raw technical error for support."
     }
 }

@@ -12209,4 +12209,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
+
+  @override
+  String get startupFailedDetails => 'Detaljer';
 }

@@ -12227,4 +12227,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get startupFailedDetails => 'Tiedot';
 }

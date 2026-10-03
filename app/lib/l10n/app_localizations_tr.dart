@@ -12235,4 +12235,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get startupFailedDetails => 'Ayrıntılar';
 }

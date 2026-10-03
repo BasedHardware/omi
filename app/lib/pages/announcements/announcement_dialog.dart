@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/models/announcement.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -139,17 +140,49 @@ class AnnouncementDialog extends StatelessWidget {
   }
 
   Future<void> _openAction(String action) async {
-    final uri = Uri.tryParse(action);
-    if (uri == null) {
-      debugPrint('Invalid URL: $action');
-      return;
-    }
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      debugPrint('Failed to open URL: $e');
+    switch (AnnouncementAction.parse(action)) {
+      case AnnouncementRoute(:final route):
+        // An in-app destination opens inside the existing Home (ux-contract §1).
+        await HomeNavigation.openRoute(route);
+      case AnnouncementUrl(:final uri):
+        try {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (e) {
+          debugPrint('Failed to open URL: $e');
+        }
+      case null:
+        debugPrint('Unsupported announcement action: $action');
     }
   }
+}
+
+/// Where an announcement's call to action leads. The backend writes `navigate:/memories` for an
+/// in-app route and `url:https://…` for a web page (backend/models/announcement.py); a bare
+/// `https://…` or `/route` is accepted too.
+sealed class AnnouncementAction {
+  const AnnouncementAction();
+
+  static AnnouncementAction? parse(String action) {
+    final value = action.trim();
+    if (value.startsWith('navigate:')) {
+      final route = value.substring('navigate:'.length).trim();
+      return route.isEmpty ? null : AnnouncementRoute(route.startsWith('/') ? route : '/$route');
+    }
+    if (value.startsWith('/')) return AnnouncementRoute(value);
+    final uri = Uri.tryParse(value.startsWith('url:') ? value.substring('url:'.length).trim() : value);
+    if (uri == null || !uri.hasScheme) return null;
+    return AnnouncementUrl(uri);
+  }
+}
+
+class AnnouncementRoute extends AnnouncementAction {
+  const AnnouncementRoute(this.route);
+  final String route;
+}
+
+class AnnouncementUrl extends AnnouncementAction {
+  const AnnouncementUrl(this.uri);
+  final Uri uri;
 }
 
 class _AnnouncementImage extends StatelessWidget {

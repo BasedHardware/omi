@@ -12238,4 +12238,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration овог гласа';
   }
+
+  @override
+  String get startupFailedDetails => 'Детаљи';
 }

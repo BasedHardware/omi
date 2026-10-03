@@ -12262,4 +12262,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get startupFailedDetails => 'Details';
 }

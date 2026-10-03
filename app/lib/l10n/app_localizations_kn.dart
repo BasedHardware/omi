@@ -12261,4 +12261,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get startupFailedDetails => 'ವಿವರಗಳು';
 }
