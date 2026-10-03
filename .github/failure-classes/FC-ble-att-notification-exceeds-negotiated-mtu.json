@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-ble-att-notification-exceeds-negotiated-mtu",
+  "violated_contract": "A GATT notification must fit the peer-negotiated ATT MTU (payload <= MTU - 3); firmware that sizes audio notifications from an assumed maximum MTU drops or corrupts packets on hosts that negotiate a smaller MTU.",
+  "canonical_prevention": "Track the negotiated MTU via the server's onMTUChange callback (reset on disconnect) and fragment each audio frame into MTU-bounded notifications carrying a monotonic packet index and per-frame sub-index.",
+  "canonical_prevention_artifact": [
+    "omiGlass/firmware/scripts/check_omiglass_mtu.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "omiGlass/firmware/src/app.cpp",
+    "omiGlass/firmware/src/config.h"
+  ],
+  "status": "open"
+}
