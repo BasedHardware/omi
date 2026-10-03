@@ -1,4 +1,5 @@
 import importlib
+import logging
 import sys
 from enum import Enum
 
@@ -15,6 +16,8 @@ from utils.executors import db_executor, llm_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.subscription import is_trial_paywalled
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 Payload = Dict[str, Any]
@@ -155,7 +158,15 @@ class ExtractKnowledgeGraphResponse(BaseModel):
 
 def _legacy_knowledge_graph_response(uid: str) -> "KnowledgeGraphResponse":
     """Bounded read of the pre-canonical graph, used when canonical is unavailable."""
-    graph = kg_db.get_knowledge_graph(uid)
+    try:
+        graph = kg_db.get_knowledge_graph(uid)
+    except Exception as e:
+        logger.error(f"Failed to retrieve legacy knowledge graph for user {uid}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve knowledge graph",
+        ) from e
+
     nodes = graph.get('nodes', [])
     edges = graph.get('edges', [])
     return KnowledgeGraphResponse(
@@ -203,6 +214,14 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
         # permanently unavailable for them. Their graph still exists in the
         # legacy store, so serve that instead of failing the feature outright.
         return _legacy_knowledge_graph_response(uid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving knowledge graph for user {uid}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve knowledge graph",
+        ) from e
     return KnowledgeGraphResponse(
         nodes=nodes,
         edges=edges,
@@ -238,6 +257,14 @@ def get_canonical_knowledge_graph(
         raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Unexpected error retrieving canonical knowledge graph for user {uid}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve canonical knowledge graph",
+        ) from exc
     return CanonicalKnowledgeGraphResponse(
         nodes=page.nodes,
         edges=page.edges,
@@ -267,7 +294,11 @@ def rebuild_graph(
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
     _require_legacy_graph_mutation(uid)
-    user_name = get_user_name(uid) or ""
+    try:
+        user_name = get_user_name(uid) or ""
+    except Exception as e:
+        logger.warning(f"Could not retrieve user name for rebuild task uid={uid}: {e}")
+        user_name = ""
     # No eager delete here: `rebuild_knowledge_graph` clears the graph itself as its
     # first step, so deleting before scheduling only widens the window where the user
     # has no graph and nothing is rebuilding one — a task that never runs, or one that
@@ -319,5 +350,12 @@ async def extract_knowledge_graph(
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     _require_legacy_graph_mutation(uid)
-    kg_db.delete_knowledge_graph(uid)
+    try:
+        kg_db.delete_knowledge_graph(uid)
+    except Exception as e:
+        logger.error(f"Failed to delete knowledge graph for user {uid}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete knowledge graph",
+        ) from e
     return DeleteKnowledgeGraphResponse(status="deleted")
