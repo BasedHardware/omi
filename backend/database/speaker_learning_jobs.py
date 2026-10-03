@@ -17,10 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
-from google.cloud.firestore_v1._helpers import encode_dict
-from google.cloud.firestore_v1.types import Document
 
-from database._client import get_firestore_client, run_transactional
 from database.speaker_profile_authority import owner_teaching_authorized, person_teaching_authorized
 from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import SOURCE_CARD
@@ -95,6 +92,19 @@ def extract_learning_receipt_markers(receipt: dict, current: dict) -> None:
     events = receipt.pop(JOB_EVENTS_KEY, [])
     current[JOB_EVENTS_KEY] = events
     current[JOB_QUEUED_KEY] = any(outcome == 'queued' for _, outcome in events)
+
+
+def get_firestore_client() -> Any:
+    # Deferred: unit harnesses stub database._client and the firestore_v1 package tree.
+    from database._client import get_firestore_client as client
+
+    return client()
+
+
+def run_transactional(client: Any, fn: Callable[..., Any], **kwargs: Any) -> Any:
+    from database._client import run_transactional as run
+
+    return run(client, fn, **kwargs)
 
 
 def jobs_ref(user_ref: Any, conversation_id: str) -> Any:
@@ -327,6 +337,9 @@ def _reconcile_jobs(
 
 
 def _ledger_size(jobs: Mapping[str, Any]) -> int:
+    from google.cloud.firestore_v1._helpers import encode_dict
+    from google.cloud.firestore_v1.types import Document
+
     return len(Document.serialize(Document(fields=encode_dict({'jobs': dict(jobs)}))))
 
 

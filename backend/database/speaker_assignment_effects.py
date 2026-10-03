@@ -13,7 +13,6 @@ from typing import Any, Mapping, Optional, Sequence
 from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
-from database._client import run_transactional
 from database import speaker_learning_jobs as learning_jobs
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
@@ -35,6 +34,8 @@ def run_assignment_transaction(client: Any, assign: Any) -> Any:
         return assign(transaction, bookkeeping)
 
     try:
+        from database._client import run_transactional
+
         return run_transactional(client, apply)
     except (Aborted, ValueError) as error:
         aborted = (isinstance(error, Aborted) and error.__context__ is None) or (
@@ -44,6 +45,8 @@ def run_assignment_transaction(client: Any, assign: Any) -> Any:
             raise
     bookkeeping.enabled = False
     record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+    from database._client import run_transactional
+
     return run_transactional(client, apply, attempts=1)
 
 

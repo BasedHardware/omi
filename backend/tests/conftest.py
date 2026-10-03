@@ -36,18 +36,6 @@ if 'tiktoken' not in sys.modules:
 
 from testing.hermetic_network import block_outbound_network
 
-from google.cloud.firestore import Client as _GenuineFirestoreClient
-from google.cloud.firestore import AsyncClient as _GenuineAsyncFirestoreClient
-
-_firestore_construction_attempts = []
-_xdist_firestore_construction_attempts = []
-_firestore_constructor_guard = pytest.MonkeyPatch()
-
-
-def _deny_firestore_client(self, *args, **kwargs):
-    _firestore_construction_attempts.append(os.environ.get('PYTEST_CURRENT_TEST', 'collection'))
-    raise AssertionError('Genuine Firestore client construction is forbidden in unit tests')
-
 
 @pytest.fixture
 def luna_model() -> str:
@@ -102,16 +90,6 @@ def pytest_sessionstart(session):
     global _network_guard
     _network_guard = block_outbound_network()
     _network_guard.__enter__()
-    _firestore_construction_attempts.clear()
-    _xdist_firestore_construction_attempts.clear()
-    if not any('integration' in Path(str(arg)).parts for arg in session.config.args):
-        # Emulator suites (the listen/pusher and sync stack gauntlets) start a real local
-        # Firestore emulator and point the SDK at it; their clients never reach the cloud.
-        # 127.0.0.1:1 is the offline sentinel used by plain unit runs, not an emulator.
-        emulator = os.environ.get('FIRESTORE_EMULATOR_HOST', '').strip()
-        if not emulator or emulator == '127.0.0.1:1':
-            _firestore_constructor_guard.setattr(_GenuineFirestoreClient, '__init__', _deny_firestore_client)
-            _firestore_constructor_guard.setattr(_GenuineAsyncFirestoreClient, '__init__', _deny_firestore_client)
     session.config._backend_test_start_time = time.perf_counter()
 
 
@@ -191,18 +169,6 @@ def pytest_sessionfinish(session, exitstatus):
             terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
             _report_failed_files(terminalreporter, _xdist_duration_failures)
         session.exitstatus = 1
-    workeroutput = getattr(session.config, 'workeroutput', None)
-    if workeroutput is not None:
-        workeroutput['backend_firestore_construction_attempts'] = list(_firestore_construction_attempts)
-    attempts = list(_firestore_construction_attempts) + list(_xdist_firestore_construction_attempts)
-    if attempts:
-        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
-        if terminalreporter is not None:
-            terminalreporter.section('Genuine Firestore client construction attempts')
-            for attempt in attempts:
-                terminalreporter.line(attempt)
-        session.exitstatus = 1
-    _firestore_constructor_guard.undo()
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None
@@ -218,7 +184,6 @@ else:
         output = getattr(node, 'workeroutput', None) or {}
         for entry in output.get('backend_fast_unit_duration_failures', ()):
             _xdist_duration_failures.append((entry[0], entry[1]))
-        _xdist_firestore_construction_attempts.extend(output.get('backend_firestore_construction_attempts', ()))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):

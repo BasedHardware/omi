@@ -25,8 +25,6 @@ from utils.conversations.transcript_hash import (
 )
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
-from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
-from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
@@ -2607,6 +2605,9 @@ def assign_conversation_speaker(
     owner_segment_ids=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
+    from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
+    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+
     rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)

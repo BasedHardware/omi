@@ -3,9 +3,15 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from database.speaker_learning_jobs import project_person_learning
-
 __all__ = ['project_person_learning', 'speech_sample_source', 'voice_learning_fields']
+
+
+def project_person_learning(*args, **kwargs):
+    # Deferred: database.users imports this module, and unit harnesses that stub the
+    # models/database tree import database.users without the job ledger's dependencies.
+    from database.speaker_learning_jobs import project_person_learning as project
+
+    return project(*args, **kwargs)
 
 
 def speech_sample_source(conversation_id: str, segment_ids: list, generation: Optional[int]) -> dict:

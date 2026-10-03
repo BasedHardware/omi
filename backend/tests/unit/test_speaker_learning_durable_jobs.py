@@ -61,7 +61,7 @@ def world(monkeypatch):
     monkeypatch.setattr(ledger, '_now', lambda: clock[0])
     events = []
     monkeypatch.setattr(ledger, 'record_speaker_learning_job_events', events.extend)
-    monkeypatch.setattr(db, 'record_speaker_learning_job_events', events.extend)
+    # database.conversations imports the recorder from the ledger module at call time.
     extract = AsyncMock(return_value='no_audio')
     monkeypatch.setattr(jobs, 'extract_speaker_samples', extract)
     owner = AsyncMock(return_value='no_audio')
