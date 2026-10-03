@@ -1718,3 +1718,226 @@ def test_target_circuit_cache_is_bounded(monkeypatch):
     for index in range(70):
         live_router.target_circuit(_target(id=f't{index}', endpoint=f'wss://ep{index}.invalid/x'))
     assert len(live_router._target_circuits) == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recovery', [False, True])
+@pytest.mark.parametrize('fault', ['cache', 'router'])
+async def test_canary_fault_fallback_preserves_registry_targets(monkeypatch, recovery, fault):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    _prime_chain(
+        monkeypatch,
+        [
+            {
+                'id': 'modulate-a',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.04,
+                'endpoint': 'wss://a.invalid/stream',
+            },
+            {
+                'id': 'modulate-b',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.05,
+                'endpoint': 'wss://b.invalid/stream',
+            },
+            {
+                'id': 'modulate-denied',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.03,
+                'endpoint': 'wss://denied.invalid/stream',
+                'ramp_percent': 0,
+            },
+        ],
+    )
+    if fault == 'cache':
+        monkeypatch.setattr(
+            live_chain.health,
+            'cost_snapshot',
+            Mock(side_effect=CostHealthUnavailable('synthetic cold cache')),
+        )
+    else:
+        monkeypatch.setattr(live_chain, 'propose', Mock(side_effect=RuntimeError('synthetic router fault')))
+    dialed = []
+    failed = set()
+    failed_targets = set()
+
+    async def connect():
+        target = live_router.connecting_target.get()
+        dialed.append(target.id if target is not None else None)
+        if target is not None and target.id == 'modulate-a':
+            raise ConnectionError('synthetic connect failure')
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={},
+        failed=failed,
+        models=['modulate-velma-2'],
+        routing_uid='synthetic',
+        routing_language='en',
+        failed_targets=failed_targets,
+    )
+    assert service == st.STTService.modulate
+    assert dialed == ['modulate-a', 'modulate-b']
+    assert failed_targets == {'modulate-a'}
+    assert failed == set()
+
+
+@pytest.mark.asyncio
+async def test_cold_cache_fallback_keeps_distinct_ids_on_shared_breaker(monkeypatch, isolated):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
+    _prime_chain(
+        monkeypatch,
+        [
+            {
+                'id': 'modulate-a',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.04,
+                'endpoint': 'wss://shared.invalid/stream',
+            },
+            {
+                'id': 'modulate-b',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.05,
+                'endpoint': 'wss://shared.invalid/stream',
+            },
+        ],
+    )
+    target_a = next(target for target in live_chain.registry() if target.id == 'modulate-a')
+    target_b = next(target for target in live_chain.registry() if target.id == 'modulate-b')
+    assert live_router.target_circuit(target_a) is live_router.target_circuit(target_b)
+    dialed = []
+    failed_targets = set()
+
+    async def connect():
+        target = live_router.connecting_target.get()
+        dialed.append(target.id if target is not None else None)
+        if target is not None and target.id == 'modulate-a':
+            raise ConnectionError('synthetic connect failure')
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={},
+        failed=set(),
+        models=['modulate-velma-2'],
+        routing_uid='synthetic',
+        routing_language='en',
+        failed_targets=failed_targets,
+    )
+    assert service == st.STTService.modulate
+    assert dialed == ['modulate-a', 'modulate-b']
+    assert failed_targets == {'modulate-a'}
+    assert live_router.target_circuit(target_a).state == 'closed'
+
+
+@pytest.mark.asyncio
+async def test_known_restricted_state_demotes_behind_unknown_in_fallback(monkeypatch, isolated):
+    pod = isolated
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    now = [1000.0]
+    monkeypatch.setattr(pod, '_clock', lambda: now[0])
+    _prime_chain(
+        monkeypatch,
+        [
+            {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+            {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754},
+        ],
+    )
+    modulate = next(target for target in live_chain.registry() if target.id == 'modulate-velma-2')
+    soniox = next(target for target in live_chain.registry() if target.id == 'soniox')
+    pod._cost_local[(modulate.id, 'all')] = GateState(stage=0, until=now[0] + 600)
+    with pytest.raises(CostHealthUnavailable) as raised:
+        pod.cost_snapshot([modulate, soniox], 'ko')
+    assert raised.value.states['modulate-velma-2'].stage == 0
+    assert raised.value.states['soniox'].stage == 100
+    assert (soniox.id, 'ko') not in pod._cost_fresh
+    dialed = []
+
+    async def connect():
+        target = live_router.connecting_target.get()
+        dialed.append(target.id if target is not None else None)
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={st.STTService.soniox: connect},
+        failed=set(),
+        models=['modulate-velma-2', 'soniox'],
+        routing_uid='synthetic',
+        routing_language='ko',
+    )
+    assert service == st.STTService.soniox
+    assert dialed == ['soniox']
+
+
+def test_unread_language_exception_carries_conservative_states_only():
+    pod = live_health.FleetHealth(clock=lambda: 1000.0, redis_client=MemoryRedis())
+    pod._cost_fresh.update({(target.id, 'all'): 1000.0 for target in DEFAULT_TARGETS})
+    with pytest.raises(CostHealthUnavailable) as raised:
+        pod.cost_snapshot(DEFAULT_TARGETS, 'ko')
+    assert raised.value.states
+    assert all(state.stage == 100 for state in raised.value.states.values())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fault', ['cache', 'router'])
+@pytest.mark.parametrize('withdrawal', ['ramp_zero', 'capability'])
+async def test_fault_fallback_keeps_custom_sibling_of_withdrawn_default(monkeypatch, fault, withdrawal):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    default = {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055}
+    if withdrawal == 'ramp_zero':
+        default['ramp_percent'] = 0
+    else:
+        default['languages'] = ['ko']
+    _prime_chain(
+        monkeypatch,
+        [
+            default,
+            {
+                'id': 'modulate-custom',
+                'family': 'modulate',
+                'cost_per_audio_hour': 0.05,
+                'endpoint': 'wss://custom.invalid/stream',
+            },
+        ],
+    )
+    if fault == 'cache':
+        monkeypatch.setattr(
+            live_chain.health,
+            'cost_snapshot',
+            Mock(side_effect=CostHealthUnavailable('synthetic cold cache')),
+        )
+    else:
+        monkeypatch.setattr(live_chain, 'propose', Mock(side_effect=RuntimeError('synthetic router fault')))
+    dialed = []
+    failed = set()
+
+    async def connect():
+        target = live_router.connecting_target.get()
+        dialed.append(target.id if target is not None else None)
+        return SimpleNamespace(is_connection_dead=False)
+
+    _socket, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={},
+        failed=failed,
+        models=['modulate-velma-2'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    assert service == st.STTService.modulate
+    assert dialed == ['modulate-custom']
+    assert failed == set()

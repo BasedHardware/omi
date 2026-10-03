@@ -206,7 +206,13 @@ registered static services that the filter withdrew are not restored; a
 nonempty proposal appends permitted configured services outside the proposal
 (including unregistered Deepgram), then eligible benched targets as last
 resorts. Cache unavailability and router faults under a valid registry fail
-open to the filtered static chain; a malformed registry or account-snapshot
+open to the filtered static chain; a canary caller instead keeps its permitted
+registry target routes so target-scoped evidence, endpoint/credential breakers
+and replay declarations survive the outage — states carried by
+`CostHealthUnavailable` demote known restricted entries behind unrestricted or
+unknown ones (higher restricted stage first, configured order for ties) but
+never clear them, while a generic router error carries no snapshot and keeps
+pure configured order; a malformed registry or account-snapshot
 malfunction fails closed for managed sessions, while UID-less legacy callers
 keep the filtered static fallback under the same account/capability checks.
 Every connection
@@ -225,7 +231,9 @@ filtering empties the whole chain, `NoPermittedTarget` (a
 longest remaining account quarantine, otherwise five seconds, and the unlabeled
 `omi_stt_cost_routing_no_permitted_target_total` counter increments. Router
 exceptions and cache unavailability with a valid registry fail open to the
-same filtered chain, never the raw configured order. An invalid
+same filtered chain — canary sessions keep permitted registry target
+identities, non-canary sessions keep the filtered static chain — never the
+raw configured order. An invalid
 `STT_ROUTING_TARGETS_JSON` cannot establish permissions: managed routing
 sessions get the typed chain-unavailable plus a `router_error` fail-open
 rather than a default that could reopen a withdrawn target; UID-less legacy
@@ -236,9 +244,11 @@ declared/learned session profile, so a declared English account with a learned
 Hindi prior cannot enter an English-only target. Healthy cheaper targets take every eligible session within their
 configured ramp and capacity. There is no portfolio split or worst-provider
 probe. The existing Parakeet admission and batch-pressure gates still reject
-at connect and overflow into the next target. Target IDs are distinct from
-provider families: two Modulate endpoints have separate health and connection
-breakers. A narrow typed-death hook routes a custom endpoint's serving failure
+at connect and overflow into the next target. Recovery target IDs stay
+distinct per registry entry, while connection breakers key on provider plus
+actual endpoint plus credential plus stage — two Modulate targets on the same
+wire share one breaker but still fail independently as recovery candidates. A
+narrow typed-death hook routes a custom endpoint's serving failure
 to its own local breaker, preserving the old endpoint's serving capacity;
 account failures still quarantine their shared credential family.
 `live_target_connect.py` reuses the existing Modulate socket protocol

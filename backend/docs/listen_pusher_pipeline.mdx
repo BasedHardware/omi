@@ -123,8 +123,12 @@ classified provider errors and completed text, with shared
 5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
 admission stay intact. Redis refresh/write work stays off connect with a 75 ms
 default deadline; faults use local evidence and known benches, and router errors
-restore the filtered configured order — ramp-withdrawn or account-quarantined
-targets are denied on every dial path, and an entirely empty permitted set
+restore the filtered configured order — for canary sessions that means the
+permitted registry targets themselves (target IDs, endpoint breakers and
+replay declarations intact, and only states carried by the cache outage demote
+known restricted entries), for everyone else the filtered family chain — ramp-withdrawn or
+account-quarantined targets are denied on every dial path, and an entirely
+empty permitted set
 raises a bounded chain-unavailable rather than dialing. No worst-provider
 probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than

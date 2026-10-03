@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
+    def __init__(self, message: str, *, states: dict[str, GateState] | None = None) -> None:
+        super().__init__(message)
+        self.states = states if states is not None else {}
+
 
 class _IdentityChanged(RuntimeError):
     """An awaited write observed a different environment identity than queued."""
@@ -235,7 +239,7 @@ class CostHealthMixin(ABC):
                 result[target.id] = state
                 self._publish_cost_state(target.id, global_state)
             if unknown_language:
-                raise CostHealthUnavailable('unread language cost state; restore configured order')
+                raise CostHealthUnavailable('unread language cost state; restore configured order', states=result)
         return result
 
     def prefer_recovery(self, target: str, language: str) -> None:

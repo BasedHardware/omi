@@ -38,6 +38,7 @@ from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_cost_health import CostHealthUnavailable
+from utils.stt.live_gate import GateState
 from utils.stt.connect_backoff import ConnectLease, connect_backoff
 from utils.stt.live_metrics import CONNECT_BACKOFF, COST_DECISION, COST_FAIL_OPEN, COST_NO_PERMITTED_TARGET
 from utils.stt.provider_resilience import (
@@ -224,6 +225,37 @@ async def connect_configured_chain(
         ):
             configured_candidates.append(service)
     routes = [(service, None) for service in configured_candidates]
+
+    def fallback_routes(states: dict[str, GateState]) -> tuple[list[tuple[STTService, Target | None]], bool]:
+        if not canary or targets is None:
+            return [(service, None) for service in configured_candidates], False
+        represented = {
+            target.family for target in targets if target.endpoint is None and engine_matches(target, routing_models)
+        }
+        permitted: dict[str, list[Target]] = {}
+        for target in targets:
+            if permitted_target(
+                target, routing_uid, routing_language, routing_languages, routing_models, account_states
+            ):
+                permitted.setdefault(target.family, []).append(target)
+        fallback: list[tuple[STTService, Target | None]] = []
+        for service in candidates:
+            if callbacks.get(service) is None:
+                continue
+            fallback.extend((service, target) for target in permitted.get(service.value, ()))
+            if service in configured_candidates and service.value not in represented:
+                entry = capacity_targets.get(DEFAULT_IDS.get(service.value, ''))
+                if entry is None or capacity_available(entry):
+                    fallback.append((service, None))
+
+        def conservative_stage(route: tuple[STTService, Target | None]) -> int:
+            service, target = route
+            identity = target.id if target is not None else DEFAULT_IDS.get(service.value)
+            return states.get(identity or '', GateState()).stage
+
+        fallback.sort(key=lambda route: (conservative_stage(route) < 100, -conservative_stage(route)))
+        return fallback, True
+
     if mode != 'off' and routing_uid and not _routing_static:
         try:
             canary = routing_on(routing_uid)
@@ -260,10 +292,9 @@ async def connect_configured_chain(
                 ]
                 routes = [(STTService(target.family), target) for target in proposed] + tail
                 routes.extend((STTService(target.family), target) for target in last_resorts)
-        except CostHealthUnavailable:
+        except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
-            active = False
-            routes = [(service, None) for service in configured_candidates]
+            routes, active = fallback_routes(error.states)
             logger.debug('live_stt_cost_router cache unavailable; using configured order')
             if canary:
                 record_fallback(
@@ -275,8 +306,7 @@ async def connect_configured_chain(
                 )
         except Exception:
             COST_FAIL_OPEN.labels(reason='router_error').inc()
-            active = False
-            routes = [(service, None) for service in configured_candidates]
+            routes, active = fallback_routes({})
             logger.exception('live_stt_cost_router using configured order')
             record_fallback(
                 component='stt_selection',

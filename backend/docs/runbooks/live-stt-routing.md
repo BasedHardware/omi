@@ -88,7 +88,11 @@ Every refresh reads all registry targets across the closed supported-language
 vocabulary plus `all`, so a language bench is honored on its first request even
 without prior interest. Freshness is per `(target, language)`; an unread
 language raises `CostHealthUnavailable` instead of reporting stage 100, which
-the chain treats as a filtered-static-order fail-open. Per-target language
+the chain treats as a fail-open: non-canary sessions keep the filtered static
+order, while canary sessions keep their permitted registry target routes with
+the exception's conservative states demoting known restricted entries (a
+generic router error carries no snapshot and keeps configured order).
+Per-target language
 comparisons are counted in
 `omi_stt_cost_routing_language_state_total{target,comparison}` with
 `agree|language_restricted|global_restricted|unknown|stale`.
@@ -136,7 +140,8 @@ minutes plus the following positive coverage; elapsed time alone never passes:
    send it new primary traffic. Do not manufacture probe traffic to qualify it.
    A complete registry override must retain Parakeet and Soniox entries; after
    active selection their registered Modulate sibling cannot reappear as a
-   static tail. Router-error fail-open still uses the filtered static chain.
+   static tail. Router-error fail-open keeps permitted registry targets for
+   canary sessions and the filtered static chain otherwise.
 5. Transcript-success, no-text share, first-text latency, window capacity and
    GPU pressure remain within the conditions below. Confirm the existing
    transcript-success alert is evaluated and routed to the live contact point.
