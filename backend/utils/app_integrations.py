@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from typing import List
+from typing import Any, List
 import os
 import time
 
@@ -433,23 +433,53 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 
 # proactive notification
-def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+def _retrieve_contextual_memories(uid: str, user_context: Any) -> list:
+    if not isinstance(user_context, Mapping):
+        return []
+    raw_question = user_context.get('question')
+    question = raw_question if isinstance(raw_question, str) else ''
+
+    raw_filters = user_context.get('filters')
+    filters = raw_filters if isinstance(raw_filters, Mapping) else {}
+
+    def _extract_str_list(val: Any) -> list[str]:
+        if not isinstance(val, list):
+            return []
+        return [item for item in val if isinstance(item, str)]
+
+    people = _extract_str_list(filters.get("people"))
+    topics = _extract_str_list(filters.get("topics"))
+    entities = _extract_str_list(filters.get("entities"))
+    dates = _extract_str_list(filters.get("dates"))
+
+    # Skip vector retrieval if there is no question and no metadata filters
+    if not question.strip() and not (people or topics or entities or dates):
+        return []
+
+    vector = (
+        generate_embedding(question)
+        if question.strip()
+        else [0] * 3072
+    )
     logger.info(f"query_vectors vector: {vector[:5]}")
 
-    date_filters = {}  # not support yet
-    filters = user_context.get('filters', {})
+    date_filters: dict[str, Any] = {}  # not support yet
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=filters.get("people", []),
-        topics=filters.get("topics", []),
-        entities=filters.get("entities", []),
-        dates=filters.get("dates", []),
+        people=people,
+        topics=topics,
+        entities=entities,
+        dates=dates,
     )
-    convos = conversations_db.get_conversations_by_id(uid, memories_id)
-    return [c for c in convos if not c.get('is_locked')]
+    convos = conversations_db.get_conversations_by_id(uid, memories_id) or []
+    return [
+        c
+        for c in convos
+        if isinstance(c, Mapping) and not c.get('is_locked')
+    ]
 
 
 def _hit_proactive_notification_rate_limits(uid: str, app: App):
@@ -989,26 +1019,51 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
-    if len(prompt) > max_prompt_char_limit:
-        send_app_notification(
-            uid,
-            app.name,
-            app.id,
-            f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.",
+    raw_prompt = data.get('prompt')
+    if not isinstance(raw_prompt, str):
+        logger.info(
+            f"App {app.id} notification payload missing valid prompt {uid}"
         )
-        logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    prompt = raw_prompt.strip()
+    if not prompt:
+        logger.info(f"App {app.id} notification prompt empty {uid}")
+        return None
+
+    if len(prompt) > max_prompt_char_limit:
+        msg = (
+            f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} "
+            "characters. Please shorten."
+        )
+        send_app_notification(uid, app.name, app.id, msg)
+        logger.info(
+            f"App {app.id}, prompt too long, length: "
+            f"{len(prompt)}/{max_prompt_char_limit} {uid}"
+        )
+        return None
+
+    raw_params = data.get('params')
+    safe_params = (
+        [p for p in raw_params if isinstance(p, str)]
+        if isinstance(raw_params, list)
+        else []
+    )
+    filter_scopes = app.filter_proactive_notification_scopes(safe_params)
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        raw_context = data.get('context')
+        context_payload = (
+            raw_context if isinstance(raw_context, Mapping) else {}
+        )
+        memories = _retrieve_contextual_memories(uid, context_payload)
         if len(memories) > 0:
-            context = conversations_to_string(deserialize_conversations(memories))
+            context = conversations_to_string(
+                deserialize_conversations(memories)
+            )
 
     chat_messages = []
     if 'user_chat' in filter_scopes:
@@ -1017,21 +1072,35 @@ def _process_proactive_notification(uid: str, app: App, data):
         # from here, so an unguarded build silently dropped the proactive notification every run
         # until the bad row aged out of the last-10 window. deserialize_many_safe (#8882) is the
         # shared safe-deserialize path for exactly this class.
-        chat_messages = list(reversed(Message.deserialize_many_safe(get_app_messages(uid, app.id, limit=10))))
+        chat_messages = list(
+            reversed(
+                Message.deserialize_many_safe(
+                    get_app_messages(uid, app.id, limit=10)
+                )
+            )
+        )
 
     # Build prompt with substitutions
     for param in filter_scopes:
         if param == "user_name":
-            prompt = prompt.replace("{{user_name}}", user_name)
+            prompt = prompt.replace("{{user_name}}", str(user_name or ''))
         elif param == "user_facts":
-            prompt = prompt.replace("{{user_facts}}", user_facts)
+            prompt = prompt.replace("{{user_facts}}", str(user_facts or ''))
         elif param == "user_context":
             prompt = prompt.replace("{{user_context}}", context if context else "")
         elif param == "user_chat":
-            prompt = prompt.replace(
-                "{{user_chat}}", Message.get_messages_as_string(chat_messages) if chat_messages else ""
+            chat_str = (
+                Message.get_messages_as_string(chat_messages)
+                if chat_messages
+                else ""
             )
+            prompt = prompt.replace("{{user_chat}}", chat_str)
     prompt = prompt.replace('    ', '').strip()
+    if not prompt:
+        logger.info(
+            f"App {app.id} notification prompt empty after template substitution {uid}"
+        )
+        return None
 
     with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
         message = get_llm('app_integration').invoke(prompt).content
@@ -1244,8 +1313,9 @@ async def _async_trigger_realtime_integrations(
                     return
 
                 # message
-                message = response_data.get('message', '')
-                if message and len(message) > 5:
+                raw_message = response_data.get('message')
+                if isinstance(raw_message, str) and len(raw_message.strip()) > 5:
+                    message = raw_message.strip()
                     await send_app_notification_async(uid, app.name, app.id, message)
                     results[app.id] = message
 
