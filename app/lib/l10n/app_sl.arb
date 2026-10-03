@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi bo osebo {name} prepoznal prihodnjič.} pending{To traja nekaj sekund.} disabled{V nastavitvah vklopite shranjevanje glasov, da bo Omi lahko prepoznal osebo {name}.} other{Omi potrebuje več jasnega govora osebe {name} in bo poskušal še naprej.}}",
     "speakerLabelEarlierMatches": "Prejšnji pogovori s tem glasom: {count}",
     "speakerLabelText": "{part, select, likely{Verjetno} soundsLike{Zveni kot {name}} notPerson{Ni {name}} carried{Še vedno {name}. Preneseno iz vašega zadnjega pogovora.} change{Spremeni} alsoTitle{Je to tudi {name}?} alsoBody{Omi je našel isti glas v prejšnjih pogovorih.} confirmed{Potrdili ste to oznako} other{Preglej}}",
-    "speakerLabelTalkTime": "{duration} tega glasu"
+    "speakerLabelTalkTime": "{duration} tega glasu",
+    "diagnosticsRightNow": "Trenutno",
+    "diagnosticsLast7Days": "Zadnjih 7 dni",
+    "diagnosticsConnectedFor": "Povezano",
+    "diagnosticsVerdictReconnects": "Samodejno se ponovno poveže",
+    "diagnosticsVerdictReconnectsDetail": "Kratki izpadi, vsakič nazaj v približno {duration}",
+    "diagnosticsVerdictNoDrops": "Ta teden brez izpadov",
+    "diagnosticsVerdictTrouble": "Težave s povezovanjem",
+    "diagnosticsVerdictTroubleDetail": "Neuspešne povezave v zadnjih 24 urah: {count}",
+    "diagnosticsDrops": "Izpadi",
+    "diagnosticsDropsPerHour": "približno {count} na uro",
+    "diagnosticsLongestGap": "Najdaljši premor",
+    "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
+    "diagnosticsLastDuration": "Zadnjih {duration}"
 }

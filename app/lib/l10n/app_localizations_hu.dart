@@ -12269,4 +12269,53 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Jelenleg';
+
+  @override
+  String get diagnosticsLast7Days => 'Elmúlt 7 nap';
+
+  @override
+  String get diagnosticsConnectedFor => 'Csatlakozva';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Magától újracsatlakozik';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Rövid kiesések, minden alkalommal kb. $duration alatt visszaáll';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Ezen a héten nem volt kiesés';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Csatlakozási problémák';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Sikertelen kapcsolatok az elmúlt 24 órában: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Kiesések';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'kb. $count óránként';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Leghosszabb kiesés';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Párosítás óta: $drops kiesés, $failed sikertelen kapcsolat.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Utolsó $duration';
+  }
 }

@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{下次 Omi 就能认出 {name}。} pending{这需要几秒钟。} disabled{请在设置中开启声音保存，以便 Omi 能认出 {name}。} other{Omi 需要 {name} 更清晰的语音，并会继续尝试。}}",
     "speakerLabelEarlierMatches": "与此声音的过往对话：{count}",
     "speakerLabelText": "{part, select, likely{可能} soundsLike{听起来像 {name}} notPerson{不是 {name}} carried{仍是 {name}。沿用自你的上一段对话。} change{更改} alsoTitle{这也是 {name} 吗？} alsoBody{Omi 在之前的对话中发现了相同的声音。} confirmed{你已确认此标签} other{查看}}",
-    "speakerLabelTalkTime": "此声音共 {duration}"
+    "speakerLabelTalkTime": "此声音共 {duration}",
+    "diagnosticsRightNow": "当前",
+    "diagnosticsLast7Days": "过去 7 天",
+    "diagnosticsConnectedFor": "已连接",
+    "diagnosticsVerdictReconnects": "可自动重新连接",
+    "diagnosticsVerdictReconnectsDetail": "短暂断开，每次约 {duration} 后恢复",
+    "diagnosticsVerdictNoDrops": "本周没有断开",
+    "diagnosticsVerdictTrouble": "连接出现问题",
+    "diagnosticsVerdictTroubleDetail": "过去 24 小时内连接失败：{count}",
+    "diagnosticsDrops": "断开次数",
+    "diagnosticsDropsPerHour": "约每小时 {count} 次",
+    "diagnosticsLongestGap": "最长中断",
+    "diagnosticsSincePairingSummary": "配对以来：断开 {drops} 次，连接失败 {failed} 次。",
+    "diagnosticsLastDuration": "最近 {duration}"
 }

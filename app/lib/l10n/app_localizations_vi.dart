@@ -12216,4 +12216,53 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Hiện tại';
+
+  @override
+  String get diagnosticsLast7Days => '7 ngày qua';
+
+  @override
+  String get diagnosticsConnectedFor => 'Đã kết nối';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Tự kết nối lại';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Ngắt quãng ngắn, mỗi lần kết nối lại sau khoảng $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Không bị ngắt tuần này';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Gặp sự cố khi kết nối';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Kết nối thất bại trong 24 giờ qua: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Lần ngắt';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'khoảng $count lần mỗi giờ';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Lần gián đoạn lâu nhất';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Kể từ khi ghép đôi: $drops lần ngắt, $failed kết nối thất bại.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '$duration gần nhất';
+  }
 }

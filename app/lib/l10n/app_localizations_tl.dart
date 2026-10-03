@@ -12327,4 +12327,53 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Ngayon';
+
+  @override
+  String get diagnosticsLast7Days => 'Nakaraang 7 Araw';
+
+  @override
+  String get diagnosticsConnectedFor => 'Nakakonekta nang';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Kusang muling kumokonekta';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Maiikling pagputol, bumabalik sa loob ng mga $duration bawat beses';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Walang pagputol ngayong linggo';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Nahihirapang kumonekta';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mga bigong koneksyon sa nakaraang 24 na oras: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Mga pagputol';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'mga $count kada oras';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Pinakamahabang puwang';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Mula nang ipares: $drops pagputol, $failed bigong koneksyon.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Nakaraang $duration';
+  }
 }

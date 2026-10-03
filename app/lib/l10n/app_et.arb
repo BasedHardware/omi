@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest"
+    "speakerLabelTalkTime": "{duration} sellest häälest",
+    "diagnosticsRightNow": "Praegu",
+    "diagnosticsLast7Days": "Viimased 7 päeva",
+    "diagnosticsConnectedFor": "Ühendatud",
+    "diagnosticsVerdictReconnects": "Taasühendub ise",
+    "diagnosticsVerdictReconnectsDetail": "Lühikesed katkestused, iga kord tagasi umbes {duration} pärast",
+    "diagnosticsVerdictNoDrops": "Sel nädalal katkestusi pole",
+    "diagnosticsVerdictTrouble": "Ühendamisega on probleeme",
+    "diagnosticsVerdictTroubleDetail": "Ebaõnnestunud ühendused viimase 24 tunni jooksul: {count}",
+    "diagnosticsDrops": "Katkestused",
+    "diagnosticsDropsPerHour": "umbes {count} tunnis",
+    "diagnosticsLongestGap": "Pikim paus",
+    "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
+    "diagnosticsLastDuration": "Viimased {duration}"
 }

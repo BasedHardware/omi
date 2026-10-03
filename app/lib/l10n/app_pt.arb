@@ -3817,5 +3817,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{O Omi vai reconhecer {name} na próxima vez.} pending{Isso leva alguns segundos.} disabled{Ative o salvamento de vozes em Configurações para o Omi poder reconhecer {name}.} other{O Omi precisa de mais fala clara de {name} e vai continuar tentando.}}",
     "speakerLabelEarlierMatches": "Conversas anteriores com esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Provável} soundsLike{Soa como {name}} notPerson{Não é {name}} carried{Continua sendo {name}. Mantido da sua última conversa.} change{Alterar} alsoTitle{Esta voz também é {name}?} alsoBody{O Omi encontrou a mesma voz em conversas anteriores.} confirmed{Você confirmou este rótulo} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} desta voz"
+    "speakerLabelTalkTime": "{duration} desta voz",
+    "diagnosticsRightNow": "Agora",
+    "diagnosticsLast7Days": "Últimos 7 dias",
+    "diagnosticsConnectedFor": "Conectado há",
+    "diagnosticsVerdictReconnects": "Reconecta sozinho",
+    "diagnosticsVerdictReconnectsDetail": "Quedas breves, volta em cerca de {duration} a cada vez",
+    "diagnosticsVerdictNoDrops": "Nenhuma queda esta semana",
+    "diagnosticsVerdictTrouble": "Com problemas de conexão",
+    "diagnosticsVerdictTroubleDetail": "Falhas de conexão nas últimas 24 horas: {count}",
+    "diagnosticsDrops": "Quedas",
+    "diagnosticsDropsPerHour": "cerca de {count} por hora",
+    "diagnosticsLongestGap": "Maior intervalo",
+    "diagnosticsSincePairingSummary": "Desde o emparelhamento: {drops} quedas, {failed} falhas de conexão.",
+    "diagnosticsLastDuration": "Últimos {duration}"
 }

@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi kitą kartą atpažins {name}.} pending{Tai užtrunka kelias sekundes.} disabled{Įjunkite balsų išsaugojimą nustatymuose, kad Omi galėtų atpažinti {name}.} other{Omi reikia daugiau aiškios {name} kalbos ir toliau bandys.}}",
     "speakerLabelEarlierMatches": "Ankstesni pokalbiai su šiuo balsu: {count}",
     "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
-    "speakerLabelTalkTime": "{duration} šio balso"
+    "speakerLabelTalkTime": "{duration} šio balso",
+    "diagnosticsRightNow": "Dabar",
+    "diagnosticsLast7Days": "Paskutinės 7 dienos",
+    "diagnosticsConnectedFor": "Prijungta",
+    "diagnosticsVerdictReconnects": "Prisijungia iš naujo savaime",
+    "diagnosticsVerdictReconnectsDetail": "Trumpi nutrūkimai, kaskart grįžta maždaug per {duration}",
+    "diagnosticsVerdictNoDrops": "Šią savaitę nutrūkimų nebuvo",
+    "diagnosticsVerdictTrouble": "Kyla prisijungimo problemų",
+    "diagnosticsVerdictTroubleDetail": "Nepavykę ryšiai per paskutines 24 valandas: {count}",
+    "diagnosticsDrops": "Nutrūkimai",
+    "diagnosticsDropsPerHour": "maždaug {count} per valandą",
+    "diagnosticsLongestGap": "Ilgiausia pertrauka",
+    "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
+    "diagnosticsLastDuration": "Paskutinės {duration}"
 }

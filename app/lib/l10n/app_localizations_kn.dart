@@ -12261,4 +12261,53 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get diagnosticsRightNow => 'ಈಗ';
+
+  @override
+  String get diagnosticsLast7Days => 'ಕಳೆದ 7 ದಿನಗಳು';
+
+  @override
+  String get diagnosticsConnectedFor => 'ಸಂಪರ್ಕದ ಅವಧಿ';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'ಸಣ್ಣ ಕಡಿತಗಳು, ಪ್ರತಿ ಬಾರಿ ಸುಮಾರು $duration ನಲ್ಲಿ ಮರಳುತ್ತದೆ';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'ಈ ವಾರ ಯಾವುದೇ ಕಡಿತವಿಲ್ಲ';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'ಸಂಪರ್ಕಿಸಲು ತೊಂದರೆಯಾಗುತ್ತಿದೆ';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'ಕಳೆದ 24 ಗಂಟೆಗಳಲ್ಲಿ ವಿಫಲ ಸಂಪರ್ಕಗಳು: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'ಕಡಿತಗಳು';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ಗಂಟೆಗೆ ಸುಮಾರು $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'ಅತಿ ದೀರ್ಘ ಅಂತರ';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'ಜೋಡಿಯಾದಾಗಿನಿಂದ: $drops ಕಡಿತಗಳು, $failed ವಿಫಲ ಸಂಪರ್ಕಗಳು.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'ಕಳೆದ $duration';
+  }
 }

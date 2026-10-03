@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
     "speakerLabelEarlierMatches": "Ранейшыя размовы з гэтым голасам: {count}",
     "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
-    "speakerLabelTalkTime": "{duration} гэтага голасу"
+    "speakerLabelTalkTime": "{duration} гэтага голасу",
+    "diagnosticsRightNow": "Зараз",
+    "diagnosticsLast7Days": "Апошнія 7 дзён",
+    "diagnosticsConnectedFor": "Падключана",
+    "diagnosticsVerdictReconnects": "Перападключаецца сама",
+    "diagnosticsVerdictReconnectsDetail": "Кароткія разрывы, кожны раз вяртаецца прыкладна за {duration}",
+    "diagnosticsVerdictNoDrops": "На гэтым тыдні разрываў не было",
+    "diagnosticsVerdictTrouble": "Праблемы з падключэннем",
+    "diagnosticsVerdictTroubleDetail": "Няўдалыя злучэнні за апошнія 24 гадзіны: {count}",
+    "diagnosticsDrops": "Разрывы",
+    "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
+    "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
+    "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
+    "diagnosticsLastDuration": "Апошнія {duration}"
 }

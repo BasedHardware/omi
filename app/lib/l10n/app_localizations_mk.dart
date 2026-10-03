@@ -12287,4 +12287,53 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Моментално';
+
+  @override
+  String get diagnosticsLast7Days => 'Последните 7 дена';
+
+  @override
+  String get diagnosticsConnectedFor => 'Поврзано';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Самостојно повторно се поврзува';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Кратки прекини, секој пат се враќа за околу $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Без прекини оваа недела';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Проблеми со поврзувањето';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Неуспешни поврзувања во последните 24 часа: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Прекини';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'околу $count на час';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Најдолг прекин';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Од спарувањето: $drops прекини, $failed неуспешни поврзувања.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Последните $duration';
+  }
 }

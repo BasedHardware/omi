@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi riconoscerà {name} la prossima volta.} pending{Ci vogliono pochi secondi.} disabled{Attiva il salvataggio delle voci nelle Impostazioni così Omi potrà riconoscere {name}.} other{Omi ha bisogno di più parlato chiaro da {name} e continuerà a provare.}}",
     "speakerLabelEarlierMatches": "Conversazioni precedenti con questa voce: {count}",
     "speakerLabelText": "{part, select, likely{Probabile} soundsLike{Somiglia a {name}} notPerson{Non è {name}} carried{È ancora {name}. Riportato dalla tua ultima conversazione.} change{Cambia} alsoTitle{È anche {name}?} alsoBody{Omi ha trovato la stessa voce in conversazioni precedenti.} confirmed{Hai confermato questa etichetta} other{Rivedi}}",
-    "speakerLabelTalkTime": "{duration} di questa voce"
+    "speakerLabelTalkTime": "{duration} di questa voce",
+    "diagnosticsRightNow": "Adesso",
+    "diagnosticsLast7Days": "Ultimi 7 giorni",
+    "diagnosticsConnectedFor": "Connesso da",
+    "diagnosticsVerdictReconnects": "Si riconnette da solo",
+    "diagnosticsVerdictReconnectsDetail": "Brevi interruzioni, torna in circa {duration} ogni volta",
+    "diagnosticsVerdictNoDrops": "Nessuna interruzione questa settimana",
+    "diagnosticsVerdictTrouble": "Problemi di connessione",
+    "diagnosticsVerdictTroubleDetail": "Connessioni non riuscite nelle ultime 24 ore: {count}",
+    "diagnosticsDrops": "Interruzioni",
+    "diagnosticsDropsPerHour": "circa {count} all'ora",
+    "diagnosticsLongestGap": "Interruzione più lunga",
+    "diagnosticsSincePairingSummary": "Dall'associazione: {drops} interruzioni, {failed} connessioni non riuscite.",
+    "diagnosticsLastDuration": "Ultimi {duration}"
 }

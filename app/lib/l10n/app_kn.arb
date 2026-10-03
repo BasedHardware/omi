@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
     "speakerLabelEarlierMatches": "ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: {count}",
     "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
-    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}"
+    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
+    "diagnosticsRightNow": "ಈಗ",
+    "diagnosticsLast7Days": "ಕಳೆದ 7 ದಿನಗಳು",
+    "diagnosticsConnectedFor": "ಸಂಪರ್ಕದ ಅವಧಿ",
+    "diagnosticsVerdictReconnects": "ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ",
+    "diagnosticsVerdictReconnectsDetail": "ಸಣ್ಣ ಕಡಿತಗಳು, ಪ್ರತಿ ಬಾರಿ ಸುಮಾರು {duration} ನಲ್ಲಿ ಮರಳುತ್ತದೆ",
+    "diagnosticsVerdictNoDrops": "ಈ ವಾರ ಯಾವುದೇ ಕಡಿತವಿಲ್ಲ",
+    "diagnosticsVerdictTrouble": "ಸಂಪರ್ಕಿಸಲು ತೊಂದರೆಯಾಗುತ್ತಿದೆ",
+    "diagnosticsVerdictTroubleDetail": "ಕಳೆದ 24 ಗಂಟೆಗಳಲ್ಲಿ ವಿಫಲ ಸಂಪರ್ಕಗಳು: {count}",
+    "diagnosticsDrops": "ಕಡಿತಗಳು",
+    "diagnosticsDropsPerHour": "ಗಂಟೆಗೆ ಸುಮಾರು {count}",
+    "diagnosticsLongestGap": "ಅತಿ ದೀರ್ಘ ಅಂತರ",
+    "diagnosticsSincePairingSummary": "ಜೋಡಿಯಾದಾಗಿನಿಂದ: {drops} ಕಡಿತಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
+    "diagnosticsLastDuration": "ಕಳೆದ {duration}"
 }

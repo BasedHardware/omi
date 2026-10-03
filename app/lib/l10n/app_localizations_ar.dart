@@ -12150,4 +12150,53 @@ class AppLocalizationsAr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
+
+  @override
+  String get diagnosticsRightNow => 'الآن';
+
+  @override
+  String get diagnosticsLast7Days => 'آخر 7 أيام';
+
+  @override
+  String get diagnosticsConnectedFor => 'متصل منذ';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'يعيد الاتصال تلقائيًا';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'انقطاعات قصيرة، يعود خلال $duration تقريبًا في كل مرة';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'لا انقطاعات هذا الأسبوع';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'يواجه مشكلة في الاتصال';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'اتصالات فاشلة خلال آخر 24 ساعة: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'الانقطاعات';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'حوالي $count في الساعة';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'أطول انقطاع';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'منذ الاقتران: $drops انقطاع، $failed اتصال فاشل.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'آخر $duration';
+  }
 }

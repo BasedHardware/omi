@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{அடுத்த முறை Omi {name} அவர்களை அடையாளம் காணும்.} pending{இதற்கு சில விநாடிகள் ஆகும்.} disabled{Omi {name} அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.} other{Omi-க்கு {name} அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.}}",
     "speakerLabelEarlierMatches": "இந்தக் குரலுடன் முந்தைய உரையாடல்கள்: {count}",
     "speakerLabelText": "{part, select, likely{சாத்தியம்} soundsLike{{name} போல ஒலிக்கிறது} notPerson{{name} இல்லை} carried{இன்னும் {name}. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.} change{மாற்று} alsoTitle{இதுவும் {name} தானா?} alsoBody{முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.} confirmed{இந்த லேபிளை உறுதிப்படுத்தினீர்கள்} other{மதிப்பாய்வு}}",
-    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}"
+    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}",
+    "diagnosticsRightNow": "இப்போது",
+    "diagnosticsLast7Days": "கடந்த 7 நாட்கள்",
+    "diagnosticsConnectedFor": "இணைந்திருக்கும் நேரம்",
+    "diagnosticsVerdictReconnects": "தானாகவே மீண்டும் இணைகிறது",
+    "diagnosticsVerdictReconnectsDetail": "சிறிய துண்டிப்புகள், ஒவ்வொரு முறையும் சுமார் {duration} இல் மீண்டும் இணைகிறது",
+    "diagnosticsVerdictNoDrops": "இந்த வாரம் துண்டிப்புகள் இல்லை",
+    "diagnosticsVerdictTrouble": "இணைப்பதில் சிக்கல்",
+    "diagnosticsVerdictTroubleDetail": "கடந்த 24 மணிநேரத்தில் தோல்வியுற்ற இணைப்புகள்: {count}",
+    "diagnosticsDrops": "துண்டிப்புகள்",
+    "diagnosticsDropsPerHour": "மணிக்கு சுமார் {count}",
+    "diagnosticsLongestGap": "நீண்ட இடைவெளி",
+    "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
+    "diagnosticsLastDuration": "கடந்த {duration}"
 }

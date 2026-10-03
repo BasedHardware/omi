@@ -12231,4 +12231,53 @@ class AppLocalizationsSv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av den här rösten';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Just nu';
+
+  @override
+  String get diagnosticsLast7Days => 'Senaste 7 dagarna';
+
+  @override
+  String get diagnosticsConnectedFor => 'Ansluten i';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Återansluter av sig själv';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Korta avbrott, tillbaka efter cirka $duration varje gång';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Inga avbrott den här veckan';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Har problem att ansluta';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Misslyckade anslutningar de senaste 24 timmarna: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Avbrott';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'cirka $count i timmen';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Längsta uppehåll';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Sedan kopplingen: $drops avbrott, $failed misslyckade anslutningar.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Senaste $duration';
+  }
 }

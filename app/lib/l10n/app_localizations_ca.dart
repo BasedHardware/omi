@@ -12292,4 +12292,53 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Ara mateix';
+
+  @override
+  String get diagnosticsLast7Days => 'Últims 7 dies';
+
+  @override
+  String get diagnosticsConnectedFor => 'Connectat durant';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Es reconnecta sol';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Talls breus, torna en uns $duration cada vegada';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Cap tall aquesta setmana';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Té problemes per connectar-se';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Connexions fallides en les últimes 24 hores: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Talls';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'uns $count per hora';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Interrupció més llarga';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Des de l\'aparellament: $drops talls, $failed connexions fallides.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Últims $duration';
+  }
 }

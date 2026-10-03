@@ -12205,4 +12205,53 @@ class AppLocalizationsHi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
+
+  @override
+  String get diagnosticsRightNow => 'अभी';
+
+  @override
+  String get diagnosticsLast7Days => 'पिछले 7 दिन';
+
+  @override
+  String get diagnosticsConnectedFor => 'कनेक्टेड समय';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'अपने आप फिर से जुड़ जाता है';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'छोटी रुकावटें, हर बार लगभग $duration में वापस';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'इस सप्ताह कोई रुकावट नहीं';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'कनेक्ट होने में समस्या';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'पिछले 24 घंटों में विफल कनेक्शन: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'रुकावटें';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'लगभग $count प्रति घंटा';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'सबसे लंबा अंतराल';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'पेयरिंग के बाद से: $drops रुकावटें, $failed विफल कनेक्शन।';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'पिछले $duration';
+  }
 }

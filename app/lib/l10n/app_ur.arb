@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi اگلی بار {name} کو پہچان لے گا۔} pending{اس میں چند سیکنڈ لگتے ہیں۔} disabled{ترتیبات میں آوازیں محفوظ کرنا آن کریں تاکہ Omi {name} کو پہچان سکے۔} other{Omi کو {name} کی مزید واضح گفتگو درکار ہے اور وہ کوشش جاری رکھے گا۔}}",
     "speakerLabelEarlierMatches": "اس آواز کے ساتھ پچھلی گفتگوئیں: {count}",
     "speakerLabelText": "{part, select, likely{ممکنہ} soundsLike{{name} جیسی لگتی ہے} notPerson{{name} نہیں} carried{اب بھی {name}۔ آپ کی پچھلی گفتگو سے جاری۔} change{تبدیل کریں} alsoTitle{کیا یہ بھی {name} ہیں؟} alsoBody{Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔} confirmed{آپ نے اس لیبل کی تصدیق کی} other{جائزہ لیں}}",
-    "speakerLabelTalkTime": "اس آواز کا {duration}"
+    "speakerLabelTalkTime": "اس آواز کا {duration}",
+    "diagnosticsRightNow": "ابھی",
+    "diagnosticsLast7Days": "پچھلے 7 دن",
+    "diagnosticsConnectedFor": "منسلک رہنے کا وقت",
+    "diagnosticsVerdictReconnects": "خود بخود دوبارہ جڑ جاتا ہے",
+    "diagnosticsVerdictReconnectsDetail": "مختصر رکاوٹیں، ہر بار تقریباً {duration} میں واپس",
+    "diagnosticsVerdictNoDrops": "اس ہفتے کوئی رکاوٹ نہیں",
+    "diagnosticsVerdictTrouble": "جڑنے میں مسئلہ",
+    "diagnosticsVerdictTroubleDetail": "پچھلے 24 گھنٹوں میں ناکام کنکشن: {count}",
+    "diagnosticsDrops": "رکاوٹیں",
+    "diagnosticsDropsPerHour": "تقریباً {count} فی گھنٹہ",
+    "diagnosticsLongestGap": "طویل ترین وقفہ",
+    "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
+    "diagnosticsLastDuration": "پچھلے {duration}"
 }

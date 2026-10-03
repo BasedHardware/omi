@@ -12263,4 +12263,53 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Сейчас';
+
+  @override
+  String get diagnosticsLast7Days => 'Последние 7 дней';
+
+  @override
+  String get diagnosticsConnectedFor => 'Подключено';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Переподключается само';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Короткие обрывы, каждый раз возвращается примерно за $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'На этой неделе обрывов не было';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Проблемы с подключением';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Неудачные подключения за последние 24 часа: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Обрывы';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'примерно $count в час';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Самый долгий перерыв';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'С момента сопряжения: обрывов — $drops, неудачных подключений — $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Последние $duration';
+  }
 }

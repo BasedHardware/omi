@@ -12235,4 +12235,53 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Saat Ini';
+
+  @override
+  String get diagnosticsLast7Days => '7 Hari Terakhir';
+
+  @override
+  String get diagnosticsConnectedFor => 'Terhubung selama';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Tersambung ulang sendiri';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Terputus sebentar, kembali dalam sekitar $duration setiap kali';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Tidak ada pemutusan minggu ini';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Mengalami masalah koneksi';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Koneksi gagal dalam 24 jam terakhir: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Pemutusan';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'sekitar $count per jam';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Jeda terlama';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Sejak penyambungan: $drops pemutusan, $failed koneksi gagal.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '$duration terakhir';
+  }
 }

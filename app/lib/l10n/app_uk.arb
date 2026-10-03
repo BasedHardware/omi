@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi впізнає {name} наступного разу.} pending{Це займе кілька секунд.} disabled{Увімкніть збереження голосів у налаштуваннях, щоб Omi міг впізнавати {name}.} other{Omi потрібно більше чіткого мовлення від {name}, і він продовжить спроби.}}",
     "speakerLabelEarlierMatches": "Попередні розмови з цим голосом: {count}",
     "speakerLabelText": "{part, select, likely{Імовірно} soundsLike{Схоже на {name}} notPerson{Не {name}} carried{Досі {name}. Перенесено з вашої останньої розмови.} change{Змінити} alsoTitle{Це теж {name}?} alsoBody{Omi знайшов такий самий голос у попередніх розмовах.} confirmed{Ви підтвердили цю мітку} other{Переглянути}}",
-    "speakerLabelTalkTime": "{duration} цього голосу"
+    "speakerLabelTalkTime": "{duration} цього голосу",
+    "diagnosticsRightNow": "Зараз",
+    "diagnosticsLast7Days": "Останні 7 днів",
+    "diagnosticsConnectedFor": "Підключено",
+    "diagnosticsVerdictReconnects": "Перепідключається самостійно",
+    "diagnosticsVerdictReconnectsDetail": "Короткі обриви, щоразу повертається приблизно за {duration}",
+    "diagnosticsVerdictNoDrops": "Цього тижня обривів не було",
+    "diagnosticsVerdictTrouble": "Проблеми з підключенням",
+    "diagnosticsVerdictTroubleDetail": "Невдалі підключення за останні 24 години: {count}",
+    "diagnosticsDrops": "Обриви",
+    "diagnosticsDropsPerHour": "приблизно {count} на годину",
+    "diagnosticsLongestGap": "Найдовша перерва",
+    "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
+    "diagnosticsLastDuration": "Останні {duration}"
 }

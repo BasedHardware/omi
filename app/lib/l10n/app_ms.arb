@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengecam {name} pada masa akan datang.} pending{Ini mengambil masa beberapa saat.} disabled{Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam {name}.} other{Omi memerlukan lebih banyak pertuturan yang jelas daripada {name} dan akan terus mencuba.}}",
     "speakerLabelEarlierMatches": "Perbualan terdahulu dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
-    "speakerLabelTalkTime": "{duration} daripada suara ini"
+    "speakerLabelTalkTime": "{duration} daripada suara ini",
+    "diagnosticsRightNow": "Sekarang",
+    "diagnosticsLast7Days": "7 Hari Lepas",
+    "diagnosticsConnectedFor": "Disambungkan selama",
+    "diagnosticsVerdictReconnects": "Bersambung semula sendiri",
+    "diagnosticsVerdictReconnectsDetail": "Terputus seketika, kembali dalam kira-kira {duration} setiap kali",
+    "diagnosticsVerdictNoDrops": "Tiada pemutusan minggu ini",
+    "diagnosticsVerdictTrouble": "Menghadapi masalah sambungan",
+    "diagnosticsVerdictTroubleDetail": "Sambungan gagal dalam 24 jam lepas: {count}",
+    "diagnosticsDrops": "Pemutusan",
+    "diagnosticsDropsPerHour": "kira-kira {count} sejam",
+    "diagnosticsLongestGap": "Jurang terpanjang",
+    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
+    "diagnosticsLastDuration": "{duration} lepas"
 }

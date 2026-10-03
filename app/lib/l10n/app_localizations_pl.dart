@@ -12260,4 +12260,53 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Teraz';
+
+  @override
+  String get diagnosticsLast7Days => 'Ostatnie 7 dni';
+
+  @override
+  String get diagnosticsConnectedFor => 'Połączono od';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Łączy się ponownie samodzielnie';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Krótkie zerwania, za każdym razem powrót po ok. $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Brak zerwań w tym tygodniu';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Problemy z połączeniem';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Nieudane połączenia w ciągu ostatnich 24 godzin: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Zerwania';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ok. $count na godzinę';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Najdłuższa przerwa';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Od sparowania: zerwania: $drops, nieudane połączenia: $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Ostatnie $duration';
+  }
 }

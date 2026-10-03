@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nabudúce rozpozná osobu {name}.} pending{Trvá to niekoľko sekúnd.} disabled{Zapnite ukladanie hlasov v Nastaveniach, aby Omi mohol rozpoznať osobu {name}.} other{Omi potrebuje viac zreteľnej reči osoby {name} a bude to skúšať ďalej.}}",
     "speakerLabelEarlierMatches": "Predchádzajúce rozhovory s týmto hlasom: {count}",
     "speakerLabelText": "{part, select, likely{Pravdepodobne} soundsLike{Znie ako {name}} notPerson{Nie je to {name}} carried{Stále {name}. Prevzaté z vášho posledného rozhovoru.} change{Zmeniť} alsoTitle{Je to aj {name}?} alsoBody{Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.} confirmed{Tento štítok ste potvrdili} other{Skontrolovať}}",
-    "speakerLabelTalkTime": "{duration} tohto hlasu"
+    "speakerLabelTalkTime": "{duration} tohto hlasu",
+    "diagnosticsRightNow": "Práve teraz",
+    "diagnosticsLast7Days": "Posledných 7 dní",
+    "diagnosticsConnectedFor": "Pripojené",
+    "diagnosticsVerdictReconnects": "Znovu sa pripája samo",
+    "diagnosticsVerdictReconnectsDetail": "Krátke výpadky, zakaždým späť asi za {duration}",
+    "diagnosticsVerdictNoDrops": "Tento týždeň žiadne výpadky",
+    "diagnosticsVerdictTrouble": "Problémy s pripojením",
+    "diagnosticsVerdictTroubleDetail": "Neúspešné pripojenia za posledných 24 hodín: {count}",
+    "diagnosticsDrops": "Výpadky",
+    "diagnosticsDropsPerHour": "asi {count} za hodinu",
+    "diagnosticsLongestGap": "Najdlhší výpadok",
+    "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
+    "diagnosticsLastDuration": "Posledných {duration}"
 }

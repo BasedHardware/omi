@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
     "speakerLabelEarlierMatches": "Претходни разговори со овој глас: {count}",
     "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} од овој глас"
+    "speakerLabelTalkTime": "{duration} од овој глас",
+    "diagnosticsRightNow": "Моментално",
+    "diagnosticsLast7Days": "Последните 7 дена",
+    "diagnosticsConnectedFor": "Поврзано",
+    "diagnosticsVerdictReconnects": "Самостојно повторно се поврзува",
+    "diagnosticsVerdictReconnectsDetail": "Кратки прекини, секој пат се враќа за околу {duration}",
+    "diagnosticsVerdictNoDrops": "Без прекини оваа недела",
+    "diagnosticsVerdictTrouble": "Проблеми со поврзувањето",
+    "diagnosticsVerdictTroubleDetail": "Неуспешни поврзувања во последните 24 часа: {count}",
+    "diagnosticsDrops": "Прекини",
+    "diagnosticsDropsPerHour": "околу {count} на час",
+    "diagnosticsLongestGap": "Најдолг прекин",
+    "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
+    "diagnosticsLastDuration": "Последните {duration}"
 }

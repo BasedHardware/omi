@@ -12222,4 +12222,53 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
+
+  @override
+  String get diagnosticsRightNow => 'এখন';
+
+  @override
+  String get diagnosticsLast7Days => 'শেষ ৭ দিন';
+
+  @override
+  String get diagnosticsConnectedFor => 'সংযুক্ত সময়';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'নিজে থেকেই আবার সংযুক্ত হয়';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'স্বল্প বিচ্ছিন্নতা, প্রতিবার প্রায় $duration-এ ফিরে আসে';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'এই সপ্তাহে কোনো বিচ্ছিন্নতা নেই';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'সংযোগে সমস্যা হচ্ছে';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'গত ২৪ ঘণ্টায় ব্যর্থ সংযোগ: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'বিচ্ছিন্নতা';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ঘণ্টায় প্রায় $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'দীর্ঘতম বিরতি';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'জোড়া হওয়ার পর থেকে: $dropsটি বিচ্ছিন্নতা, $failedটি ব্যর্থ সংযোগ।';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'শেষ $duration';
+  }
 }

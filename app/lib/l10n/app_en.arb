@@ -14575,5 +14575,85 @@
                 "type": "String"
             }
         }
+    },
+    "diagnosticsRightNow": "Right Now",
+    "@diagnosticsRightNow": {
+        "description": "Device Diagnostics section title for the live connection rows"
+    },
+    "diagnosticsLast7Days": "Last 7 Days",
+    "@diagnosticsLast7Days": {
+        "description": "Device Diagnostics section title for the 7-day connection summary"
+    },
+    "diagnosticsConnectedFor": "Connected for",
+    "@diagnosticsConnectedFor": {
+        "description": "Device Diagnostics row title; the value is how long the device has been connected"
+    },
+    "diagnosticsVerdictReconnects": "Reconnects on its own",
+    "@diagnosticsVerdictReconnects": {
+        "description": "Device Diagnostics weekly verdict when every drop recovered automatically"
+    },
+    "diagnosticsVerdictReconnectsDetail": "Brief drops, back in about {duration} each time",
+    "@diagnosticsVerdictReconnectsDetail": {
+        "description": "Device Diagnostics verdict detail; duration is the median reconnect time, e.g. 2s",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "diagnosticsVerdictNoDrops": "No drops this week",
+    "@diagnosticsVerdictNoDrops": {
+        "description": "Device Diagnostics verdict detail when nothing disconnected in the window"
+    },
+    "diagnosticsVerdictTrouble": "Having trouble connecting",
+    "@diagnosticsVerdictTrouble": {
+        "description": "Device Diagnostics verdict when a connection attempt failed in the last 24 hours"
+    },
+    "diagnosticsVerdictTroubleDetail": "Failed connections in the last 24 hours: {count}",
+    "@diagnosticsVerdictTroubleDetail": {
+        "description": "Device Diagnostics verdict detail under 'Having trouble connecting'",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsDrops": "Drops",
+    "@diagnosticsDrops": {
+        "description": "Device Diagnostics row title: how many times the connection dropped and recovered"
+    },
+    "diagnosticsDropsPerHour": "about {count} an hour",
+    "@diagnosticsDropsPerHour": {
+        "description": "Device Diagnostics secondary text under the drop count: average drops per hour",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsLongestGap": "Longest gap",
+    "@diagnosticsLongestGap": {
+        "description": "Device Diagnostics row title: the longest time the device took to reconnect"
+    },
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "@diagnosticsSincePairingSummary": {
+        "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
+        "placeholders": {
+            "drops": {
+                "type": "int"
+            },
+            "failed": {
+                "type": "int"
+            }
+        }
+    },
+    "diagnosticsLastDuration": "Last {duration}",
+    "@diagnosticsLastDuration": {
+        "description": "Caption beside the live signal chart title; duration is the chart window, e.g. 60s",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
     }
 }

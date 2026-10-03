@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ће препознати особу {name} следећи пут.} pending{Ово траје неколико секунди.} disabled{Укључите чување гласова у подешавањима да би Omi могао да препозна особу {name}.} other{Omi треба више јасног говора особе {name} и наставиће да покушава.}}",
     "speakerLabelEarlierMatches": "Ранији разговори са овим гласом: {count}",
     "speakerLabelText": "{part, select, likely{Вероватно} soundsLike{Звучи као {name}} notPerson{Није {name}} carried{И даље {name}. Пренето из вашег последњег разговора.} change{Промени} alsoTitle{Да ли је ово такође {name}?} alsoBody{Omi је пронашао исти глас у ранијим разговорима.} confirmed{Потврдили сте ову ознаку} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} овог гласа"
+    "speakerLabelTalkTime": "{duration} овог гласа",
+    "diagnosticsRightNow": "Тренутно",
+    "diagnosticsLast7Days": "Последњих 7 дана",
+    "diagnosticsConnectedFor": "Повезано",
+    "diagnosticsVerdictReconnects": "Само се поново повезује",
+    "diagnosticsVerdictReconnectsDetail": "Кратки прекиди, сваки пут се врати за отприлике {duration}",
+    "diagnosticsVerdictNoDrops": "Без прекида ове недеље",
+    "diagnosticsVerdictTrouble": "Проблеми са повезивањем",
+    "diagnosticsVerdictTroubleDetail": "Неуспеле везе у последња 24 сата: {count}",
+    "diagnosticsDrops": "Прекиди",
+    "diagnosticsDropsPerHour": "отприлике {count} на сат",
+    "diagnosticsLongestGap": "Најдужи прекид",
+    "diagnosticsSincePairingSummary": "Од упаривања: прекида {drops}, неуспелих веза {failed}.",
+    "diagnosticsLastDuration": "Последњих {duration}"
 }

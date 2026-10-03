@@ -12227,4 +12227,53 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Juuri nyt';
+
+  @override
+  String get diagnosticsLast7Days => 'Viimeiset 7 päivää';
+
+  @override
+  String get diagnosticsConnectedFor => 'Yhdistettynä';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Yhdistää itse uudelleen';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Lyhyitä katkoksia, palaa joka kerta noin $duration kuluttua';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Ei katkoksia tällä viikolla';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Yhdistämisessä on ongelmia';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Epäonnistuneet yhteydet viimeisten 24 tunnin aikana: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Katkokset';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'noin $count tunnissa';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Pisin katko';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Viimeiset $duration';
+  }
 }

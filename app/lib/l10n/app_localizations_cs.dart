@@ -12222,4 +12222,53 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Právě teď';
+
+  @override
+  String get diagnosticsLast7Days => 'Posledních 7 dní';
+
+  @override
+  String get diagnosticsConnectedFor => 'Připojeno';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Znovu se připojuje samo';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Krátké výpadky, pokaždé zpět asi za $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Tento týden žádné výpadky';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Potíže s připojením';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Neúspěšná připojení za posledních 24 hodin: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Výpadky';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'asi $count za hodinu';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Nejdelší výpadek';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Od spárování: výpadků $drops, neúspěšných připojení $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Posledních $duration';
+  }
 }

@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi पुढच्या वेळी {name} यांना ओळखेल.} pending{यास काही सेकंद लागतात.} disabled{Omi ला {name} यांना ओळखता यावे म्हणून सेटिंग्जमध्ये आवाज जतन करणे चालू करा.} other{Omi ला {name} यांचे आणखी स्पष्ट बोलणे हवे आहे आणि तो प्रयत्न करत राहील.}}",
     "speakerLabelEarlierMatches": "या आवाजासह मागील संभाषणे: {count}",
     "speakerLabelText": "{part, select, likely{संभाव्य} soundsLike{{name} सारखा वाटतो} notPerson{{name} नाही} carried{अजूनही {name}. तुमच्या मागील संभाषणातून पुढे आणले.} change{बदला} alsoTitle{हे देखील {name} आहेत का?} alsoBody{Omi ला हाच आवाज मागील संभाषणांमध्ये आढळला.} confirmed{तुम्ही हे लेबल निश्चित केले} other{पुनरावलोकन}}",
-    "speakerLabelTalkTime": "या आवाजाचे {duration}"
+    "speakerLabelTalkTime": "या आवाजाचे {duration}",
+    "diagnosticsRightNow": "आत्ता",
+    "diagnosticsLast7Days": "गेले 7 दिवस",
+    "diagnosticsConnectedFor": "कनेक्ट असलेला वेळ",
+    "diagnosticsVerdictReconnects": "आपोआप पुन्हा जोडले जाते",
+    "diagnosticsVerdictReconnectsDetail": "थोडक्यात खंड, प्रत्येक वेळी सुमारे {duration} मध्ये परत",
+    "diagnosticsVerdictNoDrops": "या आठवड्यात कोणताही खंड नाही",
+    "diagnosticsVerdictTrouble": "कनेक्ट होण्यात अडचण",
+    "diagnosticsVerdictTroubleDetail": "गेल्या 24 तासांतील अयशस्वी कनेक्शन: {count}",
+    "diagnosticsDrops": "खंड",
+    "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
+    "diagnosticsLongestGap": "सर्वात मोठा खंड",
+    "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
+    "diagnosticsLastDuration": "गेले {duration}"
 }

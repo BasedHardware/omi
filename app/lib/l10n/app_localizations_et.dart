@@ -12221,4 +12221,53 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Praegu';
+
+  @override
+  String get diagnosticsLast7Days => 'Viimased 7 päeva';
+
+  @override
+  String get diagnosticsConnectedFor => 'Ühendatud';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Taasühendub ise';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Lühikesed katkestused, iga kord tagasi umbes $duration pärast';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Sel nädalal katkestusi pole';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Ühendamisega on probleeme';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Ebaõnnestunud ühendused viimase 24 tunni jooksul: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Katkestused';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'umbes $count tunnis';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Pikim paus';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Pärast sidumist: katkestusi $drops, ebaõnnestunud ühendusi $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Viimased $duration';
+  }
 }

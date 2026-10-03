@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{سيتعرّف Omi على {name} في المرة القادمة.} pending{يستغرق هذا بضع ثوانٍ.} disabled{فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على {name}.} other{يحتاج Omi إلى مزيد من الكلام الواضح من {name} وسيواصل المحاولة.}}",
     "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
-    "speakerLabelTalkTime": "{duration} من هذا الصوت"
+    "speakerLabelTalkTime": "{duration} من هذا الصوت",
+    "diagnosticsRightNow": "الآن",
+    "diagnosticsLast7Days": "آخر 7 أيام",
+    "diagnosticsConnectedFor": "متصل منذ",
+    "diagnosticsVerdictReconnects": "يعيد الاتصال تلقائيًا",
+    "diagnosticsVerdictReconnectsDetail": "انقطاعات قصيرة، يعود خلال {duration} تقريبًا في كل مرة",
+    "diagnosticsVerdictNoDrops": "لا انقطاعات هذا الأسبوع",
+    "diagnosticsVerdictTrouble": "يواجه مشكلة في الاتصال",
+    "diagnosticsVerdictTroubleDetail": "اتصالات فاشلة خلال آخر 24 ساعة: {count}",
+    "diagnosticsDrops": "الانقطاعات",
+    "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
+    "diagnosticsLongestGap": "أطول انقطاع",
+    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
+    "diagnosticsLastDuration": "آخر {duration}"
 }

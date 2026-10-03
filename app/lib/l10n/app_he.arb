@@ -11339,5 +11339,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
     "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה"
+    "speakerLabelTalkTime": "{duration} מהקול הזה",
+    "diagnosticsRightNow": "כרגע",
+    "diagnosticsLast7Days": "7 הימים האחרונים",
+    "diagnosticsConnectedFor": "מחובר במשך",
+    "diagnosticsVerdictReconnects": "מתחבר מחדש מעצמו",
+    "diagnosticsVerdictReconnectsDetail": "ניתוקים קצרים, חוזר תוך כ־{duration} בכל פעם",
+    "diagnosticsVerdictNoDrops": "אין ניתוקים השבוע",
+    "diagnosticsVerdictTrouble": "יש בעיה בהתחברות",
+    "diagnosticsVerdictTroubleDetail": "חיבורים שנכשלו ב־24 השעות האחרונות: {count}",
+    "diagnosticsDrops": "ניתוקים",
+    "diagnosticsDropsPerHour": "בערך {count} בשעה",
+    "diagnosticsLongestGap": "הפער הארוך ביותר",
+    "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
+    "diagnosticsLastDuration": "{duration} אחרונות"
 }

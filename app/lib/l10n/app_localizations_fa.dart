@@ -12222,4 +12222,53 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get diagnosticsRightNow => 'هم‌اکنون';
+
+  @override
+  String get diagnosticsLast7Days => '۷ روز گذشته';
+
+  @override
+  String get diagnosticsConnectedFor => 'مدت اتصال';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'خودکار دوباره وصل می‌شود';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'قطعی‌های کوتاه، هر بار در حدود $duration برمی‌گردد';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'این هفته قطعی نداشته';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'در اتصال مشکل دارد';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'اتصالات ناموفق در ۲۴ ساعت گذشته: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'قطعی‌ها';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'حدود $count در ساعت';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'طولانی‌ترین وقفه';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'از زمان جفت‌سازی: $drops قطعی، $failed اتصال ناموفق.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '$duration گذشته';
+  }
 }

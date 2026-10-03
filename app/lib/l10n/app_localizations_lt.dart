@@ -12243,4 +12243,53 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Dabar';
+
+  @override
+  String get diagnosticsLast7Days => 'Paskutinės 7 dienos';
+
+  @override
+  String get diagnosticsConnectedFor => 'Prijungta';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Prisijungia iš naujo savaime';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Trumpi nutrūkimai, kaskart grįžta maždaug per $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Šią savaitę nutrūkimų nebuvo';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Kyla prisijungimo problemų';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Nepavykę ryšiai per paskutines 24 valandas: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Nutrūkimai';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'maždaug $count per valandą';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Ilgiausia pertrauka';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Nuo susiejimo: nutrūkimų $drops, nepavykusių ryšių $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Paskutinės $duration';
+  }
 }

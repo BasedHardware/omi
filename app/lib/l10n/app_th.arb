@@ -3782,5 +3782,18 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi จะจำเสียงของ {name} ได้ในครั้งหน้า} pending{ใช้เวลาไม่กี่วินาที} disabled{เปิดการบันทึกเสียงในการตั้งค่าเพื่อให้ Omi จำเสียงของ {name} ได้} other{Omi ต้องการเสียงพูดที่ชัดเจนจาก {name} มากขึ้น และจะพยายามต่อไป}}",
     "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
     "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
-    "speakerLabelTalkTime": "{duration} ของเสียงนี้"
+    "speakerLabelTalkTime": "{duration} ของเสียงนี้",
+    "diagnosticsRightNow": "ขณะนี้",
+    "diagnosticsLast7Days": "7 วันที่ผ่านมา",
+    "diagnosticsConnectedFor": "เชื่อมต่อมาแล้ว",
+    "diagnosticsVerdictReconnects": "เชื่อมต่อใหม่ได้เอง",
+    "diagnosticsVerdictReconnectsDetail": "หลุดสั้น ๆ กลับมาภายในประมาณ {duration} ทุกครั้ง",
+    "diagnosticsVerdictNoDrops": "ไม่มีการหลุดในสัปดาห์นี้",
+    "diagnosticsVerdictTrouble": "มีปัญหาในการเชื่อมต่อ",
+    "diagnosticsVerdictTroubleDetail": "การเชื่อมต่อที่ล้มเหลวใน 24 ชั่วโมงที่ผ่านมา: {count}",
+    "diagnosticsDrops": "การหลุด",
+    "diagnosticsDropsPerHour": "ประมาณ {count} ครั้งต่อชั่วโมง",
+    "diagnosticsLongestGap": "ช่วงหลุดนานที่สุด",
+    "diagnosticsSincePairingSummary": "ตั้งแต่จับคู่: หลุด {drops} ครั้ง เชื่อมต่อล้มเหลว {failed} ครั้ง",
+    "diagnosticsLastDuration": "{duration} ล่าสุด"
 }

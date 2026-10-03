@@ -12262,4 +12262,53 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get diagnosticsRightNow => 'Op dit moment';
+
+  @override
+  String get diagnosticsLast7Days => 'Laatste 7 dagen';
+
+  @override
+  String get diagnosticsConnectedFor => 'Verbonden sinds';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Maakt zelf opnieuw verbinding';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Korte onderbrekingen, elke keer na ongeveer $duration terug';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Geen onderbrekingen deze week';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Problemen met verbinden';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mislukte verbindingen in de afgelopen 24 uur: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Onderbrekingen';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ongeveer $count per uur';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Langste onderbreking';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Sinds koppeling: $drops onderbrekingen, $failed mislukte verbindingen.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Laatste $duration';
+  }
 }
