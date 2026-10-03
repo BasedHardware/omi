@@ -6,8 +6,8 @@ rules:
     - name:
         as: "backend_listen_active_ws_connections_per_pod"
       # Unlabeled main pods remain eligible; coordinator canaries use track=canary.
-      seriesQuery: 'backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"}'
-      metricsQuery: 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"})'
+      seriesQuery: 'backend_listen_active_ws_connections{listen_track!="canary"}'
+      metricsQuery: 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics",listen_track!="canary"})'
       resources:
         overrides:
           namespace: { resource: "namespace" }

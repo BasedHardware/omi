@@ -48,4 +48,4 @@ up{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track="canar
 # Must be EMPTY: any unlabeled/mislabelled canary sample means ABORT/remove.
 backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary",pod=~"${canary_pods:regex}"}
 # Adapter query: compare against external.metrics API value (API uses milli-units).
-avg(backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"})
+avg(backend_listen_active_ws_connections{job="backend-listen-metrics",listen_track!="canary"})

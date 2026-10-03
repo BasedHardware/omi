@@ -6,6 +6,7 @@ import asyncio
 import copy
 import importlib.util
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -82,19 +83,116 @@ def test_production_canary_telemetry_is_excluded_only_from_main_hpa():
         for rule in adapter['rules']['external']
         if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
     )
-    # != accepts existing main pods with an absent label and excludes canary.
-    selector = (
-        'backend_listen_active_ws_connections{job="backend-listen-metrics",'
-        'namespace="prod-omi-backend",listen_track!="canary"}'
-    )
-    assert rule['seriesQuery'] == selector
-    assert rule['metricsQuery'] == f'avg({selector})'
     queries = (ROOT / 'backend/docs/runbooks/listen-stt-canary-queries.promql').read_text()
-    assert f'avg({selector})' in queries
+    assert rule['metricsQuery'] in queries
     assert (
         'up{job="backend-listen-metrics",namespace="prod-omi-backend",'
         'listen_track="canary",pod=~"${canary_pods:regex}"}'
     ) in queries
+
+
+def _adapter_query_result(query, series):
+    """Evaluate selectors/avg over an instant-vector fixture; reject other syntax."""
+    average = query.startswith('avg(') and query.endswith(')')
+    selector = query[4:-1] if average else query
+    parsed = re.fullmatch(r'([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*)\})?', selector)
+    assert parsed, f'Unsupported selector: {selector}'
+    metric, matchers = parsed.groups()
+    predicates = []
+    for matcher in matchers.split(',') if matchers else []:
+        parsed_matcher = re.fullmatch(r'([a-zA-Z_][a-zA-Z0-9_]*)(!=|=)("[^"]*")', matcher)
+        assert parsed_matcher, f'Unsupported matcher: {matcher}'
+        label, operator, value = parsed_matcher.groups()
+        predicates.append((label, operator, json.loads(value)))
+    selected = {
+        tuple(sorted(labels.items())): value
+        for labels, value in series
+        if labels['__name__'] == metric
+        and all(
+            (labels.get(label, '') == expected) if operator == '=' else (labels.get(label, '') != expected)
+            for label, operator, expected in predicates
+        )
+    }
+    if average:
+        return {(): sum(selected.values()) / len(selected)} if selected else {}
+    return selected
+
+
+@pytest.fixture
+def listen_adapter_series():
+    # Discovery previously accepted every job/namespace; averaging filtered only job.
+    variants = [
+        ({'namespace': 'prod-omi-backend'}, 10),
+        ({'namespace': 'prod-omi-backend', 'listen_track': 'main'}, 20),
+        ({'namespace': 'dev-omi-backend'}, 30),
+        ({'namespace': 'other-backend', 'listen_track': 'control'}, 40),
+        ({'namespace': 'other-backend', 'listen_track': ''}, 50),
+        ({}, 60),
+        ({'namespace': 'other-backend', 'job': 'other-scrape'}, 700),
+        ({'namespace': 'prod-omi-backend', 'job': 'other-scrape', 'listen_track': 'main'}, 800),
+        ({'__name__': 'unrelated_metric'}, 900),
+    ]
+    return [
+        (
+            {
+                '__name__': 'backend_listen_active_ws_connections',
+                'job': 'backend-listen-metrics',
+                'pod': f'pod-{index}',
+                **labels,
+            },
+            value,
+        )
+        for index, (labels, value) in enumerate(variants)
+    ]
+
+
+@pytest.mark.parametrize('canary_value', [None, 0, 1000], ids=['no-canary', 'idle-canaries', 'busy-canaries'])
+def test_adapter_queries_preserve_old_results_except_canaries(listen_adapter_series, canary_value):
+    adapter = yaml.safe_load(
+        (ROOT / 'backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml').read_text()
+    )
+    rule = next(
+        rule
+        for rule in adapter['rules']['external']
+        if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
+    series = list(listen_adapter_series)
+    if canary_value is not None:
+        for index, (namespace, job) in enumerate(
+            [
+                ('prod-omi-backend', 'backend-listen-metrics'),
+                ('other-backend', 'backend-listen-metrics'),
+                ('other-backend', 'other-scrape'),
+            ]
+        ):
+            series.append(
+                (
+                    {
+                        '__name__': 'backend_listen_active_ws_connections',
+                        'job': job,
+                        'namespace': namespace,
+                        'pod': f'canary-{index}',
+                        'listen_track': 'canary',
+                    },
+                    canary_value,
+                )
+            )
+    old_queries = {
+        'seriesQuery': 'backend_listen_active_ws_connections',
+        'metricsQuery': 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})',
+    }
+    # Baseline values also prove the fixture exercises the old discovery/average distinction.
+    assert len(_adapter_query_result(old_queries['seriesQuery'], listen_adapter_series)) == 8
+    assert _adapter_query_result(old_queries['metricsQuery'], listen_adapter_series) == {(): 35}
+    non_canaries = [(labels, value) for labels, value in series if labels.get('listen_track') != 'canary']
+    for key, old_query in old_queries.items():
+        old_result = _adapter_query_result(old_query, series)
+        new_result = _adapter_query_result(rule[key], series)
+        assert new_result == _adapter_query_result(old_query, non_canaries)
+        if canary_value is None:
+            assert new_result == old_result
+        else:
+            assert new_result != old_result
 
 
 @pytest.mark.parametrize('image', ['gcr.io/based-hardware/backend:latest', 'gcr.io/based-hardware/backend:abc1234'])
