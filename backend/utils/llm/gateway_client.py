@@ -803,8 +803,10 @@ async def run_proactivity_gateway(
         }
     )
     payload = dict(request)
-    payload['model'] = 'omi:auto:jev-decisions' if step == 'prefilter' else 'omi:auto:proactive-notification'
-    path = '/v1/systemone' if step == 'prefilter' else '/v1/chat/completions'
+    payload['model'] = (
+        'omi:auto:jev-decisions' if step in {'prefilter', 'dedupe', 'usefulness'} else 'omi:auto:proactive-notification'
+    )
+    path = '/v1/systemone' if step in {'prefilter', 'dedupe', 'usefulness'} else '/v1/chat/completions'
     async with get_llm_gateway_semaphore():
         response = await get_llm_gateway_client().post(
             get_llm_gateway_base_url() + path,
@@ -812,6 +814,15 @@ async def run_proactivity_gateway(
             json=payload,
             timeout=60,
         )
+    if response.is_error:
+        try:
+            error = response.json().get('error', {})
+        except (ValueError, AttributeError):
+            error = {}
+        if error.get('param') == 'proactivity_admission':
+            from config.proactivity_v2 import ProactivityDenied
+
+            raise ProactivityDenied('gateway_admission_denied')
     response.raise_for_status()
     result = response.json()
     if not isinstance(result, dict):

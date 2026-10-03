@@ -92,6 +92,33 @@ async def test_real_executor_reserves_settles_and_tags_same_event(store, gated, 
     assert row['estimated_cost_micro_usd'] == events[0]['estimated_cost_micro_usd']
 
 
+def test_usefulness_authenticated_attribution_and_lane_fence(store):
+    ctx = context(claim(store, producer='conversation_mentor_v2'), 'usefulness')
+    request = SimpleNamespace(
+        headers={
+            'x-omi-proactivity-item': ctx.item_id,
+            'x-omi-proactivity-producer': ctx.producer,
+            'x-omi-proactivity-call': ctx.call_id,
+            'x-omi-proactivity-step': ctx.step,
+        }
+    )
+    caller = SimpleNamespace(name='backend', user_uid='u', usage_feature=ctx.accounting.feature)
+    assert gate.context_from_request(request, caller, ctx.accounting).step == 'usefulness'
+    with pytest.raises(ProactivityDenied, match='invalid_lane'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {
+                'messages': [{'role': 'user', 'content': 'judge'}],
+                'max_completion_tokens': 512,
+            },
+        )
+    caller.name = 'desktop'
+    with pytest.raises(GatewayInvalidRequestError):
+        gate.context_from_request(request, caller, ctx.accounting)
+
+
 @pytest.mark.asyncio
 async def test_failure_has_one_attempt_no_fallback_and_retains_money(store, gated):
     item = claim(store)
@@ -115,25 +142,32 @@ async def test_failure_has_one_attempt_no_fallback_and_retains_money(store, gate
 
 
 @pytest.mark.asyncio
-async def test_jev_executor_uses_same_authority(store, gated):
+@pytest.mark.parametrize('step', ['prefilter', 'dedupe', 'usefulness'])
+async def test_jev_executor_uses_same_authority(store, gated, step):
+    question = (
+        {'type': 'score', 'instructions': 'Repeat?', 'criteria': ['a', 'b', 'c', 'd', 'e']}
+        if step == 'dedupe'
+        else {'type': 'noul', 'instructions': 'Keep?', 'criteria': {'true': 'yes', 'false': 'no'}}
+    )
     item = claim(store, producer='conversation_mentor_v2')
     route = resolve_systemone_route(
         load_gateway_config(),
         {
             'model': 'omi:auto:jev-decisions',
             'state': 'synthetic',
-            'questions': {
-                'worth': {'type': 'noul', 'instructions': 'Keep?', 'criteria': {'true': 'yes', 'false': 'no'}}
-            },
+            'questions': {'worth': question},
         },
     )
     provider = Provider()
     credentials = build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u'))
-    with gate.attempt_scope(context(item, 'prefilter')):
+    with gate.attempt_scope(context(item, step)):
         await execute_systemone(
             route, credentials, ProviderRegistry({'openrouter': provider}), attempt_trace=AttemptTrace()
         )
     assert provider.calls == 1
+    row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
+    assert row['cost_status'] == 'estimated'
+    assert next(iter(row['attempts'].values()))['step'] == step
 
 
 def test_envelope_prices_jev_bytes_with_framing_and_rejects_unbounded_content(store):

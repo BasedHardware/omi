@@ -110,6 +110,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
@@ -252,6 +253,7 @@ app.include_router(mobile_feedback.router)
 app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
+app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)

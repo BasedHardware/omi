@@ -67,6 +67,18 @@ def reserve(authority, item, amount=2000, call=None):
     )
 
 
+def test_mentor_six_steps_share_budget_seventh_is_denied(store):
+    authority = money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW)
+    item = claim(store, producer='conversation_mentor_v2')
+    for _ in range(6):
+        reservation = reserve(authority, item)
+        assert authority.settle(reservation=reservation, event=event(reservation))
+    with pytest.raises(ProactivityDenied, match='call_limit'):
+        reserve(authority, item)
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert len(row['attempts']) == 6 and row['charged_micro_usd'] == 6000
+
+
 def event(reservation, cost=1000):
     return SimpleNamespace(
         as_dict=lambda: dict(

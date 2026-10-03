@@ -107,7 +107,13 @@ async def run_proactivity_model(*, item: dict[str, Any], step: str, request: dic
     )
 
 
-async def publish_item(*, item: dict[str, Any], content: dict[str, str], target: ProactivityTarget) -> None:
+async def publish_item(
+    *,
+    item: dict[str, Any],
+    content: dict[str, str],
+    target: ProactivityTarget,
+    source_guard: dict[str, Any] | None = None,
+) -> None:
     uid = item['uid']
     await ensure_admitted(uid, item['producer'])
     if target.kind != item['source_kind'] or target.id != item['source_id']:
@@ -131,13 +137,35 @@ async def publish_item(*, item: dict[str, Any], content: dict[str, str], target:
         item_id=item['item_id'],
         claim_token=item['claim_token'],
         encrypted_content=ciphertext,
+        source_guard=source_guard,
     )
     logger.info('proactivity_v2_item_terminal producer=%s state=ready', item['producer'])
 
 
+async def record_usefulness_score(*, item: dict[str, Any], score: float) -> None:
+    await run_blocking(
+        db_executor,
+        ledger.record_usefulness_score,
+        uid=item['uid'],
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        score=score,
+    )
+
+
 async def close_item(*, item: dict[str, Any], state: str, reason: str = '') -> None:
     # The reason vocabulary is kept content-free at this boundary.
-    if reason not in {'', 'model_silent', 'generation_failed', 'rollout_disabled', 'source_deleted'}:
+    if reason not in {
+        '',
+        'model_silent',
+        'generation_failed',
+        'rollout_disabled',
+        'source_deleted',
+        'duplicate',
+        'safety_escalation',
+        'source_changed',
+        'usefulness_judge',
+    }:
         raise ValueError('invalid terminal reason')
     await run_blocking(
         db_executor,

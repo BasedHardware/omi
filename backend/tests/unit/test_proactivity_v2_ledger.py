@@ -36,9 +36,27 @@ def test_claim_deduplicates_source(store):
 
 def test_timeout_is_not_delivery_or_dismissal(store):
     item = ready(store)
-    assert not outcome(store, item, 'timeout')['recorded']
+    assert outcome(store, item, 'timeout', event='timeout-id')['recorded']
     row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
     assert not row['delivered'] and not row['dismissed'] and not row['negative']
+    assert not row['acted_24h']
+    assert row['outcomes']['timeout']['event_id'] == 'timeout-id'
+    assert row['outcomes']['timeout']['at'] == NOW
+    assert (row['delivered_count'], row['acted_count'], row['negative_count']) == (0, 0, 0)
+    before = dict(row)
+    assert not outcome(store, item, 'timeout', event='timeout-id')['recorded']
+    assert not outcome(store, item, 'timeout', event='another-timeout', surface='macos')['recorded']
+    assert row == before
+    assert len(row['outcomes']) == 1
+    with pytest.raises(ProactivityDenied, match='event_conflict'):
+        outcome(store, item, 'opened', event='timeout-id')
+
+
+def test_timeout_reusing_an_action_id_also_conflicts(store):
+    item = ready(store)
+    outcome(store, item, 'opened', event='opened-id')
+    with pytest.raises(ProactivityDenied, match='event_conflict'):
+        outcome(store, item, 'timeout', event='opened-id')
 
 
 def test_cross_device_first_action_and_negative_are_independent(store):
@@ -127,3 +145,71 @@ def test_server_completion_requires_confirmed_followup_exposure(store):
     outcome(store, item, 'shown')
     repeat = ledger.record_server_outcome(item['item_id'], 'accepted', uid='u', firestore_client=store, now=NOW)
     assert not repeat['recorded'] and not repeat['acted_24h']
+
+
+def write_score(store, item, score=0.6, **patch):
+    return ledger.record_usefulness_score(
+        **dict(
+            uid='u',
+            item_id=item['item_id'],
+            claim_token=item['claim_token'],
+            score=score,
+            firestore_client=store,
+            now=NOW,
+            **patch
+        )
+    )
+
+
+def test_usefulness_score_is_numeric_first_write_survives_publication_and_outcomes(store):
+    item = claim(store, producer='conversation_mentor_v2')
+    write_score(store, item)
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['usefulness_score'] == 0.6
+    assert isinstance(row['usefulness_score'], float)
+    write_score(store, item)
+    with pytest.raises(ProactivityDenied, match='score_conflict'):
+        write_score(store, item, 0.2)
+    row['cost_status'] = 'estimated'
+    ledger.publish_item(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        encrypted_content='ciphertext',
+        firestore_client=store,
+        now=NOW,
+    )
+    outcome(store, item, 'shown')
+    outcome(store, item, 'replied')
+    outcome(store, item, 'thumbs_down')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['usefulness_score'] == 0.6 and row['acted_24h'] and row['negative']
+
+
+@pytest.mark.parametrize('score', [True, -1, 2, float('nan'), float('inf'), '0.5'])
+def test_usefulness_storage_rejects_non_numeric_or_unbounded_scores(store, score):
+    item = claim(store, producer='conversation_mentor_v2')
+    with pytest.raises(ValueError, match='invalid usefulness score'):
+        write_score(store, item, score)
+
+
+@pytest.mark.parametrize(
+    'change,reason',
+    [
+        ({'claim_token': 'other'}, 'duplicate'),
+        ({'account_generation': 'retired'}, 'not_found'),
+        ({'state': 'suppressed'}, 'duplicate'),
+        ({'expires_at': NOW}, 'not_found'),
+    ],
+)
+def test_usefulness_score_respects_claim_and_account_fences(store, change, reason):
+    item = claim(store, producer='conversation_mentor_v2')
+    store.rows[('users', 'u', ledger.ITEMS, item['item_id'])].update(change)
+    with pytest.raises(ProactivityDenied, match=reason):
+        write_score(store, item)
+
+
+def test_followup_cannot_store_mentor_score(store):
+    item = claim(store)
+    with pytest.raises(ProactivityDenied, match='invalid_producer'):
+        write_score(store, item)
