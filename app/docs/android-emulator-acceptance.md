@@ -46,12 +46,16 @@ When tagging a source whose ordinary main-push job was inapplicable, run the
 existing workflow explicitly (`gh workflow run mobile-app-checks.yml --ref main`),
 wait for successful **Android Emulator Acceptance**, then tag that exact tested
 commit. If main advances, tag the tested SHA rather than assuming the new tip is
-covered. The manual run does not replace the required canonical push aggregate
+covered. A past main commit without its own successful emulator proof is
+intentionally blocked: a manual run cannot retroactively prove an arbitrary
+older SHA. Select the current main candidate, run acceptance, and tag that tested
+SHA. Older main commits remain admissible only when they already have exact-SHA
+acceptance evidence. The manual run does not replace the required canonical push aggregate
 or Release Eligibility proof. No production publication occurs in this workflow.
 
 ## Local commands and evidence
 
-With Java 21, SDK 36/build-tools 36.0.0 and a fresh Android 16 AVD, run the
+With Java 21, Gradle 8.14.2, SDK 36/build-tools 36.0.0 and a fresh Android 16 AVD, run the
 native probe first (it also installs the accessibility instrumentation):
 
 ```sh

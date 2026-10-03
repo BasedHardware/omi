@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+from xml.etree import ElementTree
 
 from android_emulator import Emulator, sha256_file
 
@@ -30,6 +31,17 @@ def assert_healthy(log, package, pid, current_pid, boot_id, current_boot, ui):
         raise ValueError("Startup reported a fatal exception or ANR.")
     if "get started" not in ui.lower():
         raise ValueError("First-run screen did not render; a surviving process alone is insufficient.")
+
+
+def screen_from_instrumentation(dump, package):
+    match = re.search(r"^INSTRUMENTATION_RESULT: screen=(.*?)(?=\nINSTRUMENTATION_[A-Z_]+:|\Z)", dump, re.M | re.S)
+    if not match or not re.search(r"^INSTRUMENTATION_CODE: -1$", dump, re.M):
+        raise ValueError("Accessibility instrumentation did not complete successfully.")
+    ui = match[1].strip()
+    root = ElementTree.fromstring(ui)
+    if root.tag != "screen" or root.get("package") != package:
+        raise ValueError("Accessibility screen does not belong to the launched app.")
+    return ui
 
 
 def run_smoke(device, apk, output, *, aapt, rounds=3, observe_seconds=20):
@@ -81,10 +93,7 @@ def run_smoke(device, apk, output, *, aapt, rounds=3, observe_seconds=20):
                         # and stalls on the animated Flutter landing screen.
                         dump = device.run("shell", "am", "instrument", "-w", "com.omi.fgsprobe/.StartupScreenProbe")
                         (output / f"{number}-accessibility.log").write_text(dump)
-                        match = re.search(r"^INSTRUMENTATION_RESULT: screen=(.*)$", dump, re.M)
-                        ui = match[1] if match else ""
-                        if f'package="{package}"' not in ui:
-                            ui = ""
+                        ui = screen_from_instrumentation(dump, package)
                         if "get started" in ui.lower() and time.monotonic() - start >= observe_seconds:
                             break
                         if device.run("shell", f"pidof {package} || true") != pid:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless a mobile source has both canonical release proofs.
+"""Fail closed unless a mobile source has its canonical release proofs.
 
 This verifier is intentionally offline.  A caller (Codemagic or a future tag
 admission workflow) supplies a bounded JSON evidence file assembled from its
@@ -42,6 +42,18 @@ The proof document has this normalized shape (additional fields are ignored):
         "head_sha": "<source_sha>",
         "repository": "BasedHardware/omi"
       }
+    }
+
+Android callers pass ``--platform android`` and additionally supply:
+
+    "android_acceptance": {
+      "check_name": "Android Emulator Acceptance",
+      "workflow_name": "Mobile App Checks",
+      "workflow_path": ".github/workflows/mobile-app-checks.yml",
+      "event": "push or workflow_dispatch",
+      "status": "completed", "conclusion": "success", "run_attempt": 1,
+      "head_branch": "main", "head_sha": "<source_sha>",
+      "repository": "BasedHardware/omi"
     }
 
 The source may be behind current main, but only when the caller provides

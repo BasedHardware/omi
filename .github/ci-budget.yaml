@@ -4,7 +4,7 @@
     "pr_linux_minutes_per_day": 12100,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change. Android emulator prevention after #20437 adds 240 Linux min/day plus 80 for broader startup/WAL selection; raise Linux cap by 200 (1.7%) to cover the resulting approximately 12000 forecast with about 100 min headroom. Other caps unchanged; re-seed next weekly audit.",
+  "caps_rationale": "Reviewed Android prevention after #20437: prior inventory totals 11674.0 Linux and 1437.0 macOS minutes/day; candidate totals 12000.2 Linux and 1438.9 macOS. New emulator acceptance adds 240 Linux minutes/day, broader startup/WAL compile/JVM selection adds 80, and manual-run allowances account for the remainder. Raise Linux cap from 11900 to 12100 (1.7%); macOS and 46-minute signal caps stay unchanged. Re-seed from actual executions in the next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,

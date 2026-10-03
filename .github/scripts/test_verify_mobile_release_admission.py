@@ -276,6 +276,38 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
         ):
             self.assertIn(f"      - {job_id}", workflow)
 
+    def test_emulator_action_script_cannot_mask_native_failure_with_passing_smoke(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/mobile-app-checks.yml").read_text())
+        step = next(
+            step
+            for step in workflow["jobs"]["android-emulator-checks"]["steps"]
+            if "android-emulator-runner@" in step.get("uses", "")
+        )
+        script = step["with"]["script"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / "python3"
+            python.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$1" >> "$ACCEPTANCE_CALLS"\ncase "$1" in *android_fgs_probe.py) exit "$NATIVE_EXIT";; *) exit "$SMOKE_EXIT";; esac\n'
+            )
+            python.chmod(0o755)
+            for native, smoke in ((5, 0), (0, 5), (0, 0)):
+                calls = root / "calls"
+                calls.unlink(missing_ok=True)
+                env = dict(
+                    os.environ,
+                    PATH=str(root) + os.pathsep + os.environ["PATH"],
+                    ANDROID_HOME="/fixture/sdk",
+                    ACCEPTANCE_CALLS=str(calls),
+                    NATIVE_EXIT=str(native),
+                    SMOKE_EXIT=str(smoke),
+                )
+                result = subprocess.run(["sh", "-c", script], env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, native == smoke == 0, result.stderr)
+                self.assertEqual(len(calls.read_text().splitlines()), 1 if native else 2)
+
     def test_selected_emulator_failure_or_skip_blocks_actual_aggregate_script(self) -> None:
         import yaml
 

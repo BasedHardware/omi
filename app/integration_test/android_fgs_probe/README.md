@@ -28,7 +28,8 @@ At source `147f77d86a2d`, immediate stop kills the probe with
 `onCreate` promotion alone does not repair an already cancelled pending start.
 The companion hermetic tests run with `:app:testDevDebugUnitTest`. Mobile App
 Checks now runs this probe and minified AOT startup acceptance on an Android 16
-Linux emulator. A selected failure or skip blocks Mobile Release Eligibility,
+Linux emulator. A selected failure or unexpected skip in an active full-tier run
+blocks Mobile Release Eligibility (unapproved fork CI is deliberately deferred),
 which Codemagic's existing source-admission gate requires. See the
 [acceptance guide](../../docs/android-emulator-acceptance.md).
 

@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from android_emulator import Emulator
-from android_startup_smoke import apk_identity, assert_healthy, run_smoke
+from android_startup_smoke import apk_identity, assert_healthy, run_smoke, screen_from_instrumentation
 
 
 class StartupTests(unittest.TestCase):
@@ -30,6 +30,18 @@ class StartupTests(unittest.TestCase):
         for pid, current_pid, boot in (("", "", "boot"), ("12", "13", "boot"), ("12", "12", "new-boot")):
             with self.subTest(pid=pid), self.assertRaises(ValueError):
                 assert_healthy("", "com.friend.ios.dev", pid, current_pid, "boot", boot, "Get Started")
+
+    def test_multiline_accessibility_capture_and_failed_or_wrong_app_probe(self):
+        xml = '<screen package="com.friend.ios.dev"><node description="multi\nline"/><node description="Get Started"/></screen>'
+        dump = "INSTRUMENTATION_RESULT: screen=" + xml + "\nINSTRUMENTATION_CODE: -1"
+        self.assertEqual(screen_from_instrumentation(dump, "com.friend.ios.dev"), xml)
+        for invalid in (
+            dump.replace("CODE: -1", "CODE: 0"),
+            "INSTRUMENTATION_FAILED: missing probe",
+            dump.replace("com.friend.ios.dev", "other.app"),
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                screen_from_instrumentation(invalid, "com.friend.ios.dev")
 
     def test_identity_comes_from_artifact_and_rejects_other_apps(self):
         with patch("android_startup_smoke.subprocess.run") as run:
@@ -74,9 +86,7 @@ class StartupTests(unittest.TestCase):
                     if command == ("shell", "pm", "path", "com.omi.fgsprobe"):
                         return "package:/data/app/probe.apk"
                     if command[:4] == ("shell", "am", "instrument", "-w"):
-                        return (
-                            'INSTRUMENTATION_RESULT: screen=<screen package="com.friend.ios.dev">Get Started</screen>'
-                        )
+                        return 'INSTRUMENTATION_RESULT: screen=<screen package="com.friend.ios.dev">Get Started</screen>\nINSTRUMENTATION_CODE: -1'
                     if command[0] == "logcat" and "-d" in command:
                         return "Process: com.friend.ios.dev, PID: 12" if fatal else ""
                     return ""
