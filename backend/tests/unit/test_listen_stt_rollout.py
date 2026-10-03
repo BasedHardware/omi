@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import websockets
+import yaml
 from websockets.legacy.server import serve
 
 from testing.live_stt_soak.manifest import render as soak_manifest
@@ -55,6 +56,45 @@ def test_canary_renders_only_independent_pinned_deployment(environment):
     assert [e for e in container['env'] if e['name'] == 'STT_FAILOVER_RECOVERY_ENABLED'] == [
         {'name': 'STT_FAILOVER_RECOVERY_ENABLED', 'value': 'true'}
     ]
+
+
+def test_production_canary_telemetry_is_excluded_only_from_main_hpa():
+    monitoring = ROOT / 'backend/charts/monitoring'
+    values = yaml.safe_load((monitoring / 'kube-prometheus-stack/prod_omi_monitoring_values.yaml').read_text())
+    jobs = values['prometheus']['prometheusSpec']['additionalScrapeConfigs']
+    scrape = next(job for job in jobs if job['job_name'] == 'backend-listen-metrics')
+    # Pod discovery can see track without any kube-state-metrics allowlist.
+    assert scrape['kubernetes_sd_configs'] == [{'role': 'pod'}]
+    relabels = scrape['relabel_configs']
+    assert {'source_labels': ['__meta_kubernetes_pod_label_track'], 'target_label': 'listen_track'} in relabels
+    assert {'source_labels': ['__meta_kubernetes_pod_name'], 'target_label': 'pod'} in relabels
+    # Canary must still be scraped for rollout/fleet health queries.
+    assert not any(
+        'track' in source
+        for rule in relabels
+        if rule.get('action') in {'keep', 'drop'}
+        for source in rule.get('source_labels', [])
+    )
+    assert not scrape.get('metric_relabel_configs')
+    adapter = yaml.safe_load((monitoring / 'prometheus-adapter/prod_omi_prometheus_adapter.yaml').read_text())
+    rule = next(
+        rule
+        for rule in adapter['rules']['external']
+        if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
+    # != accepts existing main pods with an absent label and excludes canary.
+    selector = (
+        'backend_listen_active_ws_connections{job="backend-listen-metrics",'
+        'namespace="prod-omi-backend",listen_track!="canary"}'
+    )
+    assert rule['seriesQuery'] == selector
+    assert rule['metricsQuery'] == f'avg({selector})'
+    queries = (ROOT / 'backend/docs/runbooks/listen-stt-canary-queries.promql').read_text()
+    assert f'avg({selector})' in queries
+    assert (
+        'up{job="backend-listen-metrics",namespace="prod-omi-backend",'
+        'listen_track="canary",pod=~"${canary_pods:regex}"}'
+    ) in queries
 
 
 @pytest.mark.parametrize('image', ['gcr.io/based-hardware/backend:latest', 'gcr.io/based-hardware/backend:abc1234'])

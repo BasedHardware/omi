@@ -22,16 +22,25 @@ canary ReplicaSets** or strip their owner references: the broader main selector
 could then adopt an orphan. Test contracts cover the rendered controllers and
 Service selectors, not a claim of observed production distribution.
 
-Main HPA still targets only main; it does not scale canary. Its existing external
-metric `avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})`
-includes canary scrapes, so canary load can influence main HPA decisions. Also,
-the existing PDB's broad selector includes canary pods. Check main readiness,
-HPA and capacity at each step; no monitoring or selector changes are made here.
+Main HPA targets only main; it does not scale canary. Production pod discovery
+copies Kubernetes `track` into the target label `listen_track` on every
+`backend-listen-metrics` series, including `up`. The adapter's listen series
+and averaging queries select that job/namespace and exclude
+`listen_track="canary"`. Main pods with no track label remain eligible. Canary
+metrics stay in the same scrape job, so fleet health watches still include
+canary harm. The existing PDB's broad selector includes canary pods; check main
+readiness and capacity at each step.
 
-The production scrape keeps `app.kubernetes.io/name=backend-listen`, copies pod
-name and namespace, and does **not** copy `track`. Use an escaped exact pod-name
-regex, never `track="canary"` in PromQL unless the coordinator verifies that
-label is present. Both canary endpoints join the existing Service/NEG. Balancing
+The coordinator must deploy **both** monitoring values changes before creating
+canary pods: the production kube-prometheus-stack scrape config and the
+production prometheus-adapter rule. The listen deployment workflow deploys
+neither. Follow the linked rollout card's monitoring prerequisite, verify live
+config and external metric, and remove canary before rolling either back.
+
+Use an escaped exact pod-name regex for canary PromQL; the scrape still copies
+pod name and namespace. `listen_track="canary"` is an additional isolation
+verification selector, not a substitute for pinned pod identities/exposure.
+Both canary endpoints join the existing Service/NEG. Balancing
 is by ready endpoints for **new connections**, with LB locality/capacity effects;
 long sockets do not move. Observe actual accept counts instead of inferring
 session share from replicas. GKE NEG health attachment must be checked live.

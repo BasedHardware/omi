@@ -1,5 +1,5 @@
 # PR #20391 rollout watches. Grafana variable canary_pods must list escaped EXACT pod names.
-# No track label is copied by the current scrape. Control queries use a separate exact pod set.
+# Production scrape copies track to listen_track; control queries use a separate exact pod set.
 # Exposure windows must contain only the pinned image; missing series/exposure = HOLD.
 # Zero-event labeled counters may export TYPE but no samples. Verify registration
 # on each healthy scraped pod before interpreting an empty error query as zero;
@@ -16,6 +16,11 @@ sum by (provider,phase) (increase(omi_live_stt_terminal_failures_total{job="back
 sum by (provider) (increase(omi_live_session_terminal_after_text_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
 min_over_time((abs(sum by (instance,target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (instance,target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (instance,target) (omi_stt_managed_legs_open{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"})))[2m:15s])
 
+# Proposed fleet watches, with manual for: 1m semantics (no alert rules installed).
+# Evaluate each comparison every 15s. Fire only after five consecutive TRUE
+# evaluations spanning >=60s; FALSE resets that watch's timer. Missing/stale
+# scrapes or unverified metric registration mean HOLD, never FALSE/zero.
+# The 5m/25m ranges are lookback windows, not dwell periods.
 sum(increase(omi_fallback_total{job="backend-listen-metrics",namespace="prod-omi-backend",component="stt_live_session",from_mode=~"soniox|modulate",reason="capacity_full"}[5m])) > 0
 sum(increase(omi_live_stt_terminal_failures_total{job="backend-listen-metrics",namespace="prod-omi-backend",phase=~"connection|send"}[25m])) > 3
 
@@ -36,3 +41,11 @@ sum(increase(omi_stt_window_admissions_total{job="backend-listen-metrics",namesp
 process_resident_memory_bytes{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}
 container_memory_working_set_bytes{namespace="prod-omi-backend",pod=~"${canary_pods:regex}",container="backend-listen"}
 increase(kube_pod_container_status_restarts_total{namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[1h])
+
+# HPA isolation checks after monitoring upgrades and at every canary stage:
+# This pod set must equal the exact ready canary set, all values 1.
+up{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track="canary",pod=~"${canary_pods:regex}"}
+# Must be EMPTY: any unlabeled/mislabelled canary sample means ABORT/remove.
+backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary",pod=~"${canary_pods:regex}"}
+# Adapter query: compare against external.metrics API value (API uses milli-units).
+avg(backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"})

@@ -42,8 +42,10 @@ and [watch queries](listen-stt-canary-queries.promql) are part of this card.
    namespace to stop the soak. Record fake versus vendor evidence separately.
 
 3. **Two-pod prod canary.** Set explicit coordinator context from the approved
-   cluster inventory; never rely on the default. Capture controls, then render,
-   review, diff, apply and check ready Service endpoints/NEG health and scrapes.
+   cluster inventory; never rely on the default. First complete the
+   [monitoring prerequisite](#monitoring-prerequisite-coordinator-only), then
+   capture controls, render, review, diff, apply and check ready Service
+   endpoints/NEG health and scrapes.
 
    ```bash
    export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
@@ -67,7 +69,11 @@ and [watch queries](listen-stt-canary-queries.promql) are part of this card.
    canary pod names. Save the control digest; verify the reported `a2ab2c5`
    controls actually exist, otherwise HOLD/review the comparable-load baseline.
    Start the clock only after **both** canary pods are ready, NEG-attached and
-   scraped. Refresh exact pod regex after replacements; reset the exposure
+   scraped **with `listen_track="canary"`**, and the isolation checks in the
+   query file pass (no canary sample eligible for the HPA). Otherwise remove
+   canary immediately. Compare the external metric with the main-only PromQL
+   average; confirm HPA has no metric errors. Refresh exact pod regex after
+   replacements; reset the exposure
    window. Rollback at every canary stage is the same draining removal:
 
    ```bash
@@ -89,8 +95,12 @@ and [watch queries](listen-stt-canary-queries.promql) are part of this card.
    at comparable load; first-text p95 <30s; window POST p95 <2s; combined
    pressure/overflow ≤1%/10min with ≥20 admissions. Review RSS slope/limit
    headroom, vendor usage, GPU and backfill queues. Fallback `exhausted` is a
-   diagnostic, **not the authoritative user-harm count**. Two proposed watches
-   in the query file have a 1min dwell; this PR installs no alert rules.
+   diagnostic, **not the authoritative user-harm count**. For each of the two
+   proposed fleet watches in the query file, evaluate every 15s: five consecutive
+   true evaluations spanning at least 60s trigger investigate/HOLD (`for: 1m`
+   semantics). A false evaluation resets that watch's timer; missing/stale
+   telemetry means HOLD. The 5m/25m lookbacks do not establish dwell. This PR
+   installs no alert rules; replay-induced terminal death still aborts immediately.
 
 6. **Expand only after attended hour and coordinator approval.** For 25% then
    50% of endpoints (each ≥1h; 50% through peak), use `ceil(p*main_ready/(1-p))`
@@ -123,3 +133,64 @@ Deletion retains chart preStop (15s) and termination grace (120s). Existing
 sockets remain process-owned; there is no cross-image session transfer. Grace
 is bounded, not a promise that every long WebSocket ends naturally. Record
 disconnects in the rollback drill; abrupt process death can lose in-memory tail.
+
+## Monitoring prerequisite (coordinator only)
+
+Before any canary exists, deploy the reviewed main monitoring configuration.
+The scrape must copy `track` to `listen_track`, and the adapter must exclude
+`listen_track="canary"` in **both** listen queries. A listen Helm upgrade does
+not install these changes. The existing monitoring workflow can install the
+scrape config (a main push deploys development only; prod requires coordinator
+dispatch); it also deploys the Cloud Run exporter and provisions live alerts,
+so review that scope. It does not deploy the adapter. Alternatively the
+coordinator can use the monitoring README's pinned stack Helm procedure.
+
+```bash
+export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
+export MON_NS=prod-omi-monitoring
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+# Save the DEPLOYED revision of each release for rollback; inspect history.
+helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-kube-prometheus-stack
+helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-prometheus-adapter
+export STACK_BEFORE=<deployed-stack-revision>
+export ADAPTER_BEFORE=<deployed-adapter-revision>
+export ADAPTER_VERSION=<currently-deployed-prometheus-adapter-chart-version>
+gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
+# Find the exact main run, then gh run watch RUN_ID --exit-status; proceed only on success.
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update prometheus-community
+helm upgrade prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \
+  --version "$ADAPTER_VERSION" --namespace "$MON_NS" --kube-context "$PROD_CTX" \
+  --values backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml \
+  --atomic --wait --timeout 10m
+kubectl --context "$PROD_CTX" -n "$MON_NS" get secret prod-omi-kube-prometheus-s-prometheus-scrape-confg \
+  -o jsonpath='{.data.additional-scrape-configs\.yaml}' | base64 --decode
+kubectl --context "$PROD_CTX" -n "$MON_NS" get configmap prod-omi-prometheus-adapter -o yaml
+kubectl --context "$PROD_CTX" -n "$MON_NS" rollout status deployment/prod-omi-prometheus-adapter --timeout=5m
+kubectl --context "$PROD_CTX" get --raw /apis/external.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/backend_listen_active_ws_connections_per_pod
+```
+
+Use a checkout at the reviewed merged monitoring revision for the adapter values.
+Verify the live scrape relabel and adapter rules match this PR; after Prometheus
+reload, confirm main scrapes and the external metric remain healthy. Once canary
+starts, verify each ready canary's `up` and connection gauge has the canary
+label, verify **zero** canary gauge samples match the adapter selector, and
+compare its main-only average with the external API value. Recheck on pod
+replacement/expansion and after any monitoring change. HOLD/abort on mismatch.
+No production config/metric verification was performed by this PR's author.
+
+Rollback: remove canary and wait for its pods to terminate first, then roll back
+the adapter and, if needed, the stack to the captured deployed revisions. Never
+restore the inclusive adapter while canary pods still serve. Review exporter and
+alert changes from the workflow separately; these Helm rollbacks cover only the
+two releases named here.
+
+```bash
+kubectl --context "$PROD_CTX" -n prod-omi-backend delete deployment prod-omi-backend-listen-canary --wait=true --timeout=5m
+kubectl --context "$PROD_CTX" -n prod-omi-backend wait --for=delete pod \
+  -l app.kubernetes.io/name=backend-listen,track=canary --timeout=5m
+helm rollback prod-omi-prometheus-adapter "$ADAPTER_BEFORE" \
+  --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 10m
+helm rollback prod-omi-kube-prometheus-stack "$STACK_BEFORE" \
+  --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 15m
+```
