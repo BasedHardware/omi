@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from utils.stt import live_health, live_session, streaming as st
+from utils.stt import live_gate, live_health, live_session, streaming as st
 from config.live_stt_registry import DEFAULT_TARGETS, routing_on
 from utils.stt.live_router import connecting_target
 
@@ -195,11 +195,12 @@ async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
         def __init__(self):
             self.writes = []
 
-        async def set(self, key, value, **_kwargs):
+        async def eval(self, _script, _numkeys, key, kind, until):
+            value = f'{kind}:{until}'
             self.writes.append((key, value))
             if len(self.writes) <= live_health.WRITE_IN_FLIGHT_LIMITS['bench']:
                 await gate.wait()
-            return True
+            return [value, '1']
 
     redis = SlotRedis()
     health = live_health.FleetHealth(redis_client=redis)
@@ -230,11 +231,11 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
         def __init__(self):
             self.writes = 0
 
-        async def set(self, *_args, **_kwargs):
+        async def eval(self, _script, _numkeys, key, kind, until):
             self.writes += 1
             if self.writes == 1:
                 raise ConnectionError('Redis unavailable')
-            return True
+            return [f'{kind}:{until}', '1']
 
         async def mget(self, keys):
             return [None] * len(keys)
@@ -565,6 +566,11 @@ async def test_cost_order_does_not_claim_a_per_pod_recovery_permit(monkeypatch, 
     )
     admit = Mock(return_value=False)
     monkeypatch.setattr(live_chain.health, 'try_admit_recovery_probe', admit)
+    monkeypatch.setattr(
+        live_chain.health,
+        'cost_snapshot',
+        lambda targets, _language: {target.id: live_gate.GateState(stage=100) for target in targets},
+    )
 
     class Circuit:
         def __init__(self, allowed):

@@ -13,10 +13,13 @@ from tests.unit.test_live_early_provider_deaths import managed_leg, ProviderWebS
 from tests.unit.test_stt_session_failover import _receiver_with_dead_socket, FakeSocket
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_chain, live_failure, live_health, live_session, streaming as st
-from utils.stt.live_cost_health import PREFIX
+from config import live_stt_state
+from config.live_stt_registry import DEFAULT_TARGETS
 from utils.stt.live_gate import GateState, transition, HEALTHY_USERS, FAILURE_RESERVE
 from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_EMISSION_ACK_ERRORS
 from utils.stt.soniox import SafeSonioxSocket
+
+SONIOX = next(t for t in DEFAULT_TARGETS if t.id == 'soniox')
 
 
 @pytest.mark.parametrize('dead_before_close', [False, True])
@@ -189,12 +192,12 @@ async def test_46_events_across_pods_get_three_votes_in_redis(failed):
     for i in range(46):
         await pods[i % 2]._write_cost_result('soniox', 'ko', failed, None, 'a' * 16)
     for lang in ('all', 'ko'):
-        state = GateState.decode(json.loads(redis.data[f'{PREFIX}:soniox:{lang}']))
+        state = GateState.decode(json.loads(redis.data[live_stt_state.cost_key(SONIOX, lang)]))
         assert state.n == 3 and state.failures == (3 if failed else 0)
         assert state.stage == 100 and len(state.healthy_users) == 1
     now[0] = 1300
     await pods[0]._write_cost_result('soniox', 'ko', failed, None, 'a' * 16)
-    state = GateState.decode(json.loads(redis.data[f'{PREFIX}:soniox:all']))
+    state = GateState.decode(json.loads(redis.data[live_stt_state.cost_key(SONIOX, 'all')]))
     assert state.n == 4 and state.healthy_users == (('a' * 16, 1),)
 
 
@@ -210,7 +213,7 @@ async def test_concurrent_cas_cannot_spend_a_user_budget_twice():
     pods = [live_health.FleetHealth(redis_client=redis) for _ in range(2)]
     for _ in range(8):
         await asyncio.gather(*(pod._write_cost_result('soniox', 'ko', True, None, 'a' * 16) for pod in pods))
-    state = GateState.decode(json.loads(redis.data[f'{PREFIX}:soniox:all']))
+    state = GateState.decode(json.loads(redis.data[live_stt_state.cost_key(SONIOX, 'all')]))
     assert state.n == state.failures == 3
 
 
@@ -242,10 +245,10 @@ async def test_healthy_fairness_keys_expire_but_bench_and_trial_do_not():
     pod = live_health.FleetHealth(redis_client=redis)
     key = ('soniox', 'all')
     await pod._cost_update(key, lambda _: GateState(n=1))
-    assert redis.ttls[f'{PREFIX}:soniox:all'] == 900
+    assert redis.ttls[live_stt_state.cost_key(SONIOX, 'all')] == 900
     for stage in (0, 5, 25):
         await pod._cost_update(key, lambda _, stage=stage: GateState(stage=stage, generation=1))
-        assert redis.ttls[f'{PREFIX}:soniox:all'] == 0  # Never silently reset a bench to 100%.
+        assert redis.ttls[live_stt_state.cost_key(SONIOX, 'all')] == 0  # Never silently reset a bench to 100%.
 
 
 @pytest.mark.asyncio
@@ -589,7 +592,7 @@ async def test_saturated_fleet_window_benches_across_pods_and_preserves_bench_wi
     await pods[0]._cost_update(('soniox', 'all'), lambda _: GateState(n=512, healthy_window=3, healthy_users=users))
     for i in range(8):
         await pods[i % 2]._write_cost_result('soniox', 'en', True, None, f'{HEALTHY_USERS + i:016x}')
-    state = GateState.decode(json.loads(redis.data[f'{PREFIX}:soniox:all']))
+    state = GateState.decode(json.loads(redis.data[live_stt_state.cost_key(SONIOX, 'all')]))
     assert state.stage == 0 and state.failures == 8
     assert not state.healthy_users and not state.overflow_failures
-    assert redis.ttls[f'{PREFIX}:soniox:all'] == 0
+    assert redis.ttls[live_stt_state.cost_key(SONIOX, 'all')] == 0

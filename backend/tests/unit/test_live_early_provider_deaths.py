@@ -16,7 +16,6 @@ from utils.stt import live_failure, live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
 from config.live_stt_registry import assigned
 from utils.stt.live_gate import GateState
-from utils.stt.live_cost_health import PREFIX
 
 
 class ProviderWebSocket:

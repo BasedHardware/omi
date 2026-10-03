@@ -123,7 +123,10 @@ classified provider errors and completed text, with shared
 5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
 admission stay intact. Redis refresh/write work stays off connect with a 75 ms
 default deadline; faults use local evidence and known benches, and router errors
-restore configured order. No worst-provider probes or score ranking remain in
+restore the filtered configured order — ramp-withdrawn or account-quarantined
+targets are denied on every dial path, and an entirely empty permitted set
+raises a bounded chain-unavailable rather than dialing. No worst-provider
+probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than
 additional health samples. Plain no-text and deadline-only outcomes are
 censored: they neither bench nor promote. Serving/connect errors use a closed
@@ -131,7 +134,9 @@ provider-attributable reason set; later failures after a no-text diagnostic
 remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
-The cost-v7 evidence seam is `LiveLegOutcome.settle`: the serving decision
+Promotion additionally needs 30/60 admitted outcomes from 10/20 distinct users
+after a 300/600-second trial dwell on the Redis clock.
+The cost-v8 evidence seam is `LiveLegOutcome.settle`: the serving decision
 settles both source-leg fallback and router observation exactly once. A first
 claim after client disconnect/inactive/shutdown excludes the death and preserves
 prior text success; already claimed connected-client evidence remains valid. Liveness
@@ -153,6 +158,10 @@ legs honor capacity signals and a five-second process-local cooldown after
 `capacity_full`, without treating capacity as provider disruption. If every
 candidate is capacity-blocked, one least-recently-refused candidate may dial
 through its normal circuit/admission gate so a sole recovered target can serve.
+Shared state is namespaced by deployment stage and a hashed endpoint/credential
+identity (`cost-v8` cost keys, `fleet-v2` fleet keys); changed identity starts
+fresh. Per-language freshness is read for every bounded supported language at
+each refresh — an unread language is unknown, not healthy.
 Global-stage pod cache views (including freshness/unknown state), scoped CAS
 transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)

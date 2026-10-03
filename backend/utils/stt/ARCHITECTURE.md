@@ -201,9 +201,35 @@ windowed Parakeet must have won the existing window/RNNT selection, pass
 Connect validates target/model/endpoint identity; a mismatch counts a bounded
 `engine_mismatch` fail-open and restores configured order. RNNT outcomes are
 never labelled as window outcomes.
-An empty proposal always restores the configured chain. A nonempty proposal
-appends configured services outside the proposal (including unregistered
-Deepgram), then eligible benched targets as last resorts. Bench means demotion
+A canary empty proposal keeps only the permitted unregistered legacy tails —
+registered static services that the filter withdrew are not restored; a
+nonempty proposal appends permitted configured services outside the proposal
+(including unregistered Deepgram), then eligible benched targets as last
+resorts. Cache unavailability and router faults under a valid registry fail
+open to the filtered static chain; a malformed registry or account-snapshot
+malfunction fails closed for managed sessions, while UID-less legacy callers
+keep the filtered static fallback under the same account/capability checks.
+Every connection
+path passes one permission helper (`permitted_target` in `live_router.py`):
+the actual family engine, target capability for the requested and every
+expected language, the sticky registry ramp (zero/partial ramps without cohort
+proof withdraw the target), and an active account quarantine all deny dialing.
+The filter applies to proposal candidates, last-resort tails and the static
+fallback in `on`, `shadow` and `off` modes alike; the account snapshot is read
+even when routing is off, and Deepgram honors it like every other family.
+A registered endpoint-less target matching the actual engine owns the default
+endpoint's permissions — a custom endpoint entry does not withdraw it, and an
+unmatched engine keeps only its unregistered capability/account checks. When
+filtering empties the whole chain, `NoPermittedTarget` (a
+`ProviderChainUnavailable` subclass) raises with a bounded retry after the
+longest remaining account quarantine, otherwise five seconds, and the unlabeled
+`omi_stt_cost_routing_no_permitted_target_total` counter increments. Router
+exceptions and cache unavailability with a valid registry fail open to the
+same filtered chain, never the raw configured order. An invalid
+`STT_ROUTING_TARGETS_JSON` cannot establish permissions: managed routing
+sessions get the typed chain-unavailable plus a `router_error` fail-open
+rather than a default that could reopen a withdrawn target; UID-less legacy
+callers keep the static fallback under the same account exclusions. Bench means demotion
 when every better connection fails, not denial of service. Local account and
 capacity protections still apply; this tail does not generate proactive probes. Capability checks include every expected language from the immutable
 declared/learned session profile, so a declared English account with a learned
@@ -230,8 +256,9 @@ eligibility and account protection are never bypassed. If all candidates are
 capacity-blocked, propose the least-recently-refused chain and allow the
 existing one-dial-per-session capacity escape. Empty still means no eligible
 registered target (for example a withdrawn ramp or account-only quarantine),
-invalid config/cache error, or a legacy-only configured family; it restores
-configured order and must not be hidden by a misleading healthy proposal.
+invalid config/cache error, or a legacy-only configured family; on canary it
+serves only the permitted unregistered tails, while a fault falls back to the
+filtered configured order and must not be hidden by a misleading healthy proposal.
 
 The registry defaults to `parakeet-window` ($0.02/audio-hour),
 `modulate-velma-2` ($0.055), and `soniox` ($0.0754). These are routing estimates,
@@ -247,12 +274,14 @@ A new wire protocol needs an adapter before it can become a config-only target;
 this router does not re-enable Deepgram or invent provider SDKs.
 
 `parakeet-window` always reads `PARAKEET_WINDOW_ALLOCATION_PERCENT`, including
-its existing `sha256("parakeet-window:" + uid)` cohort. Its registry percentage
-cannot override that safety control. Other target ramps use the same hash shape
-with their target ID. Recovery uses a separate, nested sticky cohort, so a 5%
+its existing `sha256("parakeet-window:" + uid)` cohort. Its effective ramp is
+the minimum of the registry percentage and that allocation, so neither control
+can exceed the other; registry `ramp_percent` defaults to 100 and
+`PARAKEET_WINDOW_ALLOCATION_PERCENT` defaults to 0, unchanged. Other target
+ramps use the same hash shape with their target ID. Recovery uses a separate, nested sticky cohort, so a 5%
 re-entry means 5% of sessions eligible under the configured ramp.
 
-### Serving-owned health evidence (cost-v7)
+### Serving-owned health evidence (cost-v8)
 
 `live_outcome.LiveLegOutcome.settle` is the single emission seam. Each managed
 leg owns one outcome. Observing `is_connection_dead` is pure; send only latches
@@ -340,11 +369,19 @@ more than half the recent failures. Sparse language benches require two affected
 users, sixteen admitted recent failures and score >=14; the cap means two or
 three repeating callers need several windows, rather than one reconnect burst.
 A language restriction is independent of the global stage, which remains the
-only state exported by the stage gauge. Promotion uses 30/60 classified trial
-outcomes, one majority-outcome vote per user, and at most three sequential votes
-per user per trial window. Broad failures re-bench; narrow failures hold. Held
-windows reset at 120/240. Re-entry remains 5 → 25 → 100 with shared leases,
-generation fences and a 300-second initial cooldown doubling to four hours.
+only state exported by the stage gauge. Promotion uses 30/60 **admitted** trial
+outcomes (stage 5→25 requires 30, stage 25→100 requires 60), at least **10/20
+distinct witness fingerprints** respectively, and a **300/600-second trial
+dwell** measured from `trial_started_at` on the Redis clock — a completed
+admitted window before the dwell holds at its stage. Per-witness votes stay
+capped at three admitted success/failure outcomes per trial window, so one
+repeated caller can neither fill the sample nor be a majority. Promotion also
+requires the majority-failure fraction across trial users at or under the gate;
+broad failures (at least four majority-failing users) re-bench, and anonymous
+simulation outcomes cannot promote because breadth cannot be proven. Held
+windows reset at 120/240 admitted outcomes. Re-entry remains 5 → 25 → 100 with
+shared leases, generation fences and a 300-second initial cooldown doubling to
+four hours.
 Expensive benches receive no primary probes when a cheaper target can serve.
 
 Reproduce the v6 calibration from `backend/`:
@@ -380,12 +417,43 @@ traffic breadth. Read admitted shared votes when diagnosing detection speed.
 ### Fleet state and operational limits
 
 `live_cost_health.py` stores target/global and bounded-language state under
-`omi:live-stt:cost-v7`. v5/v6 client-departure evidence is not reinterpreted.
+`omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<language>` and fleet
+bench/probe/score state under `omi:live-stt:fleet-v2:<stage>:<32-hex
+credential-family identity>`. `config/live_stt_state.py` owns the key helpers:
+`stage` comes from `OMI_ENV_STAGE` (`prod|dev|local|offline`, else `unknown`,
+never defaulted to prod) and the digest is a domain-separated SHA-256 of the
+actual serving endpoint plus the family credential — Parakeet uses
+`HOSTED_PARAKEET_API_URL`, Modulate/Soniox their configured or built-in
+endpoint and API key. An account quarantine therefore spans every custom
+endpoint sharing one credential, while a changed endpoint, credential or stage
+starts with fresh state; in-memory views reset on that boundary instead of
+mixing identities, and in-flight writes cannot populate a new identity's
+cache. v7/v1 and older namespaces are never read, migrated or backfilled.
+Raw URLs and credentials never enter Redis paths, logs or metrics.
 Redis TIME owns windows and cooldowns; CAS preserves counts and stages across
 pods. Connect reads a cached snapshot, with Redis refresh/result work in bounded
 background tasks under the existing 75 ms deadline. Redis failure retains local
 evidence and known benches; no pod privately restarts a trial. Local benches
 reconcile before staged recovery, and generation fences reject stale completions.
+Fleet bench writes are a single Lua update: a live account quarantine rejects a
+stale selection write, same-kind writes keep the longest deadline, and the
+returned retained value merges back into the writing pod's local view so a
+stale pod immediately learns a stronger quarantine. Expired cleanup is a
+compare-delete that re-reads the observed value and its deadline inside the
+script before removing state and probe together — a bench renewed between the
+text read and the delete survives.
+Each off-connect refresh reads every registry target across the closed bounded
+language vocabulary (Modulate ∪ Parakeet supported languages plus `other`,
+capped at 16 targets) plus `all`, not only live interests. Freshness is tracked
+per `(target, language)`: an explicit missing Redis key marks that key read and
+healthy, a global timestamp never fresh-marks an unread language, and
+`_cost_update` marks only the key it wrote. A snapshot whose requested language
+is unread and unconstrained by a retained lower-stage bench raises
+`CostHealthUnavailable` instead of claiming stage 100; cold Redis-down views
+retain local and known benches. `omi_stt_cost_routing_language_state_total`
+counts each per-target comparison (`agree|language_restricted|
+global_restricted|unknown|stale`) with no language, endpoint, account or UID
+labels.
 Connect rejection captures the generation at rejection, not before its handshake.
 Healthy keys expire after 900 idle seconds (three windows). Bench and trial
 states have no healthy-window fingerprints and deliberately persist: expiration
@@ -400,8 +468,9 @@ path. Exact PromQL is in the live routing runbook.
 Health stages may demote but cannot empty an otherwise eligible chain. Explicit
 ramp/capability/account exclusions stay hard in the active chain: a withdrawn
 registered default endpoint cannot return disguised as an unregistered static
-tail. Unregistered configured families retain their legacy tail. An empty proposal
-or router exception still fails open to configured order. Local account/serve
+tail. Unregistered configured families retain their legacy tail; a canary empty
+proposal keeps only those permitted tails, while a router exception still fails
+open to the filtered configured chain. Local account/serve
 circuits and window admission/pressure gates remain fast protection. Target
 identity is preserved across same-family endpoints; account failures quarantine
 the credential family. Capacity refusals keep their five-second local cooldown
@@ -456,7 +525,11 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `omi_stt_cost_routing_shadow_total{agreement,static_primary,proposed_primary}`, and
 `omi_stt_cost_routing_events_total{target,event,scope}`, and
 `omi_stt_cost_routing_fail_open_total{reason}` with bounded
-`empty_proposal|engine_mismatch|cache_unavailable|router_error`. Primary and skip decisions count the proposed policy even in shadow;
+`engine_mismatch|cache_unavailable|router_error`,
+`omi_stt_cost_routing_no_permitted_target_total` (unlabeled) when the
+permission filter empties the chain, and
+`omi_stt_cost_routing_language_state_total{target,comparison}` with
+`agree|language_restricted|global_restricted|unknown|stale`. Primary and skip decisions count the proposed policy even in shadow;
 `failover` counts actual active backup attempts, and capacity admission refusals
 count actual overflow. Unused backup legs do not inflate failover counters.
 `omi_stt_cost_routing_all_degraded_total{target}` marks the emergency health

@@ -14,7 +14,9 @@ from typing import Any, Callable
 
 import redis.asyncio as aioredis
 
+from config.live_stt_registry import registry
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from config import live_stt_state
 from utils.executors import start_background_task
 from utils.stt.live_cost_health import CostHealthMixin
 from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED, LEG_TRANSCRIPT_OUTCOME
@@ -33,7 +35,52 @@ LOCAL_PROBE_INTERVAL_SECONDS = 10.0
 LOCAL_EVENTS_CAP = 256
 LOCAL_KEYS_CAP = 256
 WRITE_IN_FLIGHT_LIMITS = {'result': 8, 'bench': 4}
-KEY_PREFIX = 'omi:live-stt:v1'
+
+BENCH_UPDATE = """
+local raw = redis.call('GET', KEYS[1])
+local t = redis.call('TIME')
+local now = t[1] + t[2] / 1000000
+local incoming = tonumber(ARGV[2])
+if raw == false then raw = '' end
+if incoming == nil or incoming <= now then
+  return {raw, '0'}
+end
+local kind, deadline = '', 0
+local sep = raw:find(':', 1, true)
+if sep then
+  kind = raw:sub(1, sep - 1)
+  deadline = tonumber(raw:sub(sep + 1)) or 0
+end
+if kind == 'account' and deadline > now and ARGV[1] ~= 'account' then
+  return {raw, '0'}
+end
+local retained = incoming
+if kind == ARGV[1] then
+  retained = math.max(deadline, incoming)
+  if deadline >= incoming then
+    return {raw, '0'}
+  end
+end
+local value = ARGV[1] .. ':' .. string.format('%.3f', retained)
+redis.call('SET', KEYS[1], value, 'EX', math.ceil(retained - now) + 300)
+return {value, '1'}
+"""
+
+BENCH_CLEANUP = """
+local raw = redis.call('GET', KEYS[1])
+if (raw or '') ~= ARGV[1] then
+  return 0
+end
+local sep = raw:find(':', 1, true)
+local deadline = sep and tonumber(raw:sub(sep + 1)) or 0
+local t = redis.call('TIME')
+local now = t[1] + t[2] / 1000000
+if deadline > now then
+  return 0
+end
+redis.call('DEL', KEYS[1], KEYS[2])
+return 1
+"""
 
 
 def mode() -> str:
@@ -91,11 +138,65 @@ class FleetHealth(CostHealthMixin):
         self._writes_in_flight = {'result': 0, 'bench': 0}
         # At most one deadline for each provider/kind, even during a Redis outage.
         self._pending_benches: dict[tuple[str, str], float] = {}
-        self._bench_providers_in_flight: set[str] = set()
+        self._bench_providers_in_flight: dict[str, str] = {}
         seed = f'{os.getpid()}:{time.monotonic_ns()}'.encode()
         self._probe_jitter = probe_jitter or (
             lambda provider: int.from_bytes(hashlib.sha256(seed + provider.encode()).digest()[:4], 'big') / 2**32 * 5.0
         )
+        self._identity = ''
+
+    def _check_identity(self) -> str:
+        """Reset in-memory views when stage/endpoint/credential identity changes."""
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            targets = ()
+        identity = live_stt_state.state_identity(targets)
+        if not self._identity or identity == self._identity:
+            self._identity = self._identity or identity
+            return identity
+        with self._lock:
+            if not self._identity or self._identity == identity:
+                self._identity = self._identity or identity
+                return identity
+            self._local.clear()
+            self._benches.clear()
+            self._interests.clear()
+            self._cached_scores.clear()
+            self._cached_benches.clear()
+            self._cache_at = None
+            self._probe_ready.clear()
+            self._probe_pending.clear()
+            self._local_probe_next.clear()
+            self._pending_benches.clear()
+            self._cost_local.clear()
+            self._cost_cached.clear()
+            self._cost_interests.clear()
+            self._cost_preferred.clear()
+            self._cost_fresh.clear()
+            self._cost_unreconciled.clear()
+            self._cost_server_offset = 0.0
+            self._identity = identity
+        return identity
+
+    def _merge_bench(self, provider: str, retained: str) -> None:
+        """Learn the strongest quarantine a shared bench update kept."""
+        kind, _, raw_until = str(retained).partition(':')
+        if kind not in {'account', 'selection'}:
+            return
+        try:
+            until = float(raw_until)
+        except ValueError:
+            return
+        now = self._clock()
+        with self._lock:
+            for benches in (self._benches, self._cached_benches):
+                old_kind, old_until = benches.get(provider, ('', 0.0))
+                if kind == 'account' or (kind == old_kind and until > old_until) or old_until <= now:
+                    if kind == old_kind:
+                        benches[provider] = kind, max(until, old_until)
+                    else:
+                        benches[provider] = kind, until
 
     def _redis(self) -> Any:
         if self._client is None:
@@ -114,8 +215,7 @@ class FleetHealth(CostHealthMixin):
         return await asyncio.wait_for(operation, timeout=_timeout())
 
     def _score_keys(self, provider: str, language: str, bucket: int) -> tuple[str, str]:
-        stem = f'{KEY_PREFIX}:score:{provider}:{language}:{bucket}'
-        return stem + ':text', stem + ':no_text'
+        return live_stt_state.fleet_score_keys(provider, language, bucket)
 
     def _local_score(self, provider: str, language: str) -> ProviderState:
         cutoff = self._clock() - SCORE_BUCKET_SECONDS * SCORE_BUCKETS
@@ -135,6 +235,7 @@ class FleetHealth(CostHealthMixin):
             pass
         if mode() == 'off':
             return
+        identity = self._check_identity()
         with self._lock:
             key = provider, lang
             if key not in self._local and len(self._local) >= LOCAL_KEYS_CAP:
@@ -143,32 +244,41 @@ class FleetHealth(CostHealthMixin):
             events.append((self._clock(), outcome == 'text'))
             while len(events) > LOCAL_EVENTS_CAP:
                 events.popleft()
-        self.schedule(self._write_result(provider, lang, outcome))
+        self.schedule(self._write_result(provider, lang, outcome, expected_identity=identity))
 
-    async def _write_result(self, provider: str, language: str, outcome: str) -> None:
+    async def _write_result(
+        self, provider: str, language: str, outcome: str, *, expected_identity: str | None = None
+    ) -> None:
         if self._clock() < self._redis_retry_at:
+            FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+            return
+        identity = self._check_identity()
+        if expected_identity is not None and identity != expected_identity:
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             return
         bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
         text_key, no_text_key = self._score_keys(provider, language, bucket)
         key = text_key if outcome == 'text' else no_text_key
+        state_key = live_stt_state.fleet_state_key(provider)
+        probe_key = live_stt_state.fleet_probe_key(provider)
         try:
-            clear_bench = False
+            clear_bench = None
             if outcome == 'text':
-                raw = await self._bounded(self._redis().get(f'{KEY_PREFIX}:state:{provider}'))
+                raw = await self._bounded(self._redis().get(state_key))
                 if raw:
                     try:
-                        clear_bench = float(str(raw).split(':', 1)[1]) <= self._clock()
+                        clear_bench = str(raw) if float(str(raw).split(':', 1)[1]) <= self._clock() else None
                     except (IndexError, ValueError):
-                        clear_bench = False
+                        clear_bench = None
             pipe = self._redis().pipeline(transaction=False)
             pipe.incr(key)
             pipe.expire(key, SCORE_BUCKET_SECONDS * (SCORE_BUCKETS + 1))
-            if clear_bench:
-                pipe.delete(f'{KEY_PREFIX}:state:{provider}', f'{KEY_PREFIX}:probe:{provider}')
             await self._bounded(pipe.execute())
+            if clear_bench is not None:
+                await self._bounded(self._redis().eval(BENCH_CLEANUP, 2, state_key, probe_key, clear_bench))
         except Exception:
-            self._redis_retry_at = self._clock() + 10.0
+            if self._check_identity() == identity:
+                self._redis_retry_at = self._clock() + 10.0
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             logger.debug('STT fleet health write fell back to local state', exc_info=True)
 
@@ -222,6 +332,7 @@ class FleetHealth(CostHealthMixin):
     def quarantine(self, provider: str, kind: str, seconds: float) -> None:
         if provider not in PROVIDERS or kind not in {'account', 'selection'} or mode() == 'off':
             return
+        self._check_identity()
         until = self._clock() + max(1.0, seconds)
         with self._lock:
             previous_kind, previous_until = self._benches.get(provider, ('', 0.0))
@@ -231,22 +342,30 @@ class FleetHealth(CostHealthMixin):
             self._pending_benches[key] = max(until, self._pending_benches.get(key, 0.0))
         self._drain_pending_benches()
 
-    async def _write_bench(self, provider: str, kind: str, until: float) -> bool:
+    async def _write_bench(
+        self, provider: str, kind: str, until: float, *, expected_identity: str | None = None
+    ) -> bool:
         if until <= self._clock() or self._clock() < self._redis_retry_at:
             return False
+        identity = self._check_identity()
+        if expected_identity is not None and identity != expected_identity:
+            return False
+        key = live_stt_state.fleet_state_key(provider)
         try:
-            await self._bounded(
-                self._redis().set(
-                    f'{KEY_PREFIX}:state:{provider}',
-                    f'{kind}:{until:.3f}',
-                    ex=max(1, int(until - self._clock()) + 300),
-                )
-            )
-            return True
+            result = await self._bounded(self._redis().eval(BENCH_UPDATE, 1, key, kind, f'{until:.3f}'))
         except Exception:
-            self._redis_retry_at = self._clock() + 10.0
+            if self._check_identity() == identity:
+                self._redis_retry_at = self._clock() + 10.0
             logger.debug('STT fleet bench write fell back to local state', exc_info=True)
             return False
+        if self._check_identity() != identity:
+            return True
+        retained = result[0] if isinstance(result, (list, tuple)) else str(result or '')
+        if isinstance(retained, bytes):
+            retained = retained.decode()
+        with self._lock:
+            self._merge_bench(provider, retained)
+        return True
 
     def _account_bench_until(self, provider: str) -> float:
         """Keep a selection write from replacing an active account quarantine."""
@@ -258,19 +377,23 @@ class FleetHealth(CostHealthMixin):
             self._pending_benches.get((provider, 'account'), 0.0),
         )
 
-    def _bench_write_done(self, provider: str, kind: str, until: float, task: asyncio.Task[bool]) -> None:
+    def _bench_write_done(
+        self, provider: str, kind: str, until: float, identity: str, task: asyncio.Task[bool]
+    ) -> None:
         success = False
         if not task.cancelled():
             try:
                 success = task.result()
             except Exception:
-                self._redis_retry_at = self._clock() + 10.0
+                if self._check_identity() == identity:
+                    self._redis_retry_at = self._clock() + 10.0
                 logger.debug('STT fleet bench write will retry', exc_info=True)
         with self._lock:
-            self._bench_providers_in_flight.discard(provider)
+            if self._bench_providers_in_flight.get(provider) == identity:
+                self._bench_providers_in_flight.pop(provider, None)
             self._writes_in_flight['bench'] -= 1
             key = provider, kind
-            if success and self._pending_benches.get(key, 0.0) <= until:
+            if success and self._identity == identity and self._pending_benches.get(key, 0.0) <= until:
                 self._pending_benches.pop(key, None)
         if not task.cancelled():
             self._drain_pending_benches()
@@ -296,6 +419,7 @@ class FleetHealth(CostHealthMixin):
                     self._pending_benches.pop(key, None)
             if now < self._redis_retry_at:
                 return
+            expected_identity = self._check_identity()
             for (provider, kind), until in sorted(self._pending_benches.items()):
                 if len(self._bench_providers_in_flight) >= WRITE_IN_FLIGHT_LIMITS['bench']:
                     break
@@ -303,26 +427,29 @@ class FleetHealth(CostHealthMixin):
                     continue
                 if kind == 'selection' and self._account_bench_until(provider) > now:
                     continue
-                self._bench_providers_in_flight.add(provider)
+                self._bench_providers_in_flight[provider] = expected_identity
                 self._writes_in_flight['bench'] += 1
                 attempts.append((provider, kind, until))
 
         for provider, kind, until in attempts:
 
-            def launch(provider: str = provider, kind: str = kind, until: float = until) -> None:
-                coroutine = self._write_bench(provider, kind, until)
+            def launch(
+                provider: str = provider, kind: str = kind, until: float = until, identity: str = expected_identity
+            ) -> None:
+                coroutine = self._write_bench(provider, kind, until, expected_identity=identity)
                 try:
                     task = start_background_task(coroutine, name='live_stt_fleet_bench_write')
                 except RuntimeError:
                     coroutine.close()
                     self._redis_retry_at = self._clock() + 10.0
                     with self._lock:
-                        self._bench_providers_in_flight.discard(provider)
+                        if self._bench_providers_in_flight.get(provider) == identity:
+                            self._bench_providers_in_flight.pop(provider, None)
                         self._writes_in_flight['bench'] -= 1
                 else:
                     task.add_done_callback(
-                        lambda task, provider=provider, kind=kind, until=until: self._bench_write_done(
-                            provider, kind, until, task
+                        lambda task, provider=provider, kind=kind, until=until, identity=identity: self._bench_write_done(
+                            provider, kind, until, identity, task
                         )
                     )
 
@@ -334,11 +461,12 @@ class FleetHealth(CostHealthMixin):
                 except RuntimeError:
                     self._redis_retry_at = self._clock() + 10.0
                     with self._lock:
-                        self._bench_providers_in_flight.discard(provider)
+                        self._bench_providers_in_flight.pop(provider, None)
                         self._writes_in_flight['bench'] -= 1
 
     def cached_snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
         """Read only pod memory on connect; keep known benches when scores go stale."""
+        self._check_identity()
         providers = [provider for provider in providers if provider in PROVIDERS]
         lang = bounded_language(language)
         local = {provider: self._local_score(provider, lang) for provider in providers}
@@ -372,6 +500,7 @@ class FleetHealth(CostHealthMixin):
 
     def has_fresh_fleet_snapshot(self) -> bool:
         """Whether cached routing state came from a recent successful fleet read."""
+        self._check_identity()
         now = self._clock()
         with self._lock:
             return (
@@ -384,6 +513,7 @@ class FleetHealth(CostHealthMixin):
         """One bounded Redis batch off the connection path, including probe leases."""
         if mode() == 'off':
             return
+        identity = self._check_identity()
         self._loop = asyncio.get_running_loop()
         self._drain_pending_benches()
         if self._clock() < self._redis_retry_at:
@@ -400,9 +530,12 @@ class FleetHealth(CostHealthMixin):
             for index in range(SCORE_BUCKETS):
                 keys.extend(self._score_keys(provider, lang, bucket - index))
         for provider in sorted(PROVIDERS):
-            keys.append(f'{KEY_PREFIX}:state:{provider}')
+            keys.append(live_stt_state.fleet_state_key(provider))
+        probe_keys = {provider: live_stt_state.fleet_probe_key(provider) for provider in PROVIDERS}
         try:
             values = await self._bounded(self._redis().mget(keys))
+            if self._check_identity() != identity:
+                return
             if not isinstance(values, list) or len(values) != len(keys):
                 raise ValueError('invalid fleet health read')
             scores: dict[tuple[str, str], ProviderState] = {}
@@ -424,6 +557,8 @@ class FleetHealth(CostHealthMixin):
                 if len(state) == 2 and state[0] in {'account', 'selection'}:
                     benches[provider] = state[0], float(state[1])
             with self._lock:
+                if self._identity != identity:
+                    return
                 self._cached_scores = scores
                 self._cached_benches = benches
                 self._cache_at = self._clock()
@@ -437,16 +572,19 @@ class FleetHealth(CostHealthMixin):
                 self._probe_pending.update(need_lease)
             try:
                 for provider in sorted(need_lease):
-                    granted = await self._bounded(
-                        self._redis().set(f'{KEY_PREFIX}:probe:{provider}', '1', ex=10, nx=True)
-                    )
+                    granted = await self._bounded(self._redis().set(probe_keys[provider], '1', ex=10, nx=True))
+                    if self._check_identity() != identity:
+                        return
                     if granted:
                         with self._lock:
                             self._probe_ready[provider] = self._clock() + 9.0
             finally:
                 with self._lock:
-                    self._probe_pending.difference_update(need_lease)
+                    if self._identity == identity:
+                        self._probe_pending.difference_update(need_lease)
         except Exception:
+            if self._check_identity() != identity:
+                return
             self._redis_retry_at = self._clock() + 10.0
             with self._lock:
                 self._cache_at = None

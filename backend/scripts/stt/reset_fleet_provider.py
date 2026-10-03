@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import redis
 
+from config import live_stt_state
+
 PROVIDERS = ('modulate', 'soniox', 'deepgram', 'parakeet')
-PREFIX = 'omi:live-stt:v1'
 MAX_SCORE_KEYS = 1000
 
 
@@ -32,10 +37,14 @@ def main() -> int:
         socket_timeout=0.075,
         retry_on_timeout=False,
     )
-    keys: list[bytes | str] = [f'{PREFIX}:state:{args.provider}', f'{PREFIX}:probe:{args.provider}']
+    prefix = live_stt_state.fleet_prefix(args.provider)
+    keys: list[bytes | str] = [
+        live_stt_state.fleet_state_key(args.provider),
+        live_stt_state.fleet_probe_key(args.provider),
+    ]
     # The score prefix is provider-anchored; collect before deleting so an
     # unexpected cardinality cannot cause a partial reset.
-    for key in client.scan_iter(match=f'{PREFIX}:score:{args.provider}:*', count=100):
+    for key in client.scan_iter(match=f'{prefix}:score:{args.provider}:*', count=100):
         keys.append(key)
         if len(keys) > MAX_SCORE_KEYS:
             raise RuntimeError('score key cap exceeded; no keys deleted')
