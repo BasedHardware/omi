@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 
-from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
+from google.api_core.exceptions import AlreadyExists, Conflict, InvalidArgument, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -23,6 +23,7 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
+from utils.observability.fallback import record_fallback
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
@@ -36,7 +37,15 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from ._client import (
+    db,
+    delete_collection_recursive,
+    firestore_document_kind,
+    firestore_error_document_path,
+    get_firestore_client,
+    is_document_size_limit_error,
+    run_transactional,
+)
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -3377,12 +3386,14 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             result.pop('manual_speaker_assignments', None)
         return result
 
+    attempted: dict[str, str] = {}
+
     @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, full_ids=frozenset()):
         def encode(payload):
             return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
-        return assign_in_transaction(
+        planned = assign_in_transaction(
             transaction,
             user_ref,
             incoming,
@@ -3391,14 +3402,64 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
+            full_ids=full_ids,
         )
+        # The commit runs after this returns; remember which row it would grow.
+        attempted['canonical'] = planned[0]['id']
+        return planned
 
-    result = run_transactional(client, assign)
+    try:
+        result = run_transactional(client, assign)
+    except InvalidArgument as error:
+        full_id, kind = _size_limited_conversation(error, attempted.get('canonical'))
+        if full_id is None:
+            raise
+        # The size estimate missed: the named conversation cannot grow. Re-plan
+        # once with it left untouched; the transaction re-runs every fence, and
+        # an identical retry later finds the rollover row by interval and dedupes.
+        logger.warning('event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=%s', kind)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='canonical_append',
+            to_mode='size_limit_retry',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        try:
+            result = run_transactional(client, assign, full_ids=frozenset({full_id}))
+        except InvalidArgument as retry_error:
+            _size_limited_conversation(retry_error, attempted.get('canonical'))
+            raise
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
         _delete_conversation_search_index(uid, str(donor_id))
     _sync_conversation_search_index(uid, conversation['id'])
     return result
+
+
+def _size_limited_conversation(error: BaseException, canonical: Optional[str]) -> Tuple[Optional[str], str]:
+    """``(conversation id that cannot grow, bounded doc kind)`` for a sync size-limit rejection.
+
+    Only a conversation can be routed around: the canonical a message names
+    (or the attempted canonical when it names no document), or a donor whose
+    redirect write was rejected. An index document yields no id, so the
+    failure stands. The kind is stamped on the error for the pipeline's
+    ``sync_persistence_exception`` line; neither the id nor the path is logged.
+    """
+    if not is_document_size_limit_error(error):
+        return None, 'none'
+    kind = firestore_document_kind(error)
+    path = firestore_error_document_path(error)
+    named: Optional[str] = None
+    if kind == 'conversation' and path:
+        named = path[-1]
+        if named != canonical:
+            kind = 'donor'
+    elif kind == 'none':
+        named = canonical
+    setattr(error, 'sync_firestore_doc_kind', kind)
+    return named, kind
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:

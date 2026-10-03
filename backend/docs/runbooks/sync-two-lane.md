@@ -162,9 +162,19 @@ content ID, file names, or exception text. Also monitor
 `failure_class`, and `sync_transcription_job outcome=invalid_input` with
 `reason_code=sync_invalid_audio`. A rising cap rate means clients still have
 retained audio requiring investigation; it is not a success count.
-`event=sync_persistence_exception` exposes a bounded exception subtype and a
-bounded `firestore_error` class for every persistence failure, without
-exception text.
+`event=sync_persistence_exception` exposes a bounded exception subtype, a
+bounded `firestore_error` class and a bounded `firestore_doc_kind` for every
+persistence failure, without exception text, paths or ids.
+
+A canonical conversation near Firestore's 1 MiB limit rolls new speech over to
+another conversation instead of failing after paid transcription:
+`sync_assignment_target outcome=size_rollover` (with `trigger=estimate` or
+`trigger=commit_limit`) and `omi_fallback_event component=sync_dispatch
+to=size_rollover` count it, `outcome=size_limit_retry` counts the one commit
+backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
+safe home and the write failed as before. `firestore_error=document_size_limit`
+should then be rare and name `sync_day_index` or `sync_recent` rather than
+`conversation`.
 
 ## Run ownership and recovery
 
