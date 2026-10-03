@@ -299,8 +299,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reportMessage => 'సందేశాన్ని నివేదించండి';
 
   @override
-  String get reportMessageConfirm =>
-      'మీరు ఈ సందేశాన్ని నివేదించాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా?';
+  String get reportMessageConfirm => 'ఈ సందేశాన్ని నివేదించాలా?';
 
   @override
   String get messageReported => 'సందేశం విజయవంతంగా నివేదించబడింది.';
@@ -313,7 +312,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'మీరు చ్యాట్‌ను సరిచేయాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా? ఈ చర్య రద్దు చేయబడదు.';
+      'ఈ చాట్‌లోని అన్ని సందేశాలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get maxFilesLimit =>
@@ -1081,7 +1080,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '$appName నుండి డిస్‌కనెక్ట్ చేయాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా? మీరు ఎప్పుడైనా తిరిగి కనెక్ట్ చేయవచ్చు.';
+    return 'మీరు ఎప్పుడైనా $appName‌ను మళ్లీ కనెక్ట్ చేయవచ్చు.';
   }
 
   @override
@@ -2070,14 +2069,14 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deleteActionItemTitle => 'పనిని తొలగించండి';
 
   @override
-  String get deleteActionItemMessage => 'మీరు ఈ పనిని తొలగించాలనుకుంటున్నారా?';
+  String get deleteActionItemMessage => 'ఈ పనిని తొలగించాలా?';
 
   @override
   String get deleteSelectedItemsTitle => 'ఎంచుకున్న అంశాలను తొలగించండి';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'మీరు $count ఎంచుకున్న పని$sని తొలగించాలనుకుంటున్నారా?';
+    return '$count ఎంచుకున్న పని$sని తొలగించాలా?';
   }
 
   @override
@@ -2171,7 +2170,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'మీరు Omi యొక్క జ్ఞాపకాన్ని సరిచేయాలని నిర్ణయం చేసారా? ఈ చర్య చేయబడదు.';
+      'మీ జ్ఞాపకాలన్నీ తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get clearMemoryButton => 'జ్ఞాపకాన్ని సరిచేయండి';
@@ -2319,8 +2318,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'పనిని తొలగించండి';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'మీరు ఈ పనిని తొలగించాలనుకుంటున్నారా?';
+  String get deleteActionItemConfirmMessage => 'ఈ పనిని తొలగించాలా?';
 
   @override
   String get appLanguage => 'ఆ విషయానికి సంబంధించిన భాష';
@@ -2430,7 +2428,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deleteMemory => 'స్మృతి తొలగించండి';
 
   @override
-  String get thisActionCannotBeUndone => 'ఈ చర్యను రద్దు చేయలేము.';
+  String get thisActionCannotBeUndone => 'ఇది రిసెట్ చేయబడదు.';
 
   @override
   String memoriesCount(int count) {
@@ -2896,7 +2894,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'ఈ పనిని తొలగించాలని మీరు ఖచ్చితంగా అనుకుంటున్నారా? ఈ చర్యను రద్దు చేయలేము.';
+      'ఈ పనిని తొలగించాలా? ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get enterActionItemDescription => 'పని వివరణను నమోదు చేయండి';
@@ -3252,8 +3250,7 @@ class AppLocalizationsTe extends AppLocalizations {
       '✅ సందేశం విజయవంతంగా నివేదించబడింది';
 
   @override
-  String get confirmReportMessage =>
-      'ఈ సందేశాన్ని నివేదించాలని మీరు నిశ్చితమైనారా?';
+  String get confirmReportMessage => 'ఈ సందేశాన్ని నివేదించాలా?';
 
   @override
   String get selectChatAssistant => 'చాట్ సహాయకను ఎంచుకోండి';
@@ -3269,7 +3266,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'చాట్ క్లియర్ చేయాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము.';
+      'ఈ చాట్‌ను క్లియర్ చేయాలా? ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get copy => 'కాపీ';
@@ -3453,7 +3450,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'ఈ స్మృతిని తొలగించాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము.';
+      'ఈ జ్ఞాపకాన్ని తొలగించాలా? ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get makePrivate => 'ఖాగితి చేయండి';
@@ -3494,7 +3491,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omi స్మృతిని క్లియర్ చేయాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము మరియు $count స్మృతులన్నింటిని శాశ్వతంగా తొలగిస్తుంది.';
+    return 'మొత్తం $count జ్ఞాపకాలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.';
   }
 
   @override
@@ -3812,7 +3809,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'ఈ సంభాషణను తొలగించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.';
+      'ఈ సంభాషణను తొలగించాలా? ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get conversationDeleted => 'సంభాషణ తొలగించబడింది';
@@ -4162,7 +4159,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'మీ అ్యాప్‌ను నవీకరించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? మార్పులు మా టీమ్ ద్వారా సమీక్ష చేసిన తర్వాత ప్రతిబింబిస్తాయి.';
+      'మా టీమ్ సమీక్షించిన తర్వాత మార్పులు ప్రచురించబడతాయి.';
 
   @override
   String get updateApp => 'అ్యాప్‌ను నవీకరించండి';
@@ -4229,7 +4226,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'సభ్యత రద్దు చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? మీ ప్రస్తుత బిలింగ్ కాలం చివర వరకు మీరు యాక్సెస్‌ను కలిగి ఉంటారు.';
+      'మీ ప్రస్తుత బిలింగ్ కాలం చివర వరకు మీరు యాక్సెస్‌ను కలిగి ఉంటారు.';
 
   @override
   String get cancelSubscriptionButton => 'సభ్యత రద్దు చేయండి';
@@ -4420,7 +4417,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము. ఈ కీని ఉపయోగించే ఏదైనా అ్యాప్లికేషన్‌లు API కు యాక్సెస్ చేయలేరు.';
+      'ఈ కీని ఉపయోగించే యాప్‌లు API యాక్సెస్‌ను కోల్పోతాయి. ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get revoke => 'రిభోక్ చేయండి';
@@ -4478,7 +4475,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'ఈ $item ను తొలగించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.';
+    return 'ఈ $itemను తొలగిస్తే రద్దు చేయలేరు.';
   }
 
   @override
@@ -4486,7 +4483,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'కీ \"$keyName\" ను రిభోక్ చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.';
+    return '\"$keyName\"ను ఉపయోగించే ప్రతిదీ యాక్సెస్‌ను కోల్పోతుంది. ఇది రిసెట్ చేయబడదు.';
   }
 
   @override
@@ -4673,7 +4670,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'మీ ప్లాన్ $date వరకు సక్రియంగా ఉంటుంది. దీని తర్వాత, మీ అనీమిత ఫీచర్‌లకు యాక్సెస్ కోల్పోతారు. మీరు చేసిన చేసిన నిశ్చితమైనారా?';
+    return 'మీ ప్లాన్ $date వరకు సక్రియంగా ఉంటుంది. దీని తర్వాత, మీ అనీమిత ఫీచర్‌లకు యాక్సెస్ కోల్పోతారు.';
   }
 
   @override
@@ -4985,7 +4982,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'ఇది Limitless నుండి దిగుమతి చేసిన అన్ని సంభాషణలను శాశ్వతంగా తొలగిస్తుంది. ఈ చర్యను తిరిగి చేయలేము.';
+      'Limitless నుండి దిగుమతి చేసిన అన్ని సంభాషణలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -5027,7 +5024,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$name యొక్క నమూనాను తొలగించాలని మీరు చెప్పుకుంటున్నారా?';
+    return '$name వాయిస్ నమూనా తొలగించబడుతుంది. ఇది రిసెట్ చేయబడదు.';
   }
 
   @override
@@ -5035,7 +5032,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$name ను తొలగించాలని మీరు చెప్పుకుంటున్నారా? ఇది సంబంధిత అన్ని ప్రసంగ నమూనాలను కూడా తీసివేస్తుంది.';
+    return 'ఇది $name వాయిస్ నమూనాలను తొలగిస్తుంది, దీన్ని రద్దు చేయలేరు. గత సంభాషణలలో వారి మాటలు పేరు లేని వక్తలుగా మారతాయి.';
   }
 
   @override
@@ -5413,7 +5410,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'రికార్డింగ్‌ను ఆపివేసి సంభాషణను ఇప్పుడే సారాంశం చేయాలని మీరు చెప్పుకుంటున్నారా?';
+      'రికార్డింగ్ ఆపి ఇప్పుడే సంభాషణను సారాంశం చేయాలా?';
 
   @override
   String get conversationEndsManually =>
@@ -6997,8 +6994,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get shareRecording => 'రికార్డింగ్‌ను భాగస్వామ్యం చేయండి';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'మీరు ఈ రికార్డింగ్‌ను శాశ్వతంగా తొలగించాలనుకుంటున్నారా? ఇది చేయలేము.';
+  String get deleteRecordingConfirmation => 'ఇది రిసెట్ చేయబడదు.';
 
   @override
   String get recordingIdLabel => 'రికార్డింగ్ ID';
@@ -7406,7 +7402,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'మీరు మీ Unlimited ప్రణాళికను $title కు మారుస్తున్నారు. మీరు కొనసాగించాలనుకుంటున్నారా?';
+    return 'మీరు మీ Unlimited ప్రణాళికను $title కు మారుస్తున్నారు.';
   }
 
   @override
@@ -10180,8 +10176,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deleteOnDeviceModel => 'మోడల్‌ను తొలగించు';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'ఈ మోడల్‌ను తొలగించాలని మీరు ఖచ్చితంగా అనుకుంటున్నారా?';
+  String get deleteOnDeviceModelConfirm => 'ఈ మోడల్‌ను తొలగించాలా?';
 
   @override
   String get onDeviceModelDownloaded => 'డౌన్‌లోడ్ అయింది';

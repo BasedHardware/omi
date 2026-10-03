@@ -297,8 +297,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reportMessage => 'Báo cáo tin nhắn';
 
   @override
-  String get reportMessageConfirm =>
-      'Bạn có chắc chắn muốn báo cáo tin nhắn này?';
+  String get reportMessageConfirm => 'Báo cáo tin nhắn này?';
 
   @override
   String get messageReported => 'Đã báo cáo tin nhắn thành công.';
@@ -311,7 +310,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Bạn có chắc chắn muốn xóa trò chuyện? Hành động này không thể hoàn tác.';
+      'Tất cả tin nhắn trong cuộc trò chuyện này sẽ bị xóa. Hành động này không thể hoàn tác.';
 
   @override
   String get maxFilesLimit => 'Bạn chỉ có thể tải lên tối đa 4 tệp cùng lúc';
@@ -1073,7 +1072,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Bạn có chắc chắn muốn ngắt kết nối khỏi $appName? Bạn có thể kết nối lại bất kỳ lúc nào.';
+    return 'Bạn có thể kết nối lại $appName bất cứ lúc nào.';
   }
 
   @override
@@ -2054,15 +2053,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteActionItemTitle => 'Xóa nhiệm vụ';
 
   @override
-  String get deleteActionItemMessage =>
-      'Bạn có chắc chắn muốn xóa nhiệm vụ này không?';
+  String get deleteActionItemMessage => 'Xóa nhiệm vụ này?';
 
   @override
   String get deleteSelectedItemsTitle => 'Xóa các mục đã chọn';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Bạn có chắc chắn muốn xóa $count nhiệm vụ$s đã chọn?';
+    return 'Xóa $count nhiệm vụ$s đã chọn?';
   }
 
   @override
@@ -2153,7 +2151,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Bạn có chắc chắn muốn xóa bộ nhớ của Omi? Hành động này không thể hoàn tác.';
+      'Tất cả kỷ niệm của bạn sẽ bị xóa. Hành động này không thể hoàn tác.';
 
   @override
   String get clearMemoryButton => 'Xóa bộ nhớ';
@@ -2301,8 +2299,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Xóa nhiệm vụ';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Bạn có chắc chắn muốn xóa nhiệm vụ này?';
+  String get deleteActionItemConfirmMessage => 'Xóa nhiệm vụ này?';
 
   @override
   String get appLanguage => 'Ngôn ngữ ứng dụng';
@@ -2867,7 +2864,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Bạn có chắc chắn muốn xóa nhiệm vụ này không? Hành động này không thể hoàn tác.';
+      'Xóa nhiệm vụ này? Hành động này không thể hoàn tác.';
 
   @override
   String get enterActionItemDescription => 'Nhập mô tả nhiệm vụ';
@@ -3218,8 +3215,7 @@ class AppLocalizationsVi extends AppLocalizations {
       '✅ Tin nhắn đã được báo cáo thành công';
 
   @override
-  String get confirmReportMessage =>
-      'Bạn có chắc chắn muốn báo cáo tin nhắn này không?';
+  String get confirmReportMessage => 'Báo cáo tin nhắn này?';
 
   @override
   String get selectChatAssistant => 'Chọn trợ lý trò chuyện';
@@ -3235,7 +3231,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác.';
+      'Xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.';
 
   @override
   String get copy => 'Sao chép';
@@ -3415,7 +3411,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác.';
+      'Xóa kỷ niệm này? Hành động này không thể hoàn tác.';
 
   @override
   String get makePrivate => 'Riêng tư';
@@ -3455,7 +3451,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Bạn có chắc chắn muốn xóa bộ nhớ của Omi không? Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tất cả $count ký ức.';
+    return 'Tất cả $count kỷ niệm sẽ bị xóa. Hành động này không thể hoàn tác.';
   }
 
   @override
@@ -3773,7 +3769,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Bạn có chắc chắn muốn xóa cuộc trò chuyện này không? Hành động này không thể hoàn tác.';
+      'Xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.';
 
   @override
   String get conversationDeleted => 'Đã xóa cuộc trò chuyện';
@@ -4117,7 +4113,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Bạn có chắc chắn muốn cập nhật ứng dụng? Các thay đổi sẽ được phản ánh sau khi được đội ngũ của chúng tôi xem xét.';
+      'Các thay đổi sẽ được áp dụng sau khi đội ngũ của chúng tôi xem xét.';
 
   @override
   String get updateApp => 'Cập nhật ứng dụng';
@@ -4183,7 +4179,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Bạn có chắc chắn muốn hủy đăng ký? Bạn sẽ tiếp tục có quyền truy cập cho đến cuối kỳ thanh toán hiện tại.';
+      'Bạn sẽ tiếp tục có quyền truy cập cho đến cuối kỳ thanh toán hiện tại.';
 
   @override
   String get cancelSubscriptionButton => 'Hủy đăng ký';
@@ -4374,7 +4370,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Hành động này không thể hoàn tác. Bất kỳ ứng dụng nào sử dụng khóa này sẽ không thể truy cập API nữa.';
+      'Các ứng dụng dùng khóa này sẽ mất quyền truy cập API. Hành động này không thể hoàn tác.';
 
   @override
   String get revoke => 'Thu hồi';
@@ -4431,7 +4427,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Bạn có chắc chắn muốn xóa $item này? Hành động này không thể hoàn tác.';
+    return 'Không thể hoàn tác việc xóa $item này.';
   }
 
   @override
@@ -4439,7 +4435,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Bạn có chắc chắn muốn thu hồi khóa \"$keyName\"? Hành động này không thể hoàn tác.';
+    return 'Mọi thứ đang dùng \"$keyName\" sẽ mất quyền truy cập. Hành động này không thể hoàn tác.';
   }
 
   @override
@@ -4626,7 +4622,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Gói của bạn sẽ vẫn hoạt động cho đến $date. Sau đó, bạn sẽ mất quyền truy cập vào các tính năng không giới hạn. Bạn có chắc không?';
+    return 'Gói của bạn sẽ vẫn hoạt động cho đến $date. Sau đó, bạn sẽ mất quyền truy cập vào các tính năng không giới hạn.';
   }
 
   @override
@@ -4935,7 +4931,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Điều này sẽ xóa vĩnh viễn tất cả các cuộc hội thoại được nhập từ Limitless. Hành động này không thể hoàn tác.';
+      'Tất cả cuộc trò chuyện đã nhập từ Limitless sẽ bị xóa. Hành động này không thể hoàn tác.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4976,7 +4972,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Bạn có chắc chắn muốn xóa mẫu của $name?';
+    return 'Mẫu giọng nói của $name sẽ bị xóa. Hành động này không thể hoàn tác.';
   }
 
   @override
@@ -4984,7 +4980,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Bạn có chắc chắn muốn xóa $name? Điều này cũng sẽ xóa tất cả các mẫu giọng nói liên quan.';
+    return 'Thao tác này sẽ xóa các mẫu giọng nói của $name và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.';
   }
 
   @override
@@ -5358,7 +5354,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Bạn có chắc muốn dừng ghi âm và tóm tắt cuộc trò chuyện ngay bây giờ không?';
+      'Dừng ghi âm và tóm tắt cuộc trò chuyện ngay bây giờ?';
 
   @override
   String get conversationEndsManually =>
@@ -6925,8 +6921,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get shareRecording => 'Chia sẻ Bản ghi';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Bạn có chắc chắn muốn xóa vĩnh viễn bản ghi này? Hành động này không thể hoàn tác.';
+  String get deleteRecordingConfirmation => 'Hành động này không thể hoàn tác.';
 
   @override
   String get recordingIdLabel => 'ID Bản ghi';
@@ -7330,7 +7325,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Bạn đang chuyển Gói Unlimited sang $title. Bạn có chắc chắn muốn tiếp tục?';
+    return 'Bạn đang chuyển Gói Unlimited sang $title.';
   }
 
   @override
@@ -10062,8 +10057,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteOnDeviceModel => 'Xóa mô hình';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Bạn có chắc chắn muốn xóa mô hình này không?';
+  String get deleteOnDeviceModelConfirm => 'Xóa mô hình này?';
 
   @override
   String get onDeviceModelDownloaded => 'Đã tải xuống';

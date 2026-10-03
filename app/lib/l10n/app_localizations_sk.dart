@@ -299,7 +299,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reportMessage => 'Nahlásiť správu';
 
   @override
-  String get reportMessageConfirm => 'Naozaj chcete nahlásiť túto správu?';
+  String get reportMessageConfirm => 'Nahlásiť túto správu?';
 
   @override
   String get messageReported => 'Správa bola úspešne nahlásená.';
@@ -312,7 +312,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Naozaj chcete vymazať chat? Túto akciu nie je možné vrátiť späť.';
+      'Všetky správy v tomto chate budú vymazané. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get maxFilesLimit => 'Môžete nahrať maximálne 4 súbory naraz';
@@ -1073,7 +1073,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Naozaj chcete odpojiť $appName? Môžete sa znovu pripojiť kedykoľvek.';
+    return '$appName môžete kedykoľvek znova pripojiť.';
   }
 
   @override
@@ -2058,14 +2058,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deleteActionItemTitle => 'Odstrániť úlohu';
 
   @override
-  String get deleteActionItemMessage => 'Naozaj chcete odstrániť túto úlohu?';
+  String get deleteActionItemMessage => 'Odstrániť túto úlohu?';
 
   @override
   String get deleteSelectedItemsTitle => 'Odstrániť vybrané položky';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Naozaj chcete odstrániť $count vybranú úlohu/úlohy$s?';
+    return 'Odstrániť vybrané úlohy ($count)$s?';
   }
 
   @override
@@ -2159,7 +2159,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť.';
+      'Všetky vaše spomienky budú vymazané. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get clearMemoryButton => 'Vymazať pamäť';
@@ -2306,8 +2306,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Odstrániť úlohu';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Naozaj chcete odstrániť túto úlohu?';
+  String get deleteActionItemConfirmMessage => 'Odstrániť túto úlohu?';
 
   @override
   String get appLanguage => 'Jazyk aplikácie';
@@ -2871,7 +2870,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Naozaj chcete odstrániť túto úlohu? Túto akciu nemožno vrátiť späť.';
+      'Odstrániť túto úlohu? Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get enterActionItemDescription => 'Zadajte popis úlohy';
@@ -3221,7 +3220,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Správa úspešne nahlásená';
 
   @override
-  String get confirmReportMessage => 'Naozaj chcete nahlásiť túto správu?';
+  String get confirmReportMessage => 'Nahlásiť túto správu?';
 
   @override
   String get selectChatAssistant => 'Vybrať chatovacieho asistenta';
@@ -3237,7 +3236,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Naozaj chcete vymazať chat? Túto akciu nemožno vrátiť späť.';
+      'Vymazať tento chat? Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get copy => 'Kopírovať';
@@ -3416,7 +3415,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť.';
+      'Odstrániť túto spomienku? Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get makePrivate => 'Nastaviť ako súkromné';
@@ -3457,7 +3456,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých $count spomienok.';
+    return 'Všetky spomienky ($count) budú vymazané. Túto akciu nie je možné vrátiť späť.';
   }
 
   @override
@@ -3770,7 +3769,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Naozaj chcete odstrániť túto konverzáciu? Túto akciu nemožno vrátiť späť.';
+      'Odstrániť túto konverzáciu? Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get conversationDeleted => 'Konverzácia odstránená';
@@ -4116,7 +4115,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Ste si istý, že chcete aktualizovať svoju aplikáciu? Zmeny sa prejavia po kontrole naším tímom.';
+      'Zmeny sa prejavia po kontrole naším tímom.';
 
   @override
   String get updateApp => 'Aktualizovať aplikáciu';
@@ -4182,7 +4181,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Ste si istý, že chcete zrušiť predplatné? Budete mať prístup do konca aktuálneho fakturačného obdobia.';
+      'Budete mať prístup do konca aktuálneho fakturačného obdobia.';
 
   @override
   String get cancelSubscriptionButton => 'Zrušiť predplatné';
@@ -4374,7 +4373,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Túto akciu nie je možné vrátiť späť. Aplikácie používajúce tento kľúč už nebudú mať prístup k API.';
+      'Aplikácie používajúce tento kľúč stratia prístup k API. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get revoke => 'Odvolať';
@@ -4431,7 +4430,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ste si istí, že chcete odstrániť túto $item? Túto akciu nie je možné vrátiť späť.';
+    return '$item bude odstránená. Túto akciu nie je možné vrátiť späť.';
   }
 
   @override
@@ -4439,7 +4438,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ste si istí, že chcete odvolať kľúč \"$keyName\"? Túto akciu nie je možné vrátiť späť.';
+    return 'Všetko, čo používa \"$keyName\", stratí prístup. Túto akciu nie je možné vrátiť späť.';
   }
 
   @override
@@ -4626,7 +4625,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Váš plán zostane aktívny do $date. Potom stratíte prístup k neobmedzeným funkciám. Ste si istí?';
+    return 'Váš plán zostane aktívny do $date. Potom stratíte prístup k neobmedzeným funkciám.';
   }
 
   @override
@@ -4934,7 +4933,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Toto natrvalo odstráni všetky konverzácie importované z Limitless. Túto akciu nemožno vrátiť späť.';
+      'Všetky konverzácie importované z Limitless budú vymazané. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4976,7 +4975,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Ste si istí, že chcete odstrániť vzorku $name?';
+    return 'Hlasová vzorka osoby $name bude odstránená. Túto akciu nie je možné vrátiť späť.';
   }
 
   @override
@@ -4984,7 +4983,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Ste si istí, že chcete odstrániť $name? Tým sa odstránia aj všetky súvisiace hlasové vzorky.';
+    return 'Tým sa odstránia hlasové vzorky osoby $name a nedá sa to vrátiť späť. Repliky v minulých konverzáciách sa stanú nepomenovanými rečníkmi.';
   }
 
   @override
@@ -5356,7 +5355,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Ste si istí, že chcete zastaviť nahrávanie a zhrnúť konverzáciu teraz?';
+      'Zastaviť nahrávanie a zhrnúť konverzáciu teraz?';
 
   @override
   String get conversationEndsManually => 'Konverzácia sa ukončí iba ručne.';
@@ -6924,7 +6923,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteRecordingConfirmation =>
-      'Naozaj chcete odstrániť túto nahrávku?';
+      'Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get recordingIdLabel => 'ID nahrávky';
@@ -10046,7 +10045,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deleteOnDeviceModel => 'Zmazať model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Naozaj chcete zmazať tento model?';
+  String get deleteOnDeviceModelConfirm => 'Odstrániť tento model?';
 
   @override
   String get onDeviceModelDownloaded => 'Stiahnuté';

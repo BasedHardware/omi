@@ -296,7 +296,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reportMessage => 'Nahlásit zprávu';
 
   @override
-  String get reportMessageConfirm => 'Opravdu chcete nahlásit tuto zprávu?';
+  String get reportMessageConfirm => 'Nahlásit tuto zprávu?';
 
   @override
   String get messageReported => 'Zpráva úspěšně nahlášena.';
@@ -309,7 +309,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.';
+      'Všechny zprávy v tomto chatu budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String get maxFilesLimit => 'Najednou můžete nahrát pouze 4 soubory';
@@ -1070,7 +1070,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Opravdu chcete odpojit od $appName? Můžete se kdykoli znovu připojit.';
+    return '$appName můžete kdykoli znovu připojit.';
   }
 
   @override
@@ -2044,14 +2044,14 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteActionItemTitle => 'Smazat úkol';
 
   @override
-  String get deleteActionItemMessage => 'Opravdu chcete tento úkol smazat?';
+  String get deleteActionItemMessage => 'Smazat tento úkol?';
 
   @override
   String get deleteSelectedItemsTitle => 'Smazat vybrané položky';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Opravdu chcete smazat $count vybraný/vybrané/vybraných úkol$s?';
+    return 'Smazat vybrané úkoly ($count)$s?';
   }
 
   @override
@@ -2144,7 +2144,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět.';
+      'Všechny vaše vzpomínky budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String get clearMemoryButton => 'Vymazat paměť';
@@ -2291,8 +2291,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Smazat úkol';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Opravdu chcete smazat tento úkol?';
+  String get deleteActionItemConfirmMessage => 'Smazat tento úkol?';
 
   @override
   String get appLanguage => 'Jazyk aplikace';
@@ -2854,7 +2853,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Opravdu chcete smazat tento úkol? Tuto akci nelze vrátit zpět.';
+      'Smazat tento úkol? Tuto akci nelze vrátit zpět.';
 
   @override
   String get enterActionItemDescription => 'Zadejte popis úkolu';
@@ -3204,7 +3203,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Zpráva úspěšně nahlášena';
 
   @override
-  String get confirmReportMessage => 'Opravdu chcete nahlásit tuto zprávu?';
+  String get confirmReportMessage => 'Nahlásit tuto zprávu?';
 
   @override
   String get selectChatAssistant => 'Vybrat chatovacího asistenta';
@@ -3220,7 +3219,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.';
+      'Vymazat tento chat? Tuto akci nelze vrátit zpět.';
 
   @override
   String get copy => 'Kopírovat';
@@ -3399,7 +3398,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.';
+      'Smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.';
 
   @override
   String get makePrivate => 'Nastavit jako soukromé';
@@ -3441,7 +3440,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět a trvale odstraní všech $count vzpomínek.';
+    return 'Všechny vzpomínky ($count) budou smazány. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -3755,7 +3754,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Opravdu chcete smazat tuto konverzaci? Tuto akci nelze vrátit zpět.';
+      'Smazat tuto konverzaci? Tuto akci nelze vrátit zpět.';
 
   @override
   String get conversationDeleted => 'Konverzace smazána';
@@ -4101,7 +4100,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Opravdu chcete aktualizovat svou aplikaci? Změny se projeví po kontrole naším týmem.';
+      'Změny se projeví po kontrole naším týmem.';
 
   @override
   String get updateApp => 'Aktualizovat aplikaci';
@@ -4167,7 +4166,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Opravdu chcete zrušit předplatné? Budete mít přístup do konce aktuálního fakturačního období.';
+      'Budete mít přístup do konce aktuálního fakturačního období.';
 
   @override
   String get cancelSubscriptionButton => 'Zrušit předplatné';
@@ -4358,7 +4357,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tuto akci nelze vrátit zpět. Všechny aplikace používající tento klíč již nebudou mít přístup k API.';
+      'Aplikace používající tento klíč ztratí přístup k API. Tuto akci nelze vrátit zpět.';
 
   @override
   String get revoke => 'Odvolat';
@@ -4415,7 +4414,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Opravdu chcete smazat tuto $item? Tuto akci nelze vrátit zpět.';
+    return 'Smazání této $item nelze vrátit zpět.';
   }
 
   @override
@@ -4423,7 +4422,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Opravdu chcete odvolat klíč \"$keyName\"? Tuto akci nelze vrátit zpět.';
+    return 'Vše, co používá \"$keyName\", ztratí přístup. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -4609,7 +4608,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Váš plán zůstane aktivní do $date. Poté ztratíte přístup k neomezeným funkcím. Jste si jisti?';
+    return 'Váš plán zůstane aktivní do $date. Poté ztratíte přístup k neomezeným funkcím.';
   }
 
   @override
@@ -4917,7 +4916,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Toto trvale smaže všechny konverzace importované z Limitless. Tuto akci nelze vrátit zpět.';
+      'Všechny konverzace importované z Limitless budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4958,7 +4957,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Opravdu chcete smazat vzorek uživatele $name?';
+    return 'Hlasový vzorek osoby $name bude odstraněn. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -4966,7 +4965,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Opravdu chcete smazat $name? Tím se také odstraní všechny přidružené hlasové vzorky.';
+    return 'Tím se odstraní hlasové vzorky osoby $name a nelze to vrátit zpět. Repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.';
   }
 
   @override
@@ -5340,7 +5339,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Opravdu chcete zastavit nahrávání a shrnout konverzaci nyní?';
+      'Zastavit nahrávání a shrnout konverzaci hned teď?';
 
   @override
   String get conversationEndsManually => 'Konverzace skončí pouze ručně.';
@@ -6912,8 +6911,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get shareRecording => 'Sdílet nahrávku';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Opravdu chcete trvale smazat tuto nahrávku? Tuto akci nelze vrátit zpět.';
+  String get deleteRecordingConfirmation => 'Tuto akci nelze vrátit zpět.';
 
   @override
   String get recordingIdLabel => 'ID nahrávky';
@@ -7316,7 +7314,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Měníte svůj plán Unlimited na $title. Opravdu chcete pokračovat?';
+    return 'Měníte svůj plán Unlimited na $title.';
   }
 
   @override
@@ -10068,7 +10066,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteOnDeviceModel => 'Smazat model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Opravdu chcete tento model smazat?';
+  String get deleteOnDeviceModelConfirm => 'Smazat tento model?';
 
   @override
   String get onDeviceModelDownloaded => 'Staženo';

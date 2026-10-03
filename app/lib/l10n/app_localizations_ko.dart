@@ -295,7 +295,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearChat => '채팅 삭제';
 
   @override
-  String get clearChatConfirm => '채팅을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get clearChatConfirm => '이 채팅의 모든 메시지가 삭제됩니다. 이 작업은 취소할 수 없습니다.';
 
   @override
   String get maxFilesLimit => '한 번에 최대 4개의 파일만 업로드할 수 있습니다';
@@ -1040,7 +1040,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '$appName과의 연결을 해제하시겠습니까? 언제든지 다시 연결할 수 있습니다.';
+    return '언제든지 $appName에 다시 연결할 수 있습니다.';
   }
 
   @override
@@ -2069,7 +2069,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearMemoryTitle => 'Omi의 기억 지우기';
 
   @override
-  String get clearMemoryMessage => 'Omi의 기억을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get clearMemoryMessage => '모든 기억이 삭제됩니다. 이 작업은 취소할 수 없습니다.';
 
   @override
   String get clearMemoryButton => '메모리 지우기';
@@ -3110,7 +3110,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearChatTitle => '채팅 삭제?';
 
   @override
-  String get confirmClearChat => '채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get confirmClearChat => '이 채팅을 지우시겠습니까? 이 작업은 취소할 수 없습니다.';
 
   @override
   String get copy => '복사';
@@ -3283,7 +3283,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createMemory => '메모리 만들기';
 
   @override
-  String get deleteMemoryConfirmation => '이 메모리를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
+  String get deleteMemoryConfirmation => '이 기억을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
 
   @override
   String get makePrivate => '비공개로 변경';
@@ -3320,7 +3320,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omi의 메모리를 지우시겠습니까? 이 작업은 취소할 수 없으며 모든 $count개의 메모리를 영구적으로 삭제합니다.';
+    return '기억 $count개가 모두 삭제됩니다. 이 작업은 취소할 수 없습니다.';
   }
 
   @override
@@ -3940,7 +3940,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get updateAppQuestion => '앱을 업데이트하시겠습니까?';
 
   @override
-  String get updateAppConfirmation => '앱을 업데이트하시겠습니까? 변경 사항은 팀 검토 후 반영됩니다.';
+  String get updateAppConfirmation => '변경 사항은 팀 검토 후 반영됩니다.';
 
   @override
   String get updateApp => '앱 업데이트';
@@ -4005,7 +4005,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      '구독을 취소하시겠습니까? 현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.';
+      '현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.';
 
   @override
   String get cancelSubscriptionButton => '구독 취소';
@@ -4189,7 +4189,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      '이 작업은 취소할 수 없습니다. 이 키를 사용하는 애플리케이션은 더 이상 API에 접근할 수 없습니다.';
+      '이 키를 사용하는 앱은 API에 액세스할 수 없게 됩니다. 이 작업은 취소할 수 없습니다.';
 
   @override
   String get revoke => '취소';
@@ -4246,7 +4246,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return '이 $item을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+    return '이 $item을(를) 삭제하면 되돌릴 수 없습니다.';
   }
 
   @override
@@ -4254,7 +4254,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '\"$keyName\" 키를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+    return '\"$keyName\"을(를) 사용하는 모든 항목이 액세스 권한을 잃습니다. 이 작업은 취소할 수 없습니다.';
   }
 
   @override
@@ -4430,7 +4430,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return '플랜은 $date까지 활성 상태로 유지됩니다. 그 이후에는 무제한 기능에 대한 액세스 권한을 잃게 됩니다. 확실합니까?';
+    return '플랜은 $date까지 활성 상태로 유지됩니다. 그 이후에는 무제한 기능에 대한 액세스 권한을 잃게 됩니다.';
   }
 
   @override
@@ -4719,7 +4719,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      '이렇게 하면 Limitless에서 가져온 모든 대화가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.';
+      'Limitless에서 가져온 모든 대화가 삭제됩니다. 이 작업은 취소할 수 없습니다.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4760,7 +4760,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$name의 샘플을 삭제하시겠습니까?';
+    return '$name님의 음성 샘플이 삭제됩니다. 이 작업은 취소할 수 없습니다.';
   }
 
   @override
@@ -4768,7 +4768,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$name을(를) 삭제하시겠습니까? 이렇게 하면 관련된 모든 음성 샘플도 제거됩니다.';
+    return '$name님의 음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
   }
 
   @override
@@ -6637,8 +6637,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get shareRecording => '녹음 공유';
 
   @override
-  String get deleteRecordingConfirmation =>
-      '이 녹음을 영구적으로 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
+  String get deleteRecordingConfirmation => '이 작업은 취소할 수 없습니다.';
 
   @override
   String get recordingIdLabel => '녹음 ID';
@@ -7014,7 +7013,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Unlimited 플랜을 $title(으)로 변경하려고 합니다. 계속하시겠습니까?';
+    return 'Unlimited 플랜을 $title(으)로 변경합니다.';
   }
 
   @override

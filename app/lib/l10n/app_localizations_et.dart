@@ -295,8 +295,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reportMessage => 'Teata sõnumist';
 
   @override
-  String get reportMessageConfirm =>
-      'Kas olete kindel, et soovite sellest sõnumist teatada?';
+  String get reportMessageConfirm => 'Kas teatada sellest sõnumist?';
 
   @override
   String get messageReported => 'Sõnumist teatati edukalt.';
@@ -309,7 +308,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Kas olete kindel, et soovite vestluse tühjendada? Seda toimingut ei saa tagasi võtta.';
+      'Kõik selle vestluse sõnumid kustutatakse. Seda ei saa tagasi võtta.';
 
   @override
   String get maxFilesLimit => 'Korraga saate üles laadida ainult 4 faili';
@@ -1068,7 +1067,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Kas olete kindel, et soovite ühenduse rakendusega $appName katkestada? Saate igal ajal uuesti ühendada.';
+    return 'Saate $appName igal ajal uuesti ühendada.';
   }
 
   @override
@@ -2047,15 +2046,14 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteActionItemTitle => 'Kustuta ülesanne';
 
   @override
-  String get deleteActionItemMessage =>
-      'Kas olete kindel, et soovite selle ülesande kustutada?';
+  String get deleteActionItemMessage => 'Kas kustutada see ülesanne?';
 
   @override
   String get deleteSelectedItemsTitle => 'Kustuta valitud punktid';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Kas olete kindel, et soovite kustutada $count valitud ülesande$s?';
+    return 'Kas kustutada $count valitud ülesannet$s?';
   }
 
   @override
@@ -2147,7 +2145,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Kas olete kindel, et soovite Omi mälu tühjendada? Seda tegevust ei saa tagasi võtta.';
+      'Kõik teie mälestused kustutatakse. Seda ei saa tagasi võtta.';
 
   @override
   String get clearMemoryButton => 'Tühjenda mälu';
@@ -2295,8 +2293,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Kustuta ülesanne';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Kas olete kindel, et soovite selle ülesande kustutada?';
+  String get deleteActionItemConfirmMessage => 'Kas kustutada see ülesanne?';
 
   @override
   String get appLanguage => 'Rakenduse keel';
@@ -2405,7 +2402,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteMemory => 'Kustuta mälestus';
 
   @override
-  String get thisActionCannotBeUndone => 'Seda toimingut ei saa tagasi võtta.';
+  String get thisActionCannotBeUndone => 'Seda ei saa tagasi võtta.';
 
   @override
   String memoriesCount(int count) {
@@ -2858,7 +2855,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Kas olete kindel, et soovite selle ülesande kustutada? Seda tegevust ei saa tagasi võtta.';
+      'Kas kustutada see ülesanne? Seda ei saa tagasi võtta.';
 
   @override
   String get enterActionItemDescription => 'Sisesta ülesande kirjeldus';
@@ -3206,8 +3203,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Sõnum edukalt teatatud';
 
   @override
-  String get confirmReportMessage =>
-      'Kas olete kindel, et soovite seda sõnumit teatada?';
+  String get confirmReportMessage => 'Kas teatada sellest sõnumist?';
 
   @override
   String get selectChatAssistant => 'Vali vestlusabiline';
@@ -3223,7 +3219,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta.';
+      'Kas tühjendada see vestlus? Seda ei saa tagasi võtta.';
 
   @override
   String get copy => 'Kopeeri';
@@ -3402,7 +3398,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.';
+      'Kas kustutada see mälestus? Seda ei saa tagasi võtta.';
 
   @override
   String get makePrivate => 'Tee privaatseks';
@@ -3441,7 +3437,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Kas oled kindel, et soovid tühjendada Omi mälu? Seda toimingut ei saa tagasi võtta ja see kustutab püsivalt kõik $count mälestust.';
+    return 'Kõik mälestused ($count) kustutatakse. Seda ei saa tagasi võtta.';
   }
 
   @override
@@ -3756,7 +3752,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
+      'Kas kustutada see vestlus? Seda ei saa tagasi võtta.';
 
   @override
   String get conversationDeleted => 'Vestlus kustutatud';
@@ -4101,7 +4097,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.';
+      'Muudatused jõustuvad pärast meie meeskonna ülevaatust.';
 
   @override
   String get updateApp => 'Värskenda rakendust';
@@ -4167,7 +4163,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Kas olete kindel, et soovite tellimuse tühistada? Teil on juurdepääs praeguse arveldusperioodi lõpuni.';
+      'Teil on juurdepääs praeguse arveldusperioodi lõpuni.';
 
   @override
   String get cancelSubscriptionButton => 'Tühista tellimus';
@@ -4358,7 +4354,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.';
+      'Seda võtit kasutavad rakendused kaotavad API-juurdepääsu. Seda ei saa tagasi võtta.';
 
   @override
   String get revoke => 'Tühista';
@@ -4415,7 +4411,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Kas olete kindel, et soovite seda $item kustutada? Seda toimingut ei saa tagasi võtta.';
+    return '$item kustutatakse. Seda ei saa tagasi võtta.';
   }
 
   @override
@@ -4423,7 +4419,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Kas olete kindel, et soovite võtme \"$keyName\" tühistada? Seda toimingut ei saa tagasi võtta.';
+    return 'Kõik, mis kasutab võtit \"$keyName\", kaotab juurdepääsu. Seda ei saa tagasi võtta.';
   }
 
   @override
@@ -4610,7 +4606,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda kaotate juurdepääsu piiramatutele funktsioonidele. Kas olete kindel?';
+    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda kaotate juurdepääsu piiramatutele funktsioonidele.';
   }
 
   @override
@@ -4918,7 +4914,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'See kustutab jäädavalt kõik Limitlessist imporditud vestlused. Seda toimingut ei saa tagasi võtta.';
+      'Kõik Limitlessist imporditud vestlused kustutatakse. Seda ei saa tagasi võtta.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4960,7 +4956,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Kas olete kindel, et soovite kustutada $name näidise?';
+    return 'Isiku $name häälenäidis eemaldatakse. Seda ei saa tagasi võtta.';
   }
 
   @override
@@ -4968,7 +4964,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Kas olete kindel, et soovite kustutada $name? See eemaldab ka kõik seotud kõnenäidised.';
+    return 'See eemaldab isiku $name häälenäidised ja seda ei saa tagasi võtta. Tema read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
   }
 
   @override
@@ -5337,7 +5333,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Kas olete kindel, et soovite salvestamise peatada ja vestluse kohe kokku võtta?';
+      'Kas lõpetada salvestamine ja teha vestlusest kohe kokkuvõte?';
 
   @override
   String get conversationEndsManually => 'Vestlus lõpeb ainult käsitsi.';
@@ -6910,8 +6906,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get shareRecording => 'Jaga salvestist';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Kas olete kindel, et soovite selle salvestise jäädavalt kustutada? Seda ei saa tagasi võtta.';
+  String get deleteRecordingConfirmation => 'Seda ei saa tagasi võtta.';
 
   @override
   String get recordingIdLabel => 'Salvestise ID';
@@ -7318,7 +7313,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Te lähete üle oma Unlimited paketilt $title paketile. Kas olete kindel, et soovite jätkata?';
+    return 'Te lähete oma Unlimited paketilt üle $title paketile.';
   }
 
   @override
@@ -10063,8 +10058,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteOnDeviceModel => 'Kustuta mudel';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Kas oled kindel, et soovid selle mudeli kustutada?';
+  String get deleteOnDeviceModelConfirm => 'Kas kustutada see mudel?';
 
   @override
   String get onDeviceModelDownloaded => 'Alla laaditud';

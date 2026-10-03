@@ -299,8 +299,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get reportMessage => 'Zgłoś wiadomość';
 
   @override
-  String get reportMessageConfirm =>
-      'Czy na pewno chcesz zgłosić tę wiadomość?';
+  String get reportMessageConfirm => 'Zgłosić tę wiadomość?';
 
   @override
   String get messageReported => 'Wiadomość zgłoszona pomyślnie.';
@@ -313,7 +312,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Czy na pewno chcesz wyczyścić czat? Ta czynność nie może zostać cofnięta.';
+      'Wszystkie wiadomości w tym czacie zostaną usunięte. Tej operacji nie można cofnąć.';
 
   @override
   String get maxFilesLimit => 'Możesz przesłać maksymalnie 4 pliki naraz';
@@ -1073,7 +1072,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Czy na pewno chcesz rozłączyć się z $appName? Możesz ponownie połączyć w dowolnym momencie.';
+    return 'Możesz ponownie połączyć $appName w dowolnym momencie.';
   }
 
   @override
@@ -2054,15 +2053,14 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteActionItemTitle => 'Usuń zadanie';
 
   @override
-  String get deleteActionItemMessage =>
-      'Czy na pewno chcesz usunąć to zadanie?';
+  String get deleteActionItemMessage => 'Usunąć to zadanie?';
 
   @override
   String get deleteSelectedItemsTitle => 'Usuń wybrane elementy';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Czy na pewno chcesz usunąć $count wybrane zadani$s?';
+    return 'Usunąć wybrane zadania ($count)$s?';
   }
 
   @override
@@ -2154,7 +2152,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Czy na pewno chcesz wyczyścić pamięć Omi? Tej czynności nie można cofnąć.';
+      'Wszystkie twoje wspomnienia zostaną usunięte. Tej operacji nie można cofnąć.';
 
   @override
   String get clearMemoryButton => 'Wyczyść pamięć';
@@ -2302,8 +2300,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Usuń zadanie';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Czy na pewno chcesz usunąć to zadanie?';
+  String get deleteActionItemConfirmMessage => 'Usunąć to zadanie?';
 
   @override
   String get appLanguage => 'Język aplikacji';
@@ -2412,7 +2409,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteMemory => 'Usuń wspomnienie';
 
   @override
-  String get thisActionCannotBeUndone => 'Ta czynność nie może być cofnięta.';
+  String get thisActionCannotBeUndone => 'Tej operacji nie można cofnąć.';
 
   @override
   String memoriesCount(int count) {
@@ -2869,7 +2866,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Czy na pewno chcesz usunąć to zadanie? Tej operacji nie można cofnąć.';
+      'Usunąć to zadanie? Tej operacji nie można cofnąć.';
 
   @override
   String get enterActionItemDescription => 'Wprowadź opis zadania';
@@ -3221,8 +3218,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Wiadomość zgłoszona pomyślnie';
 
   @override
-  String get confirmReportMessage =>
-      'Czy na pewno chcesz zgłosić tę wiadomość?';
+  String get confirmReportMessage => 'Zgłosić tę wiadomość?';
 
   @override
   String get selectChatAssistant => 'Wybierz asystenta czatu';
@@ -3238,7 +3234,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Czy na pewno chcesz wyczyścić czat? Tej akcji nie można cofnąć.';
+      'Wyczyścić ten czat? Tej operacji nie można cofnąć.';
 
   @override
   String get copy => 'Kopiuj';
@@ -3418,7 +3414,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Czy na pewno chcesz usunąć to wspomnienie? Tej czynności nie można cofnąć.';
+      'Usunąć to wspomnienie? Tej operacji nie można cofnąć.';
 
   @override
   String get makePrivate => 'Ustaw jako prywatne';
@@ -3463,7 +3459,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Czy na pewno chcesz wyczyścić pamięć Omi? Tej czynności nie można cofnąć i trwale usunie wszystkie $count wspomnienia.';
+    return 'Wszystkie wspomnienia ($count) zostaną usunięte. Tej operacji nie można cofnąć.';
   }
 
   @override
@@ -3780,7 +3776,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Czy na pewno chcesz usunąć tę rozmowę? Ta operacja nie może zostać cofnięta.';
+      'Usunąć tę rozmowę? Tej operacji nie można cofnąć.';
 
   @override
   String get conversationDeleted => 'Rozmowa usunięta';
@@ -4125,7 +4121,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Czy na pewno chcesz zaktualizować aplikację? Zmiany zostaną wprowadzone po sprawdzeniu przez nasz zespół.';
+      'Zmiany zostaną opublikowane po sprawdzeniu przez nasz zespół.';
 
   @override
   String get updateApp => 'Zaktualizuj aplikację';
@@ -4191,7 +4187,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Czy na pewno chcesz anulować subskrypcję? Będziesz mieć dostęp do końca bieżącego okresu rozliczeniowego.';
+      'Będziesz mieć dostęp do końca bieżącego okresu rozliczeniowego.';
 
   @override
   String get cancelSubscriptionButton => 'Anuluj subskrypcję';
@@ -4385,7 +4381,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tej akcji nie można cofnąć. Aplikacje używające tego klucza nie będą już mogły uzyskać dostępu do API.';
+      'Aplikacje korzystające z tego klucza stracą dostęp do API. Tej operacji nie można cofnąć.';
 
   @override
   String get revoke => 'Unieważnij';
@@ -4442,7 +4438,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Czy na pewno chcesz usunąć tę $item? Tej czynności nie można cofnąć.';
+    return '$item zostanie usunięta. Tej operacji nie można cofnąć.';
   }
 
   @override
@@ -4450,7 +4446,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Czy na pewno chcesz unieważnić klucz \"$keyName\"? Tej czynności nie można cofnąć.';
+    return 'Wszystko, co używa \"$keyName\", straci dostęp. Tej operacji nie można cofnąć.';
   }
 
   @override
@@ -4637,7 +4633,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Twój plan pozostanie aktywny do $date. Następnie utracisz dostęp do nieograniczonych funkcji. Czy na pewno?';
+    return 'Twój plan pozostanie aktywny do $date. Następnie utracisz dostęp do nieograniczonych funkcji.';
   }
 
   @override
@@ -4946,7 +4942,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Spowoduje to trwałe usunięcie wszystkich rozmów zaimportowanych z Limitless. Tej akcji nie można cofnąć.';
+      'Wszystkie rozmowy zaimportowane z Limitless zostaną usunięte. Tej operacji nie można cofnąć.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4987,7 +4983,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Czy na pewno chcesz usunąć próbkę $name?';
+    return 'Próbka głosu osoby $name zostanie usunięta. Tej operacji nie można cofnąć.';
   }
 
   @override
@@ -4995,7 +4991,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Czy na pewno chcesz usunąć $name? Spowoduje to również usunięcie wszystkich powiązanych próbek mowy.';
+    return 'Spowoduje to usunięcie próbek głosu osoby $name i nie można tego cofnąć. Wypowiedzi w dawnych rozmowach staną się nienazwanymi rozmówcami.';
   }
 
   @override
@@ -5369,7 +5365,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Czy na pewno chcesz zatrzymać nagrywanie i podsumować rozmowę teraz?';
+      'Zatrzymać nagrywanie i podsumować rozmowę teraz?';
 
   @override
   String get conversationEndsManually => 'Rozmowa zakończy się tylko ręcznie.';
@@ -6944,8 +6940,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get shareRecording => 'Udostępnij nagranie';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Czy na pewno chcesz trwale usunąć to nagranie? Tej operacji nie można cofnąć.';
+  String get deleteRecordingConfirmation => 'Tej operacji nie można cofnąć.';
 
   @override
   String get recordingIdLabel => 'ID nagrania';
@@ -7351,7 +7346,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Przechodzisz z planu Unlimited na $title. Czy na pewno chcesz kontynuować?';
+    return 'Przechodzisz z planu Unlimited na $title.';
   }
 
   @override
@@ -10118,8 +10113,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Usuń model';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Czy na pewno chcesz usunąć ten model?';
+  String get deleteOnDeviceModelConfirm => 'Usunąć ten model?';
 
   @override
   String get onDeviceModelDownloaded => 'Pobrano';

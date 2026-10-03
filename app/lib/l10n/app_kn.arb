@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಸಂದೇಶ ವರದಿ ಮಾಡಲು ಬಯಸುತ್ತೀರಾ?",
+    "reportMessageConfirm": "ಈ ಸಂದೇಶವನ್ನು ವರದಿ ಮಾಡುವುದೇ?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "ನೀವು ಖಚಿತವಾಗಿ ಚ್ಯಾಟ್ ತೆರವುಗೊಳಿಸಲು ಬಯಸುತ್ತೀರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಲಾಗುವುದಿಲ್ಲ.",
+    "clearChatConfirm": "ಈ ಚಾಟ್‌ನ ಎಲ್ಲಾ ಸಂದೇಶಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "ನೀವು ಖಚಿತವಾಗಿ {appName} ಸಂಪರ್ಕ ಛಿನ್ನ ಬಯಸುತ್ತೀರಾ? ನೀವು ಯಾವಾಗ ಪುನರ್ಸಂಯೋಜಿಸಬಹುದು.",
+    "disconnectAppMessage": "ನೀವು ಯಾವಾಗ ಬೇಕಾದರೂ {appName} ಅನ್ನು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಬಹುದು.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
+    "deleteActionItemMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "ನೀವು {count} ಆಯ್ಕೆಮಾಡಿದ ಕಾರ್ಯ{s} ಅಳಿಸಲು ಖಚಿತವೆ?",
+    "deleteSelectedItemsMessage": "{count} ಆಯ್ಕೆಮಾಡಿದ ಕಾರ್ಯ{s} ಅಳಿಸುವುದೇ?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "ನೀವು Omi ಯ ಸ್ಮೃತಿ ಸ್ಪಷ್ಟ ಮಾಡಲು ಖಚಿತವೆ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "clearMemoryMessage": "ನಿಮ್ಮ ಎಲ್ಲಾ ಸ್ಮೃತಿಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
+    "deleteActionItemConfirmMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.",
+    "thisActionCannotBeUndone": "ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+    "deleteActionItemConfirmation": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "ನೀವು ಖಚಿತವಾಗಿ ಈ ವಾರ್ತೆ ವರದಿ ಮಾಡಲು ಬಯಸುವಿರಿ?",
+    "confirmReportMessage": "ಈ ಸಂದೇಶವನ್ನು ವರದಿ ಮಾಡುವುದೇ?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "ನೀವು ಖಚಿತವಾಗಿ ಚ್ಯಾಟ್ ಸ್ಪಷ್ಟ ಮಾಡಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.",
+    "confirmClearChat": "ಈ ಚಾಟ್ ತೆರವುಗೊಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಸ್ಮರಣೆ ಅಳಿಸಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.",
+    "deleteMemoryConfirmation": "ಈ ಸ್ಮೃತಿಯನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "ನೀವು ಖಚಿತವಾಗಿ Omi ಸ್ಮರಣೆ ಸ್ಪಷ್ಟ ಮಾಡಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ ಮತ್ತು ಎಲ್ಲಾ {count} ಸ್ಮರಣೆಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸುತ್ತದೆ.",
+    "clearMemoryConfirmation": "ಎಲ್ಲಾ {count} ಸ್ಮೃತಿಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Omi ಅನ್ನು ಸಿ ಉತ್ತಮ ಅಪ್ಲಿಕೇಶನ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಆಯ್ಕೆ ಮಾಡಲು ನಿರ್ಬಂಧಿತಕ್ಕೆ ಗೊತ್ತಪಡಿಸಿ",
-    "deleteConversationConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಸಂವಾದವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "deleteConversationConfirmation": "ಈ ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "conversationDeleted": "ಸಂವಾದ ಅಳಿಸಲಾಗಿದೆ",
     "generatingLink": "ಲಿಂಕ್ ರಚಿಸುತ್ತಿದೆ…",
     "editConversation": "ಸಂವಾದವನ್ನು ಸಂಪಾದಿಸಿ",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನವನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಲು ಬಯಸುವಿರಾ? ನಮ್ಮ ತಂಡದ ಮೂಲಕ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಬದಲಾವಣೆಗಳು ಪ್ರತಿಬಿಂಬಿಸುತ್ತವೆ.",
+    "updateAppConfirmation": "ನಮ್ಮ ತಂಡ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಬದಲಾವಣೆಗಳು ಪ್ರಕಟವಾಗುತ್ತವೆ.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ನಿಮ್ಮ ಸಾಬಸ್ಕ್ರಿಪ್ಷನ್ ರದ್ದುಗೊಳಿಸಲು ಬಯಸುವಿರಾ? ನೀವು ನಿಮ್ಮ ಪ್ರವಾಹಿ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಅಂತ್ಯ ತನಕ ಪ್ರವೇಶ ಹೊಂದಿರುತ್ತೀರಿ.",
+    "cancelSubscriptionConfirmation": "ನೀವು ನಿಮ್ಮ ಪ್ರವಾಹಿ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಅಂತ್ಯ ತನಕ ಪ್ರವೇಶ ಹೊಂದಿರುತ್ತೀರಿ.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ. ಈ ಕೀಯನ್ನು ಬಳಸುವ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ API ಗೆ ಹೆಚ್ಚುತರ ಪ್ರವೇಶವನ್ನು ಹೊಂದಿರುವುದಿಲ್ಲ.",
+    "revokeApiKeyWarning": "ಈ ಕೀ ಬಳಸುವ ಆಪ್‌ಗಳು API ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತವೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ {item} ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "deleteItemConfirmation": "ಈ {item} ಅಳಿಸುವುದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಕೀ \"{keyName}\" ರದ್ದುಗೊಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "revokeKeyConfirmation": "\"{keyName}\" ಬಳಸುವ ಎಲ್ಲವೂ ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "ನಿಮ್ಮ ಯೋಜನೆ {date} ತನಕ ಸಕ್ರಿಯವಾಗಿರುತ್ತದೆ. ಅದರ ನಂತರ, ನೀವು ನಿಮ್ಮ ಅಸೀಮಿತ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಪ್ರವೇಶ ಕಳೆದುಕೊಳ್ಳುತ್ತೀರಿ. ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?",
+    "planRemainsActiveUntil": "ನಿಮ್ಮ ಯೋಜನೆ {date} ತನಕ ಸಕ್ರಿಯವಾಗಿರುತ್ತದೆ. ಅದರ ನಂತರ, ನೀವು ನಿಮ್ಮ ಅಸೀಮಿತ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಪ್ರವೇಶ ಕಳೆದುಕೊಳ್ಳುತ್ತೀರಿ.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "ಇದು Limitless ನಿಂದ ಆಮದು ಮಾಡಲಾದ ಎಲ್ಲಾ ಸಂಭಾಷಣೆಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸುತ್ತದೆ. ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "deleteAllLimitlessWarning": "Limitless ನಿಂದ ಆಮದು ಮಾಡಿದ ಎಲ್ಲಾ ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "{name} ನ ಮಾದರಿಯನ್ನು ಅಳಿಸುವುದೇ ಎಂದು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ?",
+    "deleteSampleConfirmation": "{name} ಅವರ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "{name} ಅನ್ನು ಅಳಿಸುವುದೇ ಎಂದು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ? ಇದು ಸಂಬಂಧಿತ ಎಲ್ಲಾ ಭಾಷಣ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ.",
+    "deletePersonConfirmation": "ಇದು {name} ಅವರ ಧ್ವನಿ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ ಮತ್ತು ಹಿಂದಕ್ಕೆ ಪಡೆಯಲಾಗುವುದಿಲ್ಲ. ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿನ ಅವರ ಮಾತುಗಳು ಹೆಸರಿಲ್ಲದ ಮಾತನಾಡುವವರಾಗುತ್ತವೆ.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು ಮತ್ತು ಸಂಭಾಷಣೆ ಈಗ ಸಾರಾಂಶ ಮಾಡಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ?",
+    "stopRecordingConfirmation": "ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ ಈಗಲೇ ಸಂಭಾಷಣೆಯನ್ನು ಸಾರಾಂಶಗೊಳಿಸುವುದೇ?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲು ನಿಶ್ಚಿತವಾಗಿ ಬಯಸಿದ್ದೀರಾ? ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "deleteRecordingConfirmation": "ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "ನೀವು ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು {title}ಗೆ ಬದಲಾಯಿಸಿಕೊಳ್ಳುತ್ತಿದ್ದೀರಿ. ನೀವು ಮುಂದುವರೆಯಲು ನಿಶ್ಚಿತವಾಗಿ ಬಯಸಿದ್ದೀರಾ?",
+    "planSwitchingDescriptionWithTitle": "ನೀವು ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು {title}ಗೆ ಬದಲಾಯಿಸುತ್ತಿದ್ದೀರಿ.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "ಕ್ಲೌಡ್ ಪ್ರತಿಲೇಖನ",
     "copyMessage": "ಸಂದೇಶವನ್ನು ನಕಲಿಸಿ",
     "deleteOnDeviceModel": "ಮಾದರಿಯನ್ನು ಅಳಿಸಿ",
-    "deleteOnDeviceModelConfirm": "ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?",
+    "deleteOnDeviceModelConfirm": "ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸುವುದೇ?",
     "downgradeAnyway": "ಆದರೂ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
     "downgradeLimitBattery": "7 ಪಟ್ಟು ಹೆಚ್ಚು ಬ್ಯಾಟರಿ ಬಳಕೆ",
     "downgradeLimitDelay": "5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ",

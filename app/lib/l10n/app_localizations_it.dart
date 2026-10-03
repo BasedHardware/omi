@@ -301,8 +301,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reportMessage => 'Segnala messaggio';
 
   @override
-  String get reportMessageConfirm =>
-      'Sei sicuro di voler segnalare questo messaggio?';
+  String get reportMessageConfirm => 'Segnalare questo messaggio?';
 
   @override
   String get messageReported => 'Messaggio segnalato con successo.';
@@ -315,7 +314,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.';
+      'Tutti i messaggi di questa chat verranno eliminati. Questa azione non può essere annullata.';
 
   @override
   String get maxFilesLimit => 'Puoi caricare solo 4 file alla volta';
@@ -1082,7 +1081,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Sei sicuro di volerti disconnettere da $appName? Puoi riconnetterti in qualsiasi momento.';
+    return 'Puoi ricollegare $appName in qualsiasi momento.';
   }
 
   @override
@@ -2071,15 +2070,14 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deleteActionItemTitle => 'Elimina attività';
 
   @override
-  String get deleteActionItemMessage =>
-      'Sei sicuro di voler eliminare questa attività?';
+  String get deleteActionItemMessage => 'Eliminare questa attività?';
 
   @override
   String get deleteSelectedItemsTitle => 'Elimina Elementi Selezionati';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Sei sicuro di voler eliminare $count attività$s selezionate?';
+    return 'Eliminare $count attività$s selezionate?';
   }
 
   @override
@@ -2172,7 +2170,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Sei sicuro di voler cancellare la memoria di Omi? Questa azione non può essere annullata.';
+      'Tutti i tuoi ricordi verranno eliminati. Questa azione non può essere annullata.';
 
   @override
   String get clearMemoryButton => 'Cancella memoria';
@@ -2321,8 +2319,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Elimina Attività';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Sei sicuro di voler eliminare questa attività?';
+  String get deleteActionItemConfirmMessage => 'Eliminare questa attività?';
 
   @override
   String get appLanguage => 'Lingua App';
@@ -2892,7 +2889,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Sei sicuro di voler eliminare questa attività? Questa azione non può essere annullata.';
+      'Eliminare questa attività? Questa azione non può essere annullata.';
 
   @override
   String get enterActionItemDescription =>
@@ -3243,8 +3240,7 @@ class AppLocalizationsIt extends AppLocalizations {
       '✅ Messaggio segnalato con successo';
 
   @override
-  String get confirmReportMessage =>
-      'Sei sicuro di voler segnalare questo messaggio?';
+  String get confirmReportMessage => 'Segnalare questo messaggio?';
 
   @override
   String get selectChatAssistant => 'Seleziona assistente chat';
@@ -3260,7 +3256,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.';
+      'Cancellare questa chat? Questa azione non può essere annullata.';
 
   @override
   String get copy => 'Copia';
@@ -3442,7 +3438,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata.';
+      'Eliminare questo ricordo? Questa azione non può essere annullata.';
 
   @override
   String get makePrivate => 'Rendi privato';
@@ -3481,7 +3477,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Sei sicuro di voler cancellare la memoria di Omi? Questa azione non può essere annullata e eliminerà permanentemente tutti i $count ricordi.';
+    return 'Tutti i $count ricordi verranno eliminati. Questa azione non può essere annullata.';
   }
 
   @override
@@ -3800,7 +3796,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.';
+      'Eliminare questa conversazione? Questa azione non può essere annullata.';
 
   @override
   String get conversationDeleted => 'Conversazione eliminata';
@@ -4152,7 +4148,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Sei sicuro di voler aggiornare la tua app? Le modifiche saranno visibili dopo la revisione del nostro team.';
+      'Le modifiche saranno visibili dopo la revisione del nostro team.';
 
   @override
   String get updateApp => 'Aggiorna app';
@@ -4218,7 +4214,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sei sicuro di voler annullare l\'abbonamento? Continuerai ad avere accesso fino alla fine del periodo di fatturazione corrente.';
+      'Continuerai ad avere accesso fino alla fine del periodo di fatturazione corrente.';
 
   @override
   String get cancelSubscriptionButton => 'Annulla abbonamento';
@@ -4410,7 +4406,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Questa azione non può essere annullata. Le applicazioni che utilizzano questa chiave non potranno più accedere all\'API.';
+      'Le app che usano questa chiave perderanno l\'accesso all\'API. Questa azione non può essere annullata.';
 
   @override
   String get revoke => 'Revoca';
@@ -4467,7 +4463,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Sei sicuro di voler eliminare questo $item? Questa azione non può essere annullata.';
+    return '$item verrà eliminata. Questa azione non può essere annullata.';
   }
 
   @override
@@ -4475,7 +4471,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Sei sicuro di voler revocare la chiave \"$keyName\"? Questa azione non può essere annullata.';
+    return 'Tutto ciò che usa \"$keyName\" perderà l\'accesso. Questa azione non può essere annullata.';
   }
 
   @override
@@ -4663,7 +4659,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Il tuo piano rimarrà attivo fino al $date. Dopo, perderai l\'accesso alle funzionalità illimitate. Sei sicuro?';
+    return 'Il tuo piano rimarrà attivo fino al $date. Dopo, perderai l\'accesso alle funzionalità illimitate.';
   }
 
   @override
@@ -4972,7 +4968,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Questo eliminerà permanentemente tutte le conversazioni importate da Limitless. Questa azione non può essere annullata.';
+      'Tutte le conversazioni importate da Limitless verranno eliminate. Questa azione non può essere annullata.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -5015,7 +5011,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sei sicuro di voler eliminare il campione di $name?';
+    return 'Il campione vocale di $name verrà rimosso. Questa azione non può essere annullata.';
   }
 
   @override
@@ -5023,7 +5019,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sei sicuro di voler eliminare $name? Questo rimuoverà anche tutti i campioni vocali associati.';
+    return 'Questo rimuove i campioni vocali di $name e non può essere annullato. Le sue battute nelle conversazioni passate diventano interlocutori senza nome.';
   }
 
   @override
@@ -5398,7 +5394,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Sei sicuro di voler interrompere la registrazione e riassumere la conversazione ora?';
+      'Interrompere la registrazione e riassumere ora la conversazione?';
 
   @override
   String get conversationEndsManually =>
@@ -6981,7 +6977,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteRecordingConfirmation =>
-      'Sei sicuro di voler eliminare permanentemente questa registrazione? Questa azione non può essere annullata.';
+      'Questa azione non può essere annullata.';
 
   @override
   String get recordingIdLabel => 'ID registrazione';
@@ -7385,7 +7381,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Stai passando dal tuo Piano Illimitato al $title. Sei sicuro di voler procedere?';
+    return 'Stai passando dal tuo Piano Illimitato al $title.';
   }
 
   @override
@@ -10154,8 +10150,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deleteOnDeviceModel => 'Elimina modello';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Sei sicuro di voler eliminare questo modello?';
+  String get deleteOnDeviceModelConfirm => 'Eliminare questo modello?';
 
   @override
   String get onDeviceModelDownloaded => 'Scaricato';

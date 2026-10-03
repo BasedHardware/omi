@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Вы ўпэўнены, што хочаце скаржыцца на гэта паведамленне?",
+    "reportMessageConfirm": "Паскардзіцца на гэта паведамленне?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Вы ўпэўнены, што хочаце ачысціць чат? Гэта дзеянне нельга адмяніць.",
+    "clearChatConfirm": "Усе паведамленні ў гэтым чаце будуць выдалены. Гэта нельзя адмяніць.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Вы ўпэўнены, што хочаце адключыцца ад {appName}? Вы можаце переадключыцца ў любы час.",
+    "disconnectAppMessage": "Вы можаце зноў падключыць {appName} у любы час.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу?",
+    "deleteActionItemMessage": "Выдаліць гэту задачу?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Вы ўпэўнены, што хочаце выдаліць {count} выбраных задач{s}?",
+    "deleteSelectedItemsMessage": "Выдаліць выбраныя задачы ({count}){s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Вы ўпэўнены, што хочаце вычысціць памяць Omi? Гэтае дзеянне нельга адмяніць.",
+    "clearMemoryMessage": "Усе вашы ўспаміны будуць выдалены. Гэта нельзя адмяніць.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу?",
+    "deleteActionItemConfirmMessage": "Выдаліць гэту задачу?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "Гэта дзеянне невозможна адмяніць.",
+    "thisActionCannotBeUndone": "Гэта нельзя адмяніць.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу? Гэта дзеянне немагчыма адмяніць.",
+    "deleteActionItemConfirmation": "Выдаліць гэту задачу? Гэта нельзя адмяніць.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Вы ўпэўнены, што хочаце паведаміць аб гэтым паведамленні?",
+    "confirmReportMessage": "Паскардзіцца на гэта паведамленне?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Вы ўпэўнены, што хочаце очыстіць чат? Гэта дзеянне невозможна адмяніць.",
+    "confirmClearChat": "Ачысціць гэты чат? Гэта нельзя адмяніць.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Вы ўпэўнены, што хочаце выдаліць гэту памяць? Гэта дзеянне невозможна адмяніць.",
+    "deleteMemoryConfirmation": "Выдаліць гэты ўспамін? Гэта нельзя адмяніць.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Вы ўпэўнены, што хочаце очыстіць памяць Omi? Гэта дзеянне невозможна адмяніць і назаўсёды выдаліць усе {count} памяткі.",
+    "clearMemoryConfirmation": "Усе ўспаміны ({count}) будуць выдалены. Гэта нельзя адмяніць.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Дозвольце Omi выбраць най­лепшае прыкладанне аўтаматычна",
-    "deleteConversationConfirmation": "Вы сапраўды хочаце выдаліць гэтую размову? Гэта дзеянне не можна адмяніць.",
+    "deleteConversationConfirmation": "Выдаліць гэту размову? Гэта нельзя адмяніць.",
     "conversationDeleted": "Размова выдалена",
     "generatingLink": "Генеруецца спасылка…",
     "editConversation": "Рэдагаваць размову",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Вы сапраўды хочаце абнавіць вашае прыкладанне? Змяненні будуць адлюстраны пасля рэцэнзіі нашай каманды.",
+    "updateAppConfirmation": "Змяненні з'явяцца пасля праверкі нашай камандай.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Вы сапраўды хочаце скасаваць вашу падпіску? Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.",
+    "cancelSubscriptionConfirmation": "Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "Гэта дзеянне не можна адмяніць. Любыя прыкладанні, якія выкарыстоўваюць гэты ключ, больш не зможуць мець доступ да API.",
+    "revokeApiKeyWarning": "Праграмы, якія выкарыстоўваюць гэты ключ, страцяць доступ да API. Гэта нельзя адмяніць.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Вы сапраўды хочаце выдаліць гэты {item}? Гэта дзеянне не можна адмяніць.",
+    "deleteItemConfirmation": "{item} будзе выдалена. Гэта нельга адмяніць.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Вы сапраўды хочаце адкліклаць ключ \"{keyName}\"? Гэта дзеянне не можна адмяніць.",
+    "revokeKeyConfirmation": "Усё, што выкарыстоўвае \"{keyName}\", страціць доступ. Гэта нельзя адмяніць.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Ваш план застанецца актыўным да {date}. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый. Вы сапраўды?",
+    "planRemainsActiveUntil": "Ваш план застанецца актыўным да {date}. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "Гэта перманентна удаліт усе разговоры, імпартаваныя з Limitless. Гэта дзеяннне нельга адмяніць.",
+    "deleteAllLimitlessWarning": "Усе размовы, імпартаваныя з Limitless, будуць выдалены. Гэта нельзя адмяніць.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Вы ўпэўнены, што хочаце удаліць ўзор {name}?",
+    "deleteSampleConfirmation": "Узор голасу {name} будзе выдалены. Гэта нельзя адмяніць.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Вы ўпэўнены, што хочаце удаліць {name}? Гэта таксама выдаліт усе звязаныя ўзоры мовы.",
+    "deletePersonConfirmation": "Гэта выдаліць узоры голасу {name}, і гэта нельга адмяніць. Рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Вы ўпэўнены, што хочаце спыніць запіс і рэзюміраваць разговор зараз?",
+    "stopRecordingConfirmation": "Спыніць запіс і падсумаваць размову зараз?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Вы ўпэўнены, што хочаце назаўсёды выдаліць гэты запіс? Гэта не можна адмяніць.",
+    "deleteRecordingConfirmation": "Гэта нельзя адмяніць.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "Вы мяняеце ваш Unlimite план на {title}. Вы ўпэўнены, што хочаце адкіць?",
+    "planSwitchingDescriptionWithTitle": "Вы мяняеце ваш план Unlimited на {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "Воблачная транскрыпцыя",
     "copyMessage": "Капіяваць паведамленне",
     "deleteOnDeviceModel": "Выдаліць мадэль",
-    "deleteOnDeviceModelConfirm": "Вы сапраўды хочаце выдаліць гэту мадэль?",
+    "deleteOnDeviceModelConfirm": "Выдаліць гэту мадэль?",
     "downgradeAnyway": "Усё роўна перайсці",
     "downgradeLimitBattery": "У 7 разоў большы расход батарэі",
     "downgradeLimitDelay": "Затрымка 5–7 секунд",

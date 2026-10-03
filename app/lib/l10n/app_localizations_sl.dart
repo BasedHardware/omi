@@ -297,8 +297,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get reportMessage => 'Prijavite sporočilo';
 
   @override
-  String get reportMessageConfirm =>
-      'Ali ste prepričani, da želite prijaviti to sporočilo?';
+  String get reportMessageConfirm => 'Prijavim to sporočilo?';
 
   @override
   String get messageReported => 'Sporočilo je bilo uspešno prijavljeno.';
@@ -311,7 +310,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Ali ste prepričani, da želite počistiti klepet? To dejanje ni mogoče razveljaviti.';
+      'Vsa sporočila v tem klepetu bodo izbrisana. Tega ni mogoče razveljaviti.';
 
   @override
   String get maxFilesLimit => 'Hkrati lahko naložite samo 4 datoteke';
@@ -1070,7 +1069,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Ali ste prepričani, da se želite odklopi iz $appName? Lahko se ponovno povežete kadarkoli.';
+    return '$appName lahko kadar koli znova povežete.';
   }
 
   @override
@@ -2046,15 +2045,14 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deleteActionItemTitle => 'Izbriši nalogo';
 
   @override
-  String get deleteActionItemMessage =>
-      'Ali ste prepričani, da želite izbrisati to nalogo?';
+  String get deleteActionItemMessage => 'Izbrišem to nalogo?';
 
   @override
   String get deleteSelectedItemsTitle => 'Izbriši izbrane postavke';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Ali ste prepričani, da želite izbrisati $count izbranih nalog$s?';
+    return 'Izbrišem $count izbranih nalog$s?';
   }
 
   @override
@@ -2146,7 +2144,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Ali ste prepričani, da želite počistiti Omijevo spomin? To dejanje ne moremo razveljaviti.';
+      'Vsi vaši spomini bodo izbrisani. Tega ni mogoče razveljaviti.';
 
   @override
   String get clearMemoryButton => 'Počisti spomin';
@@ -2293,8 +2291,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Izbriši nalogo';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Ali ste prepričani, da želite izbrisati to nalogo?';
+  String get deleteActionItemConfirmMessage => 'Izbrišem to nalogo?';
 
   @override
   String get appLanguage => 'Jezik aplikacije';
@@ -2402,7 +2399,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deleteMemory => 'Izbriši spomin';
 
   @override
-  String get thisActionCannotBeUndone => 'Tega dejanja ni mogoče razveljaviti.';
+  String get thisActionCannotBeUndone => 'Tega ni mogoče razveljaviti.';
 
   @override
   String memoriesCount(int count) {
@@ -2865,7 +2862,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Ali ste prepričani, da želite izbrisati to nalogo? Tega dejanja ni mogoče razveljaviti.';
+      'Izbrišem to nalogo? Tega ni mogoče razveljaviti.';
 
   @override
   String get enterActionItemDescription => 'Vnesite opis naloge';
@@ -3215,8 +3212,7 @@ class AppLocalizationsSl extends AppLocalizations {
       '✅ Sporočilo je bilo uspešno prijavljeno';
 
   @override
-  String get confirmReportMessage =>
-      'Ali ste prepričani, da želite prijaviti to sporočilo?';
+  String get confirmReportMessage => 'Prijavim to sporočilo?';
 
   @override
   String get selectChatAssistant => 'Izberite pomočnika za klepet';
@@ -3232,7 +3228,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Ali ste prepričani, da želite počistiti klepet? Tega dejanja ni mogoče razveljaviti.';
+      'Počistim ta klepet? Tega ni mogoče razveljaviti.';
 
   @override
   String get copy => 'Kopiraj';
@@ -3411,7 +3407,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Ali ste prepričani, da želite izbrisati ta spomin? Tega dejanja ni mogoče razveljaviti.';
+      'Izbrišem ta spomin? Tega ni mogoče razveljaviti.';
 
   @override
   String get makePrivate => 'Naredi zasebno';
@@ -3452,7 +3448,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Ali ste prepričani, da želite počistiti Omijin spomin? Tega dejanja ni mogoče razveljaviti in trajno izbriše vse $count spominov.';
+    return 'Vsi spomini ($count) bodo izbrisani. Tega ni mogoče razveljaviti.';
   }
 
   @override
@@ -3768,7 +3764,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Ste prepričani, da želite izbrisati ta pogovor? Te akcije ni mogoče razveljaviti.';
+      'Izbrišem ta pogovor? Tega ni mogoče razveljaviti.';
 
   @override
   String get conversationDeleted => 'Pogovor je izbrisan';
@@ -4114,7 +4110,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Ste prepričani, da želite posodobiti svojo aplikacijo? Spremembe se bodo odražale, ko jih pregleda naš tim.';
+      'Spremembe bodo objavljene, ko jih pregleda naša ekipa.';
 
   @override
   String get updateApp => 'Posodobi aplikacijo';
@@ -4180,7 +4176,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Ste prepričani, da želite preklicati naročnino? Nadaljeval boste imeti dostop do konca trenutnega obračunskega obdobja.';
+      'Nadaljeval boste imeti dostop do konca trenutnega obračunskega obdobja.';
 
   @override
   String get cancelSubscriptionButton => 'Preklici naročnino';
@@ -4372,7 +4368,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Te akcije ni mogoče razveljaviti. Nobene aplikacije, ki uporabljajo ta ključ, ne bodo več imele dostopa do API.';
+      'Aplikacije, ki uporabljajo ta ključ, izgubijo dostop do API-ja. Tega ni mogoče razveljaviti.';
 
   @override
   String get revoke => 'Preklici';
@@ -4429,7 +4425,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ste prepričani, da želite izbrisati ta $item? Te akcije ni mogoče razveljaviti.';
+    return '$item bo izbrisana. Tega ni mogoče razveljaviti.';
   }
 
   @override
@@ -4437,7 +4433,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ste prepričani, da želite preklicati ključ \"$keyName\"? Te akcije ni mogoče razveljaviti.';
+    return 'Vse, kar uporablja \"$keyName\", izgubi dostop. Tega ni mogoče razveljaviti.';
   }
 
   @override
@@ -4623,7 +4619,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Vaš načrt ostane aktiven do $date. Po tem boste izgubili dostop do svojih neomejenih funkcij. Ste prepričani?';
+    return 'Vaš načrt ostane aktiven do $date. Po tem boste izgubili dostop do svojih neomejenih funkcij.';
   }
 
   @override
@@ -4929,7 +4925,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'To bo trajno izbrisalo vse pogovore, uvožene iz Limitless. To dejanja ne moremo razveljaviti.';
+      'Vsi pogovori, uvoženi iz Limitless, bodo izbrisani. Tega ni mogoče razveljaviti.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4970,7 +4966,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Ali ste prepričani, da želite izbrisati vzorec $name?';
+    return 'Glasovni vzorec osebe $name bo odstranjen. Tega ni mogoče razveljaviti.';
   }
 
   @override
@@ -4978,7 +4974,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Ali ste prepričani, da želite izbrisati $name? To bo tudi odstranjeno vse povezane govorčeve vzorce.';
+    return 'S tem odstranite glasovne vzorce osebe $name, dejanja ni mogoče razveljaviti. Izjave v preteklih pogovorih postanejo neimenovani govorci.';
   }
 
   @override
@@ -5353,7 +5349,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Ali ste prepričani, da želite prenehati s snemanjem in povzeti pogovor sedaj?';
+      'Ustavim snemanje in zdaj povzamem pogovor?';
 
   @override
   String get conversationEndsManually => 'Pogovor se bo končal samo ročno.';
@@ -6928,8 +6924,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get shareRecording => 'Deli Snemanje';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Ali ste prepričani, da želite trajno izbrisati to snemanje? To se ne more razveljaviti.';
+  String get deleteRecordingConfirmation => 'Tega ni mogoče razveljaviti.';
 
   @override
   String get recordingIdLabel => 'ID Snemanja';
@@ -7343,7 +7338,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Vaš Neomejeni Načrt Spreminjate na $title. Ali ste prepričani, da želite nadaljevati?';
+    return 'Svoj Neomejeni načrt spreminjate v $title.';
   }
 
   @override
@@ -10101,8 +10096,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Izbriši model';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Ali ste prepričani, da želite izbrisati ta model?';
+  String get deleteOnDeviceModelConfirm => 'Izbrišem ta model?';
 
   @override
   String get onDeviceModelDownloaded => 'Preneseno';

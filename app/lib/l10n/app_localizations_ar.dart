@@ -289,8 +289,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reportMessage => 'الإبلاغ عن الرسالة';
 
   @override
-  String get reportMessageConfirm =>
-      'هل أنت متأكد من رغبتك في الإبلاغ عن هذه الرسالة؟';
+  String get reportMessageConfirm => 'الإبلاغ عن هذه الرسالة؟';
 
   @override
   String get messageReported => 'تم الإبلاغ عن الرسالة بنجاح.';
@@ -303,7 +302,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'هل أنت متأكد من رغبتك في مسح المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
+      'سيتم حذف جميع الرسائل في هذه المحادثة. لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get maxFilesLimit => 'يمكنك تحميل 4 ملفات فقط في كل مرة';
@@ -1055,7 +1054,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'هل أنت متأكد من رغبتك في قطع الاتصال بـ $appName؟ يمكنك إعادة الاتصال في أي وقت.';
+    return 'يمكنك إعادة الاتصال بـ $appName في أي وقت.';
   }
 
   @override
@@ -2019,14 +2018,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteActionItemTitle => 'حذف المهمة';
 
   @override
-  String get deleteActionItemMessage => 'هل أنت متأكد أنك تريد حذف هذه المهمة؟';
+  String get deleteActionItemMessage => 'حذف هذه المهمة؟';
 
   @override
   String get deleteSelectedItemsTitle => 'حذف العناصر المحددة';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'هل أنت متأكد من رغبتك في حذف $count مهمة محددة$s؟';
+    return 'حذف $count مهمة محددة$s؟';
   }
 
   @override
@@ -2117,7 +2116,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'هل أنت متأكد من رغبتك في مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء.';
+      'سيتم حذف جميع ذكرياتك. لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get clearMemoryButton => 'مسح الذاكرة';
@@ -2263,8 +2262,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'حذف المهمة';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'هل أنت متأكد من رغبتك في حذف هذه المهمة؟';
+  String get deleteActionItemConfirmMessage => 'حذف هذه المهمة؟';
 
   @override
   String get appLanguage => 'لغة التطبيق';
@@ -2818,7 +2816,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'هل أنت متأكد من حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.';
+      'حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get enterActionItemDescription => 'أدخل وصف المهمة';
@@ -3165,8 +3163,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ تم الإبلاغ عن الرسالة بنجاح';
 
   @override
-  String get confirmReportMessage =>
-      'هل أنت متأكد من أنك تريد الإبلاغ عن هذه الرسالة؟';
+  String get confirmReportMessage => 'الإبلاغ عن هذه الرسالة؟';
 
   @override
   String get selectChatAssistant => 'اختر مساعد الدردشة';
@@ -3182,7 +3179,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه.';
+      'مسح هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get copy => 'نسخ';
@@ -3358,7 +3355,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'هل أنت متأكد من حذف هذه الذاكرة؟ لا يمكن التراجع عن هذا الإجراء.';
+      'حذف هذه الذكرى؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get makePrivate => 'جعلها خاصة';
@@ -3396,7 +3393,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'هل أنت متأكد من مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف جميع الذكريات الـ $count نهائياً.';
+    return 'سيتم حذف جميع الذكريات ($count). لا يمكن التراجع عن هذا الإجراء.';
   }
 
   @override
@@ -3706,7 +3703,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'هل أنت متأكد من حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
+      'حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get conversationDeleted => 'تم حذف المحادثة';
@@ -4043,7 +4040,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'هل أنت متأكد من رغبتك في تحديث تطبيقك؟ ستظهر التغييرات بعد مراجعتها من قبل فريقنا.';
+      'ستظهر التغييرات بعد مراجعتها من قبل فريقنا.';
 
   @override
   String get updateApp => 'تحديث التطبيق';
@@ -4109,7 +4106,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'هل أنت متأكد من رغبتك في إلغاء اشتراكك؟ سيستمر وصولك حتى نهاية فترة الفوترة الحالية.';
+      'سيستمر وصولك حتى نهاية فترة الفوترة الحالية.';
 
   @override
   String get cancelSubscriptionButton => 'إلغاء الاشتراك';
@@ -4298,7 +4295,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'لا يمكن التراجع عن هذا الإجراء. لن تتمكن أي تطبيقات تستخدم هذا المفتاح من الوصول إلى API بعد الآن.';
+      'ستفقد التطبيقات التي تستخدم هذا المفتاح الوصول إلى واجهة API. لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get revoke => 'إلغاء';
@@ -4355,7 +4352,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'هل أنت متأكد أنك تريد حذف هذا $item؟ لا يمكن التراجع عن هذا الإجراء.';
+    return 'لا يمكن التراجع عن حذف $item.';
   }
 
   @override
@@ -4363,7 +4360,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'هل أنت متأكد أنك تريد إلغاء المفتاح \"$keyName\"؟ لا يمكن التراجع عن هذا الإجراء.';
+    return 'سيفقد أي شيء يستخدم \"$keyName\" الوصول. لا يمكن التراجع عن هذا الإجراء.';
   }
 
   @override
@@ -4549,7 +4546,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'سيبقى اشتراكك نشطاً حتى $date. بعد ذلك، ستفقد الوصول إلى الميزات غير المحدودة. هل أنت متأكد؟';
+    return 'سيبقى اشتراكك نشطاً حتى $date. بعد ذلك، ستفقد الوصول إلى الميزات غير المحدودة.';
   }
 
   @override
@@ -4854,7 +4851,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'سيؤدي هذا إلى حذف جميع المحادثات المستوردة من Limitless نهائيًا. لا يمكن التراجع عن هذا الإجراء.';
+      'سيتم حذف جميع المحادثات المستوردة من Limitless. لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4896,7 +4893,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'هل أنت متأكد من حذف عينة $name؟';
+    return 'ستتم إزالة عيّنة صوت $name. لا يمكن التراجع عن هذا الإجراء.';
   }
 
   @override
@@ -4904,7 +4901,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'هل أنت متأكد من حذف $name؟ سيؤدي ذلك أيضًا إلى إزالة جميع عينات الكلام المرتبطة.';
+    return 'يؤدي هذا إلى إزالة عيّنات صوت $name ولا يمكن التراجع عنه. تصبح عباراته في المحادثات السابقة متحدثين بلا أسماء.';
   }
 
   @override
@@ -5270,8 +5267,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finishedConversation => 'هل انتهت المحادثة؟';
 
   @override
-  String get stopRecordingConfirmation =>
-      'هل أنت متأكد أنك تريد إيقاف التسجيل وتلخيص المحادثة الآن؟';
+  String get stopRecordingConfirmation => 'إيقاف التسجيل وتلخيص المحادثة الآن؟';
 
   @override
   String get conversationEndsManually => 'ستنتهي المحادثة يدويًا فقط.';
@@ -6828,8 +6824,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get shareRecording => 'مشاركة التسجيل';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'هل أنت متأكد من رغبتك في حذف هذا التسجيل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.';
+  String get deleteRecordingConfirmation => 'لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get recordingIdLabel => 'معرّف التسجيل';
@@ -7225,7 +7220,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'أنت تقوم بتغيير خطتك غير المحدودة إلى $title. هل أنت متأكد؟';
+    return 'أنت تقوم بتغيير خطتك غير المحدودة إلى $title.';
   }
 
   @override
@@ -9941,8 +9936,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteOnDeviceModel => 'حذف النموذج';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'هل أنت متأكد أنك تريد حذف هذا النموذج؟';
+  String get deleteOnDeviceModelConfirm => 'حذف هذا النموذج؟';
 
   @override
   String get onDeviceModelDownloaded => 'تم التنزيل';

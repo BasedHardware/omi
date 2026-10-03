@@ -292,8 +292,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get reportMessage => 'Пријави поруку';
 
   @override
-  String get reportMessageConfirm =>
-      'Да ли сте сигурни да желите пријавити ову поруку?';
+  String get reportMessageConfirm => 'Пријавити ову поруку?';
 
   @override
   String get messageReported => 'Порука успешно пријављена.';
@@ -306,7 +305,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Да ли сте сигурни да желите очистити разговор? Ова радња се не може отказати.';
+      'Све поруке у овом ћаскању биће обрисане. Ово не може бити опозвано.';
 
   @override
   String get maxFilesLimit => 'Можете учитати само 4 датотеке одједном';
@@ -1066,7 +1065,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Да ли сте сигурни да желите одсоединити од $appName? Можете се поново повезати било када.';
+    return '$appName можете поново да повежете било када.';
   }
 
   @override
@@ -2044,15 +2043,14 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deleteActionItemTitle => 'Избриши задатак';
 
   @override
-  String get deleteActionItemMessage =>
-      'Да ли си сигуран да желиш да избришеш овај задатак?';
+  String get deleteActionItemMessage => 'Обрисати овај задатак?';
 
   @override
   String get deleteSelectedItemsTitle => 'Избриши одабране ставке';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Да ли си сигуран да желиш да избришеш $count одабран$s задатак?';
+    return 'Обрисати $count одабраних задатака$s?';
   }
 
   @override
@@ -2144,7 +2142,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Да ли си сигуран да желиш да очистиш Omi-јево сећање? Ова акција се не може поништити.';
+      'Све ваше успомене биће обрисане. Ово не може бити опозвано.';
 
   @override
   String get clearMemoryButton => 'Очисти сећање';
@@ -2291,8 +2289,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Избриши задатак';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Да ли си сигуран да желиш да избришеш овај задатак?';
+  String get deleteActionItemConfirmMessage => 'Обрисати овај задатак?';
 
   @override
   String get appLanguage => 'Језик апликације';
@@ -2402,7 +2399,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deleteMemory => 'Обриши меморију';
 
   @override
-  String get thisActionCannotBeUndone => 'Ова радња се не може опозвати.';
+  String get thisActionCannotBeUndone => 'Ово не може бити опозвано.';
 
   @override
   String memoriesCount(int count) {
@@ -2861,7 +2858,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Да ли си сигуран да желиш да обришеш овај задатак? Ова радња се не може опозвати.';
+      'Обрисати овај задатак? Ово не може бити опозвано.';
 
   @override
   String get enterActionItemDescription => 'Унеси опис задатка';
@@ -3211,8 +3208,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Порука успешно пријављена';
 
   @override
-  String get confirmReportMessage =>
-      'Да ли си сигуран да желиш да пријавиш ову поруку?';
+  String get confirmReportMessage => 'Пријавити ову поруку?';
 
   @override
   String get selectChatAssistant => 'Изабери чат асистента';
@@ -3228,7 +3224,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Да ли си сигуран да желиш да очистиш чат? Ова радња се не може опозвати.';
+      'Обрисати ово ћаскање? Ово не може бити опозвано.';
 
   @override
   String get copy => 'Копирај';
@@ -3407,7 +3403,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Да ли си сигуран да желиш да обришеш ову меморију? Ова радња се не може опозвати.';
+      'Обрисати ову успомену? Ово не може бити опозвано.';
 
   @override
   String get makePrivate => 'Направи приватном';
@@ -3448,7 +3444,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Да ли си сигуран да желиш да очистиш Omi-јеву меморију? Ова радња се не може опозвати и трајно ће обрисати све $count меморије.';
+    return 'Све успомене ($count) биће обрисане. Ово не може бити опозвано.';
   }
 
   @override
@@ -3765,7 +3761,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Да ли сте сигурни да желите да обришете овај разговор? Ова радња не може бити отказана.';
+      'Обрисати овај разговор? Ово не може бити опозвано.';
 
   @override
   String get conversationDeleted => 'Разговор обрисан';
@@ -4110,7 +4106,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Да ли сте сигурни да желите да ажурирате вашу апликацију? Измене ће бити рефлектоване када буду прегледане од наше тима.';
+      'Измене ће бити објављене када их наш тим прегледа.';
 
   @override
   String get updateApp => 'Ажурирај апликацију';
@@ -4176,7 +4172,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Да ли сте сигурни да желите да отказете вашу претплату? Наставићете да имате приступ до краја вашег тренутног периода наплате.';
+      'Наставићете да имате приступ до краја вашег тренутног периода наплате.';
 
   @override
   String get cancelSubscriptionButton => 'Отказати претплату';
@@ -4368,7 +4364,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Ова радња не може бити отказана. Било која апликација која користи овај кључ неће моћи да приступи API-ју.';
+      'Апликације које користе овај кључ губе приступ API-ју. Ово не може бити опозвано.';
 
   @override
   String get revoke => 'Опозови';
@@ -4425,7 +4421,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Да ли сте сигурни да желите да обришете ово $item? Ова радња не може бити отказана.';
+    return '$item ће бити обрисана. Ово не може бити опозвано.';
   }
 
   @override
@@ -4433,7 +4429,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Да ли сте сигурни да желите да опозовете кључ \"$keyName\"? Ова радња не може бити отказана.';
+    return 'Све што користи \"$keyName\" губи приступ. Ово не може бити опозвано.';
   }
 
   @override
@@ -4620,7 +4616,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ваш план остаје активан до $date. После тога, изгубићете приступ вашим неограниченим функцијама. Да ли сте сигурни?';
+    return 'Ваш план остаје активан до $date. После тога, изгубићете приступ вашим неограниченим функцијама.';
   }
 
   @override
@@ -4928,7 +4924,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Ово ће трајно обрисати све разговоре увезене из Limitless. Ова акција се не може отменити.';
+      'Сви разговори увезени из Limitless-а биће обрисани. Ово не може бити опозвано.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4970,7 +4966,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Да ли сте сигурни да желите да избришете узорак од $name?';
+    return 'Узорак гласа особе $name биће уклоњен. Ово не може бити опозвано.';
   }
 
   @override
@@ -4978,7 +4974,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Да ли сте сигурни да желите да избришете $name? Ово ће такође уклонити све асоцијаторе узорке говора.';
+    return 'Ово уклања узорке гласа особе $name и не може се поништити. Реплике у прошлим разговорима постају неименовани говорници.';
   }
 
   @override
@@ -5352,7 +5348,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Да ли сте сигурни да желите да zaustavите записивање и sažmete разговор сада?';
+      'Зауставити снимање и сада сажети разговор?';
 
   @override
   String get conversationEndsManually => 'Разговор ће завршити само ручно.';
@@ -6929,8 +6925,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get shareRecording => 'Дели снимак';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Да ли сте сигурни да желите трајно да избришете овај снимак? Ово се не може отказати.';
+  String get deleteRecordingConfirmation => 'Ово не може бити опозвано.';
 
   @override
   String get recordingIdLabel => 'Шифра записа';
@@ -7339,7 +7334,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Прелазите са Неограниченог плана на $title. Да ли сте сигурни да желите да наставите?';
+    return 'Прелазите са Неограниченог плана на $title.';
   }
 
   @override
@@ -10091,8 +10086,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deleteOnDeviceModel => 'Обриши модел';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Да ли сте сигурни да желите да обришете овај модел?';
+  String get deleteOnDeviceModelConfirm => 'Обрисати овај модел?';
 
   @override
   String get onDeviceModelDownloaded => 'Преузето';

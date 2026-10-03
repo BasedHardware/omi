@@ -300,8 +300,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reportMessage => 'Αναφορά μηνύματος';
 
   @override
-  String get reportMessageConfirm =>
-      'Είστε βέβαιοι ότι θέλετε να αναφέρετε αυτό το μήνυμα;';
+  String get reportMessageConfirm => 'Αναφορά αυτού του μηνύματος;';
 
   @override
   String get messageReported => 'Το μήνυμα αναφέρθηκε επιτυχώς.';
@@ -314,7 +313,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Είστε βέβαιοι ότι θέλετε να εκκαθαρίσετε τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Όλα τα μηνύματα αυτής της συνομιλίας θα διαγραφούν. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get maxFilesLimit => 'Μπορείτε να ανεβάσετε μόνο 4 αρχεία τη φορά';
@@ -1083,7 +1082,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Είστε βέβαιοι ότι θέλετε να αποσυνδεθείτε από το $appName; Μπορείτε να επανασυνδεθείτε ανά πάσα στιγμή.';
+    return 'Μπορείτε να συνδέσετε ξανά το $appName οποιαδήποτε στιγμή.';
   }
 
   @override
@@ -2077,15 +2076,14 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteActionItemTitle => 'Διαγραφή εργασίας';
 
   @override
-  String get deleteActionItemMessage =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την εργασία;';
+  String get deleteActionItemMessage => 'Διαγραφή αυτής της εργασίας;';
 
   @override
   String get deleteSelectedItemsTitle => 'Διαγραφή Επιλεγμένων Στοιχείων';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε $count επιλεγμένες εργασίες$s;';
+    return 'Διαγραφή $count επιλεγμένων εργασιών$s;';
   }
 
   @override
@@ -2180,7 +2178,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Είστε βέβαιοι ότι θέλετε να εκκαθαρίσετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Όλες οι αναμνήσεις σας θα διαγραφούν. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get clearMemoryButton => 'Εκκαθάριση μνήμης';
@@ -2331,8 +2329,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Διαγραφή Εργασίας';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την εργασία;';
+  String get deleteActionItemConfirmMessage => 'Διαγραφή αυτής της εργασίας;';
 
   @override
   String get appLanguage => 'Γλώσσα Εφαρμογής';
@@ -2904,7 +2901,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτήν την εργασία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Διαγραφή αυτής της εργασίας; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get enterActionItemDescription => 'Εισαγάγετε περιγραφή εργασίας';
@@ -3260,8 +3257,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Το μήνυμα αναφέρθηκε επιτυχώς';
 
   @override
-  String get confirmReportMessage =>
-      'Είστε βέβαιοι ότι θέλετε να αναφέρετε αυτό το μήνυμα;';
+  String get confirmReportMessage => 'Αναφορά αυτού του μηνύματος;';
 
   @override
   String get selectChatAssistant => 'Επιλογή βοηθού συνομιλίας';
@@ -3277,7 +3273,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Εκκαθάριση αυτής της συνομιλίας; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get copy => 'Αντιγραφή';
@@ -3460,7 +3456,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Είστε σίγουροι ότι θέλετε να διαγράψετε αυτήν τη μνήμη; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Διαγραφή αυτής της ανάμνησης; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get makePrivate => 'Κάντε ιδιωτική';
@@ -3501,7 +3497,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Είστε σίγουροι ότι θέλετε να διαγράψετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί και θα διαγράψει μόνιμα όλες τις $count μνήμες.';
+    return 'Θα διαγραφούν και οι $count αναμνήσεις. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
   }
 
   @override
@@ -3823,7 +3819,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Είστε σίγουροι ότι θέλετε να διαγράψετε αυτή τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Διαγραφή αυτής της συνομιλίας; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get conversationDeleted => 'Η συνομιλία διαγράφηκε';
@@ -4174,7 +4170,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Είστε σίγουροι ότι θέλετε να ενημερώσετε την εφαρμογή σας; Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.';
+      'Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.';
 
   @override
   String get updateApp => 'Ενημέρωση εφαρμογής';
@@ -4241,7 +4237,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Είστε σίγουροι ότι θέλετε να ακυρώσετε τη συνδρομή σας; Θα συνεχίσετε να έχετε πρόσβαση μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.';
+      'Θα συνεχίσετε να έχετε πρόσβαση μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.';
 
   @override
   String get cancelSubscriptionButton => 'Ακύρωση συνδρομής';
@@ -4433,7 +4429,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Αυτή η ενέργεια δεν μπορεί να αναιρεθεί. Οι εφαρμογές που χρησιμοποιούν αυτό το κλειδί δεν θα έχουν πλέον πρόσβαση στο API.';
+      'Οι εφαρμογές που χρησιμοποιούν αυτό το κλειδί χάνουν την πρόσβαση στο API. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get revoke => 'Ανάκληση';
@@ -4491,7 +4487,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το $item; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+    return 'Η $item θα διαγραφεί. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
   }
 
   @override
@@ -4499,7 +4495,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"$keyName\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+    return 'Ό,τι χρησιμοποιεί το \"$keyName\" χάνει την πρόσβαση. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
   }
 
   @override
@@ -4687,7 +4683,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Το πρόγραμμά σας θα παραμείνει ενεργό μέχρι $date. Μετά από αυτό, θα χάσετε την πρόσβαση στις απεριόριστες λειτουργίες. Είστε σίγουροι;';
+    return 'Το πρόγραμμά σας θα παραμείνει ενεργό μέχρι $date. Μετά από αυτό, θα χάσετε την πρόσβαση στις απεριόριστες λειτουργίες.';
   }
 
   @override
@@ -4997,7 +4993,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Αυτό θα διαγράψει μόνιμα όλες τις συνομιλίες που εισήχθησαν από το Limitless. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Όλες οι συνομιλίες που εισήχθησαν από το Limitless θα διαγραφούν. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -5039,7 +5035,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε το δείγμα του $name;';
+    return 'Το δείγμα φωνής για $name θα αφαιρεθεί. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
   }
 
   @override
@@ -5047,7 +5043,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε τον/την $name; Αυτό θα αφαιρέσει επίσης όλα τα σχετικά δείγματα ομιλίας.';
+    return 'Αυτό αφαιρεί τα δείγματα φωνής για $name και δεν μπορεί να αναιρεθεί. Οι ατάκες σε παλαιότερες συζητήσεις γίνονται ανώνυμοι ομιλητές.';
   }
 
   @override
@@ -5425,7 +5421,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Είστε σίγουροι ότι θέλετε να σταματήσετε την εγγραφή και να συνοψίσετε τη συνομιλία τώρα;';
+      'Διακοπή εγγραφής και σύνοψη της συνομιλίας τώρα;';
 
   @override
   String get conversationEndsManually =>
@@ -7010,7 +7006,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteRecordingConfirmation =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά αυτήν την εγγραφή; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get recordingIdLabel => 'Αναγνωριστικό εγγραφής';
@@ -7424,7 +7420,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Αλλάζετε το Απεριόριστο Πλάνο σας σε $title. Είστε βέβαιοι ότι θέλετε να προχωρήσετε;';
+    return 'Αλλάζετε το Απεριόριστο Πλάνο σας σε $title.';
   }
 
   @override
@@ -10198,8 +10194,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Διαγραφή μοντέλου';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το μοντέλο;';
+  String get deleteOnDeviceModelConfirm => 'Διαγραφή αυτού του μοντέλου;';
 
   @override
   String get onDeviceModelDownloaded => 'Λήφθηκε';

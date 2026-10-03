@@ -297,8 +297,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reportMessage => 'Сообщить о сообщении';
 
   @override
-  String get reportMessageConfirm =>
-      'Вы уверены, что хотите пожаловаться на это сообщение?';
+  String get reportMessageConfirm => 'Пожаловаться на это сообщение?';
 
   @override
   String get messageReported => 'Жалоба на сообщение успешно отправлена.';
@@ -311,7 +310,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Вы уверены, что хотите очистить чат? Это действие нельзя будет отменить.';
+      'Все сообщения в этом чате будут удалены. Это действие нельзя отменить.';
 
   @override
   String get maxFilesLimit => 'Вы можете загрузить только 4 файла одновременно';
@@ -1076,7 +1075,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Вы уверены, что хотите отключиться от $appName? Вы можете переподключиться в любое время.';
+    return 'Вы можете снова подключить $appName в любое время.';
   }
 
   @override
@@ -2061,15 +2060,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteActionItemTitle => 'Удалить задачу';
 
   @override
-  String get deleteActionItemMessage =>
-      'Вы уверены, что хотите удалить эту задачу?';
+  String get deleteActionItemMessage => 'Удалить эту задачу?';
 
   @override
   String get deleteSelectedItemsTitle => 'Удалить выбранные элементы';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Вы уверены, что хотите удалить $count выбранных задач$s?';
+    return 'Удалить выбранные задачи ($count)$s?';
   }
 
   @override
@@ -2162,7 +2160,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить.';
+      'Все ваши воспоминания будут удалены. Это действие нельзя отменить.';
 
   @override
   String get clearMemoryButton => 'Очистить память';
@@ -2310,8 +2308,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Удалить задачу';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Вы уверены, что хотите удалить эту задачу?';
+  String get deleteActionItemConfirmMessage => 'Удалить эту задачу?';
 
   @override
   String get appLanguage => 'Язык приложения';
@@ -2875,7 +2872,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Вы уверены, что хотите удалить эту задачу? Это действие нельзя отменить.';
+      'Удалить эту задачу? Это действие нельзя отменить.';
 
   @override
   String get enterActionItemDescription => 'Введите описание задачи';
@@ -3229,8 +3226,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Сообщение успешно отправлено';
 
   @override
-  String get confirmReportMessage =>
-      'Вы уверены, что хотите сообщить об этом сообщении?';
+  String get confirmReportMessage => 'Пожаловаться на это сообщение?';
 
   @override
   String get selectChatAssistant => 'Выбрать чат-ассистента';
@@ -3246,7 +3242,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Вы уверены, что хотите очистить чат? Это действие нельзя отменить.';
+      'Очистить этот чат? Это действие нельзя отменить.';
 
   @override
   String get copy => 'Копировать';
@@ -3427,7 +3423,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Вы уверены, что хотите удалить эту память? Это действие нельзя отменить.';
+      'Удалить это воспоминание? Это действие нельзя отменить.';
 
   @override
   String get makePrivate => 'Сделать приватной';
@@ -3468,7 +3464,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить, и оно навсегда удалит все $count воспоминаний.';
+    return 'Все воспоминания ($count) будут удалены. Это действие нельзя отменить.';
   }
 
   @override
@@ -3785,7 +3781,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Вы уверены, что хотите удалить этот разговор? Это действие нельзя отменить.';
+      'Удалить этот разговор? Это действие нельзя отменить.';
 
   @override
   String get conversationDeleted => 'Разговор удален';
@@ -4131,7 +4127,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Вы уверены, что хотите обновить приложение? Изменения вступят в силу после проверки нашей командой.';
+      'Изменения вступят в силу после проверки нашей командой.';
 
   @override
   String get updateApp => 'Обновить приложение';
@@ -4197,7 +4193,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Вы уверены, что хотите отменить подписку? У вас будет доступ до конца текущего расчетного периода.';
+      'У вас будет доступ до конца текущего расчетного периода.';
 
   @override
   String get cancelSubscriptionButton => 'Отменить подписку';
@@ -4389,7 +4385,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Это действие нельзя отменить. Приложения, использующие этот ключ, больше не смогут получить доступ к API.';
+      'Приложения, использующие этот ключ, потеряют доступ к API. Это действие нельзя отменить.';
 
   @override
   String get revoke => 'Отозвать';
@@ -4446,7 +4442,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Вы уверены, что хотите удалить этот $item? Это действие нельзя отменить.';
+    return '$item будет удалено. Это действие нельзя отменить.';
   }
 
   @override
@@ -4454,7 +4450,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Вы уверены, что хотите отозвать ключ \"$keyName\"? Это действие нельзя отменить.';
+    return 'Всё, что использует \"$keyName\", потеряет доступ. Это действие нельзя отменить.';
   }
 
   @override
@@ -4640,7 +4636,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ваш план останется активным до $date. После этого вы потеряете доступ к безлимитным функциям. Вы уверены?';
+    return 'Ваш план останется активным до $date. После этого вы потеряете доступ к безлимитным функциям.';
   }
 
   @override
@@ -4948,7 +4944,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Это навсегда удалит все разговоры, импортированные из Limitless. Это действие нельзя отменить.';
+      'Все разговоры, импортированные из Limitless, будут удалены. Это действие нельзя отменить.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4990,7 +4986,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Вы уверены, что хотите удалить образец $name?';
+    return 'Образец голоса $name будет удалён. Это действие нельзя отменить.';
   }
 
   @override
@@ -4998,7 +4994,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Вы уверены, что хотите удалить $name? Это также удалит все связанные образцы речи.';
+    return 'Это удалит образцы голоса $name, и отменить это нельзя. Реплики в прошлых разговорах станут безымянными говорящими.';
   }
 
   @override
@@ -5374,7 +5370,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Вы уверены, что хотите остановить запись и подвести итоги разговора сейчас?';
+      'Остановить запись и подвести итоги разговора сейчас?';
 
   @override
   String get conversationEndsManually => 'Разговор завершится только вручную.';
@@ -6951,8 +6947,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get shareRecording => 'Поделиться записью';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Вы уверены, что хотите безвозвратно удалить эту запись? Это действие нельзя отменить.';
+  String get deleteRecordingConfirmation => 'Это действие нельзя отменить.';
 
   @override
   String get recordingIdLabel => 'ID записи';
@@ -7359,7 +7354,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Вы меняете свой тарифный план Unlimited на $title. Вы уверены, что хотите продолжить?';
+    return 'Вы меняете свой тарифный план Unlimited на $title.';
   }
 
   @override
@@ -10124,8 +10119,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteOnDeviceModel => 'Удалить модель';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Вы уверены, что хотите удалить эту модель?';
+  String get deleteOnDeviceModelConfirm => 'Удалить эту модель?';
 
   @override
   String get onDeviceModelDownloaded => 'Загружено';

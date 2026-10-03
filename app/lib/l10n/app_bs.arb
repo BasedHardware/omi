@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Jeste li sigurni da želite da prijavite ovu poruku?",
+    "reportMessageConfirm": "Prijaviti ovu poruku?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Jeste li sigurni da želite da očistite čat? Ova radnja se ne može opozvati.",
+    "clearChatConfirm": "Sve poruke u ovom četu bit će obrisane. Ovo se ne može poništiti.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Jeste li sigurni da želite da se iskopčate od {appName}? Možete se ponovo povezati bilo kada.",
+    "disconnectAppMessage": "{appName} možete ponovo povezati bilo kada.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Jeste li sigurni da želite da obrišete ovaj zadatak?",
+    "deleteActionItemMessage": "Obrisati ovaj zadatak?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Jeste li sigurni da želite obrisati {count} odabranih zadatak{s}?",
+    "deleteSelectedItemsMessage": "Obrisati {count} odabranih zadataka{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Ste li sigurni da želite da obrišete Omi-jevu memoriju? Ova akcija se ne može poništiti.",
+    "clearMemoryMessage": "Sve vaše uspomene bit će obrisane. Ovo se ne može poništiti.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Jeste li sigurni da želite da obrišete ovaj zadatak?",
+    "deleteActionItemConfirmMessage": "Obrisati ovaj zadatak?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "Ova radnja se ne može opozvati.",
+    "thisActionCannotBeUndone": "Ovo se ne može poništiti.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Jesi li siguran da želiš obrisati ovaj zadatak? Ova radnja se ne može opozvati.",
+    "deleteActionItemConfirmation": "Obrisati ovaj zadatak? Ovo se ne može poništiti.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Jesi li siguran da želiš prijaviti ovu poruku?",
+    "confirmReportMessage": "Prijaviti ovu poruku?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Jesi li siguran da želiš očistiti razgovor? Ova radnja se ne može opozvati.",
+    "confirmClearChat": "Očistiti ovaj čet? Ovo se ne može poništiti.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Jesi li siguran da želiš obrisati ovu uspomenu? Ova radnja se ne može opozvati.",
+    "deleteMemoryConfirmation": "Obrisati ovu uspomenu? Ovo se ne može poništiti.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Jesi li siguran da želiš očistiti Omijevu memoriju? Ova radnja se ne može opozvati i trajno će obrisati sve {count} uspomena.",
+    "clearMemoryConfirmation": "Sve uspomene ({count}) bit će obrisane. Ovo se ne može poništiti.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Pusti Omi da automatski odabere najbolju aplikaciju",
-    "deleteConversationConfirmation": "Jesi li siguran da želiš obrisati ovaj razgovor? Ova se akcija ne može poništiti.",
+    "deleteConversationConfirmation": "Obrisati ovaj razgovor? Ovo se ne može poništiti.",
     "conversationDeleted": "Razgovor je obrisan",
     "generatingLink": "Generiranje veze…",
     "editConversation": "Uredi razgovor",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Jesi li siguran da želiš ažurirati svoju aplikaciju? Promjene će se odraziti kada ih odobri naš tim.",
+    "updateAppConfirmation": "Promjene će biti objavljene nakon što ih pregleda naš tim.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Jesi li siguran da želiš otkazati svoju pretplatu? Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.",
+    "cancelSubscriptionConfirmation": "Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "Ova se akcija ne može poništiti. Sve aplikacije koje koriste ovaj ključ neće više moći pristupiti API-ju.",
+    "revokeApiKeyWarning": "Aplikacije koje koriste ovaj ključ gube pristup API-ju. Ovo se ne može poništiti.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Jesi li siguran da želiš obrisati ovaj {item}? Ova se akcija ne može poništiti.",
+    "deleteItemConfirmation": "{item} će biti obrisana. Ovo se ne može poništiti.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Jesi li siguran da želiš opozva ključ \"{keyName}\"? Ova se akcija ne može poništiti.",
+    "revokeKeyConfirmation": "Sve što koristi \"{keyName}\" gubi pristup. Ovo se ne može poništiti.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Tvoj će plan ostati aktivna do {date}. Nakon toga ćeš izgubiti pristup svojima neograničenim značajkama. Jesi li siguran?",
+    "planRemainsActiveUntil": "Tvoj će plan ostati aktivna do {date}. Nakon toga ćeš izgubiti pristup svojima neograničenim značajkama.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "Ovo će trajno obrisati sve razgovore uvezene iz Limitless aplikacije. Ova akcija se ne može poništiti.",
+    "deleteAllLimitlessWarning": "Svi razgovori uvezeni iz Limitlessa bit će obrisani. Ovo se ne može poništiti.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Jeste li sigurni da želite obrisati {name}ov uzorak?",
+    "deleteSampleConfirmation": "Uzorak glasa osobe {name} bit će uklonjen. Ovo se ne može poništiti.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Jeste li sigurni da želite obrisati {name}? Ovo će ukloniti i sve povezane uzorke govora.",
+    "deletePersonConfirmation": "Ovo uklanja uzorke glasa osobe {name} i ne može se poništiti. Replike u prošlim razgovorima postaju neimenovani govornici.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Jeste li sigurni da želite zaustaviti snimanje i sažeti razgovor sada?",
+    "stopRecordingConfirmation": "Zaustaviti snimanje i sada sažeti razgovor?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Jeste li sigurni da želite da trajno izbrišete ovaj snimak? Ovo se ne može poništiti.",
+    "deleteRecordingConfirmation": "Ovo se ne može poništiti.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "Prebacujete svoj Unlimited plan na {title}. Jeste li sigurni da želite nastaviti?",
+    "planSwitchingDescriptionWithTitle": "Prebacujete svoj Unlimited plan na {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "Transkripcija u oblaku",
     "copyMessage": "Kopiraj poruku",
     "deleteOnDeviceModel": "Izbriši model",
-    "deleteOnDeviceModelConfirm": "Jeste li sigurni da želite izbrisati ovaj model?",
+    "deleteOnDeviceModelConfirm": "Obrisati ovaj model?",
     "downgradeAnyway": "Ipak pređi na niži plan",
     "downgradeLimitBattery": "7x veća potrošnja baterije",
     "downgradeLimitDelay": "Kašnjenje od 5-7 sekundi",

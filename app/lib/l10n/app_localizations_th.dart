@@ -290,8 +290,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reportMessage => 'รายงานข้อความ';
 
   @override
-  String get reportMessageConfirm =>
-      'คุณแน่ใจหรือไม่ว่าต้องการรายงานข้อความนี้?';
+  String get reportMessageConfirm => 'รายงานข้อความนี้ไหม?';
 
   @override
   String get messageReported => 'รายงานข้อความสำเร็จแล้ว';
@@ -304,7 +303,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'คุณแน่ใจหรือไม่ว่าต้องการล้างแชท? การดำเนินการนี้ไม่สามารถยกเลิกได้';
+      'ข้อความทั้งหมดในแชทนี้จะถูกลบ การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get maxFilesLimit => 'คุณสามารถอัปโหลดได้เพียง 4 ไฟล์ในคราวเดียว';
@@ -1059,7 +1058,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการตัดการเชื่อมต่อจาก $appName? คุณสามารถเชื่อมต่อใหม่ได้ตลอดเวลา';
+    return 'คุณเชื่อมต่อ $appName ใหม่ได้ทุกเมื่อ';
   }
 
   @override
@@ -2024,14 +2023,14 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteActionItemTitle => 'ลบงาน';
 
   @override
-  String get deleteActionItemMessage => 'คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้';
+  String get deleteActionItemMessage => 'ลบงานนี้ไหม?';
 
   @override
   String get deleteSelectedItemsTitle => 'ลบรายการที่เลือก';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการลบงานที่เลือก $count รายการ$s?';
+    return 'ลบงานที่เลือก $count รายการ$s ไหม?';
   }
 
   @override
@@ -2122,7 +2121,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'คุณแน่ใจหรือไม่ว่าต้องการล้างความทรงจำของ Omi? การกระทำนี้ไม่สามารถยกเลิกได้';
+      'ความทรงจำทั้งหมดของคุณจะถูกลบ การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get clearMemoryButton => 'ล้างความทรงจำ';
@@ -2269,8 +2268,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'ลบงาน';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้?';
+  String get deleteActionItemConfirmMessage => 'ลบงานนี้ไหม?';
 
   @override
   String get appLanguage => 'ภาษาแอป';
@@ -2823,7 +2821,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้ การดำเนินการนี้ไม่สามารถยกเลิกได้';
+      'ลบงานนี้ไหม? การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get enterActionItemDescription => 'ป้อนคำอธิบายงาน';
@@ -3172,8 +3170,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ รายงานข้อความสำเร็จ';
 
   @override
-  String get confirmReportMessage =>
-      'คุณแน่ใจหรือไม่ว่าต้องการรายงานข้อความนี้?';
+  String get confirmReportMessage => 'รายงานข้อความนี้ไหม?';
 
   @override
   String get selectChatAssistant => 'เลือกผู้ช่วยแชท';
@@ -3189,7 +3186,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'คุณแน่ใจหรือไม่ว่าต้องการล้างแชท? การกระทำนี้ไม่สามารถยกเลิกได้';
+      'ล้างแชทนี้ไหม? การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get copy => 'คัดลอก';
@@ -3366,7 +3363,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบความทรงจำนี้? การกระทำนี้ไม่สามารถยกเลิกได้';
+      'ลบความทรงจำนี้ไหม? การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get makePrivate => 'เปลี่ยนเป็นส่วนตัว';
@@ -3404,7 +3401,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการล้างความทรงจำของ Omi? การดำเนินการนี้ไม่สามารถยกเลิกได้และจะลบความทรงจำทั้งหมด $count รายการอย่างถาวร';
+    return 'ความทรงจำทั้งหมด $count รายการจะถูกลบ การดำเนินการนี้ไม่สามารถยกเลิกได้';
   }
 
   @override
@@ -3712,7 +3709,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบการสนทนานี้? การกระทำนี้ไม่สามารถยกเลิกได้';
+      'ลบบทสนทนานี้ไหม? การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get conversationDeleted => 'ลบการสนทนาแล้ว';
@@ -4050,7 +4047,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการอัปเดตแอป? การเปลี่ยนแปลงจะมีผลหลังจากทีมของเราตรวจสอบ';
+      'การเปลี่ยนแปลงจะมีผลหลังจากทีมของเราตรวจสอบ';
 
   @override
   String get updateApp => 'อัปเดตแอป';
@@ -4116,7 +4113,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการสมัครสมาชิก? คุณจะยังคงเข้าถึงได้จนถึงสิ้นสุดรอบบิลปัจจุบัน';
+      'คุณจะยังคงเข้าถึงได้จนถึงสิ้นสุดรอบบิลปัจจุบัน';
 
   @override
   String get cancelSubscriptionButton => 'ยกเลิกการสมัครสมาชิก';
@@ -4305,7 +4302,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'การดำเนินการนี้ไม่สามารถยกเลิกได้ แอปพลิเคชันใดๆ ที่ใช้คีย์นี้จะไม่สามารถเข้าถึง API ได้อีกต่อไป';
+      'แอปที่ใช้คีย์นี้จะเข้าถึง API ไม่ได้อีก การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get revoke => 'เพิกถอน';
@@ -4362,7 +4359,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการลบ$itemนี้? การกระทำนี้ไม่สามารถยกเลิกได้';
+    return 'การลบ$itemนี้ย้อนกลับไม่ได้';
   }
 
   @override
@@ -4370,7 +4367,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการเพิกถอนคีย์ \"$keyName\"? การกระทำนี้ไม่สามารถยกเลิกได้';
+    return 'ทุกอย่างที่ใช้ \"$keyName\" จะเข้าถึงไม่ได้อีก การดำเนินการนี้ไม่สามารถยกเลิกได้';
   }
 
   @override
@@ -4555,7 +4552,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'แพ็คเกจของคุณจะยังคงใช้งานได้จนถึง $date หลังจากนั้น คุณจะสูญเสียการเข้าถึงฟีเจอร์ไม่จำกัด คุณแน่ใจหรือไม่?';
+    return 'แพ็คเกจของคุณจะยังคงใช้งานได้จนถึง $date หลังจากนั้น คุณจะสูญเสียการเข้าถึงฟีเจอร์ไม่จำกัด';
   }
 
   @override
@@ -4859,7 +4856,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'การดำเนินการนี้จะลบการสนทนาทั้งหมดที่นำเข้าจาก Limitless อย่างถาวร ไม่สามารถยกเลิกการกระทำนี้ได้';
+      'บทสนทนาทั้งหมดที่นำเข้าจาก Limitless จะถูกลบ การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4900,7 +4897,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการลบตัวอย่างของ $name?';
+    return 'ตัวอย่างเสียงของ $name จะถูกลบ การดำเนินการนี้ไม่สามารถยกเลิกได้';
   }
 
   @override
@@ -4908,7 +4905,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'คุณแน่ใจหรือไม่ว่าต้องการลบ $name? การดำเนินการนี้จะลบตัวอย่างเสียงที่เกี่ยวข้องทั้งหมดด้วย';
+    return 'การดำเนินการนี้จะลบตัวอย่างเสียงของ $name และย้อนกลับไม่ได้ คำพูดในบทสนทนาที่ผ่านมาจะกลายเป็นผู้พูดที่ไม่มีชื่อ';
   }
 
   @override
@@ -5274,8 +5271,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get finishedConversation => 'จบการสนทนา?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการหยุดบันทึกและสรุปการสนทนาตอนนี้?';
+  String get stopRecordingConfirmation => 'หยุดบันทึกและสรุปบทสนทนาตอนนี้ไหม?';
 
   @override
   String get conversationEndsManually => 'การสนทนาจะจบลงด้วยตนเองเท่านั้น';
@@ -6828,8 +6824,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get shareRecording => 'แชร์การบันทึก';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบการบันทึกนี้ถาวร? การดำเนินการนี้ไม่สามารถยกเลิกได้';
+  String get deleteRecordingConfirmation => 'การดำเนินการนี้ไม่สามารถยกเลิกได้';
 
   @override
   String get recordingIdLabel => 'รหัสการบันทึก';
@@ -7225,7 +7220,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'คุณกำลังเปลี่ยนแผน Unlimited เป็น $title คุณแน่ใจหรือไม่ว่าต้องการดำเนินการต่อ?';
+    return 'คุณกำลังเปลี่ยนแผน Unlimited เป็น $title';
   }
 
   @override
@@ -9945,8 +9940,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteOnDeviceModel => 'ลบโมเดล';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'คุณแน่ใจหรือไม่ว่าต้องการลบโมเดลนี้?';
+  String get deleteOnDeviceModelConfirm => 'ลบโมเดลนี้ไหม?';
 
   @override
   String get onDeviceModelDownloaded => 'ดาวน์โหลดแล้ว';

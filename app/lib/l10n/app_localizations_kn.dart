@@ -295,8 +295,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reportMessage => 'ಸಂದೇಶ ವರದಿ';
 
   @override
-  String get reportMessageConfirm =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಈ ಸಂದೇಶ ವರದಿ ಮಾಡಲು ಬಯಸುತ್ತೀರಾ?';
+  String get reportMessageConfirm => 'ಈ ಸಂದೇಶವನ್ನು ವರದಿ ಮಾಡುವುದೇ?';
 
   @override
   String get messageReported => 'ಸಂದೇಶ ಸಫಲವಾಗಿ ವರದಿ ಮಾಡಲಾಗಿದೆ.';
@@ -309,7 +308,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಚ್ಯಾಟ್ ತೆರವುಗೊಳಿಸಲು ಬಯಸುತ್ತೀರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಲಾಗುವುದಿಲ್ಲ.';
+      'ಈ ಚಾಟ್‌ನ ಎಲ್ಲಾ ಸಂದೇಶಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get maxFilesLimit =>
@@ -1072,7 +1071,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'ನೀವು ಖಚಿತವಾಗಿ $appName ಸಂಪರ್ಕ ಛಿನ್ನ ಬಯಸುತ್ತೀರಾ? ನೀವು ಯಾವಾಗ ಪುನರ್ಸಂಯೋಜಿಸಬಹುದು.';
+    return 'ನೀವು ಯಾವಾಗ ಬೇಕಾದರೂ $appName ಅನ್ನು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಬಹುದು.';
   }
 
   @override
@@ -2052,14 +2051,14 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteActionItemTitle => 'ಕಾರ್ಯ ಅಳಿಸಿ';
 
   @override
-  String get deleteActionItemMessage => 'ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?';
+  String get deleteActionItemMessage => 'ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?';
 
   @override
   String get deleteSelectedItemsTitle => 'ಆಯ್ಕೆ ಪಡೆದ ಐಟಂ ಅಳಿಸಿ';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'ನೀವು $count ಆಯ್ಕೆಮಾಡಿದ ಕಾರ್ಯ$s ಅಳಿಸಲು ಖಚಿತವೆ?';
+    return '$count ಆಯ್ಕೆಮಾಡಿದ ಕಾರ್ಯ$s ಅಳಿಸುವುದೇ?';
   }
 
   @override
@@ -2151,7 +2150,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'ನೀವು Omi ಯ ಸ್ಮೃತಿ ಸ್ಪಷ್ಟ ಮಾಡಲು ಖಚಿತವೆ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+      'ನಿಮ್ಮ ಎಲ್ಲಾ ಸ್ಮೃತಿಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get clearMemoryButton => 'ಸ್ಮೃತಿ ಸ್ಪಷ್ಟ ಮಾಡಿ';
@@ -2299,8 +2298,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'ಕಾರ್ಯ ಅಳಿಸಿ';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?';
+  String get deleteActionItemConfirmMessage => 'ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?';
 
   @override
   String get appLanguage => 'ಅ್ಯಪ್ ಭಾಷೆ';
@@ -2409,7 +2407,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteMemory => 'ಸ್ಮರಣೆ ಅಳಿಸಿ';
 
   @override
-  String get thisActionCannotBeUndone => 'ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.';
+  String get thisActionCannotBeUndone => 'ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String memoriesCount(int count) {
@@ -2872,7 +2870,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+      'ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get enterActionItemDescription => 'ಕಾರ್ಯದ ವಿವರಣೆ ನಮೂದಿಸಿ';
@@ -3226,8 +3224,7 @@ class AppLocalizationsKn extends AppLocalizations {
       '✅ ವಾರ್ತೆ ಯಶಸ್ವಿಯಾಗಿ ವರದಿ ಮಾಡಲಾಯಿತು';
 
   @override
-  String get confirmReportMessage =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಈ ವಾರ್ತೆ ವರದಿ ಮಾಡಲು ಬಯಸುವಿರಿ?';
+  String get confirmReportMessage => 'ಈ ಸಂದೇಶವನ್ನು ವರದಿ ಮಾಡುವುದೇ?';
 
   @override
   String get selectChatAssistant => 'ಚ್ಯಾಟ್ ಸಹಾಯಕ ಆಯ್ಕೆ ಮಾಡಿ';
@@ -3243,7 +3240,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಚ್ಯಾಟ್ ಸ್ಪಷ್ಟ ಮಾಡಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.';
+      'ಈ ಚಾಟ್ ತೆರವುಗೊಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get copy => 'ನಕಲಿಸಿ';
@@ -3424,7 +3421,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಈ ಸ್ಮರಣೆ ಅಳಿಸಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.';
+      'ಈ ಸ್ಮೃತಿಯನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get makePrivate => 'ನಿಜಿ ಮಾಡಿ';
@@ -3465,7 +3462,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'ನೀವು ಖಚಿತವಾಗಿ Omi ಸ್ಮರಣೆ ಸ್ಪಷ್ಟ ಮಾಡಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ ಮತ್ತು ಎಲ್ಲಾ $count ಸ್ಮರಣೆಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸುತ್ತದೆ.';
+    return 'ಎಲ್ಲಾ $count ಸ್ಮೃತಿಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
   }
 
   @override
@@ -3782,7 +3779,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'ನೀವು ಖಚಿತವಾಗಿ ಈ ಸಂವಾದವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+      'ಈ ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸುವುದೇ? ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get conversationDeleted => 'ಸಂವಾದ ಅಳಿಸಲಾಗಿದೆ';
@@ -4131,7 +4128,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'ನೀವು ಖಚಿತವಾಗಿ ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನವನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಲು ಬಯಸುವಿರಾ? ನಮ್ಮ ತಂಡದ ಮೂಲಕ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಬದಲಾವಣೆಗಳು ಪ್ರತಿಬಿಂಬಿಸುತ್ತವೆ.';
+      'ನಮ್ಮ ತಂಡ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಬದಲಾವಣೆಗಳು ಪ್ರಕಟವಾಗುತ್ತವೆ.';
 
   @override
   String get updateApp => 'ಅಪ್ಲಿಕೇಶನ ಅಪ್ಡೇಟ್ ಮಾಡಿ';
@@ -4197,7 +4194,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'ನೀವು ಖಚಿತವಾಗಿ ನಿಮ್ಮ ಸಾಬಸ್ಕ್ರಿಪ್ಷನ್ ರದ್ದುಗೊಳಿಸಲು ಬಯಸುವಿರಾ? ನೀವು ನಿಮ್ಮ ಪ್ರವಾಹಿ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಅಂತ್ಯ ತನಕ ಪ್ರವೇಶ ಹೊಂದಿರುತ್ತೀರಿ.';
+      'ನೀವು ನಿಮ್ಮ ಪ್ರವಾಹಿ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಅಂತ್ಯ ತನಕ ಪ್ರವೇಶ ಹೊಂದಿರುತ್ತೀರಿ.';
 
   @override
   String get cancelSubscriptionButton => 'ಸಾಬಸ್ಕ್ರಿಪ್ಷನ್ ರದ್ದುಗೊಳಿಸಿ';
@@ -4389,7 +4386,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ. ಈ ಕೀಯನ್ನು ಬಳಸುವ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ API ಗೆ ಹೆಚ್ಚುತರ ಪ್ರವೇಶವನ್ನು ಹೊಂದಿರುವುದಿಲ್ಲ.';
+      'ಈ ಕೀ ಬಳಸುವ ಆಪ್‌ಗಳು API ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತವೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get revoke => 'ರದ್ದುಗೊಳಿಸಿ';
@@ -4446,7 +4443,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'ನೀವು ಖಚಿತವಾಗಿ ಈ $item ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+    return 'ಈ $item ಅಳಿಸುವುದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
   }
 
   @override
@@ -4454,7 +4451,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'ನೀವು ಖಚಿತವಾಗಿ ಕೀ \"$keyName\" ರದ್ದುಗೊಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+    return '\"$keyName\" ಬಳಸುವ ಎಲ್ಲವೂ ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
   }
 
   @override
@@ -4642,7 +4639,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ತನಕ ಸಕ್ರಿಯವಾಗಿರುತ್ತದೆ. ಅದರ ನಂತರ, ನೀವು ನಿಮ್ಮ ಅಸೀಮಿತ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಪ್ರವೇಶ ಕಳೆದುಕೊಳ್ಳುತ್ತೀರಿ. ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?';
+    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ತನಕ ಸಕ್ರಿಯವಾಗಿರುತ್ತದೆ. ಅದರ ನಂತರ, ನೀವು ನಿಮ್ಮ ಅಸೀಮಿತ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಪ್ರವೇಶ ಕಳೆದುಕೊಳ್ಳುತ್ತೀರಿ.';
   }
 
   @override
@@ -4952,7 +4949,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'ಇದು Limitless ನಿಂದ ಆಮದು ಮಾಡಲಾದ ಎಲ್ಲಾ ಸಂಭಾಷಣೆಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸುತ್ತದೆ. ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+      'Limitless ನಿಂದ ಆಮದು ಮಾಡಿದ ಎಲ್ಲಾ ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4994,7 +4991,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$name ನ ಮಾದರಿಯನ್ನು ಅಳಿಸುವುದೇ ಎಂದು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ?';
+    return '$name ಅವರ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
   }
 
   @override
@@ -5002,7 +4999,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$name ಅನ್ನು ಅಳಿಸುವುದೇ ಎಂದು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ? ಇದು ಸಂಬಂಧಿತ ಎಲ್ಲಾ ಭಾಷಣ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ.';
+    return 'ಇದು $name ಅವರ ಧ್ವನಿ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ ಮತ್ತು ಹಿಂದಕ್ಕೆ ಪಡೆಯಲಾಗುವುದಿಲ್ಲ. ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿನ ಅವರ ಮಾತುಗಳು ಹೆಸರಿಲ್ಲದ ಮಾತನಾಡುವವರಾಗುತ್ತವೆ.';
   }
 
   @override
@@ -5380,7 +5377,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು ಮತ್ತು ಸಂಭಾಷಣೆ ಈಗ ಸಾರಾಂಶ ಮಾಡಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಿ?';
+      'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ ಈಗಲೇ ಸಂಭಾಷಣೆಯನ್ನು ಸಾರಾಂಶಗೊಳಿಸುವುದೇ?';
 
   @override
   String get conversationEndsManually =>
@@ -6961,8 +6958,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get shareRecording => 'ರೆಕಾರ್ಡಿಂಗ್ ಹಂಚಿಕೊಳ್ಳಿ';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲು ನಿಶ್ಚಿತವಾಗಿ ಬಯಸಿದ್ದೀರಾ? ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.';
+  String get deleteRecordingConfirmation => 'ಇದನ್ನು ರದ್ದು ಮಾಡಲಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get recordingIdLabel => 'ರೆಕಾರ್ಡಿಂಗ್ ID';
@@ -7366,7 +7362,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'ನೀವು ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು $titleಗೆ ಬದಲಾಯಿಸಿಕೊಳ್ಳುತ್ತಿದ್ದೀರಿ. ನೀವು ಮುಂದುವರೆಯಲು ನಿಶ್ಚಿತವಾಗಿ ಬಯಸಿದ್ದೀರಾ?';
+    return 'ನೀವು ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು $titleಗೆ ಬದಲಾಯಿಸುತ್ತಿದ್ದೀರಿ.';
   }
 
   @override
@@ -10128,8 +10124,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteOnDeviceModel => 'ಮಾದರಿಯನ್ನು ಅಳಿಸಿ';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?';
+  String get deleteOnDeviceModelConfirm => 'ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸುವುದೇ?';
 
   @override
   String get onDeviceModelDownloaded => 'ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ';

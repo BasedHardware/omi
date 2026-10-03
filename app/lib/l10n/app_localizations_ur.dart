@@ -295,8 +295,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reportMessage => 'پیغام کی اطلاع دیں';
 
   @override
-  String get reportMessageConfirm =>
-      'کیا آپ واقعی اس پیغام کی اطلاع دینا چاہتے ہیں؟';
+  String get reportMessageConfirm => 'اس پیغام کی اطلاع دیں؟';
 
   @override
   String get messageReported => 'پیغام کی کامیابی سے اطلاع دی گئی۔';
@@ -309,7 +308,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'کیا آپ واقعی بات چیت صاف کرنا چاہتے ہیں؟ یہ عمل واپس نہیں کیا جا سکتا۔';
+      'اس چیٹ کے تمام پیغامات حذف ہو جائیں گے۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get maxFilesLimit => 'آپ ایک وقت میں صرف 4 فائلیں اپ لوڈ کر سکتے ہیں';
@@ -1070,7 +1069,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'کیا آپ واقعی $appName سے منقطع کرنا چاہتے ہیں؟ آپ کسی بھی وقت دوبارہ جڑ سکتے ہیں۔';
+    return 'آپ کسی بھی وقت $appName کو دوبارہ جوڑ سکتے ہیں۔';
   }
 
   @override
@@ -2041,15 +2040,14 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteActionItemTitle => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemMessage =>
-      'کیا آپ یقینی ہیں کہ یہ کام حذف کرنا چاہتے ہیں؟';
+  String get deleteActionItemMessage => 'یہ کام حذف کریں؟';
 
   @override
   String get deleteSelectedItemsTitle => 'منتخب شدہ چیزیں حذف کریں';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'کیا آپ یقینی ہیں کہ آپ $count منتخب کام$s حذف کرنا چاہتے ہیں؟';
+    return '$count منتخب کام$s حذف کریں؟';
   }
 
   @override
@@ -2141,7 +2139,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'کیا آپ یقینی ہیں کہ Omi کی میموری صاف کرنا چاہتے ہیں؟ یہ عمل الٹایا نہیں جا سکتا۔';
+      'آپ کی تمام یادیں حذف ہو جائیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get clearMemoryButton => 'میموری صاف کریں';
@@ -2288,8 +2286,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'کیا آپ یقینی ہیں کہ یہ کام حذف کرنا چاہتے ہیں؟';
+  String get deleteActionItemConfirmMessage => 'یہ کام حذف کریں؟';
 
   @override
   String get appLanguage => 'ایپ کی زبان';
@@ -2396,7 +2393,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteMemory => 'یادوں کو حذف کریں';
 
   @override
-  String get thisActionCannotBeUndone => 'یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get thisActionCannotBeUndone => 'یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String memoriesCount(int count) {
@@ -2857,7 +2854,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'کیا آپ اس کام کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+      'یہ کام حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get enterActionItemDescription => 'کام کی تفصیل درج کریں';
@@ -3208,7 +3205,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ پیغام کامیابی سے رپورٹ ہوا';
 
   @override
-  String get confirmReportMessage => 'کیا آپ اس پیغام کی رپورٹ کرنا چاہتے ہیں؟';
+  String get confirmReportMessage => 'اس پیغام کی اطلاع دیں؟';
 
   @override
   String get selectChatAssistant => 'چیٹ معاون منتخب کریں';
@@ -3223,8 +3220,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get clearChatTitle => 'چیٹ صاف کریں؟';
 
   @override
-  String get confirmClearChat =>
-      'کیا آپ چیٹ صاف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get confirmClearChat => 'یہ چیٹ صاف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get copy => 'کاپی کریں';
@@ -3404,7 +3400,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'کیا آپ اس یاد کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+      'یہ یاد حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get makePrivate => 'نجی بنائیں';
@@ -3442,7 +3438,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'کیا آپ Omi کی یاد صاف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی اور تمام $count یادوں کو ہٹا دے گی۔';
+    return 'تمام $count یادیں حذف ہو جائیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -3759,7 +3755,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'کیا آپ واقعی یہ بات چیت حذف کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+      'یہ گفتگو حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get conversationDeleted => 'بات چیت حذف ہو گئی';
@@ -4105,7 +4101,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'کیا آپ واقعی اپنی ایپ اپ ڈیٹ کرنا چاہتے ہیں؟ ہماری ٹیم کے نقطہ نظر سے تبدیلیاں نظر آئیں گی۔';
+      'ہماری ٹیم کے جائزے کے بعد تبدیلیاں نافذ ہو جائیں گی۔';
 
   @override
   String get updateApp => 'ایپ اپ ڈیٹ کریں';
@@ -4171,7 +4167,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'کیا آپ واقعی اپنی رکنیت منسوخ کرنا چاہتے ہیں؟ آپ اپنی موجودہ بلنگ مدت کے اختتام تک رسائی میں رہیں گے۔';
+      'آپ اپنی موجودہ بلنگ مدت کے اختتام تک رسائی میں رہیں گے۔';
 
   @override
   String get cancelSubscriptionButton => 'رکنیت منسوخ کریں';
@@ -4362,7 +4358,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'یہ کارنامہ واپس نہیں ہو سکتا۔ اس کلید کو استعمال کرنے والی کوئی بھی ایپلیکیشنز اب API تک رسائی نہیں کر سکیں گی۔';
+      'اس کلید کو استعمال کرنے والی ایپس API تک رسائی کھو دیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get revoke => 'منسوخ کریں';
@@ -4419,7 +4415,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'کیا آپ واقعی یہ $item حذف کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+    return 'اس $item کو حذف کرنا واپس نہیں ہو سکتا۔';
   }
 
   @override
@@ -4427,7 +4423,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'کیا آپ واقعی کلید \"$keyName\" منسوخ کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+    return '\"$keyName\" استعمال کرنے والی ہر چیز رسائی کھو دے گی۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -4614,7 +4610,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'آپ کا منصوبہ $date تک فعال رہے گا۔ اس کے بعد آپ اپنی لامحدود خصوصیات تک رسائی سے محروم ہو جائیں گے۔ کیا آپ یقینی ہیں؟';
+    return 'آپ کا منصوبہ $date تک فعال رہے گا۔ اس کے بعد آپ اپنی لامحدود خصوصیات تک رسائی سے محروم ہو جائیں گے۔';
   }
 
   @override
@@ -4921,7 +4917,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'اس سے Limitless سے درآمد شدہ تمام گفتگو مستقل طور پر حذف ہوں گی۔ یہ عمل واپس نہیں کیا جا سکتا۔';
+      'Limitless سے درآمد کی گئی تمام گفتگو حذف ہو جائے گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4963,7 +4959,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'کیا آپ واقی $name کا نمونہ حذف کرنا چاہتے ہیں؟';
+    return '$name کا آواز کا نمونہ ہٹا دیا جائے گا۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -4971,7 +4967,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'کیا آپ واقی $name کو حذف کرنا چاہتے ہیں؟ اس سے تمام متعلقہ صوتی نمونے بھی ہٹائے جائیں گے۔';
+    return 'یہ $name کے آواز کے نمونے ہٹا دیتا ہے اور اسے واپس نہیں کیا جا سکتا۔ ماضی کی گفتگوؤں میں ان کے جملے بے نام مقررین بن جاتے ہیں۔';
   }
 
   @override
@@ -5342,7 +5338,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'کیا آپ یقینی ہیں کہ آپ ریکارڈنگ روک کر گفتگو کو اب خلاصہ کرنا چاہتے ہیں؟';
+      'ریکارڈنگ روک کر ابھی گفتگو کا خلاصہ بنائیں؟';
 
   @override
   String get conversationEndsManually => 'گفتگو صرف دستی طور پر ختم ہوگی۔';
@@ -6920,8 +6916,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get shareRecording => 'ریکارڈنگ شیئر کریں';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'کیا آپ یقینی ہیں کہ آپ یہ ریکارڈنگ مستقل طور پر ڈیلیٹ کرنا چاہتے ہیں؟ یہ واپس نہیں کیا جا سکتا۔';
+  String get deleteRecordingConfirmation => 'یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get recordingIdLabel => 'ریکارڈنگ ID';
@@ -7329,7 +7324,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'آپ اپنی Unlimited منصوبہ کو $title میں تبدیل کر رہے ہیں۔ کیا آپ آگے بڑھنا چاہتے ہیں؟';
+    return 'آپ اپنا Unlimited منصوبہ $title میں تبدیل کر رہے ہیں۔';
   }
 
   @override
@@ -10073,8 +10068,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteOnDeviceModel => 'ماڈل حذف کریں';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'کیا آپ واقعی یہ ماڈل حذف کرنا چاہتے ہیں؟';
+  String get deleteOnDeviceModelConfirm => 'یہ ماڈل حذف کریں؟';
 
   @override
   String get onDeviceModelDownloaded => 'ڈاؤن لوڈ شدہ';

@@ -298,8 +298,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reportMessage => 'Üzenet jelentése';
 
   @override
-  String get reportMessageConfirm =>
-      'Biztosan be szeretnéd jelenteni ezt az üzenetet?';
+  String get reportMessageConfirm => 'Jelented ezt az üzenetet?';
 
   @override
   String get messageReported => 'Üzenet sikeresen bejelentve.';
@@ -312,7 +311,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Biztosan törölni szeretnéd a csevegést? Ez a művelet nem vonható vissza.';
+      'A csevegés összes üzenete törlődik. Ez nem vonható vissza.';
 
   @override
   String get maxFilesLimit => 'Egyszerre csak 4 fájlt tölthetsz fel';
@@ -1075,7 +1074,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Biztosan leválasztod a(z) $appName-t? Bármikor újracsatlakozthatsz.';
+    return 'A(z) $appName bármikor újra csatlakoztatható.';
   }
 
   @override
@@ -2062,15 +2061,14 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteActionItemTitle => 'Feladat törlése';
 
   @override
-  String get deleteActionItemMessage =>
-      'Biztosan törölni szeretné ezt a feladatot?';
+  String get deleteActionItemMessage => 'Törlöd ezt a feladatot?';
 
   @override
   String get deleteSelectedItemsTitle => 'Kiválasztott elemek törlése';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Biztosan törölni szeretnéd a(z) $count kiválasztott feladatot$s?';
+    return 'Törlöd a(z) $count kiválasztott feladatot$s?';
   }
 
   @override
@@ -2164,7 +2162,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Biztosan törölni szeretnéd az Omi emlékét? Ez a művelet nem vonható vissza.';
+      'Az összes emléked törlődik. Ez nem vonható vissza.';
 
   @override
   String get clearMemoryButton => 'Memória törlése';
@@ -2312,8 +2310,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Feladat törlése';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Biztosan törölni szeretnéd ezt a feladatot?';
+  String get deleteActionItemConfirmMessage => 'Törlöd ezt a feladatot?';
 
   @override
   String get appLanguage => 'Alkalmazás nyelve';
@@ -2421,7 +2418,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteMemory => 'Emlékezet törlése';
 
   @override
-  String get thisActionCannotBeUndone => 'Ez a művelet nem vonható vissza.';
+  String get thisActionCannotBeUndone => 'Ez nem vonható vissza.';
 
   @override
   String memoriesCount(int count) {
@@ -2880,7 +2877,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Biztosan törölni szeretné ezt a feladatot? Ez a művelet nem vonható vissza.';
+      'Törlöd ezt a feladatot? Ez nem vonható vissza.';
 
   @override
   String get enterActionItemDescription => 'Adja meg a feladat leírását';
@@ -3234,8 +3231,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Üzenet sikeresen jelentve';
 
   @override
-  String get confirmReportMessage =>
-      'Biztosan jelenteni szeretné ezt az üzenetet?';
+  String get confirmReportMessage => 'Jelented ezt az üzenetet?';
 
   @override
   String get selectChatAssistant => 'Chat asszisztens kiválasztása';
@@ -3251,7 +3247,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza.';
+      'Törlöd ezt a csevegést? Ez nem vonható vissza.';
 
   @override
   String get copy => 'Másolás';
@@ -3434,7 +3430,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza.';
+      'Törlöd ezt az emléket? Ez nem vonható vissza.';
 
   @override
   String get makePrivate => 'Priváttá tétel';
@@ -3475,7 +3471,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Biztosan törölni szeretnéd az Omi memóriáját? Ez a művelet nem vonható vissza és véglegesen törli mind a(z) $count emlékezetet.';
+    return 'Mind a(z) $count emlék törlődik. Ez nem vonható vissza.';
   }
 
   @override
@@ -3795,7 +3791,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Biztosan törli ezt a beszélgetést? Ez a művelet nem vonható vissza.';
+      'Törlöd ezt a beszélgetést? Ez nem vonható vissza.';
 
   @override
   String get conversationDeleted => 'Beszélgetés törölve';
@@ -4142,7 +4138,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Biztosan frissíteni szeretné az alkalmazást? A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.';
+      'A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.';
 
   @override
   String get updateApp => 'Alkalmazás frissítése';
@@ -4208,7 +4204,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Biztosan le szeretné mondani az előfizetését? Az aktuális számlázási időszak végéig továbbra is hozzáférhet.';
+      'Az aktuális számlázási időszak végéig továbbra is hozzáférhet.';
 
   @override
   String get cancelSubscriptionButton => 'Előfizetés lemondása';
@@ -4400,7 +4396,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Ez a művelet nem vonható vissza. Az ezt a kulcsot használó alkalmazások többé nem férhetnek hozzá az API-hoz.';
+      'A kulcsot használó alkalmazások elveszítik az API-hozzáférést. Ez nem vonható vissza.';
 
   @override
   String get revoke => 'Visszavonás';
@@ -4457,7 +4453,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Biztosan törölni szeretné ezt a(z) $item-t? Ez a művelet nem vonható vissza.';
+    return 'A(z) $item törlődik. Ez nem vonható vissza.';
   }
 
   @override
@@ -4465,7 +4461,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Biztosan vissza szeretné vonni a(z) \"$keyName\" kulcsot? Ez a művelet nem vonható vissza.';
+    return 'Minden, ami a(z) \"$keyName\" kulcsot használja, elveszíti a hozzáférést. Ez nem vonható vissza.';
   }
 
   @override
@@ -4652,7 +4648,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'A csomagja $date-ig aktív marad. Ezután elveszíti a korlátlan funkciókhoz való hozzáférést. Biztos benne?';
+    return 'A csomagja $date-ig aktív marad. Ezután elveszíti a korlátlan funkciókhoz való hozzáférést.';
   }
 
   @override
@@ -4959,7 +4955,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Ez véglegesen törli a Limitlessből importált összes beszélgetést. Ez a művelet nem vonható vissza.';
+      'A Limitlessből importált összes beszélgetés törlődik. Ez nem vonható vissza.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -5002,7 +4998,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Biztosan törölni szeretné $name mintáját?';
+    return '$name hangmintája törlődik. Ez nem vonható vissza.';
   }
 
   @override
@@ -5010,7 +5006,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Biztosan törölni szeretné $name személyt? Ez eltávolítja az összes kapcsolódó hangmintát is.';
+    return 'Ez eltávolítja $name hangmintáit, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondatai névtelen beszélőkké válnak.';
   }
 
   @override
@@ -5383,7 +5379,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Biztosan le szeretné állítani a felvételt és most összefoglalni a beszélgetést?';
+      'Leállítod a felvételt, és most összefoglalod a beszélgetést?';
 
   @override
   String get conversationEndsManually =>
@@ -6964,8 +6960,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get shareRecording => 'Felvétel megosztása';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Biztosan véglegesen törölni szeretnéd ezt a felvételt? Ez nem vonható vissza.';
+  String get deleteRecordingConfirmation => 'Ez nem vonható vissza.';
 
   @override
   String get recordingIdLabel => 'Felvétel azonosító';
@@ -7372,7 +7367,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'You\'re switching your Unlimited Plan to the $title.';
   }
 
   @override
@@ -10135,8 +10130,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteOnDeviceModel => 'Modell törlése';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Biztosan törölni szeretnéd ezt a modellt?';
+  String get deleteOnDeviceModelConfirm => 'Törlöd ezt a modellt?';
 
   @override
   String get onDeviceModelDownloaded => 'Letöltve';

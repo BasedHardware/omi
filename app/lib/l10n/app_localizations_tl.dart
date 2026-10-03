@@ -301,8 +301,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reportMessage => 'I-report ang Mensahe';
 
   @override
-  String get reportMessageConfirm =>
-      'Sigurado ka na bang gustong i-report ang mensaheng ito?';
+  String get reportMessageConfirm => 'I-report ang mensaheng ito?';
 
   @override
   String get messageReported => 'Ang mensahe ay na-report na.';
@@ -315,7 +314,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Sigurado ka na bang gustong burahin ang chat? Hindi maaaring bawiin ang aksyong ito.';
+      'Mabubura ang lahat ng mensahe sa chat na ito. Hindi ito maaaring bawiin.';
 
   @override
   String get maxFilesLimit =>
@@ -1088,7 +1087,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Sigurado ka na bang gustong mag-disconnect mula sa $appName? Maaari kang muling kumonekta anumang oras.';
+    return 'Puwede mong ikonekta muli ang $appName anumang oras.';
   }
 
   @override
@@ -2080,15 +2079,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteActionItemTitle => 'I-delete ang Gawain';
 
   @override
-  String get deleteActionItemMessage =>
-      'Sigurado ka ba na gusto mong i-delete ang gawaing ito?';
+  String get deleteActionItemMessage => 'I-delete ang task na ito?';
 
   @override
   String get deleteSelectedItemsTitle => 'I-delete ang Mga Piniling Items';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Sigurado ka ba na gusto mong i-delete ang $count piniling task$s?';
+    return 'I-delete ang $count piniling task$s?';
   }
 
   @override
@@ -2183,7 +2181,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      'Sigurado ka ba na gusto mong i-clear ang alaala ng Omi? Ang aksyon na ito ay hindi mababawi.';
+      'Mabubura ang lahat ng iyong alaala. Hindi ito maaaring bawiin.';
 
   @override
   String get clearMemoryButton => 'I-clear ang Alaala';
@@ -2332,8 +2330,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'I-delete ang Gawain';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      'Sigurado ka ba na gusto mong i-delete ang gawaing ito?';
+  String get deleteActionItemConfirmMessage => 'I-delete ang task na ito?';
 
   @override
   String get appLanguage => 'App Language';
@@ -2443,8 +2440,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteMemory => 'Burahin ang Memory';
 
   @override
-  String get thisActionCannotBeUndone =>
-      'Ang aksyong ito ay hindi maaaring bawiin.';
+  String get thisActionCannotBeUndone => 'Hindi ito maaaring bawiin.';
 
   @override
   String memoriesCount(int count) {
@@ -2913,7 +2909,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      'Sigurado ka na ba na nais mong burahin ang gawaing ito? Ang aksyong ito ay hindi maaaring bawiin.';
+      'I-delete ang task na ito? Hindi ito maaaring bawiin.';
 
   @override
   String get enterActionItemDescription => 'Magpasok ng paglalarawan ng gawain';
@@ -3270,8 +3266,7 @@ class AppLocalizationsTl extends AppLocalizations {
       '✅ Ang mensahe ay matagumpay na nai-report';
 
   @override
-  String get confirmReportMessage =>
-      'Sigurado ka na ba na nais mong i-report ang mensaheng ito?';
+  String get confirmReportMessage => 'I-report ang mensaheng ito?';
 
   @override
   String get selectChatAssistant => 'Pumili ng Chat Assistant';
@@ -3287,7 +3282,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      'Sigurado ka na ba na nais mong i-clear ang chat? Ang aksyong ito ay hindi maaaring bawiin.';
+      'I-clear ang chat na ito? Hindi ito maaaring bawiin.';
 
   @override
   String get copy => 'Kopyahin';
@@ -3469,7 +3464,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      'Sigurado ka na ba na nais mong burahin ang memory na ito? Ang aksyong ito ay hindi maaaring bawiin.';
+      'I-delete ang alaalang ito? Hindi ito maaaring bawiin.';
 
   @override
   String get makePrivate => 'Gawing Private';
@@ -3512,7 +3507,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Sigurado ka na ba na nais mong burahin ang memory ng Omi? Ang aksyong ito ay hindi maaaring bawiin at permanenteng magsasabing lahat ng $count memories.';
+    return 'Mabubura ang lahat ng $count alaala. Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -3835,7 +3830,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      'Sigurado ka na ba na gusto mong burahin ang conversation na ito? Ang aksyong ito ay hindi mababawi.';
+      'I-delete ang usapang ito? Hindi ito maaaring bawiin.';
 
   @override
   String get conversationDeleted => 'Conversation na nabura';
@@ -4188,7 +4183,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      'Sigurado ka na ba na gusto mong i-update ang iyong app? Ang mga pagbabago ay makikita kapag na-review na ng aming team.';
+      'Makikita ang mga pagbabago kapag na-review na ng aming team.';
 
   @override
   String get updateApp => 'I-update ang App';
@@ -4254,7 +4249,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sigurado ka na ba na gusto mong i-cancel ang iyong subscription? Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.';
+      'Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.';
 
   @override
   String get cancelSubscriptionButton => 'I-cancel ang Subscription';
@@ -4445,7 +4440,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Ang aksyong ito ay hindi mababawi. Ang anumang aplikasyon na gumagamit ng key na ito ay hindi na makakapag-access sa API.';
+      'Mawawalan ng access sa API ang mga app na gumagamit ng key na ito. Hindi ito maaaring bawiin.';
 
   @override
   String get revoke => 'Mag-revoke';
@@ -4502,7 +4497,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Sigurado ka na ba na gusto mong burahin ang $item? Ang aksyong ito ay hindi mababawi.';
+    return 'Hindi na mababawi ang pagbura sa $item na ito.';
   }
 
   @override
@@ -4510,7 +4505,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Sigurado ka na ba na gusto mong mag-revoke ng key na \"$keyName\"? Ang aksyong ito ay hindi mababawi.';
+    return 'Mawawalan ng access ang lahat ng gumagamit ng \"$keyName\". Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -4697,7 +4692,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ang iyong plan ay manatiling aktibo hanggang sa $date. Pagkatapos, mawawalan ka ng access sa iyong unlimited features. Sigurado ka na ba?';
+    return 'Ang iyong plan ay manatiling aktibo hanggang sa $date. Pagkatapos, mawawalan ka ng access sa iyong unlimited features.';
   }
 
   @override
@@ -5007,7 +5002,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Ito ay permanenteng magbabura ng lahat ng mga pag-uusap na na-import mula sa Limitless. Ang aksyon na ito ay hindi maaaring i-undo.';
+      'Mabubura ang lahat ng usapang na-import mula sa Limitless. Hindi ito maaaring bawiin.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -5050,7 +5045,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sigurado ka ba na gusto mong burahin ang $name\'s sample?';
+    return 'Aalisin ang voice sample ni $name. Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -5058,7 +5053,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sigurado ka ba na gusto mong burahin ang $name? Ito rin ay magtatanggal ng lahat ng associated speech samples.';
+    return 'Aalisin nito ang mga voice sample ni $name at hindi na ito maibabalik. Ang mga sinabi niya sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
   }
 
   @override
@@ -5437,7 +5432,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      'Sigurado ka ba na gusto mong ihinto ang pag-record at i-summarize ang pag-uusap ngayon?';
+      'Ihinto ang pagre-record at ibuod ang usapan ngayon?';
 
   @override
   String get conversationEndsManually =>
@@ -7022,8 +7017,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get shareRecording => 'Ibahagi ang Recording';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Sigurado ka na gusto mong permanenteng tanggalin ang recording na ito? Hindi na ito mababawi.';
+  String get deleteRecordingConfirmation => 'Hindi ito maaaring bawiin.';
 
   @override
   String get recordingIdLabel => 'Recording ID';
@@ -7435,7 +7429,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Ikaw ay gumagalit ng iyong Unlimited Plan sa $title. Sigurado ka na bang gusto mong magpatuloy?';
+    return 'Inililipat mo ang iyong Unlimited Plan sa $title.';
   }
 
   @override
@@ -10223,8 +10217,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Tanggalin ang Modelo';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      'Sigurado ka bang gusto mong tanggalin ang modelong ito?';
+  String get deleteOnDeviceModelConfirm => 'I-delete ang model na ito?';
 
   @override
   String get onDeviceModelDownloaded => 'Na-download';

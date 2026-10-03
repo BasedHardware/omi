@@ -297,8 +297,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reportMessage => 'Reportar mensaje';
 
   @override
-  String get reportMessageConfirm =>
-      '¿Seguro que quieres reportar este mensaje?';
+  String get reportMessageConfirm => '¿Denunciar este mensaje?';
 
   @override
   String get messageReported => 'Mensaje reportado exitosamente.';
@@ -311,7 +310,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      '¿Seguro que quieres limpiar el chat? Esta acción no se puede deshacer.';
+      'Se borrarán todos los mensajes de este chat. Esta acción no se puede deshacer.';
 
   @override
   String get maxFilesLimit => 'Solo puedes subir 4 archivos a la vez';
@@ -1073,7 +1072,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '¿Seguro que quieres desconectar $appName? Puedes reconectar en cualquier momento.';
+    return 'Puedes volver a conectar $appName cuando quieras.';
   }
 
   @override
@@ -2030,15 +2029,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteActionItemTitle => 'Eliminar tarea';
 
   @override
-  String get deleteActionItemMessage =>
-      '¿Está seguro de que desea eliminar esta tarea?';
+  String get deleteActionItemMessage => '¿Borrar esta tarea?';
 
   @override
   String get deleteSelectedItemsTitle => 'Borrar seleccionados';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '¿Seguro que quieres borrar $count tarea$s de la selección?';
+    return '¿Borrar $count tarea$s de la selección?';
   }
 
   @override
@@ -2130,7 +2128,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get clearMemoryMessage =>
-      '¿Seguro que quieres borrar la memoria de Omi? No se puede deshacer.';
+      'Se borrarán todos tus recuerdos. Esta acción no se puede deshacer.';
 
   @override
   String get clearMemoryButton => 'Borrar memoria';
@@ -2279,8 +2277,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Borrar tarea';
 
   @override
-  String get deleteActionItemConfirmMessage =>
-      '¿Seguro que quieres borrar esta tarea?';
+  String get deleteActionItemConfirmMessage => '¿Borrar esta tarea?';
 
   @override
   String get appLanguage => 'Idioma de la App';
@@ -2849,7 +2846,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmation =>
-      '¿Estás seguro de que quieres eliminar esta tarea? Esta acción no se puede deshacer.';
+      '¿Borrar esta tarea? Esta acción no se puede deshacer.';
 
   @override
   String get enterActionItemDescription => 'Ingresa la descripción de la tarea';
@@ -3204,8 +3201,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Mensaje reportado exitosamente';
 
   @override
-  String get confirmReportMessage =>
-      '¿Estás seguro de que quieres reportar este mensaje?';
+  String get confirmReportMessage => '¿Denunciar este mensaje?';
 
   @override
   String get selectChatAssistant => 'Seleccionar asistente de chat';
@@ -3221,7 +3217,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get confirmClearChat =>
-      '¿Estás seguro de que quieres borrar el chat? Esta acción no se puede deshacer.';
+      '¿Borrar este chat? Esta acción no se puede deshacer.';
 
   @override
   String get copy => 'Copiar';
@@ -3402,7 +3398,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteMemoryConfirmation =>
-      '¿Estás seguro de que deseas eliminar esta memoria? Esta acción no se puede deshacer.';
+      '¿Borrar este recuerdo? Esta acción no se puede deshacer.';
 
   @override
   String get makePrivate => 'Hacer privado';
@@ -3444,7 +3440,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return '¿Estás seguro de que deseas borrar la memoria de Omi? Esta acción no se puede deshacer y eliminará permanentemente todos los $count recuerdos.';
+    return 'Se borrarán los $count recuerdos. Esta acción no se puede deshacer.';
   }
 
   @override
@@ -3764,7 +3760,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteConversationConfirmation =>
-      '¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.';
+      '¿Borrar esta conversación? Esta acción no se puede deshacer.';
 
   @override
   String get conversationDeleted => 'Conversación eliminada';
@@ -4115,7 +4111,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get updateAppConfirmation =>
-      '¿Estás seguro de que quieres actualizar tu aplicación? Los cambios se reflejarán una vez revisados por nuestro equipo.';
+      'Los cambios se publicarán cuando nuestro equipo los revise.';
 
   @override
   String get updateApp => 'Actualizar aplicación';
@@ -4181,7 +4177,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      '¿Estás seguro de que quieres cancelar tu suscripción? Seguirás teniendo acceso hasta el final de tu período de facturación actual.';
+      'Seguirás teniendo acceso hasta el final de tu período de facturación actual.';
 
   @override
   String get cancelSubscriptionButton => 'Cancelar suscripción';
@@ -4373,7 +4369,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Esta acción no se puede deshacer. Las aplicaciones que usen esta clave ya no podrán acceder a la API.';
+      'Las apps que usen esta clave perderán el acceso a la API. Esta acción no se puede deshacer.';
 
   @override
   String get revoke => 'Revocar';
@@ -4430,7 +4426,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return '¿Estás seguro de que quieres eliminar este $item? Esta acción no se puede deshacer.';
+    return '$item se eliminará. Esta acción no se puede deshacer.';
   }
 
   @override
@@ -4438,7 +4434,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '¿Estás seguro de que quieres revocar la clave \"$keyName\"? Esta acción no se puede deshacer.';
+    return 'Todo lo que use \"$keyName\" perderá el acceso. Esta acción no se puede deshacer.';
   }
 
   @override
@@ -4625,7 +4621,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Tu plan permanecerá activo hasta $date. Después, perderás acceso a tus funciones ilimitadas. ¿Estás seguro?';
+    return 'Tu plan permanecerá activo hasta $date. Después, perderás acceso a tus funciones ilimitadas.';
   }
 
   @override
@@ -4936,7 +4932,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Esto eliminará permanentemente todas las conversaciones importadas de Limitless. Esta acción no se puede deshacer.';
+      'Se borrarán todas las conversaciones importadas de Limitless. Esta acción no se puede deshacer.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4978,7 +4974,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '¿Estás seguro de que quieres eliminar la muestra de $name?';
+    return 'Se eliminará la muestra de voz de $name. Esta acción no se puede deshacer.';
   }
 
   @override
@@ -4986,7 +4982,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '¿Estás seguro de que quieres eliminar a $name? Esto también eliminará todas las muestras de voz asociadas.';
+    return 'Esto elimina las muestras de voz de $name y no se puede deshacer. Sus intervenciones en conversaciones anteriores pasan a ser hablantes sin nombre.';
   }
 
   @override
@@ -5362,7 +5358,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get stopRecordingConfirmation =>
-      '¿Estás seguro de que quieres detener la grabación y resumir la conversación ahora?';
+      '¿Detener la grabación y resumir la conversación ahora?';
 
   @override
   String get conversationEndsManually =>
@@ -6943,8 +6939,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shareRecording => 'Compartir grabación';
 
   @override
-  String get deleteRecordingConfirmation =>
-      '¿Estás seguro de que deseas eliminar permanentemente esta grabación? Esta acción no se puede deshacer.';
+  String get deleteRecordingConfirmation => 'Esta acción no se puede deshacer.';
 
   @override
   String get recordingIdLabel => 'ID de grabación';
@@ -7355,7 +7350,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Estás cambiando tu Plan Ilimitado al $title. ¿Estás seguro de que deseas continuar?';
+    return 'Estás cambiando tu Plan Ilimitado al $title.';
   }
 
   @override
@@ -10125,8 +10120,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteOnDeviceModel => 'Eliminar modelo';
 
   @override
-  String get deleteOnDeviceModelConfirm =>
-      '¿Seguro que quieres eliminar este modelo?';
+  String get deleteOnDeviceModelConfirm => '¿Eliminar este modelo?';
 
   @override
   String get onDeviceModelDownloaded => 'Descargado';
