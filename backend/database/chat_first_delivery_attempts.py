@@ -1,7 +1,7 @@
 """Derived delivery attempts and terminal records for Chat-first intents."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.api_core.exceptions import GoogleAPICallError
@@ -25,6 +25,40 @@ UNACKNOWLEDGED_FETCH_BUDGET = 20
 logger = logging.getLogger(__name__)
 
 
+def _clean_id(value: Any, name: str = 'id', max_length: int = 64) -> str:
+    """Validate and sanitize an identifier, rejecting empty/whitespace, path traversal, null bytes, and length overruns."""
+    if not isinstance(value, str):
+        raise ValueError(f'{name} must be a string')
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f'{name} cannot be empty')
+    if '\x00' in cleaned:
+        raise ValueError(f'{name} cannot contain null bytes')
+    if any(traversal in cleaned for traversal in ('..', '/', '\\')):
+        raise ValueError(f'{name} contains invalid path traversal')
+    if len(cleaned) > max_length:
+        raise ValueError(f'{name} exceeds maximum length')
+    return cleaned
+
+
+def _ensure_utc(dt: Any) -> datetime:
+    """Ensure a datetime is timezone-aware and converted to UTC."""
+    if not isinstance(dt, datetime):
+        raise ValueError('Timestamp must be a datetime instance')
+    if dt.tzinfo is None:
+        raise ValueError('Naive datetime not allowed')
+    return dt.astimezone(timezone.utc)
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    """Safely align a datetime to UTC, converting naive to UTC if necessary."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 class ChatFirstMalformedDeliveryAttempt(RuntimeError):
     pass
 
@@ -45,19 +79,23 @@ class DeliveryAttemptState(BaseModel):
 
 
 def user_ref(uid: str, *, firestore_client: Any):
-    return firestore_client.collection('users').document(uid)
+    clean_uid = _clean_id(uid, name='uid')
+    return firestore_client.collection('users').document(clean_uid)
 
 
 def intent_ref(uid: str, intent_id: str, *, firestore_client: Any):
-    return user_ref(uid, firestore_client=firestore_client).collection(INTENTS_COLLECTION).document(intent_id)
+    clean_intent_id = _clean_id(intent_id, name='intent_id')
+    return user_ref(uid, firestore_client=firestore_client).collection(INTENTS_COLLECTION).document(clean_intent_id)
 
 
 def delivery_attempt_ref(uid: str, intent_id: str, *, firestore_client: Any):
-    return user_ref(uid, firestore_client=firestore_client).collection(DELIVERY_ATTEMPTS_COLLECTION).document(intent_id)
+    clean_intent_id = _clean_id(intent_id, name='intent_id')
+    return user_ref(uid, firestore_client=firestore_client).collection(DELIVERY_ATTEMPTS_COLLECTION).document(clean_intent_id)
 
 
 def dead_letter_ref(uid: str, intent_id: str, *, firestore_client: Any):
-    return user_ref(uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION).document(intent_id)
+    clean_intent_id = _clean_id(intent_id, name='intent_id')
+    return user_ref(uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION).document(clean_intent_id)
 
 
 def intent_with_delivery_attempt(intent: ProactiveIntent, snapshot: Any) -> ProactiveIntent:
@@ -81,6 +119,7 @@ def valid_attempt_value(_intent: ProactiveIntent, field: str, value: Any) -> boo
 def reset_malformed_delivery_attempt(intent: ProactiveIntent, raw: dict[str, Any], *, now: datetime) -> dict[str, Any]:
     """Preserve every independently valid field and spend the next fetch."""
 
+    now_utc = _as_utc(now) or datetime.now(timezone.utc)
     raw_requeue_count = raw.get('requeue_count', 0)
     preserved_requeue_count = (
         raw_requeue_count if valid_attempt_value(intent, 'requeue_count', raw_requeue_count) else 0
@@ -91,7 +130,7 @@ def reset_malformed_delivery_attempt(intent: ProactiveIntent, raw: dict[str, Any
         if valid_attempt_value(intent, 'fetch_count', raw_fetch_count)
         else (UNACKNOWLEDGED_FETCH_BUDGET - 1 if preserved_requeue_count > 0 else 0)
     )
-    reset: dict[str, Any] = {'fetch_count': preserved_fetch_count + 1, 'last_fetched_at': now}
+    reset: dict[str, Any] = {'fetch_count': preserved_fetch_count + 1, 'last_fetched_at': now_utc}
     defaults = {
         'requeue_count': preserved_requeue_count,
         'materialization_attempts': 0,
@@ -109,6 +148,7 @@ def reset_malformed_delivery_attempt(intent: ProactiveIntent, raw: dict[str, Any
 def dead_letter_payload(intent: ProactiveIntent, *, terminal_at: datetime) -> dict[str, Any]:
     """Keep the complete terminal record while ensuring repair ordering is non-null."""
 
+    terminal_at_utc = _as_utc(terminal_at) or datetime.now(timezone.utc)
     terminal = parse_payload_strict(
         DeadLetteredProactiveIntent,
         intent.model_dump(mode='python'),
@@ -116,7 +156,7 @@ def dead_letter_payload(intent: ProactiveIntent, *, terminal_at: datetime) -> di
     )
     payload = terminal.model_dump(mode='python')
     if payload.get('last_fetched_at') is None:
-        payload['last_fetched_at'] = terminal_at
+        payload['last_fetched_at'] = terminal_at_utc
     return payload
 
 
@@ -140,9 +180,13 @@ def requeue_transient_dead_letter(
     now: datetime,
     firestore_client: Any,
 ) -> ProactiveIntent | None:
-    dead_ref = dead_letter_ref(uid, intent_id, firestore_client=firestore_client)
-    active_ref = intent_ref(uid, intent_id, firestore_client=firestore_client)
-    attempt_ref = delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
+    clean_uid = _clean_id(uid, name='uid')
+    clean_intent_id = _clean_id(intent_id, name='intent_id')
+    now_utc = _as_utc(now) or datetime.now(timezone.utc)
+
+    dead_ref = dead_letter_ref(clean_uid, clean_intent_id, firestore_client=firestore_client)
+    active_ref = intent_ref(clean_uid, clean_intent_id, firestore_client=firestore_client)
+    attempt_ref = delivery_attempt_ref(clean_uid, clean_intent_id, firestore_client=firestore_client)
     transaction = firestore_client.transaction()
 
     @firestore.transactional
@@ -163,8 +207,11 @@ def requeue_transient_dead_letter(
             or intent.requeue_count != 0
         ):
             return None
-        terminal_at = intent.last_rejection_at or intent.last_fetched_at
-        if terminal_at is None or now - terminal_at < TRANSIENT_DEAD_LETTER_REPAIR_AGE:
+        raw_terminal_at = intent.last_rejection_at or intent.last_fetched_at
+        if raw_terminal_at is None:
+            return None
+        terminal_at = _as_utc(raw_terminal_at)
+        if terminal_at is None or now_utc - terminal_at < TRANSIENT_DEAD_LETTER_REPAIR_AGE:
             return None
         requeued = intent.model_copy(
             update={
@@ -221,8 +268,15 @@ def repair_transient_dead_letters(
 ) -> bool:
     """Repair a bounded terminal window; return whether the serving query failed."""
 
-    collection = user_ref(uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION)
+    clean_uid = _clean_id(uid, name='uid')
+    now_utc = _as_utc(now) or datetime.now(timezone.utc)
     try:
+        safe_limit = max(1, min(int(limit), 100))
+    except (TypeError, ValueError):
+        safe_limit = 10
+
+    try:
+        collection = user_ref(clean_uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION)
         query = (
             CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY.build(
                 collection,
@@ -235,23 +289,26 @@ def repair_transient_dead_letters(
                 field_filter_factory=FieldFilter,
             )
             .order_by('last_fetched_at')
-            .limit(2 * limit)
+            .limit(2 * safe_limit)
         )
         repaired = 0
         for snapshot in query.stream():
-            if repaired >= limit:
+            if repaired >= safe_limit:
                 break
             raw = snapshot.to_dict() or {}
-            terminal_at = raw.get('last_rejection_at') or raw.get('last_fetched_at')
-            if not isinstance(terminal_at, datetime) or now - terminal_at < TRANSIENT_DEAD_LETTER_REPAIR_AGE:
+            raw_terminal_at = raw.get('last_rejection_at') or raw.get('last_fetched_at')
+            if not isinstance(raw_terminal_at, datetime):
+                continue
+            terminal_at = _as_utc(raw_terminal_at)
+            if terminal_at is None or now_utc - terminal_at < TRANSIENT_DEAD_LETTER_REPAIR_AGE:
                 continue
             try:
                 if (
                     requeue(
-                        uid,
+                        clean_uid,
                         snapshot.id,
                         account_generation=account_generation,
-                        now=now,
+                        now=now_utc,
                         firestore_client=firestore_client,
                     )
                     is not None
@@ -259,7 +316,13 @@ def repair_transient_dead_letters(
                     repaired += 1
             except ChatFirstMalformedDeliveryAttempt:
                 continue
+            except Exception:
+                logger.exception('Failed to requeue transient dead letter snapshot %s', getattr(snapshot, 'id', None))
+                continue
     except GoogleAPICallError:
         logger.exception('Chat-first transient dead-letter repair scan failed')
+        return True
+    except Exception:
+        logger.exception('Chat-first transient dead-letter repair scan encountered unexpected error')
         return True
     return False
