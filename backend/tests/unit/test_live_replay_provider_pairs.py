@@ -8,6 +8,7 @@ import pytest
 
 from tests.unit.test_parakeet_window_live import runtime, receiver, Client  # noqa: F401
 from tests.unit.test_live_cost_router import controls  # noqa: F401
+from config.live_stt_replay import ReplayLimits
 from routers.listen.receiver import ListenReceiver
 from utils.stt import (
     parakeet_window as window,
@@ -388,8 +389,9 @@ async def test_replay_teardown_closes_unadopted_leg_once(monkeypatch, cancel):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
 async def test_stalled_replay_queue_rejects_with_bounded_capacity_cause(monkeypatch, kind):
-    monkeypatch.setattr('utils.stt.send_queue.REPLAY_QUEUE_WAIT_SECONDS', 0.001)
     raw = kind(Transport(), lambda _: None, asyncio.get_running_loop())
+    assert raw.replay_limits.queue_wait_seconds == 2.0 and raw.replay_limits.queue_packets == 2
+    monkeypatch.setattr(raw, 'replay_limits', ReplayLimits(queue_wait_seconds=0.001))
     raw._send_queue = AudioSendQueue(maxsize=1)
     raw._send_task.cancel()
     await asyncio.gather(raw._send_task, return_exceptions=True)
@@ -404,10 +406,11 @@ async def test_stalled_replay_queue_rejects_with_bounded_capacity_cause(monkeypa
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
 async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkeypatch, kind):
-    monkeypatch.setattr('utils.stt.send_queue.REPLAY_QUEUE_WAIT_SECONDS', 0.001)
     transport = Transport()
     transport.gate.clear()
     raw = kind(transport, lambda _: None, asyncio.get_running_loop())
+    assert raw.replay_limits.queue_wait_seconds == 2.0 and raw.replay_limits.queue_packets == 2
+    monkeypatch.setattr(raw, 'replay_limits', ReplayLimits(queue_wait_seconds=0.001))
     raw.replay_send = lambda data, start: raw.send(data)
     ring = full_ring()
     try:
