@@ -24,7 +24,12 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 #define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
 #define ADC_1ST_CHANNEL_ID 0
 #define ADC_1ST_CHANNEL_INPUT NRF_SAADC_INPUT_AIN0
-#define BATTERY_FILTER_ALPHA_U16 (uint16_t) (65535 / (5 + 1))
+/* Cast spacing differs between clang-format major versions (CI runs 18, local
+ * toolchains commonly 19+); keep this macro compact and hand-written.
+ */
+/* clang-format off */
+#define BATTERY_FILTER_ALPHA_U16 (uint16_t)(65535/(5+1))
+/* clang-format on */
 #define FILTER_INIT_CYCLES 5
 #define BATTERY_STATES(is_charging) ((is_charging) ? battery_charging_states : battery_discharge_states)
 
@@ -64,16 +69,15 @@ static struct battery_soc_decision battery_soc_policy(bool charging,
                                                       uint8_t filtered_percentage,
                                                       uint8_t off_percentage)
 {
+    struct battery_soc_decision decision;
     if (charging) {
-        return (struct battery_soc_decision) {
-            .percentage = has_off_sample ? off_percentage : curve_percentage,
-            .frozen = has_off_sample,
-        };
+        decision.percentage = has_off_sample ? off_percentage : curve_percentage;
+        decision.frozen = has_off_sample;
+        return decision;
     }
-    return (struct battery_soc_decision) {
-        .percentage = first_off_sample ? curve_percentage : MIN(filtered_percentage, off_percentage),
-        .frozen = false,
-    };
+    decision.percentage = first_off_sample ? curve_percentage : MIN(filtered_percentage, off_percentage);
+    decision.frozen = false;
+    return decision;
 }
 
 static const struct device *const adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
@@ -445,13 +449,11 @@ int battery_charging_state_read()
 void battery_get_diagnostics(struct battery_diagnostics *diagnostics)
 {
     k_spinlock_key_t key = k_spin_lock(&battery_state_lock);
-    *diagnostics = (struct battery_diagnostics) {
-        .millivolts = measured_millivolts,
-        .last_off_charger_millivolts = last_off_charger_millivolts,
-        .charge_edge_count = charge_edge_count,
-        .charge_pin = charging_state_known ? (is_charging ? 1U : 0U) : UINT8_MAX,
-        .soc_frozen = soc_frozen,
-    };
+    diagnostics->millivolts = measured_millivolts;
+    diagnostics->last_off_charger_millivolts = last_off_charger_millivolts;
+    diagnostics->charge_edge_count = charge_edge_count;
+    diagnostics->charge_pin = charging_state_known ? (is_charging ? 1U : 0U) : UINT8_MAX;
+    diagnostics->soc_frozen = soc_frozen;
     k_spin_unlock(&battery_state_lock, key);
 }
 
