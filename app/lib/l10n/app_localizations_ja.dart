@@ -12035,6 +12035,24 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => '音声';
+
+  @override
+  String get assistantVoice => 'アシスタントの音声';
+
+  @override
+  String get voiceSharedAcrossDevices => '選択した音声はモバイルとデスクトップで共有されます。';
+
+  @override
+  String get readChatRepliesAloud => 'チャットの返信を読み上げる';
+
+  @override
+  String get readChatRepliesAloudDescription => '「音声応答」が許可する場合にのみ読み上げます。';
+
+  @override
+  String get voicePreviewSample => 'こんにちは、Omiです。これが私の声です。';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
@@ -12105,6 +12123,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
+  String get previousDay => '前の日';
+
+  @override
+  String get nextDay => '次の日';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$dateのタスクはありません';
+  }
 
   @override
   String get reprocessingConversationProgress => '会話を再処理しています…';

@@ -117,8 +117,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       var provider = context.read<MessageProvider>();
       _messageProvider = provider;
+      provider.readAloud.active = true;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
       // Every entry resumes the current conversation, including while a reply or voice send is active.
@@ -199,8 +201,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final readAloud = _messageProvider?.readAloud;
+    if (readAloud == null) return;
+    readAloud.active = state == AppLifecycleState.resumed;
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
     _latestJumpIdleTimer?.cancel();
@@ -299,10 +309,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           : provider.isClearingChat
                               ? OmiLoadingState(label: context.l10n.deletingMessages)
                               : (provider.messages.isEmpty)
-                                  ? ChatGreeting(
-                                      isConnected: connectivityProvider.isConnected,
-                                      name: prefs.givenName,
-                                    )
+                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
                                   : _buildTranscript(provider),
                     ),
                     _buildComposer(context, provider, connectivityProvider),
@@ -1137,9 +1144,7 @@ class _SelectedTextChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
-            ),
+            ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary)),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(

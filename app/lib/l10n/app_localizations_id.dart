@@ -12236,6 +12236,24 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Asisten';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Bacakan balasan chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
@@ -12306,6 +12324,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tidak ada tugas pada $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Memproses ulang percakapan…';

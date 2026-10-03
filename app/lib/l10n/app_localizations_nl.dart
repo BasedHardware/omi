@@ -12260,6 +12260,24 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Stem';
+
+  @override
+  String get assistantVoice => 'Stem van assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Je stemkeuze wordt gedeeld tussen mobiel en desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatantwoorden hardop voorlezen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spreekt alleen als Spraakantwoord dit toestaat.';
+
+  @override
+  String get voicePreviewSample => 'Hoi, ik ben Omi. Dit is mijn stem.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
@@ -12330,6 +12348,17 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
+  String get previousDay => 'Vorige dag';
+
+  @override
+  String get nextDay => 'Volgende dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Geen taken op $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';

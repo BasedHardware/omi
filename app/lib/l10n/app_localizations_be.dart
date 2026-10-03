@@ -12256,6 +12256,24 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Голас';
+
+  @override
+  String get assistantVoice => 'Голас памочніка';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбраны вамі голас выкарыстоўваецца на мабільнай прыладзе і на камп\'ютары.';
+
+  @override
+  String get readChatRepliesAloud => 'Чытаць адказы ў чаце ўголас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Агучвае толькі тады, калі гэта дазваляе «Галасавы адказ».';
+
+  @override
+  String get voicePreviewSample => 'Прывітанне, я Omi. Гэта мой голас.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
@@ -12326,6 +12344,17 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
+  String get previousDay => 'Папярэдні дзень';
+
+  @override
+  String get nextDay => 'Наступны дзень';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задач на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Паўторная апрацоўка размовы…';

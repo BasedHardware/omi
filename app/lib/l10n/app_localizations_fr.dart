@@ -12326,6 +12326,24 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Voix';
+
+  @override
+  String get assistantVoice => 'Voix de l\'assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Votre choix de voix est partagé entre le mobile et le bureau.';
+
+  @override
+  String get readChatRepliesAloud => 'Lire les réponses du chat à voix haute';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parle uniquement lorsque la réponse vocale l\'autorise.';
+
+  @override
+  String get voicePreviewSample => 'Salut, je suis Omi. Voici ma voix.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
@@ -12396,6 +12414,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';
+
+  @override
+  String get previousDay => 'Jour précédent';
+
+  @override
+  String get nextDay => 'Jour suivant';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Aucune tâche le $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Retraitement de la conversation…';

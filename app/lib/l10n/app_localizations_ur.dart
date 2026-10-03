@@ -12237,6 +12237,24 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'آواز';
+
+  @override
+  String get assistantVoice => 'اسسٹنٹ کی آواز';
+
+  @override
+  String get voiceSharedAcrossDevices => 'آپ کی منتخب آواز موبائل اور ڈیسک ٹاپ دونوں میں مشترک ہے۔';
+
+  @override
+  String get readChatRepliesAloud => 'چیٹ جوابات بلند آواز میں پڑھیں';
+
+  @override
+  String get readChatRepliesAloudDescription => 'صرف تب بولتا ہے جب وائس رسپانس اجازت دے۔';
+
+  @override
+  String get voicePreviewSample => 'ہیلو، میں Omi ہوں۔ یہ میری آواز ہے۔';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
@@ -12307,6 +12325,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
+
+  @override
+  String get previousDay => 'پچھلا دن';
+
+  @override
+  String get nextDay => 'اگلا دن';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date کو کوئی کام نہیں';
+  }
 
   @override
   String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';

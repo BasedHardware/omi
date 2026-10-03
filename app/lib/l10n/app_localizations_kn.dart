@@ -12261,6 +12261,24 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'ಧ್ವನಿ';
+
+  @override
+  String get assistantVoice => 'ಸಹಾಯಕ ಧ್ವನಿ';
+
+  @override
+  String get voiceSharedAcrossDevices => 'ನಿಮ್ಮ ಧ್ವನಿ ಆಯ್ಕೆಯನ್ನು ಮೊಬೈಲ್ ಮತ್ತು ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಹಂಚಿಕೊಳ್ಳಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get readChatRepliesAloud => 'ಚಾಟ್ ಉತ್ತರಗಳನ್ನು ಗಟ್ಟಿಯಾಗಿ ಓದಿ';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ\" ಅನುಮತಿಸಿದಾಗ ಮಾತ್ರ ಮಾತನಾಡುತ್ತದೆ.';
+
+  @override
+  String get voicePreviewSample => 'ಹಾಯ್, ನಾನು Omi. ಇದು ನನ್ನ ಧ್ವನಿ.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
@@ -12331,6 +12349,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
+
+  @override
+  String get previousDay => 'ಹಿಂದಿನ ದಿನ';
+
+  @override
+  String get nextDay => 'ಮುಂದಿನ ದಿನ';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date ರಂದು ಯಾವುದೇ ಕಾರ್ಯಗಳಿಲ್ಲ';
+  }
 
   @override
   String get reprocessingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';

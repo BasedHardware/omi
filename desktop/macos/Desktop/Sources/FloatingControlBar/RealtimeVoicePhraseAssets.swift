@@ -2,10 +2,10 @@ import Foundation
 
 /// The exact native realtime voice for which a shipped acknowledgement clip was generated.
 ///
-/// This is intentionally separate from `ShortcutSettings.VoiceOption`: that picker controls the
-/// legacy/batch TTS output, while these clips bridge the native realtime provider's voice during a
-/// slow-tool handoff. Keeping the two identities distinct prevents a Shimmer clip from being
-/// played in a Gemini/Charon turn.
+/// This is intentionally separate from the shared `AssistantVoiceStore` picker: that picker
+/// controls the cloud TTS output, while these clips bridge the native realtime provider's voice
+/// during a slow-tool handoff. Keeping the two identities distinct prevents a Charon clip from
+/// being claimed by a turn actually speaking Kore.
 enum RealtimeVoicePhraseProfile: String, CaseIterable, Sendable {
   case geminiCharon = "gemini-charon"
   case openAICedar = "openai-cedar"
@@ -24,13 +24,16 @@ enum RealtimeVoicePhraseProfile: String, CaseIterable, Sendable {
     }
   }
 
-  /// The provider's exact voice spelling, as sent in the realtime session payload.
+  /// The clip's recorded voice — a fixed literal; the shared preference must not move it.
   var voiceName: String {
-    RealtimeHubVoicePolicy.voiceName(for: provider)
+    switch self {
+    case .geminiCharon: return "Charon"
+    case .openAICedar: return "cedar"
+    }
   }
 
-  /// The resource prefix used by the generation script and runtime locator. Derive the voice part
-  /// from `RealtimeHubVoicePolicy` so a provider voice change cannot silently reuse stale audio.
+  /// The resource prefix used by the generation script and runtime locator, keyed to the clip's
+  /// immutable recorded voice.
   var resourcePrefix: String { "\(provider.rawValue)-\(voiceName.lowercased())" }
 }
 
@@ -148,9 +151,12 @@ enum RealtimeVoicePhraseAudioSelection: Equatable, Sendable {
     provider: RealtimeHubProvider,
     kind: RealtimeSlowToolAcknowledgementKind,
     phrase: String,
+    voiceName: String? = nil,
     locator: RealtimeVoicePhraseAssetLocator = .bundled,
     load: (URL) throws -> Data = { try Data(contentsOf: $0) }
   ) -> Self {
+    let profile = RealtimeVoicePhraseProfile(provider: provider)
+    if let voiceName, voiceName != profile.voiceName { return .fallback }
     guard let url = locator.url(for: provider, kind: kind, phrase: phrase),
       let data = try? load(url),
       data.count > 44,

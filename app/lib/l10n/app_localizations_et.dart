@@ -12218,6 +12218,24 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
@@ -12288,6 +12306,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
+
+  @override
+  String get previousDay => 'Eelmine päev';
+
+  @override
+  String get nextDay => 'Järgmine päev';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date pole ülesandeid';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';

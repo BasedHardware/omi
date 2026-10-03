@@ -12229,6 +12229,24 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Röst';
+
+  @override
+  String get assistantVoice => 'Assistentens röst';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ditt röstval delas mellan mobil och dator.';
+
+  @override
+  String get readChatRepliesAloud => 'Läs chattsvar högt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Talar bara när Röstsvar tillåter det.';
+
+  @override
+  String get voicePreviewSample => 'Hej, jag är Omi. Det här är min röst.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration av den här rösten';
   }
@@ -12299,6 +12317,17 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
+
+  @override
+  String get previousDay => 'Föregående dag';
+
+  @override
+  String get nextDay => 'Nästa dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Inga uppgifter $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Bearbetar samtalet igen…';

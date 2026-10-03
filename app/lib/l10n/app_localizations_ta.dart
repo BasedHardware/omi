@@ -12308,6 +12308,24 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'குரல்';
+
+  @override
+  String get assistantVoice => 'உதவியாளர் குரல்';
+
+  @override
+  String get voiceSharedAcrossDevices => 'நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.';
+
+  @override
+  String get readChatRepliesAloud => 'அரட்டை பதில்களை சத்தமாக வாசி';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.';
+
+  @override
+  String get voicePreviewSample => 'ஹாய், நான் Omi. இது என் குரல்.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
@@ -12378,6 +12396,17 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
+  String get previousDay => 'முந்தைய நாள்';
+
+  @override
+  String get nextDay => 'அடுத்த நாள்';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date அன்று பணிகள் இல்லை';
+  }
 
   @override
   String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';

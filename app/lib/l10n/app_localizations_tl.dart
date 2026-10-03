@@ -12325,6 +12325,24 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Boses';
+
+  @override
+  String get assistantVoice => 'Boses ng Assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ang napili mong boses ay ibinabahagi sa mobile at desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Basahin nang malakas ang mga sagot sa chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Magsasalita lamang kapag pinapayagan ng Voice response.';
+
+  @override
+  String get voicePreviewSample => 'Hi, ako si Omi. Ito ang boses ko.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
@@ -12395,6 +12413,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
+  String get previousDay => 'Nakaraang araw';
+
+  @override
+  String get nextDay => 'Susunod na araw';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Walang gawain noong $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';

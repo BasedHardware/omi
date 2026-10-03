@@ -101,8 +101,11 @@ class RingRangeProof {
 
   const RingRangeProof({required this.startSeq, required this.endSeq, required this.wals});
 
-  Map<String, dynamic> toJson() =>
-      {'start_seq': startSeq, 'end_seq': endSeq, 'wals': wals.map((w) => w.toJson()).toList()};
+  Map<String, dynamic> toJson() => {
+        'start_seq': startSeq,
+        'end_seq': endSeq,
+        'wals': wals.map((w) => w.toJson()).toList(),
+      };
 
   static RingRangeProof? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -680,9 +683,11 @@ class PendantRingCustody {
     cp.lastMarkSeq = null;
     cp.lastMarkLiveIndex = null;
     cp.lastAdvancedMarkSeq = null;
-    unawaited(_persist(cp).catchError((e) {
-      Logger.debug('PendantRingCustody: mismatch-invalidation persist failed for $deviceId: $e');
-    }));
+    unawaited(
+      _persist(cp).catchError((e) {
+        Logger.debug('PendantRingCustody: mismatch-invalidation persist failed for $deviceId: $e');
+      }),
+    );
   }
 
   void noteInfo(String deviceId, int epoch, RingInfo info) {
@@ -700,9 +705,11 @@ class PendantRingCustody {
       ncp.reportedReadSeq = info.readSeq;
       ncp.reportedWriteSeq = info.writeSeq;
       ncp.durableSeq = info.readSeq;
-      unawaited(_persist(ncp).catchError((e) {
-        Logger.debug('PendantRingCustody: reincarnation persist failed for $deviceId: $e');
-      }));
+      unawaited(
+        _persist(ncp).catchError((e) {
+          Logger.debug('PendantRingCustody: reincarnation persist failed for $deviceId: $e');
+        }),
+      );
       return;
     }
     if (cp.ringId != null && info.ringId == null) return;
@@ -727,13 +734,15 @@ class PendantRingCustody {
           continue;
         }
         if (!_ordinalsDurable(state, prev.ordinalBoundary, cur.ordinalBoundary)) break;
-        state.checkpoint.liveRanges.add(LiveRangeProof(
-          startSeq: prev.ringSeq,
-          endSeq: cur.ringSeq,
-          startLiveOrdinal: prev.ordinalBoundary,
-          endLiveOrdinal: cur.ordinalBoundary,
-          wals: _walsCovering(state, prev.ordinalBoundary, cur.ordinalBoundary),
-        ));
+        state.checkpoint.liveRanges.add(
+          LiveRangeProof(
+            startSeq: prev.ringSeq,
+            endSeq: cur.ringSeq,
+            startLiveOrdinal: prev.ordinalBoundary,
+            endLiveOrdinal: cur.ordinalBoundary,
+            wals: _walsCovering(state, prev.ordinalBoundary, cur.ordinalBoundary),
+          ),
+        );
         state.checkpoint.lastMarkSeq = cur.ringSeq;
         state.checkpoint.lastMarkLiveIndex = cur.liveIndex;
         lastFolded = i - 1;

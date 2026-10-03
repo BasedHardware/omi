@@ -12212,6 +12212,24 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Stemme';
+
+  @override
+  String get assistantVoice => 'Assistentstemme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Dit stemmevalg deles mellem mobil og desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Læs chatsvar højt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Taler kun, når \"Talesvar\" tillader det.';
+
+  @override
+  String get voicePreviewSample => 'Hej, jeg er Omi. Det her er min stemme.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
@@ -12282,6 +12300,17 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antallene kan være ufuldstændige.';
+
+  @override
+  String get previousDay => 'Forrige dag';
+
+  @override
+  String get nextDay => 'Næste dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ingen opgaver den $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Samtalen genbehandles…';

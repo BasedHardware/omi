@@ -12293,6 +12293,24 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Voce dell\'assistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La voce scelta è condivisa tra mobile e desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Leggi le risposte della chat ad alta voce';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parla solo quando \"Risposta vocale\" lo consente.';
+
+  @override
+  String get voicePreviewSample => 'Ciao, sono Omi. Questa è la mia voce.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
@@ -12363,6 +12381,17 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';
+
+  @override
+  String get previousDay => 'Giorno precedente';
+
+  @override
+  String get nextDay => 'Giorno successivo';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nessuna attività il $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Rielaborazione della conversazione…';

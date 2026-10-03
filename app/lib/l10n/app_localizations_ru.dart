@@ -12266,6 +12266,25 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос ассистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбранный голос используется и на мобильном, и на компьютере.';
+
+  @override
+  String get readChatRepliesAloud => 'Озвучивать ответы в чате';
+
+  @override
+  String get readChatRepliesAloudDescription =>
+      'Озвучивает только тогда, когда это разрешено настройкой «Голосовой ответ».';
+
+  @override
+  String get voicePreviewSample => 'Привет, я Omi. Это мой голос.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
@@ -12336,6 +12355,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
+
+  @override
+  String get previousDay => 'Предыдущий день';
+
+  @override
+  String get nextDay => 'Следующий день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нет задач на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Повторная обработка разговора…';

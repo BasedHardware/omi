@@ -12014,6 +12014,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => '语音';
+
+  @override
+  String get assistantVoice => '助手语音';
+
+  @override
+  String get voiceSharedAcrossDevices => '你选择的语音将在移动端和桌面端共享。';
+
+  @override
+  String get readChatRepliesAloud => '朗读聊天回复';
+
+  @override
+  String get readChatRepliesAloudDescription => '仅在“语音回复”允许时才会朗读。';
+
+  @override
+  String get voicePreviewSample => '嗨，我是 Omi。这是我的声音。';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
@@ -12084,6 +12102,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
+  String get previousDay => '前一天';
+
+  @override
+  String get nextDay => '后一天';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date 没有任务';
+  }
 
   @override
   String get reprocessingConversationProgress => '正在重新处理对话…';

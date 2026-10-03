@@ -106,8 +106,13 @@ class DeviceInfoGroups extends StatelessWidget {
               ),
             ] else
               _copyRow(context, icon: FontAwesomeIcons.code, title: l10n.firmware, value: device?.firmwareRevision),
-            _copyRow(context,
-                icon: FontAwesomeIcons.fingerprint, title: l10n.deviceId, value: deviceId, truncate: true),
+            _copyRow(
+              context,
+              icon: FontAwesomeIcons.fingerprint,
+              title: l10n.deviceId,
+              value: deviceId,
+              truncate: true,
+            ),
             if (showSerialNumber)
               _copyRow(
                 context,

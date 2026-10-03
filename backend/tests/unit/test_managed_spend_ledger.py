@@ -29,6 +29,7 @@ import database._client as firestore_client_module
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION
 from llm_gateway.gateway.accounting import CostStatus, PricedUsage, ProviderResponseMetadata, ProviderUsage, UsageStatus
 from routers import desktop_proxy, omni_relay
+from utils.llm import desktop_gemini_telemetry
 from utils.llm import managed_spend_ledger as ledger
 from utils.llm.managed_spend_ledger import (
     DESKTOP_PROXY_CALLER,
@@ -295,7 +296,7 @@ def _request(body: bytes = b'{"contents":[{"parts":[{"text":"hello"}]}]}') -> Re
             'method': 'POST',
             'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
             'query_string': b'',
-            'headers': [(b'x-omi-request-id', b'request-12345678')],
+            'headers': [(b'x-omi-request-id', b'b87d6cf8-c82d-48d3-90d3-c0350a7c9d19')],
         },
         receive,
     )
@@ -327,7 +328,9 @@ def _telemetry(provider: str, *, uid: str | None = UID, payer: str = 'omi') -> d
 @pytest.fixture
 def scheduled(monkeypatch) -> list[ManagedAttempt]:
     calls: list[ManagedAttempt] = []
-    monkeypatch.setattr(desktop_proxy, 'schedule_managed_attempt', lambda attempt: calls.append(attempt) or True)
+    monkeypatch.setattr(
+        desktop_gemini_telemetry, 'schedule_managed_attempt', lambda attempt: calls.append(attempt) or True
+    )
     monkeypatch.setattr(desktop_proxy.sys, 'stdout', io.StringIO())
     return calls
 
@@ -351,7 +354,7 @@ def test_direct_routes_write_one_ledger_attempt_at_the_terminal_point(scheduled,
     assert attempt.configured_model == 'gemini-2.5-flash'
     assert attempt.api_surface == 'gemini_generateContent'
     assert attempt.route_artifact_id == f'desktop_proxy.{provider}'
-    assert attempt.request_id == 'request-12345678'
+    assert attempt.request_id == 'b87d6cf8-c82d-48d3-90d3-c0350a7c9d19'
     assert (attempt.invocation_id, attempt.ordinal, attempt.retry_ordinal, attempt.fallback_reason) == (
         telemetry.invocation_id,
         1,

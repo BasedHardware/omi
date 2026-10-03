@@ -12133,6 +12133,24 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'קול';
+
+  @override
+  String get assistantVoice => 'קול העוזר';
+
+  @override
+  String get voiceSharedAcrossDevices => 'בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.';
+
+  @override
+  String get readChatRepliesAloud => 'קריאת תשובות צ\'אט בקול';
+
+  @override
+  String get readChatRepliesAloudDescription => 'מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.';
+
+  @override
+  String get voicePreviewSample => 'היי, אני Omi. זה הקול שלי.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
@@ -12203,6 +12221,17 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
+
+  @override
+  String get previousDay => 'היום הקודם';
+
+  @override
+  String get nextDay => 'היום הבא';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'אין משימות ב$date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'מעבד מחדש את השיחה…';

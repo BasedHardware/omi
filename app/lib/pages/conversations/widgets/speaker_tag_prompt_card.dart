@@ -105,7 +105,9 @@ class _Header extends StatelessWidget {
         if (provider.prompts.length > 1 && !provider.finished)
           Text(
             l10n.speakerTagPromptProgress(
-                math.min(provider.index + 1, provider.prompts.length), provider.prompts.length),
+              math.min(provider.index + 1, provider.prompts.length),
+              provider.prompts.length,
+            ),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
           ),
         OmiIconButton(
@@ -230,8 +232,9 @@ class _Question extends StatelessWidget {
     }
 
     final question = switch (prompt.kind) {
-      'confirm_person' when suggestedName != null && suggestedName.isNotEmpty =>
-        l10n.speakerTagPromptIsThisPerson(suggestedName),
+      'confirm_person' when suggestedName != null && suggestedName.isNotEmpty => l10n.speakerTagPromptIsThisPerson(
+          suggestedName,
+        ),
       'identify' || 'confirm_person' => l10n.speakerTagPromptWhoIsThis,
       _ => l10n.speakerTagPromptIsThisYou,
     };
@@ -343,7 +346,9 @@ class _Question extends StatelessWidget {
             children: [
               Icon(Icons.arrow_upward, size: 14, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.xxs),
-              Expanded(child: Text(hint, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              Expanded(
+                child: Text(hint, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              ),
             ],
           ),
         ],
@@ -407,7 +412,9 @@ class _Clip extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: OmiSpacing.sm),
-              Expanded(child: SizedBox(height: 28, child: _Waveform(wav: wav))),
+              Expanded(
+                child: SizedBox(height: 28, child: _Waveform(wav: wav)),
+              ),
               const SizedBox(width: OmiSpacing.sm),
               Text(OmiDuration.offset(seconds), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
@@ -415,12 +422,7 @@ class _Clip extends StatelessWidget {
         ),
         if (prompt.excerpt.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.xs),
-          Text(
-            '“${prompt.excerpt}”',
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: OmiType.subhead,
-          ),
+          Text('“${prompt.excerpt}”', maxLines: 3, overflow: TextOverflow.ellipsis, style: OmiType.subhead),
         ],
         if (prompt.conversationTitle.isNotEmpty || started != null) ...[
           const SizedBox(height: OmiSpacing.xxs),
@@ -557,15 +559,14 @@ class _CandidateChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(child: Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500))),
+              Flexible(
+                child: Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+              ),
               if (candidate.pinned) ...[
                 const SizedBox(width: OmiSpacing.xxs),
                 Icon(Icons.push_pin, size: 12, color: OmiColors.textTertiary),
               ],
-              if (level != null) ...[
-                const SizedBox(width: OmiSpacing.xs),
-                VoiceMatchMeter(level: level),
-              ],
+              if (level != null) ...[const SizedBox(width: OmiSpacing.xs), VoiceMatchMeter(level: level)],
             ],
           ),
         ),
@@ -614,8 +615,10 @@ class _AnswerChip extends StatelessWidget {
                   Flexible(
                     child: Text(
                       label,
-                      style: OmiType.subhead
-                          .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                      style: OmiType.subhead.copyWith(
+                        color: foreground,
+                        fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],

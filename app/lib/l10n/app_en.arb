@@ -14567,6 +14567,30 @@
             }
         }
     },
+    "assistantVoiceSettingsTitle": "Voice",
+    "@assistantVoiceSettingsTitle": {
+        "description": "Settings section title for assistant voice"
+    },
+    "assistantVoice": "Assistant Voice",
+    "@assistantVoice": {
+        "description": "Row label for the assistant voice picker"
+    },
+    "voiceSharedAcrossDevices": "Your voice choice is shared across mobile and desktop.",
+    "@voiceSharedAcrossDevices": {
+        "description": "Support line under the assistant voice picker"
+    },
+    "readChatRepliesAloud": "Read chat replies aloud",
+    "@readChatRepliesAloud": {
+        "description": "Toggle label for reading chat replies aloud"
+    },
+    "readChatRepliesAloudDescription": "Only speaks when Voice response allows it.",
+    "@readChatRepliesAloudDescription": {
+        "description": "Toggle helper text explaining replies are only spoken when Voice response mode allows it"
+    },
+    "voicePreviewSample": "Hi, I'm Omi. This is my voice.",
+    "@voicePreviewSample": {
+        "description": "Sample text synthesized when previewing an assistant voice"
+    },
     "speakerLabelTalkTime": "{duration} of this voice",
     "@speakerLabelTalkTime": {
         "description": "How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)",
@@ -14677,6 +14701,21 @@
         }
     },
     "peopleStatsIncomplete": "Counts may be incomplete.",
+    "previousDay": "Previous day",
+    "@previousDay": {
+        "description": "Day page navigation: go to the day before"
+    },
+    "nextDay": "Next day",
+    "@nextDay": {
+        "description": "Day page navigation: go to the day after"
+    },
+    "noTasksOnDate": "No tasks on {date}",
+    "@noTasksOnDate": {
+        "description": "Empty state on the single-day tasks page",
+        "placeholders": {
+            "date": {}
+        }
+    },
     "reprocessingConversationProgress": "Reprocessing conversation…",
     "@reprocessingConversationProgress": {
         "description": "Shown with a progress bar while the open conversation is reprocessed."

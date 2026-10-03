@@ -12260,6 +12260,24 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaš odabir glasa dijeli se između mobilne i desktop aplikacije.';
+
+  @override
+  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori samo kada to dopusti \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
@@ -12330,6 +12348,17 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
+  String get previousDay => 'Prethodni dan';
+
+  @override
+  String get nextDay => 'Sljedeći dan';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nema zadataka za $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Ponovna obrada razgovora…';

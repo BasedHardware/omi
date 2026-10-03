@@ -12222,6 +12222,24 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'صدا';
+
+  @override
+  String get assistantVoice => 'صدای دستیار';
+
+  @override
+  String get voiceSharedAcrossDevices => 'صدای انتخابی شما در موبایل و دسکتاپ مشترک است.';
+
+  @override
+  String get readChatRepliesAloud => 'خواندن پاسخ‌های گفتگو با صدای بلند';
+
+  @override
+  String get readChatRepliesAloudDescription => 'فقط زمانی صحبت می‌کند که «پاسخ صوتی» اجازه دهد.';
+
+  @override
+  String get voicePreviewSample => 'سلام، من Omi هستم. این صدای من است.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
@@ -12292,6 +12310,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
+  String get previousDay => 'روز قبل';
+
+  @override
+  String get nextDay => 'روز بعد';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'هیچ وظیفه‌ای در $date نیست';
+  }
 
   @override
   String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';

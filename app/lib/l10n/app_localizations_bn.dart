@@ -12224,6 +12224,24 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'ভয়েস';
+
+  @override
+  String get assistantVoice => 'অ্যাসিস্ট্যান্টের ভয়েস';
+
+  @override
+  String get voiceSharedAcrossDevices => 'আপনার নির্বাচিত ভয়েস মোবাইল ও ডেস্কটপে শেয়ার করা হয়।';
+
+  @override
+  String get readChatRepliesAloud => 'চ্যাটের উত্তরগুলো জোরে পড়ুন';
+
+  @override
+  String get readChatRepliesAloudDescription => 'শুধুমাত্র \"ভয়েস রেসপন্স\" অনুমতি দিলেই কথা বলে।';
+
+  @override
+  String get voicePreviewSample => 'হাই, আমি Omi। এটাই আমার ভয়েস।';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
@@ -12294,6 +12312,17 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
+  String get previousDay => 'আগের দিন';
+
+  @override
+  String get nextDay => 'পরের দিন';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date-এ কোনো কাজ নেই';
+  }
 
   @override
   String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';

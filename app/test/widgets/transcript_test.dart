@@ -52,21 +52,26 @@ void main() {
   testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
     await setupSharedPreferences();
     var loaded = <Person>[];
-    final people =
-        PeopleProvider(loadPeople: () async => PeopleListResponse(people: loaded), renamePerson: (_, __) async => true);
+    final people = PeopleProvider(
+      loadPeople: () async => PeopleListResponse(people: loaded),
+      renamePerson: (_, __) async => true,
+    );
     final segment = segmentFor('reactive', 2)..personId = 'later';
-    await tester.pumpWidget(ChangeNotifierProvider.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
         value: people,
         child: MaterialApp(
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate
+            GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
-        )));
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
     expect(find.text('Speaker 1'), findsOneWidget);
@@ -184,9 +189,7 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
-          ),
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: true)),
         ),
       );
       await tester.pumpAndSettle();
@@ -740,9 +743,8 @@ void main() {
           line('a3', 3, 'The first voice again.', 30),
         ];
 
-    Finder speakerNameLabels() => find.byWidgetPredicate(
-          (widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''),
-        );
+    Finder speakerNameLabels() =>
+        find.byWidgetPredicate((widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''));
 
     Future<void> pumpDetail(
       WidgetTester tester,
@@ -810,13 +812,7 @@ void main() {
         final segments = voicesFixture();
         final played = <TranscriptSegment>[];
         final edited = <int>[];
-        await pumpDetail(
-          tester,
-          segments,
-          unresolved: true,
-          onSegmentTap: played.add,
-          onEditSegmentText: edited.add,
-        );
+        await pumpDetail(tester, segments, unresolved: true, onSegmentTap: played.add, onEditSegmentText: edited.add);
         await tester.pumpAndSettle();
 
         for (final segment in segments) {
@@ -943,10 +939,7 @@ void main() {
             },
           ],
         );
-        await pumpDetail(tester, [
-          line('own', 0, 'Mine.', 0, isUser: true),
-          line('same-id-other', 0, 'Not me.', 10),
-        ]);
+        await pumpDetail(tester, [line('own', 0, 'Mine.', 0, isUser: true), line('same-id-other', 0, 'Not me.', 10)]);
         await tester.pumpAndSettle();
         expect(find.text('You'), findsOneWidget);
         expect(find.text('Speaker 1'), findsOneWidget);
@@ -1060,9 +1053,7 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: TranscriptWidget(
-              segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)],
-            ),
+            body: TranscriptWidget(segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)]),
           ),
         ),
       );

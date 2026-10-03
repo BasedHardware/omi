@@ -12284,6 +12284,24 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистентот';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Вашиот избор на глас се споделува меѓу мобилен и десктоп.';
+
+  @override
+  String get readChatRepliesAloud => 'Читај ги одговорите од разговорот наглас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Зборува само кога \"Гласовен одговор\" дозволува.';
+
+  @override
+  String get voicePreviewSample => 'Здраво, јас сум Omi. Ова е мојот глас.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
@@ -12354,6 +12372,17 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Бројките може да се нецелосни.';
+
+  @override
+  String get previousDay => 'Претходен ден';
+
+  @override
+  String get nextDay => 'Следен ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нема задачи на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Разговорот повторно се обработува…';
