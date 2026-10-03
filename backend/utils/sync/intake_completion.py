@@ -5,9 +5,8 @@ globals so existing monkeypatches keep working; this helper only decides
 whether the intake wrote anything. A transient repeat-only intake is
 acknowledged without new enrollment, audio storage or enrichment — except
 when it provably completes previously admitted sync work (a sync-scoped
-exact retry or a row already carrying merged sync content), where existing
-debt still enrolls and finishes. Transient markers never escape into
-persistence or receipts.
+exact retry), where existing debt still enrolls and finishes. Transient
+markers never escape into persistence or receipts.
 """
 
 from __future__ import annotations
@@ -140,11 +139,11 @@ def complete_sync_intake(
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)
-    # An exact sync-scoped retry, or a live row already carrying merged sync
-    # content, may owe enrichment from an earlier partial run. That existing
-    # debt still enrolls and finishes even though this upload wrote nothing;
-    # pristine live repeats invent no new debt.
-    existing_completion = completion_pending or bool(assigned.get('sync_merged_from'))
+    # An exact sync-scoped retry may owe enrichment from an earlier partial
+    # run. That existing debt still enrolls and finishes even though this
+    # upload wrote nothing; pristine live repeats invent no new debt.
+    # Merged ancestry alone is not evidence of pending completion.
+    existing_completion = completion_pending
     conversation_id = assigned['id']
     with lock:
         if not repeat_only:

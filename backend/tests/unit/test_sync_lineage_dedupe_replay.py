@@ -22,7 +22,9 @@ import pytest
 from config import sync_lineage
 from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from tests.unit.test_sync_cross_job_assignment import intake
+from tests.unit.test_sync_cross_job_assignment import conversations, intake
+from utils.firestore_document_size import estimate_firestore_document_bytes
+from utils.sync import assignment
 
 T0 = 1_800_000_000.0
 LIVE_ID = 'LIVE-ROW'
@@ -87,6 +89,36 @@ def wal(skew, texts, row_id='WAL-1'):
             for i, text in enumerate(texts)
         ],
     }
+
+
+def donor_chunk(donor_id='DONOR-1', start=T0 + 50, texts=None, duration=10.0):
+    texts = texts or ['an unrelated remark about office furniture logistics']
+    return {
+        'id': donor_id,
+        'started_at': at(start),
+        'finished_at': at(start + duration * len(texts)),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'discarded': False,
+        'status': 'completed',
+        'transcript_segments': [
+            {
+                'start': i * duration,
+                'end': (i + 1) * duration,
+                'text': text,
+                'speaker_id': 0,
+                'is_user': False,
+            }
+            for i, text in enumerate(texts)
+        ],
+    }
+
+
+def seeded_store_with_donor(rows, donor=None):
+    """Seed ``rows`` directly and the donor through intake so the index sees it."""
+    store = seeded_store(rows)
+    intake(store, donor or donor_chunk())
+    return store
 
 
 def seeded_store(rows):
@@ -279,6 +311,53 @@ def test_retry_identical_text_and_range_drops_without_novel_speech():
     assert survivors == [] and assigned['_sync_lineage_repeat_only'] is True
 
 
+def test_repeat_only_upload_leaves_an_overlapping_donor_untouched():
+    store = seeded_store_with_donor([live_row()])
+    before = deepcopy(store.rows)
+    assigned, created, survivors = intake(store, wal(40, [reworded(text) for text in LIVE]), target_id=LIVE_ID)
+    assert created is False and survivors == []
+    assert assigned['id'] == LIVE_ID and assigned['_sync_lineage_repeat_only'] is True
+    assert store.rows == before
+
+
+def test_repeat_only_with_an_oversized_donor_never_rolls_over(monkeypatch, caplog):
+    store = seeded_store_with_donor([live_row()])
+    donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
+    donor_stored['structured'] = {'title': '', 'overview': 'x' * 8192}
+    live_size = estimate_firestore_document_bytes(store.rows[('users', 'u', 'conversations', LIVE_ID)], None)
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', live_size + 64)
+    before = deepcopy(store.rows)
+    with caplog.at_level(logging.WARNING):
+        assigned, created, survivors = intake(store, wal(40, [reworded(text) for text in LIVE]), target_id=LIVE_ID)
+    assert created is False and survivors == []
+    assert assigned['id'] == LIVE_ID and assigned['_sync_lineage_repeat_only'] is True
+    assert store.rows == before
+    assert len(conversations(store)) == 2
+    assert not any('size_rollover' in r.getMessage() for r in caplog.records)
+
+
+def test_donor_only_duplicate_text_is_appended_not_a_canonical_retry():
+    store = seeded_store_with_donor([live_row()], donor=donor_chunk(texts=[NEW[0]]))
+    chunk = wal_at(T0 + 50, [NEW[0]], 10.0)
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False
+    assert [s['text'] for s in survivors] == [NEW[0]]
+    assert '_sync_lineage_repeat_only' not in assigned
+    assert NEW[0] in texts_of(store, LIVE_ID)
+    donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
+    assert donor_stored['deleted'] is True and donor_stored['sync_merged_into'] == LIVE_ID
+
+
+def test_new_speech_with_a_donor_consolidates_and_appends():
+    store = seeded_store_with_donor([live_row()])
+    assigned, created, survivors = intake(store, wal(40, [reworded(text) for text in LIVE] + NEW), target_id=LIVE_ID)
+    assert created is False and len(survivors) == 3
+    assert '_sync_lineage_repeat_only' not in assigned
+    donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
+    assert donor_stored['deleted'] is True and donor_stored['sync_merged_into'] == LIVE_ID
+    assert set(texts_of(store, LIVE_ID)) >= set(NEW)
+
+
 def test_negation_changes_keep_the_segment_at_intake():
     base = 'the quarterly planning review did not cover the budget numbers in detail'
     row = live_row()
@@ -324,7 +403,9 @@ def _segments(texts):
     ]
 
 
-def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None, finish_impl=None):
+def _drive_process_segment(
+    pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None, finish_impl=None, wal_ts=T0 + 40
+):
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
@@ -332,7 +413,7 @@ def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_I
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     monkeypatch.setattr(pipeline, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))
-    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: T0 + 40)
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: wal_ts)
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
     monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
     monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
@@ -466,15 +547,34 @@ def test_lexical_repeats_on_a_pristine_live_row_still_invent_no_debt(pipeline_mo
     finish.assert_not_called()
 
 
-def test_repeat_on_a_row_with_merged_sync_content_completes_uncertain_debt(pipeline_module, monkeypatch):
+def test_repeat_on_a_row_with_merged_ancestry_alone_finishes_nothing(pipeline_module, monkeypatch):
     pipeline = pipeline_module
     store = seeded_store([live_row(sync_merged_from=['DONOR-1'])])
+    before = deepcopy(store.rows)
     texts = [reworded(text) for text in LIVE]
     finish = MagicMock()
     ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=finish)
     assert ok is True
-    assert response.get('_merged') == {LIVE_ID: 'en'}
-    finish.assert_called_once()
+    assert '_merged' not in response
+    finish.assert_not_called()
+    assert store.rows == before
+
+
+def test_all_repeat_with_a_donor_acknowledges_without_finish_or_reprocess(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    store = seeded_store_with_donor([live_row()])
+    before = deepcopy(store.rows)
+    texts = [reworded(text) for text in LIVE]
+    finish = MagicMock()
+    ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts, finish_impl=finish)
+    assert ok is True
+    assert '_merged' not in response
+    finish.assert_not_called()
+    assert store.rows == before
+    reprocess = MagicMock()
+    monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', reprocess)
+    pipeline._reprocess_merged_conversations('u', response)
+    reprocess.assert_not_called()
 
 
 def test_committed_append_logs_telemetry_before_a_failing_finish(pipeline_module, monkeypatch, caplog):

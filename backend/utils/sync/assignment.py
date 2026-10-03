@@ -367,7 +367,13 @@ def assign_in_transaction(
                 live_origin=plan_target['started_at'].timestamp(),
                 live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
             )
-            survivors, exact_retries, sync_retry = drop_exact_retries(lexical_kept, existing)
+            live_origin = plan_target['started_at'].timestamp()
+            live_stored = [
+                dict(segment, timestamp=live_origin + segment['start'])
+                for segment in live_row.get('transcript_segments', [])
+                if isinstance(segment.get('start'), (int, float))
+            ]
+            survivors, exact_retries, sync_retry = drop_exact_retries(lexical_kept, live_stored)
             live_stats = {
                 'report': dedupe_report,
                 'exact_retries': exact_retries,
@@ -473,6 +479,30 @@ def assign_in_transaction(
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
     chosen = plan(excluded, tuple(range(len(incoming['transcript_segments']))))
+    if (
+        live_stats is not None
+        and not chosen.survivors
+        and not chosen.created
+        and chosen.canonical == target_id
+        and target is not None
+    ):
+        # Every incoming segment repeated speech already on the explicit live
+        # target. Acknowledge without any writes; a sync-scoped retry still
+        # completes the enrichment the earlier commit owed.
+        no_op = decode(chosen.matched[chosen.canonical])
+        no_op['id'] = chosen.canonical
+        no_op['sync_live_target'] = chosen.result['sync_live_target']
+        no_op.setdefault('sync_relevance', 'keep')
+        no_op['_sync_lineage_repeat_only'] = True
+        if live_stats['sync_retry']:
+            no_op['_sync_lineage_completion_pending'] = True
+        no_op['_sync_lineage_dedupe'] = {
+            'appended_seconds': 0.0,
+            'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
+            'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
+            'repeat_only': True,
+        }
+        return no_op, False, []
     trigger = None
     while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
@@ -523,31 +553,6 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
-    if (
-        live_stats is not None
-        and not survivors
-        and len(matched) == 1
-        and not created
-        and canonical == target_id
-        and target is not None
-    ):
-        # Every incoming segment repeated speech already on the explicit live
-        # target. Acknowledge without any writes; a sync-scoped retry still
-        # completes the enrichment the earlier commit owed.
-        no_op = decode(matched[canonical])
-        no_op['id'] = canonical
-        no_op['sync_live_target'] = result['sync_live_target']
-        no_op.setdefault('sync_relevance', 'keep')
-        no_op['_sync_lineage_repeat_only'] = True
-        if live_stats['sync_retry']:
-            no_op['_sync_lineage_completion_pending'] = True
-        no_op['_sync_lineage_dedupe'] = {
-            'appended_seconds': 0.0,
-            'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
-            'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
-            'repeat_only': True,
-        }
-        return no_op, False, []
     payload = chosen.payload
     if created:
         # DELETE_FIELD is invalid in a Firestore set without merge. New anchors
