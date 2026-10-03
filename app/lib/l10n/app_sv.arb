@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "Längsta uppehåll",
     "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
     "diagnosticsLastDuration": "Senaste {duration}",
-    "peopleStatsIncomplete": "Antalen kan vara ofullständiga."
+    "peopleStatsIncomplete": "Antalen kan vara ofullständiga.",
+    "reprocessingConversationProgress": "Bearbetar samtalet igen…",
+    "conversationReprocessed": "Samtalet har uppdaterats",
+    "loadingTranscript": "Läser in transkription…",
+    "transcriptLoadFailed": "Det gick inte att läsa in transkriptionen.",
+    "processingConversationProgress": "Bearbetar samtalet…",
+    "conversationProcessingFailedMessage": "Det gick inte att bearbeta samtalet.",
+    "waitForReprocessing": "Vänta tills bearbetningen är klar.",
+    "unnamedSpeakerLabel": "Talare",
+    "unresolvedSpeakersNotice": "Talarna är inte separerade mellan inspelningar.",
+    "unresolvedSpeakersTitle": "Om talarmarkeringar",
+    "unresolvedSpeakersMessage": "Omi kunde inte skilja de andra rösterna åt mellan inspelningarna. Tryck på en talarmarkering för att namnge vem som talar.",
+    "nameSpeakerTitle": "Namnge talare",
+    "playbackPreparingAudio": "Förbereder ljud…",
+    "playbackBackToCurrent": "Tillbaka till aktuell",
+    "playbackAudioUnavailable": "Ljudet är inte tillgängligt",
+    "playbackAudioLoadFailed": "Ljudet kunde inte laddas",
+    "playbackAudioNetworkFailed": "Kontrollera anslutningen"
 }

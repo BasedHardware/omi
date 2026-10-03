@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
     "diagnosticsLastDuration": "Viimased {duration}",
-    "peopleStatsIncomplete": "Arvud võivad olla puudulikud."
+    "peopleStatsIncomplete": "Arvud võivad olla puudulikud.",
+    "reprocessingConversationProgress": "Vestlust töödeldakse uuesti…",
+    "conversationReprocessed": "Vestlus on uuendatud",
+    "loadingTranscript": "Transkriptsiooni laadimine…",
+    "transcriptLoadFailed": "Transkriptsiooni ei õnnestunud laadida.",
+    "processingConversationProgress": "Vestlust töödeldakse…",
+    "conversationProcessingFailedMessage": "Seda vestlust ei õnnestunud töödelda.",
+    "waitForReprocessing": "Oota, kuni uuesti töötlemine lõpeb.",
+    "unnamedSpeakerLabel": "Kõneleja",
+    "unresolvedSpeakersNotice": "Kõnelejaid ei ole salvestuste vahel eraldatud.",
+    "unresolvedSpeakersTitle": "Kõnelejate siltidest",
+    "unresolvedSpeakersMessage": "Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.",
+    "nameSpeakerTitle": "Nimeta kõneleja",
+    "playbackPreparingAudio": "Heli ettevalmistamine…",
+    "playbackBackToCurrent": "Tagasi praeguse juurde",
+    "playbackAudioUnavailable": "Heli pole saadaval",
+    "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
+    "playbackAudioNetworkFailed": "Kontrollige ühendust"
 }
