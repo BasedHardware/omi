@@ -34,12 +34,12 @@ from utils.stt.live_router import (
 )
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.recovery_state import current_recovery
+from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
-    close_rejected_socket,
     fallback_socket_is_serving,
 )
 from utils.stt.socket import STTSocket
@@ -296,9 +296,14 @@ async def connect_configured_chain(
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
         socket = None
+        recovery = current_recovery.get()
+        dial_budget = recovery.dial_budget() if recovery is not None else None
+
+        def cleanup_budget() -> float:
+            remaining = recovery.remaining() if recovery is not None else None
+            return min(2.0, max(0.0, remaining)) if remaining is not None else 2.0
+
         try:
-            recovery = current_recovery.get()
-            dial_budget = recovery.dial_budget() if recovery is not None else None
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
                 return None
@@ -352,13 +357,21 @@ async def connect_configured_chain(
                         source_outcome=prior_outcome,
                     ).note_failure(None)
                 if socket is not None:
-                    close_rejected_socket(socket)
-                on_close()
+                    try:
+                        await abort_replay_socket(socket, timeout=cleanup_budget())
+                    finally:
+                        on_close()
+                else:
+                    on_close()
                 raise
             if not isinstance(error, Exception):
                 if socket is not None:
-                    close_rejected_socket(socket)
-                on_close()
+                    try:
+                        await abort_replay_socket(socket, timeout=cleanup_budget())
+                    finally:
+                        on_close()
+                else:
+                    on_close()
                 raise
             if isinstance(error, TargetEngineMismatch):
                 if prior_outcome is not None:
@@ -370,8 +383,12 @@ async def connect_configured_chain(
                         source_outcome=prior_outcome,
                     ).note_failure(None, continuing=True)
                 if socket is not None:
-                    close_rejected_socket(socket)
-                on_close()
+                    try:
+                        await abort_replay_socket(socket, timeout=cleanup_budget())
+                    finally:
+                        on_close()
+                else:
+                    on_close()
                 COST_FAIL_OPEN.labels(reason='engine_mismatch').inc()
                 record_fallback(
                     component='stt_selection',
@@ -417,7 +434,7 @@ async def connect_configured_chain(
             )
             rejected_outcome.claim(reason, connect=True)
             if socket is not None:
-                close_rejected_socket(socket)
+                await abort_replay_socket(socket, timeout=cleanup_budget())
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
             provider_failure = provider_observation('connect_failure', reason) is True
             if provider_failure or account_rejection or reason == 'auth':

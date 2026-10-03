@@ -129,6 +129,10 @@ class LiveRecoveryController:
             self.state = RecoveryState.replaying
 
     def _release(self) -> None:
+        if self.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
+            return
+        if self.client_has_left():
+            return
         if self._adopted and self._candidate_text:
             self._deadline = None
             self.state = RecoveryState.recovered
@@ -186,10 +190,17 @@ class LiveRecoveryController:
 
     # -- attempt accounting ---------------------------------------------------
 
-    def grant_reentry(self, identity: str) -> None:
-        """Permit one extra dial of a previously attempted identity (Soniox
-        rescue). Tagged separately; it never resets the episode deadline."""
+    def grant_soniox_reentry(self, identity: str) -> bool:
+        """Grant at most one repeat dial per session (Soniox rescue/reconnect).
+        Granting the same still-unused identity is idempotent; a different
+        identity, or any grant once a repeat has been consumed, is refused.
+        Granting never resets the episode deadline."""
+        if self._reentry_used:
+            return False
+        if self._reentry_grants and identity not in self._reentry_grants:
+            return False
         self._reentry_grants.add(identity)
+        return True
 
     def mark_attempted(self, identity: str) -> None:
         """Record a real dial whose reservation happened outside the seam
@@ -232,6 +243,8 @@ class LiveRecoveryController:
                 return False
             self.attempted_targets.add(identity)
         self.dial_attempts += 1
+        if self._deadline is not None and self.state is RecoveryState.provider_died:
+            self.state = RecoveryState.recovering
         # Metric only for actual recovery dials — the initial connect runs
         # before any episode exists; selector probes/capacity skips never
         # reach this seam.

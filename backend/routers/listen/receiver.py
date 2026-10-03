@@ -50,7 +50,6 @@ from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.stt.live_failure import (
-    MAX_STT_FAILOVERS,
     PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
@@ -64,7 +63,12 @@ from utils.stt.live_failure import (
 )
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
 from utils.stt.live_recovery import select_live_replacement
-from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, current_recovery
+from utils.stt.recovery_state import (
+    LiveRecoveryController,
+    MAX_RECOVERY_TARGETS,
+    RecoveryState,
+    current_recovery,
+)
 from config.live_stt_registry import DEFAULT_IDS
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_metrics import REPLAY_SKIPPED, provider_family
@@ -727,7 +731,7 @@ class ListenReceiver(ReplayFilterMixin):
             if pending.settled:
                 self._pending_live_failover = None
         self.recovery.note_transcript(
-            any(bool(segment.get('text')) for segment in segments)
+            any(bool(str(segment.get('text') or '').strip()) for segment in segments)
             and (pending is None or provider is None or provider == pending.to_mode),
             candidate=speaker_epoch if speaker_epoch is not None else self._candidate_token,
         )
@@ -903,7 +907,7 @@ class ListenReceiver(ReplayFilterMixin):
             return socket
         if self.host.stt_service == STTService.soniox:
             if same_provider:
-                if not self.recovery.reserve('soniox', 'soniox'):
+                if not self.recovery.reserve(self._attempted_identity(self.stt_socket, STTService.soniox), 'soniox'):
                     raise RuntimeError('soniox reconnect already attempted')
                 return await process_audio_soniox(
                     modulate_callback or callback,
@@ -1639,6 +1643,7 @@ class ListenReceiver(ReplayFilterMixin):
             data = bytes(buffer)
             start = self._stt_buffer_start_sample
             if data and start is not None:
+                self._live_birth.note(start, start + len(data) // 2)
                 delivery = self._replay_delivery
                 if delivery is not None:
                     accepted = delivery.send(data, start)
@@ -1679,8 +1684,8 @@ class ListenReceiver(ReplayFilterMixin):
         # the next provider the chunk is reported unsent with the buffer intact,
         # and it must reach the replacement socket now — the next client chunk
         # may be a VAD-gated silence away. `_failover_stt_socket` enforces
-        # MAX_STT_FAILOVERS, so the bound here is a backstop, not the limit.
-        for _ in range(MAX_STT_FAILOVERS + 2):
+        # MAX_RECOVERY_TARGETS, so the bound here is a backstop, not the limit.
+        for _ in range(MAX_RECOVERY_TARGETS + 2):
             socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
             decision = decide_stt_buffer_flush(
                 buffer_len=len(buffer),
@@ -2027,6 +2032,8 @@ class ListenReceiver(ReplayFilterMixin):
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        if not self.host.use_custom_stt:
+                            self._live_birth.note(start_sample, end_sample)
                         source_map = self.host.state.source_position_map
                         if source_map is not None:
                             source_map.accept(

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
     SafeModulateSocket,
@@ -34,7 +35,7 @@ def _exercise_abrupt_modulate_close():
     loop = asyncio.new_event_loop()
 
     async def run():
-        class ObservedSendQueue(asyncio.Queue[bytes]):
+        class ObservedSendQueue(AudioSendQueue[bytes]):
             def __init__(self):
                 super().__init__(maxsize=2000)
                 self.get_count = 0

@@ -22,9 +22,10 @@ def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
         or ('deepgram' not in receiver._stt_failed_providers and st.deepgram_fallback_model(receiver.host.stt_language))
     ):
         return
+    if not receiver.recovery.grant_soniox_reentry('soniox'):
+        return
     receiver._stt_rescue_retries.add('soniox')
     receiver._stt_failed_providers.remove('soniox')
-    receiver.recovery.grant_reentry('soniox')
 
 
 def select_live_replacement(

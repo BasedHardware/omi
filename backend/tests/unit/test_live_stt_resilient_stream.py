@@ -14,6 +14,7 @@ from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.live_metrics import WINDOW_REPLAY_SAFE_TRIMS
 from utils.stt.live_failure import live_stt_terminal_reason
+from utils.stt.recovery_state import LiveRecoveryController, RecoveryState
 from utils.stt.resilient_stream import ResilientAudio, socket_is_finishing, window_replay_action
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.streaming import STTService
@@ -389,27 +390,142 @@ def test_clock_only_replay_timestamps_continue_on_capture_sample_axis():
     assert [(s['start'], s['end']) for s in segments] == [(1.0, 2.0)]
 
 
-def test_reconnect_count_and_replay_limits(monkeypatch):
-    ring = ResilientAudio(2)
-    ring.append(b'X\x00' * 28, 0)
-    assert ring.admit('soniox', 'soniox_rotation')
-    ring.record_replay('soniox', 58)
-    assert not ring.admit('soniox', 'soniox_rotation')  # extra replay would exceed 30 s
-    second = ResilientAudio(2)
-    assert second.admit('soniox', 'soniox_rotation')
-    assert second.admit('soniox', 'soniox_rotation')
-    assert not second.admit('soniox', 'soniox_rotation')  # rolling-minute cap
+def test_reconnect_reentry_is_one_controller_repeat_per_session():
+    controller = LiveRecoveryController(SimpleNamespace())
+    controller.begin()
+    controller.mark_attempted('soniox')
+    assert controller.state is RecoveryState.provider_died
+    assert controller.grant_soniox_reentry('soniox')
+    assert controller.grant_soniox_reentry('soniox')
+    assert not controller.grant_soniox_reentry('other')
+    assert controller.reserve('soniox', 'soniox')
+    assert controller.dial_attempts == 2
+    assert controller.state is RecoveryState.recovering
+    assert not controller.grant_soniox_reentry('soniox')
+    assert not controller.reserve('soniox', 'soniox')
+    assert controller.dial_attempts == 2
 
+
+def test_reconnect_reentry_never_extends_past_the_episode():
     now = [0.0]
-    monkeypatch.setattr('utils.stt.resilient_stream.time.monotonic', lambda: now[0])
-    total_cap = ResilientAudio(2)
-    assert total_cap.admit('soniox', 'soniox_rotation')
+    controller = LiveRecoveryController(SimpleNamespace(), clock=lambda: now[0])
+    controller.begin()
+    controller.mark_attempted('soniox')
+    assert controller.grant_soniox_reentry('soniox')
     now[0] = 61.0
-    assert total_cap.admit('soniox', 'soniox_rotation')
-    now[0] = 122.0
-    assert total_cap.admit('soniox', 'soniox_rotation')
-    now[0] = 183.0
-    assert not total_cap.admit('soniox', 'soniox_rotation')  # lifetime cap
+    assert controller.episode_expired()
+    assert not controller.admission_open()
+    assert not controller.can_attempt('soniox')
+    assert not controller.reserve('soniox', 'soniox')
+    assert not controller.reserve('modulate-velma-2', 'modulate')
+
+    fresh = LiveRecoveryController(SimpleNamespace(), clock=lambda: now[0])
+    fresh.begin()
+    assert fresh.reserve('modulate-velma-2', 'modulate')
+
+
+def test_recovery_states_walk_dial_replay_adopt_to_recovered():
+    controller = LiveRecoveryController(SimpleNamespace())
+    controller.begin()
+    assert controller.state is RecoveryState.provider_died
+    assert controller.reserve('modulate-velma-2', 'modulate')
+    assert controller.state is RecoveryState.recovering
+    token = object()
+    controller.set_candidate(token)
+    controller.replaying()
+    assert controller.state is RecoveryState.replaying
+    controller.adopted(token)
+    assert controller.state is not RecoveryState.recovered
+    assert controller.deadline is not None
+    controller.note_transcript(True, candidate=token)
+    assert controller.state is RecoveryState.recovered
+    assert controller.deadline is None
+
+
+def test_text_bound_to_candidate_before_adoption_releases_on_adopt():
+    controller = LiveRecoveryController(SimpleNamespace())
+    controller.begin()
+    controller.reserve('soniox', 'soniox')
+    token = object()
+    controller.set_candidate(token)
+    controller.replaying()
+    controller.note_transcript(True, candidate=token)
+    assert controller.state is not RecoveryState.recovered
+    controller.adopted(token)
+    assert controller.state is RecoveryState.recovered
+
+
+def test_whitespace_text_and_stale_candidate_tokens_never_release_the_episode():
+    controller = LiveRecoveryController(SimpleNamespace())
+    controller.begin()
+    controller.reserve('soniox', 'soniox')
+    token = object()
+    controller.set_candidate(token)
+    controller.replaying()
+    controller.adopted(token)
+    controller.note_transcript(False, candidate=token)
+    controller.note_transcript(True, candidate=object())
+    controller.note_transcript(True)
+    assert controller.state is not RecoveryState.recovered
+    assert controller.deadline is not None
+    controller.note_transcript(True, candidate=token)
+    assert controller.state is RecoveryState.recovered
+
+
+@pytest.mark.asyncio
+async def test_transient_soniox_reentry_replays_newest_twenty_second_prefix(monkeypatch):
+    listener = receiver(monkeypatch)
+    ring = listener._resilient_audio
+    assert ring is not None
+    ring.ring_seconds = 150
+    for index in range(135):
+        ring.append(b'R\x00' * 2, index * 2)
+    listener.recovery.mark_attempted('soniox')
+    listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
+    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
+    dialed = []
+
+    async def dial(callback, *args, **kwargs):
+        raw = Socket()
+        dialed.append(raw)
+        return raw
+
+    monkeypatch.setattr(listen_receiver, 'process_audio_soniox', dial)
+    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
+        assert await listener._failover_stt_socket()
+    assert len(dialed) == 1
+    assert listener.recovery.dial_attempts == 2
+    assert dialed[0].sent == [(230, b'R\x00' * 40)]
+    assert ring.buffered_bytes == 80
+    assert ring.capture_bounds == (230, 270)
+
+
+@pytest.mark.asyncio
+async def test_consumed_reentry_blocks_a_second_repeat_and_next_provider_serves(monkeypatch):
+    listener = receiver(monkeypatch)
+    listener.recovery.mark_attempted('soniox')
+    listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
+    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
+    dialed = []
+
+    async def dial(callback, *args, **kwargs):
+        raw = Socket()
+        dialed.append(raw)
+        return raw
+
+    monkeypatch.setattr(listen_receiver, 'process_audio_soniox', dial)
+    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
+        assert await listener._reconnect_stt_socket_locked()
+    assert len(dialed) == 1
+    assert listener.recovery.dial_attempts == 2
+    assert not listener.recovery.grant_soniox_reentry('soniox')
+    listener.stt_socket.is_connection_dead = True
+    listener.stt_socket.typed_death_reason = 'connection_lost'
+    listener.stt_socket.death_reason = 'ws closed'
+    assert not await listener._reconnect_stt_socket_locked()
+    assert len(dialed) == 1
+    assert listener.recovery.dial_attempts == 2
+    assert listener.recovery.state is not RecoveryState.exhausted
 
 
 @pytest.mark.asyncio

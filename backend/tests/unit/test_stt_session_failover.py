@@ -18,9 +18,10 @@ from config.stt_provider_policy import (
     SONIOX_PROVIDER,
     provider_for_service,
 )
-from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
+from routers.listen.receiver import ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
+from utils.stt.live_failure import MAX_STT_FAILOVERS
 from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile

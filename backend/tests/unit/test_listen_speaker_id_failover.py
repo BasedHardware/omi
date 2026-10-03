@@ -42,16 +42,15 @@ import io
 import logging
 import time
 import wave
-from collections import deque
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from fastapi.websockets import WebSocketDisconnect
 
 import routers.listen.receiver as receiver_module
+import utils.stt.replay_delivery as replay_delivery_module
 import utils.stt.vad_gate as vad_gate_module
 from database import conversations as conversations_db
 from routers.listen.contracts import ListenLimits, ListenSessionState
@@ -166,8 +165,21 @@ def _fake_fresh_state():
 # Doubles for the outermost IO only.
 # ---------------------------------------------------------------------------
 class FakeListenWebSocket:
-    def __init__(self, frames, clock):
-        self.frames = deque(frames)
+    """One long-lived receive stream per session.
+
+    ``receive`` blocks on an empty queue so the real ``receive_data`` loop
+    stays mounted for the session's whole life: a mid-scenario "disconnect"
+    would trip the receiver's monotonic client-leaving latch and no failover
+    could ever run after it. ``run_receive`` appends frames then an ``_ack``
+    sentinel; the fake resolves it only after every prior frame was popped —
+    and because ``receive_data`` processes each frame fully (decode, capture
+    clock, STT-buffer flush) before asking for the next, a resolved ack means
+    the whole batch was delivered through the real path. Disconnect is fed
+    once, at teardown.
+    """
+
+    def __init__(self, clock):
+        self.queue = asyncio.Queue()
         self.clock = clock
         self.sent_json = []
 
@@ -177,16 +189,25 @@ class FakeListenWebSocket:
     async def close(self, code=1000, reason=None):
         return None
 
+    def feed(self, frames):
+        for frame in frames:
+            self.queue.put_nowait(frame)
+
+    def feed_disconnect(self):
+        self.queue.put_nowait({'type': 'websocket.disconnect', 'code': 1000})
+
     async def receive(self):
-        if self.frames:
-            frame = self.frames.popleft()
+        while True:
+            frame = await self.queue.get()
+            ack = frame.pop('_ack', None)
+            if ack is not None:
+                ack.set()
+                continue
             advance = frame.pop('_advance', None)
             if advance is not None:
                 self.clock['wall'] += advance[0]
                 self.clock['mono'] += advance[1]
             return frame
-        await asyncio.sleep(0)
-        raise WebSocketDisconnect(1000)
 
 
 class FakeProviderSocket(STTSocket):
@@ -425,19 +446,27 @@ class FailoverStack:
         awaiting = getattr(self.state, 'conversations_awaiting_capture_origin', None)
         if awaiting is not None:
             awaiting.add(CONV)
+        # receive_data's finally block clears the flag; restore it before any
+        # await so the processing loop never observes a false session end.
+        self.websocket = FakeListenWebSocket(self.clock)
+        self.request.websocket = self.websocket
+        self.state.active = True
+        self.receive_task = asyncio.create_task(self.receiver.receive_data())
 
     def restore(self):
         receiver_module.time = self._real_time
 
+    async def finish(self):
+        """Teardown: the one real disconnect, then the mounted loop's exit."""
+        self.websocket.feed_disconnect()
+        await asyncio.gather(self.receive_task, return_exceptions=True)
+
     async def run_receive(self, frames):
-        self.request.websocket = FakeListenWebSocket(frames, self.clock)
-        websocket = self.request.websocket
-        self.state.active = True
-        await self.receiver.receive_data()
-        # receive_data's finally block clears the flag; restore it before any
-        # await so the processing loop never observes a false session end.
-        self.state.active = True
-        return websocket
+        ack = asyncio.Event()
+        self.websocket.feed(frames)
+        self.websocket.queue.put_nowait({'_ack': ack})
+        await ack.wait()
+        return self.websocket
 
     def provider(self, index):
         return self.created_sockets[index]
@@ -585,6 +614,7 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -673,6 +703,7 @@ async def test_initialize_stt_installs_epoch_tracked_gated_socket(monkeypatch, c
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         for task in stack.tasks:
             task.cancel()
         await asyncio.gather(*stack.tasks, return_exceptions=True)
@@ -732,6 +763,7 @@ async def test_introduction_recognition_runs_with_capture_windows_present(monkey
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -755,6 +787,7 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -820,7 +853,36 @@ async def test_cold_start_contention_corrects_persisted_and_delivered_owner(monk
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
+
+
+@pytest.mark.anyio
+async def test_held_live_audio_birth_is_accept_time_not_flush_time(monkeypatch, telemetry):
+    """A sub-flush frame's residence clock starts at capture-accept, not at
+    the later STT-buffer flush into the recovery ring — the flush must never
+    renew the capture-age deadline of audio it merely held."""
+    stack = FailoverStack(monkeypatch, v2=False)
+    monkeypatch.setattr(replay_delivery_module, 'clock', lambda: stack.clock['mono'])
+    try:
+        assert await stack.receiver.initialize_stt()
+        await stack.run_receive(_frames_for(_silence(0.02), seconds_per_frame=0.02))
+        first_birth = stack.receiver._live_birth.lookup(0)
+        assert first_birth == pytest.approx(0.02)
+
+        stack.receiver._window_replay_started = True
+        stack.provider(0)['inner'].mark_dead()
+        await stack.run_receive([_stall_frame(5.0)] + _frames_for(_silence(0.5)))
+        assert stack.receiver._live_birth.lookup(0) == pytest.approx(first_birth)
+        assert stack.receiver._live_birth.lookup(0) < 5.0
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await stack.finish()
         for task in stack.tasks:
             task.cancel()
         await asyncio.gather(*stack.tasks, return_exceptions=True)

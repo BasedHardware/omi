@@ -11,6 +11,9 @@ from tests.unit.test_live_cost_router import controls  # noqa: F401
 from routers.listen.receiver import ListenReceiver
 from utils.stt import parakeet_window as window, streaming as st, live_session
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.stt.live_failure import PendingLiveFailover, live_stt_terminal_reason
+from utils.stt.live_signal import provider_observation
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.stt.resilient_stream import ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket
@@ -411,6 +414,36 @@ async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkey
         assert raw.typed_death_reason == 'capacity_full'
     finally:
         await stop([raw])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
+async def test_adopted_tail_capacity_full_is_censored_not_provider_death(monkeypatch, successor):
+    actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
+    actual.stt_socket.raw.fail('first_text_deadline')
+    try:
+        assert await actual._failover_stt_socket()
+        tail = actual.stt_socket
+        assert isinstance(tail, ReplayTailSocket)
+        assert not tail.connection.is_connection_dead
+        assert not tail.send(b'\x01\x00' * (27 * 16000), 135 * 16000)
+        assert tail.typed_death_reason == 'capacity_full'
+        assert not raws[-1].is_connection_dead
+        assert live_stt_terminal_reason(tail, 'send_failed') == 'capacity_full'
+        hop = PendingLiveFailover.from_socket(tail, actual.host.stt_service.value, 'unavailable')
+        assert hop.reason == 'capacity_full'
+        before = fallback_count()
+        hop.note_failure(None)
+        hop.note_failure(None)
+        assert legs[-1].leg_outcome.settled
+        assert fallback_count() - before == 1
+        assert provider_observation('failover', 'capacity_full') is None
+        recorded = [entry for entry in observations if entry[0] == legs[-1].routing_target]
+        assert recorded and recorded[-1][5] == 'capacity_full'
+        assert recorded[-1][5] != 'connection_lost'
+    finally:
+        await actual._drain_stt_sockets()
+        await stop(raws)
 
 
 @pytest.mark.asyncio
