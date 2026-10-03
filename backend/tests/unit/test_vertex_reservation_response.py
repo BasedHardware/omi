@@ -14,6 +14,7 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.providers import VertexGeminiProvider
 from llm_gateway.gateway.schemas import ProviderRef
 from routers import desktop_proxy as proxy
+from utils.llm import desktop_gemini_telemetry
 from utils.llm.vertex_reservation_state import ReservationState
 
 TARGET = 'gemini-3.8-flash'
@@ -129,7 +130,7 @@ async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, str
                 await asyncio.Event().wait()
 
             monkeypatch.setattr(proxy, '_wait_for_disconnect', connected)
-            monkeypatch.setattr(proxy, 'schedule_managed_attempt', lambda _: False)
+            monkeypatch.setattr(desktop_gemini_telemetry, 'schedule_managed_attempt', lambda _: False)
             monkeypatch.setattr(proxy, 'reservation_state', store)
             proxy._reservation_snapshot.set({})
             monkeypatch.setattr(proxy, 'get_byok_key', lambda _: None)
@@ -280,7 +281,7 @@ async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch
                 return states
 
             monkeypatch.setattr(proxy, '_wait_for_disconnect', connected)
-            monkeypatch.setattr(proxy, 'schedule_managed_attempt', lambda _: False)
+            monkeypatch.setattr(desktop_gemini_telemetry, 'schedule_managed_attempt', lambda _: False)
             monkeypatch.setattr(proxy, 'reservation_state', store)
             proxy._reservation_snapshot.set({})
             monkeypatch.setattr(proxy, '_model_unavailable_at', {})

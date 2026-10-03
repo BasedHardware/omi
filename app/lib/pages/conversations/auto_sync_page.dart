@@ -254,10 +254,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (showSpinner) ...[
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(width: 12),
-          ],
+          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,10 +896,7 @@ class _ManageStorageSheet extends StatelessWidget {
             clearLabel: context.l10n.clear,
           ),
           const SizedBox(height: 12),
-          _AutoRemoveRow(
-            initialValue: autoRemoveOn,
-            onChanged: onToggleAutoRemove,
-          ),
+          _AutoRemoveRow(initialValue: autoRemoveOn, onChanged: onToggleAutoRemove),
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
@@ -983,10 +977,7 @@ class _StorageRow extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: OmiRadius.mdAll,
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
             child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
@@ -1003,14 +994,8 @@ class _StorageRow extends StatelessWidget {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface3,
-                        borderRadius: OmiRadius.smAll,
-                      ),
-                      child: Text(
-                        '$count',
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                      ),
+                      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                      child: Text('$count', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ),
                   ],
                 ),
@@ -1024,10 +1009,7 @@ class _StorageRow extends StatelessWidget {
               onTap: onClear,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: OmiColors.dangerSurface,
-                  borderRadius: OmiRadius.pillAll,
-                ),
+                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.pillAll),
                 child: Text(
                   clearLabel,
                   style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),

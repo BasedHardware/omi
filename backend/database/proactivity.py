@@ -160,14 +160,33 @@ def claim_item(
         prior = data_at(ref, tx)
         visible = source_visible(client, uid, item, tx)
         if prior:
-            raise ProactivityDenied('duplicate')
+            # Only the one-call due-event producer can reclaim an abandoned claim.
+            # Its deterministic gateway call ID also fences a late original worker.
+            if producer != 'commitment_followup' or prior['state'] != 'claimed':
+                raise ProactivityDenied('duplicate')
+            if prior['account_generation'] != generation or not visible:
+                raise ProactivityDenied('not_found')
+            if now < prior['updated_at'] + timedelta(minutes=5):
+                raise ProactivityDenied('claim_in_progress')
+            if prior['attempts'] or now >= prior['created_at'] + timedelta(hours=24):
+                # Never redispatch after ANY durable attempt, including ambiguous spend.
+                # Preserve attempts and money for accounting reconciliation.
+                prior.update(state='failed', terminal_reason='abandoned_claim', updated_at=now)
+                tx.set(ref, prior)
+                return None
+            prior.update(claim_token=item['claim_token'], updated_at=now)
+            tx.set(ref, prior)
+            return prior
         if not visible:
             raise ProactivityDenied('not_found')
         item['account_generation'] = generation
         tx.create(ref, item)
         return item
 
-    return transact(client.transaction())
+    claimed = transact(client.transaction())
+    if claimed is None:
+        raise ProactivityDenied('duplicate')
+    return claimed
 
 
 def publish_item(
@@ -220,6 +239,47 @@ def publish_item(
         item.update(state=state, terminal_reason=reason, content=encrypted_content, updated_at=now)
         if state == 'ready':
             item['feed_available_at'] = now
+        tx.set(ref, item)
+
+    transact(client.transaction())
+
+
+def record_mentor_chat(
+    *,
+    uid: str,
+    item_id: str,
+    claim_token: str,
+    status: str,
+    message_id: str = '',
+    firestore_client: Any = None,
+    now: datetime | None = None,
+) -> None:
+    """Confirm the message/item association only after the chat write returns."""
+    if status not in {'persisted', 'failed'} or (status == 'persisted' and not message_id):
+        raise ValueError('invalid chat result')
+    client = client_or_default(firestore_client)
+    ref = item_ref(client, uid, item_id)
+    now = now or utc_now()
+
+    @firestore.transactional
+    def transact(tx: Any):
+        _, generation = read_owner(client, uid, tx)
+        item = data_at(ref, tx)
+        if not item or item['account_generation'] != generation or item['expires_at'] <= now:
+            raise ProactivityDenied('not_found')
+        if (
+            item['producer'] != 'conversation_mentor_v2'
+            or item['state'] != 'ready'
+            or item['claim_token'] != claim_token
+        ):
+            raise ProactivityDenied('invalid_chat_item')
+        if item.get('mentor_chat_state') == 'persisted':
+            if item.get('mentor_chat_message_id') != message_id:
+                raise ProactivityDenied('chat_conflict')
+            return
+        item.update(mentor_chat_state=status, updated_at=now)
+        if status == 'persisted':
+            item.update(mentor_chat_message_id=message_id, mentor_chat_persisted_at=now)
         tx.set(ref, item)
 
     transact(client.transaction())
@@ -305,13 +365,27 @@ def record_outcome(
         response = dict(item_id=item_id, recorded=False, acted_24h=item['acted_24h'], negative=item['negative'])
         if action in events:
             return response
+        # A thread reply proves exposure only to a durably associated chat message.
+        # This fence also protects direct server reducer callers, not only reply mapping.
+        if (
+            surface == 'server'
+            and action == 'replied'
+            and not (item.get('mentor_chat_message_id') or item['delivered'])
+        ):
+            raise ProactivityDenied('chat_unconfirmed')
         # A mentor reply or client action can prove exposure; independent task completion cannot.
         confirms_exposure = action == 'shown' or (
             action in POSITIVE
             and not (surface == 'server' and action == 'accepted' and not item.get('push_accepted_at'))
         )
         if not item['delivered'] and confirms_exposure:
-            anchor = item.get('push_accepted_at', now) if surface == 'server' else now
+            anchor = now
+            if surface == 'server':
+                anchor = (
+                    item.get('mentor_chat_persisted_at', now)
+                    if action == 'replied'
+                    else item.get('push_accepted_at', now)
+                )
             if anchor > item['created_at'] + timedelta(hours=24) or now > anchor + timedelta(hours=24):
                 raise ProactivityDenied('expired')
             item.update(

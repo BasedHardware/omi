@@ -155,22 +155,24 @@ class OmiDeviceConnection extends DeviceConnection {
     if (!RingProtocol.isRingBufferFirmware(device.firmwareRevision)) return;
 
     try {
-      _custodyNotifySub = await getBleStorageBytesListener(onStorageBytesReceived: (value) {
-        if (epoch != _custodyEpoch || token != _custodyToken || value.isEmpty) return;
-        if (value[0] == RingProtocol.notifyLiveMark) {
-          final mark = RingProtocol.parseLiveMarkNotification(value);
-          if (mark != null) {
-            _custody.observeLiveMark(device.id, epoch, mark);
+      _custodyNotifySub = await getBleStorageBytesListener(
+        onStorageBytesReceived: (value) {
+          if (epoch != _custodyEpoch || token != _custodyToken || value.isEmpty) return;
+          if (value[0] == RingProtocol.notifyLiveMark) {
+            final mark = RingProtocol.parseLiveMarkNotification(value);
+            if (mark != null) {
+              _custody.observeLiveMark(device.id, epoch, mark);
+            }
+          } else if (value[0] == RingProtocol.notifyInfo) {
+            final info = RingProtocol.parseInfoNotification(value);
+            if (info != null) {
+              _lastRingInfo = info;
+              _noteInfoDropped(info);
+              _custody.noteInfo(device.id, epoch, info);
+            }
           }
-        } else if (value[0] == RingProtocol.notifyInfo) {
-          final info = RingProtocol.parseInfoNotification(value);
-          if (info != null) {
-            _lastRingInfo = info;
-            _noteInfoDropped(info);
-            _custody.noteInfo(device.id, epoch, info);
-          }
-        }
-      });
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: custody notify subscribe failed: $e');
     }
@@ -194,19 +196,11 @@ class OmiDeviceConnection extends DeviceConnection {
       effectiveCaps: effective,
       replayAdvance: (seq) async {
         if (scopedRingId == null) return null;
-        final ack = await advanceRingCustody(
-          seq,
-          expectedEpoch: epoch,
-          expectedRingId: scopedRingId,
-        );
+        final ack = await advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: scopedRingId);
         return ack?.status;
       },
       onAdvanceReady: (seq) async {
-        final ack = await advanceRingCustody(
-          seq,
-          expectedEpoch: epoch,
-          expectedRingId: scopedRingId,
-        );
+        final ack = await advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: scopedRingId);
         return ack?.status;
       },
     );
@@ -511,12 +505,7 @@ class OmiDeviceConnection extends DeviceConnection {
         return null;
       }
 
-      final status = StorageStatus(
-        totalUsedBytes: totalBytes,
-        fileCount: fileCount,
-        freeBytes: 0,
-        statusFlags: 0,
-      );
+      final status = StorageStatus(totalUsedBytes: totalBytes, fileCount: fileCount, freeBytes: 0, statusFlags: 0);
       Logger.debug('OmiDeviceConnection: $status');
       return status;
     } catch (e) {
@@ -694,16 +683,17 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(info);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdInfo],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdInfo,
+      ]);
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: getRingInfo timeout');
-        return null;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: getRingInfo timeout');
+          return null;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
       return null;
@@ -730,11 +720,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performAdvanceRing(int newReadSeq) async {
-    final ack = await performAdvanceRingCustody(
-      newReadSeq,
-      expectedEpoch: _custodyEpoch,
-      expectedRingId: null,
-    );
+    final ack = await performAdvanceRingCustody(newReadSeq, expectedEpoch: _custodyEpoch, expectedRingId: null);
     return ack?.isOk ?? false;
   }
 
@@ -772,19 +758,18 @@ class OmiDeviceConnection extends DeviceConnection {
         final payload = ringId != null
             ? RingProtocol.encodeAdvanceIdCommand(ringId, newReadSeq)
             : RingProtocol.encodeAdvanceCommand(newReadSeq);
-        await transport.writeCharacteristic(
-          storageDataStreamServiceUuid,
-          storageDataStreamCharacteristicUuid,
-          payload,
-        );
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, payload);
         Logger.debug(
           'OmiDeviceConnection: ${ringId != null ? "CMD_RING_ADVANCE_ID" : "CMD_RING_ADVANCE"} seq=$newReadSeq ring=${ringId ?? "none"}',
         );
 
-        final result = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-          Logger.debug('OmiDeviceConnection: advanceRing timeout');
-          return null;
-        });
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: advanceRing timeout');
+            return null;
+          },
+        );
         if (expectedEpoch != _custodyEpoch || expectedRingId != currentRingId()) {
           return const RingCommandAck(status: RingProtocol.ackRingIdMismatch);
         }
@@ -824,9 +809,7 @@ class OmiDeviceConnection extends DeviceConnection {
         sub = stream.listen((value) {
           if (completer.isCompleted) return;
           if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
-          completer.complete(
-            RingCommandAck(status: value[1], grantedCaps: value.length >= 3 ? value[2] : null),
-          );
+          completer.complete(RingCommandAck(status: value[1], grantedCaps: value.length >= 3 ? value[2] : null));
         });
 
         await transport.writeCharacteristic(
@@ -836,10 +819,13 @@ class OmiDeviceConnection extends DeviceConnection {
         );
         Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
 
-        return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-          Logger.debug('OmiDeviceConnection: custody enable timeout');
-          return null;
-        });
+        return await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: custody enable timeout');
+            return null;
+          },
+        );
       } catch (e) {
         Logger.debug('OmiDeviceConnection: Error enabling ring custody: $e');
         return null;
@@ -869,17 +855,18 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(status == 0);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdClear],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdClear,
+      ]);
       Logger.debug('OmiDeviceConnection: CMD_RING_CLEAR');
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: clearRing timeout');
-        return false;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: clearRing timeout');
+          return false;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error clearing ring: $e');
       return false;
@@ -1258,10 +1245,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   Future<bool> readChargingStatus() async {
     try {
-      final value = await transport.readCharacteristic(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return value.isNotEmpty && value[0] == 1;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
@@ -1273,10 +1257,7 @@ class OmiDeviceConnection extends DeviceConnection {
     required void Function(bool isCharging) onChargingStatusChange,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return stream.listen((value) {
         if (value.isNotEmpty) {
           onChargingStatusChange(value[0] == 1);

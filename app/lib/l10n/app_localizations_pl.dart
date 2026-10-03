@@ -12353,6 +12353,17 @@ class AppLocalizationsPl extends AppLocalizations {
   String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';
 
   @override
+  String get previousDay => 'Poprzedni dzień';
+
+  @override
+  String get nextDay => 'Następny dzień';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Brak zadań $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Ponowne przetwarzanie rozmowy…';
 
   @override

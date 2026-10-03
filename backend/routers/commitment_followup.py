@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from database.action_items import get_action_item
 from utils.commitment_followup_tasks import schedule_followup, verify_followup_task
@@ -41,5 +41,8 @@ async def run_commitment_followup(request: Request, retry_count: int = Depends(v
         if task and not task.get('completed') and task.get('status', 'active') == 'active' and current_due == due:
             await run_blocking(db_executor, schedule_followup, uid, task_id, due, retry_on_failure=True)
         return {'status': 'scheduled'}
-    await produce_followup(uid, task_id, revision)
+    try:
+        await produce_followup(uid, task_id, revision)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='followup_unavailable') from exc
     return {'status': 'acked'}

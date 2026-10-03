@@ -7,7 +7,13 @@ import pytest
 from config.proactivity_v2 import ProactivityDenied
 from database import proactivity_budget as money
 from llm_gateway.gateway import proactivity_budget as gate
-from llm_gateway.gateway.accounting import AccountingContext, AttemptTrace, ProviderResponseMetadata, ProviderUsage
+from llm_gateway.gateway.accounting import (
+    AccountingContext,
+    AttemptTrace,
+    ProviderResponseMetadata,
+    ProviderUsage,
+    openai_usage_from_response,
+)
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
@@ -43,7 +49,8 @@ class Provider:
         return ProviderResponse(
             response={'choices': [{'message': {'content': 'synthetic'}, 'finish_reason': 'stop'}]},
             accounting=ProviderResponseMetadata(
-                usage=ProviderUsage(prompt_tokens=10, uncached_input_tokens=10, output_tokens=3)
+                usage=ProviderUsage(prompt_tokens=10, uncached_input_tokens=10, output_tokens=3),
+                billable_usage_complete=True,
             ),
         )
 
@@ -256,3 +263,151 @@ async def test_missing_provider_usage_retains_reservation_and_denies_publication
     row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
     assert provider.calls == 1 and row['cost_status'] == 'indeterminate'
     assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'usage,valid',
+    [
+        ({'total_tokens': 2000}, False),
+        ({'prompt_tokens': 10}, False),
+        ({'completion_tokens': 3}, False),
+        *[({'prompt_tokens': value, 'completion_tokens': 3}, False) for value in [-1, 1.5, '10', True, None]],
+        *[({'prompt_tokens': 10, 'completion_tokens': value}, False) for value in [-1, 1.5, '3', False, None]],
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'total_tokens': 12}, False),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'total_tokens': -1}, False),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'total_tokens': 13.0}, False),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'prompt_tokens_details': {'cached_tokens': 11}}, False),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'prompt_tokens_details': {'cached_tokens': -1}}, False),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'completion_tokens_details': {'reasoning_tokens': 4}}, False),
+        ({'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}, True),
+        ({'input_tokens': 0, 'output_tokens': 0}, True),
+        ({'prompt_tokens': 10, 'completion_tokens': 3, 'total_tokens': 13}, True),
+    ],
+)
+async def test_raw_usage_receipt_real_executor_retains_full_hold_unless_complete(store, gated, usage, valid):
+    class RawReceipt(Provider):
+        async def create_chat_completion(self, request, **kwargs):
+            self.calls += 1
+            return ProviderResponse(response={'choices': []}, accounting=openai_usage_from_response({'usage': usage}))
+
+    item = claim(store)
+    route = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': 'omi:auto:proactive-notification',
+            'messages': [{'role': 'user', 'content': 'synthetic'}],
+            'max_completion_tokens': 512,
+        },
+    )
+    provider = RawReceipt()
+    trace = AttemptTrace()
+    with gate.attempt_scope(context(item)):
+        if valid:
+            await execute_chat_completion(
+                route,
+                build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+                ProviderRegistry({'openai': provider}),
+                attempt_trace=trace,
+            )
+        else:
+            with pytest.raises(GatewayInvalidRequestError, match='settlement rejected'):
+                await execute_chat_completion(
+                    route,
+                    build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+                    ProviderRegistry({'openai': provider}),
+                    attempt_trace=trace,
+                )
+    row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
+    attempt = next(iter(row['attempts'].values()))
+    assert provider.calls == 1
+    if valid:
+        assert attempt['state'] == 'settled' and row['cost_status'] == 'estimated'
+    else:
+        assert attempt['state'] == 'unknown' and row['cost_status'] == 'indeterminate'
+        assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0
+        assert trace.attempts[0].usage_status.value == 'indeterminate'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('flag,admitted', [(True, True), (False, False), (None, False), ('error', False)])
+async def test_gateway_cohort_admission_uses_same_user_resolver(store, monkeypatch, flag, admitted):
+    from utils import proactivity as service
+
+    monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
+
+    def resolve(uid):
+        if flag == 'error':
+            raise ConnectionError('flag service unavailable')
+        return flag is True
+
+    monkeypatch.setattr(service.proactivity_flags, 'enabled', resolve)
+    monkeypatch.setattr(service.ledger, 'client_or_default', lambda client=None: store)
+    monkeypatch.setattr(service.ledger, 'utc_now', lambda: NOW)
+    monkeypatch.setattr(service.ledger, 'refresh_health', lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, 'utc_now', lambda: NOW)
+    monkeypatch.setenv('LLM_GATEWAY_ACCOUNTING_ENABLED', 'true')
+    monkeypatch.setattr(
+        gate,
+        'BudgetAuthority',
+        lambda: money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW),
+    )
+    item = claim(store, producer='conversation_mentor_v2')
+    route = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': 'omi:auto:proactive-notification',
+            'messages': [{'role': 'user', 'content': 'synthetic'}],
+            'max_completion_tokens': 512,
+        },
+    )
+    provider = Provider()
+    with gate.attempt_scope(context(item, 'generate')):
+        if admitted:
+            await execute_chat_completion(
+                route,
+                build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+                ProviderRegistry({'openai': provider}),
+                attempt_trace=AttemptTrace(),
+            )
+        else:
+            with pytest.raises(GatewayInvalidRequestError, match='admission denied'):
+                await execute_chat_completion(
+                    route,
+                    build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+                    ProviderRegistry({'openai': provider}),
+                    attempt_trace=AttemptTrace(),
+                )
+    assert provider.calls == int(admitted)
+    row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
+    assert len(row['attempts']) == int(admitted)
+
+
+def test_total_only_usage_keeps_legacy_accounting_behavior():
+    from llm_gateway.gateway.accounting import build_accounting_event
+
+    metadata = openai_usage_from_response({'usage': {'total_tokens': 2000}})
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-6-luna',
+        route_artifact_id=None,
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=metadata,
+    )
+    event = build_accounting_event(
+        AccountingContext.create(
+            request_id='legacy',
+            caller='backend',
+            user_uid='u',
+            feature='proactive_notification',
+            api_surface='openai_chat_completions',
+            payer='omi',
+        ),
+        attempt,
+    )
+    assert event.usage_status.value == 'confirmed' and event.estimated_cost_micro_usd == 0
+    assert not metadata.billable_usage_complete

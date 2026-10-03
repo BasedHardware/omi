@@ -57,14 +57,16 @@ def delivered_mentor_items(uid: str, *, firestore_client: Any = None) -> list[di
 
 
 def record_mentor_reply(uid: str, *, firestore_client: Any = None) -> None:
-    """Each item's reducer retains only the first reply; push can supply its anchor."""
+    """Map replies only to persisted mentor messages or independently exposed items."""
     client = ledger.client_or_default(firestore_client)
     now = utc_now()
     for snapshot in recent_mentor_query(client, uid, now - timedelta(hours=48)).stream():
         item = snapshot.to_dict()
         if not item or item.get('state') != 'ready':
             continue
-        anchor = item.get('delivered_at') or item.get('push_accepted_at') or item.get('feed_available_at')
+        anchor = item.get('delivered_at') or (
+            item.get('mentor_chat_persisted_at') if item.get('mentor_chat_message_id') else None
+        )
         if anchor is not None and anchor <= now <= anchor + timedelta(hours=24):
             try:
                 ledger.record_server_outcome(item['item_id'], 'replied', uid=uid, firestore_client=client, now=now)

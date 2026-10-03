@@ -12342,6 +12342,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
 
   @override
+  String get previousDay => 'Iepriekšējā diena';
+
+  @override
+  String get nextDay => 'Nākamā diena';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date nav uzdevumu';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Saruna tiek apstrādāta atkārtoti…';
 
   @override

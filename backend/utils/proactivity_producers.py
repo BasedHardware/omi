@@ -23,6 +23,9 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ModelResult = TypeVar('ModelResult', bound=BaseModel)
+RETRYABLE_FOLLOWUP_DENIALS = frozenset(
+    {'unavailable', 'flag_unavailable', 'health_unavailable', 'claim_in_progress', 'gateway_admission_denied'}
+)
 
 SAME_POINT_QUESTION = (
     'Does the NEW notification make the same point or ask for the same action as any EARLIER notification? '
@@ -123,6 +126,7 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
     config, prompts = mentor_config()
     revision = hashlib.sha256(json.dumps(messages, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     item = None
+    published = False
     try:
         item = await spine.claim_item(
             uid=uid,
@@ -235,12 +239,14 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
             content={'title': 'Omi', 'body': text},
             target=ProactivityTarget(kind='conversation', id=conversation_id),
         )
+        published = True
         # Keep the existing reply surface. Do not let denied push erase the feed/chat message.
         from database.chat import add_app_message
 
-        await run_blocking(
+        message = await run_blocking(
             db_executor, add_app_message, text, 'mentor', uid, conversation_id, proactivity_item_id=item['item_id']
         )
+        await spine.record_mentor_chat(item=item, status='persisted', message_id=message.id)
         try:
             await spine.push_item(item=item)
         except ProactivityDenied:
@@ -249,7 +255,11 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
     except Exception:
         if item is not None:
             try:
-                await spine.close_item(item=item, state='failed', reason='generation_failed')
+                if published:
+                    # Feed remains available, but no chat exposure or push is fabricated.
+                    await spine.record_mentor_chat(item=item, status='failed')
+                else:
+                    await spine.close_item(item=item, state='failed', reason='generation_failed')
             except Exception:
                 logger.info('proactivity_v2 terminal_write_unavailable')
         logger.info('mentor_v2 evaluation_failed')
@@ -316,16 +326,25 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
             source_guard={'completed': False, 'status': 'active', 'due_at': due, 'deleted': False, 'is_deleted': False},
         )
     except Exception as exc:
-        if item is not None:
-            try:
-                changed = isinstance(exc, ProactivityDenied) and exc.reason == 'source_changed'
-                await spine.close_item(
-                    item=item,
-                    state='suppressed' if changed else 'failed',
-                    reason='source_changed' if changed else 'generation_failed',
-                )
-            except Exception:
-                logger.info('proactivity_v2 terminal_write_unavailable')
+        if not isinstance(exc, ProactivityDenied) or exc.reason in RETRYABLE_FOLLOWUP_DENIALS:
+            # Before claim, retry the deterministic due event. After claim, keep it
+            # for five-minute recovery: resume only without an attempt, otherwise
+            # reconcile failed with money retained and no ambiguous provider replay.
+            raise
+        if item is None:
+            return  # Terminal policy denial or duplicate terminal event.
+        try:
+            changed = exc.reason == 'source_changed'
+            await spine.close_item(
+                item=item,
+                state='suppressed' if changed else 'failed',
+                reason='source_changed' if changed else 'generation_failed',
+            )
+        except Exception:
+            # Retry reconciliation. claim_item waits five minutes, then reclaims
+            # only a no-attempt item or closes it with all existing money retained.
+            logger.info('proactivity_v2 terminal_write_unavailable')
+            raise
         logger.info('commitment_followup evaluation_denied_or_failed')
 
 

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Request
 
 from utils import cloud_tasks
-from utils.proactivity import enabled
+from utils.proactivity_flags import enabled
 
 logger = logging.getLogger(__name__)
 

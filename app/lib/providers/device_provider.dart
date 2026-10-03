@@ -1037,7 +1037,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     final free = status.freeBytes > 0 ? status.freeBytes : infoFree;
     return RingStatus(
-        usedBytes: status.usedBytes, unreadPackets: status.unreadPackets, freeBytes: free, rtcValid: status.rtcValid);
+      usedBytes: status.usedBytes,
+      unreadPackets: status.unreadPackets,
+      freeBytes: free,
+      rtcValid: status.rtcValid,
+    );
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device, int generation) async {

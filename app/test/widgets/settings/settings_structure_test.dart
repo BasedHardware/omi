@@ -81,7 +81,10 @@ const _pagesOfRows = {
   'settings_group_help': 'settings_page_help',
 };
 
-String? _keyOf(Widget widget) => switch (widget.key) { ValueKey<String>(:final value) => value, _ => null };
+String? _keyOf(Widget widget) => switch (widget.key) {
+      ValueKey<String>(:final value) => value,
+      _ => null,
+    };
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();
@@ -96,8 +99,12 @@ void main() {
   });
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues(
-        {'givenName': 'Ada', 'email': 'ada@example.com', 'uid': 'uid-1234567', 'deviceIdHash': 'test-device-hash'});
+    SharedPreferences.setMockInitialValues({
+      'givenName': 'Ada',
+      'email': 'ada@example.com',
+      'uid': 'uid-1234567',
+      'deviceIdHash': 'test-device-hash',
+    });
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
       appName: 'Omi',
@@ -132,8 +139,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed',
-      (tester) async {
+  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed', (
+    tester,
+  ) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
@@ -175,8 +183,9 @@ void main() {
     expect(find.bySemanticsLabel(en.search), findsOneWidget);
   });
 
-  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less',
-      (tester) async {
+  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (
+    tester,
+  ) async {
     await pumpSheet(tester);
 
     // Depth 0: the sheet itself.
@@ -293,13 +302,7 @@ void main() {
     expect(background.rowFile, 'lib/pages/settings/settings_groups.dart');
 
     // Pages hold what the brief says, in order.
-    expect(pageTitles['settings_page_account'], [
-      en.name,
-      en.email,
-      en.userId,
-      en.signOut,
-      en.deleteAccountTitle,
-    ]);
+    expect(pageTitles['settings_page_account'], [en.name, en.email, en.userId, en.signOut, en.deleteAccountTitle]);
     expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
@@ -311,16 +314,8 @@ void main() {
       en.conversationTimeout,
       en.transcribeLaterTitle,
     ]);
-    expect(pageTitles['settings_page_notifications'], [
-      en.notifications,
-      en.conversationDisplay,
-      en.appearance,
-    ]);
-    expect(pageTitles['settings_page_privacy'], [
-      en.dataProtection,
-      en.exportAllData,
-      en.importData,
-    ]);
+    expect(pageTitles['settings_page_notifications'], [en.notifications, en.conversationDisplay, en.appearance]);
+    expect(pageTitles['settings_page_privacy'], [en.dataProtection, en.exportAllData, en.importData]);
     expect(pageTitles['settings_page_help'], [en.helpCenter, en.whatsNew]);
   });
 

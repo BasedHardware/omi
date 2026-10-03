@@ -1,6 +1,12 @@
 # Mentor and commitment producers
 
-`MENTOR_PIPELINE=legacy` remains the default. `v2` exclusively dispatches the
+`MENTOR_PIPELINE=legacy` remains the default. `cohort` selects one pipeline per
+user through the same server-side `proactivity_v2` resolver and cached PostHog client
+as v2 admission: true selects v2; false, unknown or flag errors select unchanged
+legacy. Mentor hosts and gateway admission use the same selector. Set cohort on
+both sides for a per-user rollout; host-wide `v2` otherwise suppresses unflagged
+mentor users. Selection is exclusive per evaluation; v2 failure never invokes legacy.
+`v2` exclusively dispatches the
 conversation mentor through the v2 ledger and reserved gateway calls; invalid
 values invoke neither path, and a v2 failure never invokes legacy. Existing
 buffering, rate checks and debounce have a shared admission helper. Legacy code
@@ -50,7 +56,12 @@ admission still denies, and unknown/unsettled spend still prevents publication,
 as required by the spine. No retry or direct provider fallback is introduced.
 Stored recent conversations supply historical context without an unbudgeted
 embedding call. V2 writes the existing mentor chat message with an internal item
-mapping, publishes the conversation-linked feed item, then attempts spine push.
+mapping: first publish the conversation-linked feed item, then persist chat, record
+the confirmed message ID and persistence timestamp on that item, then attempt spine push.
+A post-publication chat failure records `mentor_chat_state=failed`, skips push,
+and leaves the feed available without chat delivery credit. A thread reply maps
+only to that persisted message association or independently confirmed exposure.
+Feed availability and FCM acceptance alone are never a reply anchor.
 Push denial leaves the feed/chat intact. The normal mentor message route observes
 the first reply within the spine's 24h delivery window.
 
@@ -64,6 +75,16 @@ and 512 output tokens: this reuses its tested reservation envelope without addin
 a model route. It produces a bounded title/body, feed-only, with no task mutation.
 Canonical single/batch completion persistence calls the server outcome reducer.
 Completion without prior confirmed feed exposure cannot earn value credit.
+
+Infrastructure failures before durable claim return HTTP 503 so Cloud Tasks retries
+the same deterministic event. Policy denials and already-terminal duplicates ack.
+Claims younger than five minutes return 503; after five minutes a claimed item
+with no durable attempt can rotate its claim token and resume. An abandoned claim
+with any attempt is closed failed, preserving every reservation and unknown cost
+for accounting reconciliation; it never re-dispatches. Deterministic gateway call
+IDs fence late workers, and rotated claim tokens fence their publication. Infrastructure errors after claim return 503 and retain the claim for this
+same recovery path. Terminal policy denials close failed/suppressed; if that
+bookkeeping write fails, the callback returns 503 for reconciliation.
 
 The worker is off unless all three deployment settings exist:
 

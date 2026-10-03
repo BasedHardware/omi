@@ -13,6 +13,7 @@ from utils import proactivity_producers as producers
 from utils import app_integrations as integration
 from routers import commitment_followup as worker
 from utils import commitment_followup_tasks as scheduler
+from tests.unit.test_proactivity_v2_budget import store
 
 
 @pytest.fixture
@@ -38,7 +39,8 @@ def lane(monkeypatch):
     monkeypatch.setattr(producers, 'mentor_delivery_history', lambda uid: ['Earlier advice'])
     import database.chat as chat
 
-    chat_write = MagicMock()
+    chat_write = MagicMock(return_value=SimpleNamespace(id='chat-message'))
+    monkeypatch.setattr(producers.spine, 'record_mentor_chat', AsyncMock())
     monkeypatch.setattr(chat, 'add_app_message', chat_write)
     config, prompts = mentor_config()
     monkeypatch.setattr(producers, 'mentor_config', lambda: (config, prompts))
@@ -280,9 +282,27 @@ def test_prompts_legacy_1_bytes_and_config_validation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('pipeline', ['legacy', 'v2', 'typo'])
-async def test_exclusive_dispatch(lane, pipeline):
+@pytest.mark.parametrize(
+    'pipeline,flag,expected',
+    [
+        ('legacy', False, 'legacy'),
+        ('v2', True, 'v2'),
+        ('typo', True, 'none'),
+        ('cohort', True, 'v2'),
+        ('cohort', False, 'legacy'),
+        ('cohort', None, 'legacy'),
+        ('cohort', 'error', 'legacy'),
+    ],
+)
+async def test_exclusive_dispatch(lane, pipeline, flag, expected):
     lane.monkeypatch.setenv('MENTOR_PIPELINE', pipeline)
+
+    def resolve(uid):
+        if flag == 'error':
+            raise ConnectionError('flag service unavailable')
+        return flag is True
+
+    lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', resolve)
     lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', lambda *args: [{'text': 'test'}])
     old = MagicMock(return_value=None)
@@ -291,8 +311,8 @@ async def test_exclusive_dispatch(lane, pipeline):
     lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
     lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
     await integration._async_trigger_realtime_integrations('u', [], 'c')
-    assert old.call_count == int(pipeline == 'legacy')
-    assert new.await_count == int(pipeline == 'v2')
+    assert old.call_count == int(expected == 'legacy')
+    assert new.await_count == int(expected == 'v2')
 
 
 @pytest.mark.asyncio
@@ -562,3 +582,144 @@ async def test_usefulness_provider_error_fails_open_in_enforce(lane):
     assert await mentor(lane)
     lane.score_write.assert_not_awaited()
     lane.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_publish_success_chat_failure_reply_cannot_fabricate_delivery(lane, store):
+    from database import proactivity as ledger
+    from database import proactivity_producers as mapping
+    from tests.unit.test_proactivity_v2_budget import NOW
+    from tests.unit.test_proactivity_v2_ledger import ready
+    from tests.unit.test_proactivity_v2_producer_outcomes import query_for
+
+    item = ready(store, producer='conversation_mentor_v2')
+    lane.claim.return_value = dict(item, uid='u')
+    lane.chat_write.side_effect = ConnectionError('chat write failed')
+
+    async def chat_result(*, item, status, message_id=''):
+        ledger.record_mentor_chat(
+            uid='u',
+            item_id=item['item_id'],
+            claim_token=item['claim_token'],
+            status=status,
+            message_id=message_id,
+            firestore_client=store,
+            now=NOW,
+        )
+
+    lane.monkeypatch.setattr(producers.spine, 'record_mentor_chat', chat_result)
+    assert await mentor(lane) is None
+    lane.push.assert_not_awaited()
+    lane.close.assert_not_awaited()
+    lane.monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    lane.monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
+    mapping.record_mentor_reply('u', firestore_client=store)
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['state'] == 'ready' and row['mentor_chat_state'] == 'failed'
+    assert not row['delivered'] and not row['acted_24h'] and 'replied' not in row['outcomes']
+
+
+@pytest.mark.parametrize('fault', ['preclaim', 'claimed_unsent', 'ambiguous_attempt'])
+def test_followup_http_recovery_without_duplicate_spend(store, monkeypatch, fault):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import proactivity as ledger
+    from tests.unit.test_proactivity_v2_budget import NOW, Redis
+    from llm_gateway.gateway import proactivity_budget as gate
+    from llm_gateway.gateway.accounting import AttemptTrace
+    from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+    from llm_gateway.gateway.resolver import resolve_chat_completion_route
+    from llm_gateway.gateway.config_loader import load_gateway_config
+    from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+    from llm_gateway.gateway.auth import ServiceCaller
+    from tests.unit.test_proactivity_v2_gateway import Provider, context
+    from database.proactivity_budget import BudgetAuthority
+
+    clock = [NOW]
+    due = NOW - timedelta(minutes=1)
+    task = {'conversation_id': 'c', 'due_at': due, 'completed': False, 'description': 'synthetic'}
+    store.rows[('users', 'u', 'action_items', 'a')] = task
+    monkeypatch.setattr(producers.tasks, 'get_action_item', lambda *args: task)
+    real_claim = ledger.claim_item
+    claims = []
+
+    async def claim_item(**kwargs):
+        claims.append(1)
+        if fault == 'preclaim' and len(claims) == 1:
+            raise ConnectionError('transient before claim')
+        source = kwargs['source']
+        return dict(
+            real_claim(uid='u', producer='commitment_followup', **source, firestore_client=store, now=clock[0]), uid='u'
+        )
+
+    monkeypatch.setattr(producers.spine, 'claim_item', claim_item)
+
+    async def admit(*args):
+        pass
+
+    monkeypatch.setattr(gate, 'ensure_admitted', admit)
+    monkeypatch.setenv('LLM_GATEWAY_ACCOUNTING_ENABLED', 'true')
+    monkeypatch.setattr(
+        gate,
+        'BudgetAuthority',
+        lambda: BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: clock[0]),
+    )
+    provider = Provider(fail=fault == 'ambiguous_attempt')
+    model_calls = []
+    monkeypatch.setattr(
+        producers.spine, 'close_item', AsyncMock(side_effect=ConnectionError('terminal write unavailable'))
+    )
+
+    async def model(**kwargs):
+        model_calls.append(1)
+        if fault == 'claimed_unsent' and len(model_calls) == 1:
+            raise ConnectionError('pre-dispatch infrastructure failure')
+        route = resolve_chat_completion_route(
+            load_gateway_config(), dict(kwargs['request'], model='omi:auto:proactive-notification')
+        )
+        with gate.attempt_scope(context(kwargs['item'])):
+            await execute_chat_completion(
+                route,
+                build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+                ProviderRegistry({'openai': provider}),
+                attempt_trace=AttemptTrace(),
+            )
+        return {'choices': [{'message': {'content': json.dumps({'title': 'Due', 'body': 'Task due'})}}]}
+
+    monkeypatch.setattr(producers.spine, 'run_proactivity_model', model)
+
+    async def publish(**kwargs):
+        item = kwargs['item']
+        ledger.publish_item(
+            uid='u',
+            item_id=item['item_id'],
+            claim_token=item['claim_token'],
+            encrypted_content='synthetic',
+            source_guard=kwargs['source_guard'],
+            firestore_client=store,
+            now=NOW,
+        )
+
+    monkeypatch.setattr(producers.spine, 'publish_item', publish)
+    app = FastAPI()
+    app.include_router(worker.router)
+    app.dependency_overrides[worker.verify_followup_task] = lambda: 0
+    payload = dict(uid='u', task_id='a', due_revision=due.isoformat())
+    with TestClient(app) as client:
+        assert client.post('/v1/commitment-followup-jobs/run', json=payload).status_code == 503
+        assert provider.calls == int(fault == 'ambiguous_attempt')
+        if fault != 'preclaim':
+            assert client.post('/v1/commitment-followup-jobs/run', json=payload).status_code == 503
+            clock[0] = NOW + timedelta(minutes=6)
+            for name in ['conversation_mentor_v2', 'commitment_followup']:
+                store.rows[(ledger.CONTROLS, name)]['checked_at'] = clock[0]
+        assert client.post('/v1/commitment-followup-jobs/run', json=payload).status_code == 200
+        assert client.post('/v1/commitment-followup-jobs/run', json=payload).status_code == 200
+    assert provider.calls == 1
+    row = next(v for k, v in store.rows.items() if k[:3] == ('users', 'u', ledger.ITEMS))
+    assert len(row['attempts']) == 1
+    if fault == 'ambiguous_attempt':
+        assert row['state'] == 'failed' and row['cost_status'] == 'indeterminate'
+        assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0
+    else:
+        assert row['state'] == 'ready'

@@ -226,6 +226,7 @@ def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> 
 
 def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_db, 'get_person', lambda uid, person_id: {'id': person_id, 'name': 'Speaker'})
+    _stub(monkeypatch, conversations_router, 'run_blocking', _inline_run_blocking)
     for discarded in _DISCARDED:
         for start, end in _DATE_PAIRS:
             request = SearchRequest(
@@ -235,7 +236,12 @@ def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                 start_date=start.isoformat() if start else None,
                 end_date=end.isoformat() if end else None,
             )
-            trial(capture, conversations_router.search_conversations_endpoint, request, uid='u1')
+            trial(
+                capture,
+                lambda request=request: asyncio.run(
+                    conversations_router.search_conversations_endpoint(request, uid='u1')
+                ),
+            )
 
 
 def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -529,7 +535,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_main_count,
         ),
         CallerWitness(
-            'routers/conversations.py:search_conversations_endpoint:database.conversation_scan.speaker_browse_scan',
+            'routers/conversations.py:_browse_speaker_conversations:database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             ('speaker-search-fallback-recipe',),

@@ -30,7 +30,7 @@ def outcome(store, item, action, event=None, surface='ios', now=NOW):
 
 def test_claim_deduplicates_source(store):
     claim(store)
-    with pytest.raises(ProactivityDenied, match='duplicate'):
+    with pytest.raises(ProactivityDenied, match='claim_in_progress'):
         claim(store)
 
 
@@ -85,7 +85,15 @@ def test_disable_persists_preference_and_denies_new_claim(store):
 
 def test_server_reply_confirms_exposure_once(store):
     item = ready(store, 'conversation_mentor_v2')
-    store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['push_accepted_at'] = NOW
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
     result = ledger.record_server_outcome(
         item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW + timedelta(hours=1)
     )
@@ -102,9 +110,17 @@ def test_source_deleted_blocks_outcome(store):
         outcome(store, item, 'opened')
 
 
-def test_server_reply_window_is_anchored_to_late_push(store):
+def test_server_reply_window_is_anchored_to_persisted_message(store):
     item = ready(store, 'conversation_mentor_v2')
-    store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['push_accepted_at'] = NOW + timedelta(hours=23)
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW + timedelta(hours=23),
+    )
     result = ledger.record_server_outcome(
         item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW + timedelta(hours=46)
     )
@@ -213,3 +229,43 @@ def test_followup_cannot_store_mentor_score(store):
     item = claim(store)
     with pytest.raises(ProactivityDenied, match='invalid_producer'):
         write_score(store, item)
+
+
+@pytest.mark.parametrize('attempted', [False, True])
+def test_followup_abandoned_claim_recovery_never_replays_an_attempt(store, attempted):
+    item = claim(store)
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    if attempted:
+        row.update(attempts={'call': {'state': 'unknown'}}, cost_status='indeterminate', charged_micro_usd=731)
+    for name in ['conversation_mentor_v2', 'commitment_followup']:
+        store.rows[(ledger.CONTROLS, name)]['checked_at'] = NOW + timedelta(minutes=5)
+    kwargs = dict(
+        uid='u',
+        producer='commitment_followup',
+        source_kind='action_item',
+        source_id='a',
+        source_revision='1',
+        source_event_id='due',
+        firestore_client=store,
+    )
+    with pytest.raises(ProactivityDenied, match='claim_in_progress'):
+        ledger.claim_item(**kwargs, now=NOW + timedelta(minutes=4))
+    if attempted:
+        with pytest.raises(ProactivityDenied, match='duplicate'):
+            ledger.claim_item(**kwargs, now=NOW + timedelta(minutes=5))
+        recovered = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+        assert recovered['state'] == 'failed' and recovered['charged_micro_usd'] == 731
+        assert recovered['attempts']['call']['state'] == 'unknown'
+    else:
+        recovered = ledger.claim_item(**kwargs, now=NOW + timedelta(minutes=5))
+        assert recovered['item_id'] == item['item_id'] and recovered['claim_token'] != item['claim_token']
+        assert not recovered['attempts']
+        with pytest.raises(ProactivityDenied, match='duplicate'):
+            ledger.publish_item(
+                uid='u',
+                item_id=item['item_id'],
+                claim_token=item['claim_token'],
+                state='failed',
+                firestore_client=store,
+                now=NOW + timedelta(minutes=5),
+            )

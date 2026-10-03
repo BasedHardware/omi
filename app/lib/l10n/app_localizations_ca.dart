@@ -12384,6 +12384,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
 
   @override
+  String get previousDay => 'Dia anterior';
+
+  @override
+  String get nextDay => 'Dia següent';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Cap tasca el $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'S\'està tornant a processar la conversa…';
 
   @override
