@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 अद्याप कोणत्याही स्मृती नाही",
+    "noMemoriesYet": "अद्याप कोणत्याही स्मृती नाही",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 कोणत्याही स्मृती सापडली नाही",
+    "noMemoriesFound": "कोणत्याही स्मृती सापडली नाही",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },

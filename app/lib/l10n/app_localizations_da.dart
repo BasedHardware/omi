@@ -2039,7 +2039,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get undo => 'Fortryd';
 
   @override
-  String get noMemoriesYet => '🧠 Ingen minder endnu';
+  String get noMemoriesYet => 'Ingen minder endnu';
 
   @override
   String get noAutoMemories => 'Ingen automatiske hukommelser';
@@ -2051,7 +2051,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noMemoriesInCategories => 'Ingen hukommelser i kategorier';
 
   @override
-  String get noMemoriesFound => '🔍 Ingen minder fundet';
+  String get noMemoriesFound => 'Ingen minder fundet';
 
   @override
   String get addFirstMemory => 'Tilføj din første hukommelse';

@@ -2058,7 +2058,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get undo => 'Cofnij';
 
   @override
-  String get noMemoriesYet => '🧠 Brak wspomnień';
+  String get noMemoriesYet => 'Brak wspomnień';
 
   @override
   String get noAutoMemories => 'Brak automatycznie wyodrębnionych wspomnień';
@@ -2070,7 +2070,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noMemoriesInCategories => 'Brak wspomnień w tych kategoriach';
 
   @override
-  String get noMemoriesFound => '🔍 Nie znaleziono wspomnień';
+  String get noMemoriesFound => 'Nie znaleziono wspomnień';
 
   @override
   String get addFirstMemory => 'Dodaj swoje pierwsze wspomnienie';

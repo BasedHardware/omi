@@ -2052,7 +2052,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get undo => 'بازگشت';
 
   @override
-  String get noMemoriesYet => '🧠 هیچ خاطره‌ای هنوز نیست';
+  String get noMemoriesYet => 'هیچ خاطره‌ای هنوز نیست';
 
   @override
   String get noAutoMemories => 'هیچ خاطره‌ای استخراج شده‌ای هنوز نیست';
@@ -2064,7 +2064,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noMemoriesInCategories => 'هیچ خاطره‌ای در این دسته‌بندی‌ها نیست';
 
   @override
-  String get noMemoriesFound => '🔍 هیچ خاطره‌ای یافت نشد';
+  String get noMemoriesFound => 'هیچ خاطره‌ای یافت نشد';
 
   @override
   String get addFirstMemory => 'اولین خاطره خود را اضافه کنید';

@@ -2054,7 +2054,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get undo => 'Tühista';
 
   @override
-  String get noMemoriesYet => '🧠 Mälestusi pole veel';
+  String get noMemoriesYet => 'Mälestusi pole veel';
 
   @override
   String get noAutoMemories => 'Automaatselt eraldatud mälestusi pole veel';
@@ -2066,7 +2066,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noMemoriesInCategories => 'Neis kategooriates pole mälestusi';
 
   @override
-  String get noMemoriesFound => '🔍 Mälestusi ei leitud';
+  String get noMemoriesFound => 'Mälestusi ei leitud';
 
   @override
   String get addFirstMemory => 'Lisa oma esimene mälestus';

@@ -2036,7 +2036,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get undo => 'تراجع';
 
   @override
-  String get noMemoriesYet => '🧠 لا توجد ذكريات بعد';
+  String get noMemoriesYet => 'لا توجد ذكريات بعد';
 
   @override
   String get noAutoMemories => 'لا توجد ذكريات مستخرجة تلقائياً بعد';
@@ -2048,7 +2048,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noMemoriesInCategories => 'لا توجد ذكريات في هذه الفئات';
 
   @override
-  String get noMemoriesFound => '🔍 لم يتم العثور على ذكريات';
+  String get noMemoriesFound => 'لم يتم العثور على ذكريات';
 
   @override
   String get addFirstMemory => 'أضف ذكرتك الأولى';

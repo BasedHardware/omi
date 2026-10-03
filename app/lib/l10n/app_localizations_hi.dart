@@ -2030,7 +2030,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get undo => 'पूर्ववत करें';
 
   @override
-  String get noMemoriesYet => '🧠 अभी कोई यादें नहीं';
+  String get noMemoriesYet => 'अभी कोई यादें नहीं';
 
   @override
   String get noAutoMemories => 'कोई स्वतः यादें नहीं';
@@ -2042,7 +2042,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noMemoriesInCategories => 'इन श्रेणियों में कोई यादें नहीं';
 
   @override
-  String get noMemoriesFound => '🔍 कोई यादें नहीं मिलीं';
+  String get noMemoriesFound => 'कोई यादें नहीं मिलीं';
 
   @override
   String get addFirstMemory => 'अपनी पहली याद जोड़ें';

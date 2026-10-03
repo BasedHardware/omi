@@ -2054,7 +2054,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get undo => 'पूर्ववत् करा';
 
   @override
-  String get noMemoriesYet => '🧠 अद्याप कोणत्याही स्मृती नाही';
+  String get noMemoriesYet => 'अद्याप कोणत्याही स्मृती नाही';
 
   @override
   String get noAutoMemories => 'अद्याप कोणत्याही स्वतः-काढून घेतलेली स्मृती नाही';
@@ -2066,7 +2066,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get noMemoriesInCategories => 'या श्रेणींमध्ये कोणत्याही स्मृती नाही';
 
   @override
-  String get noMemoriesFound => '🔍 कोणत्याही स्मृती सापडली नाही';
+  String get noMemoriesFound => 'कोणत्याही स्मृती सापडली नाही';
 
   @override
   String get addFirstMemory => 'आपली पहिली स्मृती जोडा';

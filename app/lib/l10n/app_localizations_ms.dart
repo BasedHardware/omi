@@ -2062,7 +2062,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get undo => 'Buat Asal';
 
   @override
-  String get noMemoriesYet => '🧠 Belum ada kenangan';
+  String get noMemoriesYet => 'Belum ada kenangan';
 
   @override
   String get noAutoMemories => 'Tiada ingatan auto-ekstrak lagi';
@@ -2074,7 +2074,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noMemoriesInCategories => 'Tiada ingatan dalam kategori ini';
 
   @override
-  String get noMemoriesFound => '🔍 Tiada kenangan ditemui';
+  String get noMemoriesFound => 'Tiada kenangan ditemui';
 
   @override
   String get addFirstMemory => 'Tambah ingatan pertama anda';

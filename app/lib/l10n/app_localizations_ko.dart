@@ -2016,7 +2016,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get undo => '실행 취소';
 
   @override
-  String get noMemoriesYet => '🧠 아직 추억이 없습니다';
+  String get noMemoriesYet => '아직 추억이 없습니다';
 
   @override
   String get noAutoMemories => '아직 자동 추출된 기억이 없습니다';
@@ -2028,7 +2028,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noMemoriesInCategories => '이 카테고리에 기억이 없습니다';
 
   @override
-  String get noMemoriesFound => '🔍 추억을 찾을 수 없습니다';
+  String get noMemoriesFound => '추억을 찾을 수 없습니다';
 
   @override
   String get addFirstMemory => '첫 번째 기억 추가';

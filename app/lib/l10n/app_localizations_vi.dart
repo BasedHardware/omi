@@ -2057,7 +2057,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get undo => 'Hoàn tác';
 
   @override
-  String get noMemoriesYet => '🧠 Chưa có ký ức';
+  String get noMemoriesYet => 'Chưa có ký ức';
 
   @override
   String get noAutoMemories => 'Chưa có ký ức tự động trích xuất';
@@ -2069,7 +2069,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noMemoriesInCategories => 'Không có ký ức trong các danh mục này';
 
   @override
-  String get noMemoriesFound => '🔍 Không tìm thấy ký ức';
+  String get noMemoriesFound => 'Không tìm thấy ký ức';
 
   @override
   String get addFirstMemory => 'Thêm ký ức đầu tiên của bạn';

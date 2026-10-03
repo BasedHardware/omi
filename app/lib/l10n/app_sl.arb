@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Še niso spomine",
+    "noMemoriesYet": "Še niso spomine",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Ni najdenih spomnov",
+    "noMemoriesFound": "Ni najdenih spomnov",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },

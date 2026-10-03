@@ -2060,7 +2060,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get undo => 'Vrátiť späť';
 
   @override
-  String get noMemoriesYet => '🧠 Zatiaľ žiadne spomienky';
+  String get noMemoriesYet => 'Zatiaľ žiadne spomienky';
 
   @override
   String get noAutoMemories => 'Zatiaľ žiadne automaticky extrahované spomienky';
@@ -2072,7 +2072,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noMemoriesInCategories => 'Žiadne spomienky v týchto kategóriách';
 
   @override
-  String get noMemoriesFound => '🔍 Nenašli sa žiadne spomienky';
+  String get noMemoriesFound => 'Nenašli sa žiadne spomienky';
 
   @override
   String get addFirstMemory => 'Pridajte svoju prvú spomienku';

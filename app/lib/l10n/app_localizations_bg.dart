@@ -2059,7 +2059,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get undo => 'Отмени';
 
   @override
-  String get noMemoriesYet => '🧠 Все още няма спомени';
+  String get noMemoriesYet => 'Все още няма спомени';
 
   @override
   String get noAutoMemories => 'Все още няма автоматично извлечени спомени';
@@ -2071,7 +2071,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noMemoriesInCategories => 'Няма спомени в тези категории';
 
   @override
-  String get noMemoriesFound => '🔍 Не са намерени спомени';
+  String get noMemoriesFound => 'Не са намерени спомени';
 
   @override
   String get addFirstMemory => 'Добавете вашия първи спомен';

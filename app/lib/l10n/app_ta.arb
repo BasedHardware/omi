@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 இன்னும் பதிவுகள் இல்லை",
+    "noMemoriesYet": "இன்னும் பதிவுகள் இல்லை",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 பதிவுகள் கிடைக்கவில்லை",
+    "noMemoriesFound": "பதிவுகள் கிடைக்கவில்லை",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },

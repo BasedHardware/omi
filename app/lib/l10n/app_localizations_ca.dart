@@ -2069,7 +2069,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get undo => 'Desfer';
 
   @override
-  String get noMemoriesYet => '🧠 Encara no hi ha records';
+  String get noMemoriesYet => 'Encara no hi ha records';
 
   @override
   String get noAutoMemories => 'Encara no hi ha records extrets automàticament';
@@ -2081,7 +2081,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noMemoriesInCategories => 'No hi ha records en aquestes categories';
 
   @override
-  String get noMemoriesFound => '🔍 No s\'han trobat records';
+  String get noMemoriesFound => 'No s\'han trobat records';
 
   @override
   String get addFirstMemory => 'Afegiu el vostre primer record';

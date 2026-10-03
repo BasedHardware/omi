@@ -2057,7 +2057,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get undo => 'Ångra';
 
   @override
-  String get noMemoriesYet => '🧠 Inga minnen ännu';
+  String get noMemoriesYet => 'Inga minnen ännu';
 
   @override
   String get noAutoMemories => 'Inga automatiskt extraherade minnen ännu';
@@ -2069,7 +2069,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noMemoriesInCategories => 'Inga minnen i dessa kategorier';
 
   @override
-  String get noMemoriesFound => '🔍 Inga minnen hittades';
+  String get noMemoriesFound => 'Inga minnen hittades';
 
   @override
   String get addFirstMemory => 'Lägg till ditt första minne';

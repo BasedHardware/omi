@@ -2067,7 +2067,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get undo => 'Undo';
 
   @override
-  String get noMemoriesYet => '🧠 Walang mga alaala pa';
+  String get noMemoriesYet => 'Walang mga alaala pa';
 
   @override
   String get noAutoMemories => 'Walang awtomatikong na-extract na mga alaala pa';
@@ -2079,7 +2079,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noMemoriesInCategories => 'Walang mga alaala sa mga kategoryang ito';
 
   @override
-  String get noMemoriesFound => '🔍 Walang mga alaala na nahanap';
+  String get noMemoriesFound => 'Walang mga alaala na nahanap';
 
   @override
   String get addFirstMemory => 'Magdagdag ng iyong unang alaala';

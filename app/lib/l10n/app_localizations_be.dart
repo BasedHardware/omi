@@ -2056,7 +2056,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get undo => 'Адмяніць';
 
   @override
-  String get noMemoriesYet => '🧠 Спамінаў яшчэ нету';
+  String get noMemoriesYet => 'Спамінаў яшчэ нету';
 
   @override
   String get noAutoMemories => 'Автоматычна выцягнутых спамінаў яшчэ нету';
@@ -2068,7 +2068,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noMemoriesInCategories => 'Спамінаў у гэтых катэгорыях нету';
 
   @override
-  String get noMemoriesFound => '🔍 Спамінаў не знойдзена';
+  String get noMemoriesFound => 'Спамінаў не знойдзена';
 
   @override
   String get addFirstMemory => 'Дадайце ваш першы спамін';

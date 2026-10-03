@@ -2062,7 +2062,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get undo => 'Врати';
 
   @override
-  String get noMemoriesYet => '🧠 Нема успомени сеуште';
+  String get noMemoriesYet => 'Нема успомени сеуште';
 
   @override
   String get noAutoMemories => 'Нема автоматски извлечени успомени сеуште';
@@ -2074,7 +2074,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get noMemoriesInCategories => 'Нема успомени во овие категории';
 
   @override
-  String get noMemoriesFound => '🔍 Нема пронајдени успомени';
+  String get noMemoriesFound => 'Нема пронајдени успомени';
 
   @override
   String get addFirstMemory => 'Додајте ја вашата прва успомена';

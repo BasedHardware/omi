@@ -2056,7 +2056,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get undo => 'Vrátit zpět';
 
   @override
-  String get noMemoriesYet => '🧠 Zatím žádné vzpomínky';
+  String get noMemoriesYet => 'Zatím žádné vzpomínky';
 
   @override
   String get noAutoMemories => 'Zatím žádné automaticky extrahované vzpomínky';
@@ -2068,7 +2068,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noMemoriesInCategories => 'Žádné vzpomínky v těchto kategoriích';
 
   @override
-  String get noMemoriesFound => '🔍 Nenalezeny žádné vzpomínky';
+  String get noMemoriesFound => 'Nenalezeny žádné vzpomínky';
 
   @override
   String get addFirstMemory => 'Přidat první vzpomínku';

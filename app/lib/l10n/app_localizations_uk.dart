@@ -2058,7 +2058,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get undo => 'Скасувати';
 
   @override
-  String get noMemoriesYet => '🧠 Поки що немає спогадів';
+  String get noMemoriesYet => 'Поки що немає спогадів';
 
   @override
   String get noAutoMemories => 'Автоматично витягнутих спогадів поки немає';
@@ -2070,7 +2070,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noMemoriesInCategories => 'Немає спогадів у цих категоріях';
 
   @override
-  String get noMemoriesFound => '🔍 Спогади не знайдено';
+  String get noMemoriesFound => 'Спогади не знайдено';
 
   @override
   String get addFirstMemory => 'Додати перший спогад';

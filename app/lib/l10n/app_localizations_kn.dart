@@ -2059,7 +2059,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
 
   @override
-  String get noMemoriesYet => '🧠 ಇನ್ನೂ ಸ್ಮೃತಿ ಇಲ್ಲ';
+  String get noMemoriesYet => 'ಇನ್ನೂ ಸ್ಮೃತಿ ಇಲ್ಲ';
 
   @override
   String get noAutoMemories => 'ಇನ್ನೂ ಸ್ವಯಂ-ಹೊರತೆಗೆಯಲಾದ ಸ್ಮೃತಿ ಇಲ್ಲ';
@@ -2071,7 +2071,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noMemoriesInCategories => 'ಈ ವರ್ಗಗಳಲ್ಲಿ ಯಾವುದೇ ಸ್ಮೃತಿ ಇಲ್ಲ';
 
   @override
-  String get noMemoriesFound => '🔍 ಯಾವುದೇ ಸ್ಮೃತಿ ಕಂಡುಬಂದಿಲ್ಲ';
+  String get noMemoriesFound => 'ಯಾವುದೇ ಸ್ಮೃತಿ ಕಂಡುಬಂದಿಲ್ಲ';
 
   @override
   String get addFirstMemory => 'ನಿಮ್ಮ ಮೊದಲ ಸ್ಮೃತಿ ಸೇರಿಸಿ';

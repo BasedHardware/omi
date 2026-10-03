@@ -2054,7 +2054,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get undo => 'Kumoa';
 
   @override
-  String get noMemoriesYet => '🧠 Ei vielä muistoja';
+  String get noMemoriesYet => 'Ei vielä muistoja';
 
   @override
   String get noAutoMemories => 'Ei vielä automaattisesti poimittuja muistoja';
@@ -2066,7 +2066,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noMemoriesInCategories => 'Ei muistoja näissä kategorioissa';
 
   @override
-  String get noMemoriesFound => '🔍 Muistoja ei löytynyt';
+  String get noMemoriesFound => 'Muistoja ei löytynyt';
 
   @override
   String get addFirstMemory => 'Lisää ensimmäinen muistosi';

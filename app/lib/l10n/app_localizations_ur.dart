@@ -2053,7 +2053,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get undo => 'واپس لیں';
 
   @override
-  String get noMemoriesYet => '🧠 ابھی کوئی یادیں نہیں';
+  String get noMemoriesYet => 'ابھی کوئی یادیں نہیں';
 
   @override
   String get noAutoMemories => 'ابھی کوئی خودکار نکالی گئی یادیں نہیں';
@@ -2065,7 +2065,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get noMemoriesInCategories => 'ان اقسام میں کوئی یادیں نہیں';
 
   @override
-  String get noMemoriesFound => '🔍 کوئی یادیں نہیں ملیں';
+  String get noMemoriesFound => 'کوئی یادیں نہیں ملیں';
 
   @override
   String get addFirstMemory => 'اپنی پہلی یاد شامل کریں';

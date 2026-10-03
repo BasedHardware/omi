@@ -2061,7 +2061,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get undo => 'Ongedaan maken';
 
   @override
-  String get noMemoriesYet => '🧠 Nog geen herinneringen';
+  String get noMemoriesYet => 'Nog geen herinneringen';
 
   @override
   String get noAutoMemories => 'Nog geen automatisch geëxtraheerde herinneringen';
@@ -2073,7 +2073,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noMemoriesInCategories => 'Geen herinneringen in deze categorieën';
 
   @override
-  String get noMemoriesFound => '🔍 Geen herinneringen gevonden';
+  String get noMemoriesFound => 'Geen herinneringen gevonden';
 
   @override
   String get addFirstMemory => 'Voeg je eerste herinnering toe';

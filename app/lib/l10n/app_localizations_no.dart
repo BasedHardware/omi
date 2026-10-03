@@ -2052,7 +2052,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get undo => 'Angre';
 
   @override
-  String get noMemoriesYet => '🧠 Ingen minner ennå';
+  String get noMemoriesYet => 'Ingen minner ennå';
 
   @override
   String get noAutoMemories => 'Ingen automatisk uttrukne minner ennå';
@@ -2064,7 +2064,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noMemoriesInCategories => 'Ingen minner i disse kategoriene';
 
   @override
-  String get noMemoriesFound => '🔍 Ingen minner funnet';
+  String get noMemoriesFound => 'Ingen minner funnet';
 
   @override
   String get addFirstMemory => 'Legg til ditt første minne';

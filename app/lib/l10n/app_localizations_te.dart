@@ -2063,7 +2063,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get undo => 'మరలుచేయండి';
 
   @override
-  String get noMemoriesYet => '🧠 ఇంకా జ్ఞాపకాలు లేవు';
+  String get noMemoriesYet => 'ఇంకా జ్ఞాపకాలు లేవు';
 
   @override
   String get noAutoMemories => 'ఇంకా స్వయంచాలక-సంగ్రహించిన జ్ఞాపకాలు లేవు';
@@ -2075,7 +2075,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get noMemoriesInCategories => 'ఈ వర్గాలలో జ్ఞాపకాలు లేవు';
 
   @override
-  String get noMemoriesFound => '🔍 జ్ఞాపకాలు కనుగొనబడలేదు';
+  String get noMemoriesFound => 'జ్ఞాపకాలు కనుగొనబడలేదు';
 
   @override
   String get addFirstMemory => 'మీ మొదటి జ్ఞాపకాన్ని జోడించండి';

@@ -2054,7 +2054,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get undo => 'Razveljavi';
 
   @override
-  String get noMemoriesYet => '🧠 Še niso spomine';
+  String get noMemoriesYet => 'Še niso spomine';
 
   @override
   String get noAutoMemories => 'Nema samodejno izluščenih spomnov';
@@ -2066,7 +2066,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get noMemoriesInCategories => 'Nema spomnov v teh kategorijah';
 
   @override
-  String get noMemoriesFound => '🔍 Ni najdenih spomnov';
+  String get noMemoriesFound => 'Ni najdenih spomnov';
 
   @override
   String get addFirstMemory => 'Dodajte svoj prvi spomin';

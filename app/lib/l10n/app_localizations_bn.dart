@@ -2052,7 +2052,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get undo => 'পূর্বাবস্থা';
 
   @override
-  String get noMemoriesYet => '🧠 এখনও কোনো স্মৃতি নেই';
+  String get noMemoriesYet => 'এখনও কোনো স্মৃতি নেই';
 
   @override
   String get noAutoMemories => 'এখনও কোনো স্বয়ংক্রিয়ভাবে বের করা স্মৃতি নেই';
@@ -2064,7 +2064,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get noMemoriesInCategories => 'এই বিভাগে কোনো স্মৃতি নেই';
 
   @override
-  String get noMemoriesFound => '🔍 কোনো স্মৃতি পাওয়া যায়নি';
+  String get noMemoriesFound => 'কোনো স্মৃতি পাওয়া যায়নি';
 
   @override
   String get addFirstMemory => 'আপনার প্রথম স্মৃতি যোগ করুন';

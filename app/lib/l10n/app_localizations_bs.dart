@@ -2054,7 +2054,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get undo => 'Opozovi';
 
   @override
-  String get noMemoriesYet => '🧠 Nema uspomena';
+  String get noMemoriesYet => 'Nema uspomena';
 
   @override
   String get noAutoMemories => 'Nema auto-ekstrahovanих uspomena';
@@ -2066,7 +2066,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noMemoriesInCategories => 'Nema uspomena u ovim kategorijama';
 
   @override
-  String get noMemoriesFound => '🔍 Nema pronađenih uspomena';
+  String get noMemoriesFound => 'Nema pronađenih uspomena';
 
   @override
   String get addFirstMemory => 'Dodajte vašu prvu uspomenu';

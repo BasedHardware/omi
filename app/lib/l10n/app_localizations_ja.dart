@@ -2016,7 +2016,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get undo => '元に戻す';
 
   @override
-  String get noMemoriesYet => '🧠 まだ記憶がありません';
+  String get noMemoriesYet => 'まだ記憶がありません';
 
   @override
   String get noAutoMemories => '自動で作成された記憶はまだありません';
@@ -2028,7 +2028,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noMemoriesInCategories => 'このカテゴリの記憶はありません';
 
   @override
-  String get noMemoriesFound => '🔍 記憶が見つかりませんでした';
+  String get noMemoriesFound => '記憶が見つかりませんでした';
 
   @override
   String get addFirstMemory => '最初の記憶を追加';

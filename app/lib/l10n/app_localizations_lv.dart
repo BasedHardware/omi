@@ -2059,7 +2059,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get undo => 'Atsaukt';
 
   @override
-  String get noMemoriesYet => '🧠 Vēl nav atmiņu';
+  String get noMemoriesYet => 'Vēl nav atmiņu';
 
   @override
   String get noAutoMemories => 'Vēl nav automātiski izvilktu atmiņu';
@@ -2071,7 +2071,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noMemoriesInCategories => 'Šajās kategorijās nav atmiņu';
 
   @override
-  String get noMemoriesFound => '🔍 Atmiņas nav atrastas';
+  String get noMemoriesFound => 'Atmiņas nav atrastas';
 
   @override
   String get addFirstMemory => 'Pievienot savu pirmo atmiņu';

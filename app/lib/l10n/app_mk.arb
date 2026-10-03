@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Нема успомени сеуште",
+    "noMemoriesYet": "Нема успомени сеуште",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Нема пронајдени успомени",
+    "noMemoriesFound": "Нема пронајдени успомени",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },

@@ -2064,7 +2064,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get undo => 'Anulează';
 
   @override
-  String get noMemoriesYet => '🧠 Încă nu există amintiri';
+  String get noMemoriesYet => 'Încă nu există amintiri';
 
   @override
   String get noAutoMemories => 'Nicio amintire extrasă automat încă';
@@ -2076,7 +2076,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noMemoriesInCategories => 'Nicio amintire în aceste categorii';
 
   @override
-  String get noMemoriesFound => '🔍 Nu s-au găsit amintiri';
+  String get noMemoriesFound => 'Nu s-au găsit amintiri';
 
   @override
   String get addFirstMemory => 'Adaugă prima ta amintire';

@@ -2041,7 +2041,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get undo => 'Deshacer';
 
   @override
-  String get noMemoriesYet => '🧠 Aún no hay recuerdos';
+  String get noMemoriesYet => 'Aún no hay recuerdos';
 
   @override
   String get noAutoMemories => 'No hay recuerdos automáticos';
@@ -2053,7 +2053,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get noMemoriesInCategories => 'No hay recuerdos en estas categorías';
 
   @override
-  String get noMemoriesFound => '🔍 No se encontraron recuerdos';
+  String get noMemoriesFound => 'No se encontraron recuerdos';
 
   @override
   String get addFirstMemory => 'Añade tu primer recuerdo';

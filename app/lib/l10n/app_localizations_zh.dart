@@ -2012,7 +2012,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get undo => '撤销';
 
   @override
-  String get noMemoriesYet => '🧠 还没有回忆';
+  String get noMemoriesYet => '还没有回忆';
 
   @override
   String get noAutoMemories => '暂无自动记忆';
@@ -2024,7 +2024,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMemoriesInCategories => '此类目无记忆';
 
   @override
-  String get noMemoriesFound => '🔍 未找到回忆';
+  String get noMemoriesFound => '未找到回忆';
 
   @override
   String get addFirstMemory => '添加您的第一条记忆';

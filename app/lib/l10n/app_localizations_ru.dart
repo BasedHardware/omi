@@ -2061,7 +2061,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get undo => 'Отменить';
 
   @override
-  String get noMemoriesYet => '🧠 Пока нет воспоминаний';
+  String get noMemoriesYet => 'Пока нет воспоминаний';
 
   @override
   String get noAutoMemories => 'Автоматически извлечённых воспоминаний пока нет';
@@ -2073,7 +2073,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noMemoriesInCategories => 'Нет воспоминаний в этих категориях';
 
   @override
-  String get noMemoriesFound => '🔍 Воспоминания не найдены';
+  String get noMemoriesFound => 'Воспоминания не найдены';
 
   @override
   String get addFirstMemory => 'Добавьте ваше первое воспоминание';

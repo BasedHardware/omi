@@ -2067,7 +2067,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get undo => 'மறுசெய்க';
 
   @override
-  String get noMemoriesYet => '🧠 இன்னும் பதிவுகள் இல்லை';
+  String get noMemoriesYet => 'இன்னும் பதிவுகள் இல்லை';
 
   @override
   String get noAutoMemories => 'இன்னும் தானாக எழுப்பப்பட்ட பதிவுகள் இல்லை';
@@ -2079,7 +2079,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noMemoriesInCategories => 'இந்த வகைகளில் பதிவுகள் இல்லை';
 
   @override
-  String get noMemoriesFound => '🔍 பதிவுகள் கிடைக்கவில்லை';
+  String get noMemoriesFound => 'பதிவுகள் கிடைக்கவில்லை';
 
   @override
   String get addFirstMemory => 'உங்கள் முதல் பதிவைச் சேர்க்கவும்';

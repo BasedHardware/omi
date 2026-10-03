@@ -2084,7 +2084,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 No memories yet",
+    "noMemoriesYet": "No Memories Yet",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2100,11 +2100,11 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 No memories found",
+    "noMemoriesFound": "No Memories Found",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
-    "addFirstMemory": "Add your first memory",
+    "addFirstMemory": "Add Your First Memory",
     "@addFirstMemory": {
         "description": "Button to add first memory"
     },

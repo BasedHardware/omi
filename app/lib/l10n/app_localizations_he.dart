@@ -2035,7 +2035,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get undo => 'בטל';
 
   @override
-  String get noMemoriesYet => '🧠 אין זכרונות עדיין';
+  String get noMemoriesYet => 'אין זכרונות עדיין';
 
   @override
   String get noAutoMemories => 'אין זכרונות שחולצו באופן אוטומטי עדיין';
@@ -2047,7 +2047,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noMemoriesInCategories => 'אין זכרונות בקטגוריות אלו';
 
   @override
-  String get noMemoriesFound => '🔍 לא נמצאו זכרונות';
+  String get noMemoriesFound => 'לא נמצאו זכרונות';
 
   @override
   String get addFirstMemory => 'הוסף את הזכרון הראשון שלך';

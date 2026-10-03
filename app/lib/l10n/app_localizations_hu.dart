@@ -2069,7 +2069,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get undo => 'Visszavonás';
 
   @override
-  String get noMemoriesYet => '🧠 Még nincsenek emlékek';
+  String get noMemoriesYet => 'Még nincsenek emlékek';
 
   @override
   String get noAutoMemories => 'Még nincsenek automatikusan kinyert emlékek';
@@ -2081,7 +2081,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noMemoriesInCategories => 'Nincsenek emlékek ezekben a kategóriákban';
 
   @override
-  String get noMemoriesFound => '🔍 Nem találhatók emlékek';
+  String get noMemoriesFound => 'Nem találhatók emlékek';
 
   @override
   String get addFirstMemory => 'Add hozzá az első emlékedet';

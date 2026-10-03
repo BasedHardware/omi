@@ -2074,7 +2074,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get undo => 'Rückgängig';
 
   @override
-  String get noMemoriesYet => '🧠 Noch keine Erinnerungen';
+  String get noMemoriesYet => 'Noch keine Erinnerungen';
 
   @override
   String get noAutoMemories => 'Noch keine automatischen Erinnerungen';
@@ -2086,7 +2086,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noMemoriesInCategories => 'Keine Erinnerungen in diesen Kategorien';
 
   @override
-  String get noMemoriesFound => '🔍 Keine Erinnerungen gefunden';
+  String get noMemoriesFound => 'Keine Erinnerungen gefunden';
 
   @override
   String get addFirstMemory => 'Fügen Sie Ihre erste Erinnerung hinzu';

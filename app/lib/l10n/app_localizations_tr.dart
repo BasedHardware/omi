@@ -2060,7 +2060,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get undo => 'Geri Al';
 
   @override
-  String get noMemoriesYet => '🧠 Henüz anı yok';
+  String get noMemoriesYet => 'Henüz anı yok';
 
   @override
   String get noAutoMemories => 'Henüz otomatik çıkarılan anı yok';
@@ -2072,7 +2072,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noMemoriesInCategories => 'Bu kategorilerde anı yok';
 
   @override
-  String get noMemoriesFound => '🔍 Anı bulunamadı';
+  String get noMemoriesFound => 'Anı bulunamadı';
 
   @override
   String get addFirstMemory => 'İlk anınızı ekleyin';

@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 هیچ خاطره‌ای هنوز نیست",
+    "noMemoriesYet": "هیچ خاطره‌ای هنوز نیست",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 هیچ خاطره‌ای یافت نشد",
+    "noMemoriesFound": "هیچ خاطره‌ای یافت نشد",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },

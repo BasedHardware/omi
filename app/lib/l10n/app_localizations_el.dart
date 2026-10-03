@@ -2072,7 +2072,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get undo => 'Αναίρεση';
 
   @override
-  String get noMemoriesYet => '🧠 Δεν υπάρχουν αναμνήσεις ακόμα';
+  String get noMemoriesYet => 'Δεν υπάρχουν αναμνήσεις ακόμα';
 
   @override
   String get noAutoMemories => 'Δεν υπάρχουν αυτόματα εξαγόμενες αναμνήσεις ακόμα';
@@ -2084,7 +2084,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noMemoriesInCategories => 'Δεν υπάρχουν αναμνήσεις σε αυτές τις κατηγορίες';
 
   @override
-  String get noMemoriesFound => '🔍 Δεν βρέθηκαν αναμνήσεις';
+  String get noMemoriesFound => 'Δεν βρέθηκαν αναμνήσεις';
 
   @override
   String get addFirstMemory => 'Προσθέστε την πρώτη σας ανάμνηση';

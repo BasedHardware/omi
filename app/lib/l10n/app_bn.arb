@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 এখনও কোনো স্মৃতি নেই",
+    "noMemoriesYet": "এখনও কোনো স্মৃতি নেই",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 কোনো স্মৃতি পাওয়া যায়নি",
+    "noMemoriesFound": "কোনো স্মৃতি পাওয়া যায়নি",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
