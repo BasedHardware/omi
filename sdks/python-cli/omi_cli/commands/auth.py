@@ -58,6 +58,8 @@ def login(
             detail="`--browser` and `--api-key` are mutually exclusive.",
         )
 
+    provider = oauth_auth.validate_oauth_provider(provider)
+
     # Explicit flags win over the picker.
     if browser:
         return _do_browser_login(ctx, provider=provider)

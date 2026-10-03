@@ -171,14 +171,48 @@ def test_refresh_surfaces_firebase_error(config_path, monkeypatch) -> None:
 # ---- login_with_browser surface ------------------------------------------
 
 
-def test_login_with_browser_rejects_unknown_provider(config_path) -> None:
-    with pytest.raises(UsageError):
+@pytest.mark.parametrize("bad_provider", ["microsoft", "github", "", "   "])
+def test_login_with_browser_rejects_unknown_provider(config_path, bad_provider: str) -> None:
+    with pytest.raises(UsageError) as excinfo:
         oauth.login_with_browser(
             "default",
             api_base="https://api.test.omi.local",
-            provider="microsoft",  # unsupported
+            provider=bad_provider,
             open_browser=False,
         )
+    assert f"Unknown OAuth provider: {bad_provider!r}" in str(excinfo.value)
+    assert excinfo.value.detail == "Supported: google, apple."
+
+
+def test_validate_oauth_provider_helper() -> None:
+    assert oauth.validate_oauth_provider(" Google ") == "google"
+    assert oauth.validate_oauth_provider("APPLE") == "apple"
+    with pytest.raises(UsageError) as excinfo:
+        oauth.validate_oauth_provider("invalid")
+    assert "Unknown OAuth provider: 'invalid'" in str(excinfo.value)
+    assert excinfo.value.detail == "Supported: google, apple."
+
+
+@pytest.mark.parametrize("provider_input", [" Google ", "GOOGLE", "Apple", " APPLE ", " apple "])
+def test_login_with_browser_normalizes_provider_case_and_whitespace(
+    monkeypatch, config_path, provider_input: str
+) -> None:
+    monkeypatch.setattr(oauth.webbrowser, "open", lambda *a, **k: True)
+    monkeypatch.setattr(oauth, "_BROWSER_TIMEOUT_SECONDS", 0.05)
+    with pytest.raises(oauth.AuthError):
+        oauth.login_with_browser(
+            "default",
+            api_base="https://api.test.omi.local",
+            provider=provider_input,
+            open_browser=False,
+        )
+
+
+@pytest.mark.parametrize("bad_provider", ["microsoft", "github", ""])
+def test_cli_login_rejects_unknown_provider(cli_runner, bad_provider: str) -> None:
+    result = cli_runner.invoke(app, ["auth", "login", "--browser", "--provider", bad_provider])
+    assert result.exit_code == 1
+    assert f"Unknown OAuth provider: {bad_provider!r}" in result.output
 
 
 def test_browser_login_status_goes_to_stderr_not_stdout(monkeypatch, capsys) -> None:
