@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-native-command-callback-outlives-owner",
+  "violated_contract": "A serialized native command must have a bounded terminal outcome and may only complete work owned by its connection. Missing or retired callbacks must not strand the queue or complete a replacement command.",
+  "canonical_prevention": "Fence callbacks by connection identity and command kind/key. Bound asynchronous command lifetime, cancel affected work on disconnect, deliver each result once, and release queue ownership even if timeout teardown or result consumers throw.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/GattCommandQueueTest.kt",
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/OnceCompletionTest.kt"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/**"
+  ],
+  "status": "open"
+}

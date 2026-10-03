@@ -257,33 +257,11 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
         val gatt = bleManager.connectedGatts[addr] ?: return
 
-        val originalListener = bleManager.connectionListener
-        bleManager.connectionListener = object : OmiBleManager.BleConnectionListener by connectionListener {
-            override fun onMtuChanged(address: String, mtu: Int, status: Int) {
-                bleManager.connectionListener = originalListener
-                Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status)")
+        handler.postDelayed({
+            if (!bleManager.isCurrentGatt(gatt)) return@postDelayed
+            bleManager.requestMtu(gatt, MTU_SIZE) {
                 fireDeviceReady(addr, services)
                 afterReady()
-            }
-        }
-
-        handler.postDelayed({
-            bleManager.enqueueCommand {
-                try {
-                    if (!gatt.requestMtu(MTU_SIZE)) {
-                        Log.e(TAG, "requestMtu failed for $addr")
-                        bleManager.completeCommand()
-                        bleManager.connectionListener = originalListener
-                        fireDeviceReady(addr, services)
-                        afterReady()
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "requestMtu exception for $addr: ${e.message}")
-                    bleManager.completeCommand()
-                    bleManager.connectionListener = originalListener
-                    fireDeviceReady(addr, services)
-                    afterReady()
-                }
             }
         }, MTU_REQUEST_DELAY_MS)
     }
@@ -337,10 +315,10 @@ class OmiBleForegroundService : Service() {
         }
 
         Log.i(TAG, "notifyReadyForConnectedGatt: rediscovering services for already-connected $addr")
-        bleManager.enqueueCommand {
+        bleManager.enqueueCommand(gatt, GattCommandQueue.Kind.DISCOVER) {
             if (!gatt.discoverServices()) {
                 Log.e(TAG, "notifyReadyForConnectedGatt: discoverServices returned false for $addr")
-                bleManager.completeCommand()
+                bleManager.completeCommand(gatt, GattCommandQueue.Kind.DISCOVER)
             }
         }
         return true
