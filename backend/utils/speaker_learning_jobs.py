@@ -10,10 +10,11 @@ authority, so a restart between label and teaching loses nothing.
 
 import asyncio
 import logging
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from database import speaker_learning_jobs as learning_jobs_db
 from utils.executors import db_executor, run_blocking, start_background_task
+from utils.observability.fallback import record_fallback
 from utils.speaker_identification import extract_speaker_samples
 
 logger = logging.getLogger(__name__)
@@ -52,10 +53,15 @@ async def _execute_job(uid: str, conversation_id: str, job: Mapping[str, Any]) -
                 card_generation=job.get('card_generation'),
             )
         return await extract_speaker_samples(
-            uid, job.get('person_id') or '', conversation_id, list(job.get('segment_ids') or [])
+            uid,
+            job.get('person_id') or '',
+            conversation_id,
+            list(job.get('segment_ids') or []),
+            **({'sample_rate': job['sample_rate']} if job.get('sample_rate') is not None else {}),
         )
     except asyncio.CancelledError:
-        await _finish(uid, conversation_id, job, 'timeout')
+        if job.get('job_id') and job.get('lease_token'):
+            await _finish(uid, conversation_id, job, 'timeout')
         raise
     except TimeoutError:
         return 'timeout'
@@ -81,22 +87,62 @@ async def run_speaker_learning_jobs(uid: str, conversation_id: str) -> None:
         logger.warning('speaker_voice_learning job run failed exception_type=%s', type(error).__name__)
 
 
-async def run_authorized_person_learning(uid: str, person_id: str, conversation_id: str, segment_ids: list) -> None:
-    """Persist the live request's deferred job, then run this conversation's jobs."""
+async def _run_authorized_learning(uid: str, conversation_id: str, request: dict) -> str:
+    """Persist the request's job, then claim and run exactly that job."""
+    try:
+        async with asyncio.timeout(VOICE_LEARNING_RETRY_DEADLINE_SECONDS):
+            return await _claim_authorized_learning(uid, conversation_id, request)
+    except TimeoutError:
+        return 'timeout'
+
+
+async def _claim_authorized_learning(uid: str, conversation_id: str, request: dict) -> str:
     try:
         await run_blocking(
             db_executor,
             learning_jobs_db.ensure_job,
             uid,
             conversation_id,
-            person_id=person_id,
-            segment_ids=list(segment_ids or []),
+            person_id=request.get('person_id'),
+            segment_ids=request['segment_ids'],
+            card_generation=request.get('card_generation'),
+            sample_rate=request.get('sample_rate'),
         )
-        await run_speaker_learning_jobs(uid, conversation_id)
-    except asyncio.CancelledError:
-        raise
-    except Exception as error:
-        logger.warning('speaker_voice_learning request failed exception_type=%s', type(error).__name__)
+        job = await run_blocking(db_executor, learning_jobs_db.claim_next_job, uid, conversation_id, assignment=request)
+    except Exception:
+        record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+        return await _execute_job(uid, conversation_id, request)
+    if job is None:
+        return 'pending'
+    execution = dict(job, segment_ids=list(request['segment_ids']))
+    outcome = await _execute_job(uid, conversation_id, execution)
+    await _finish(uid, conversation_id, job, outcome)
+    return outcome
+
+
+async def run_authorized_person_learning(
+    uid: str, person_id: str, conversation_id: str, segment_ids: list, *, sample_rate: Optional[int] = None
+) -> str:
+    return await _run_authorized_learning(
+        uid,
+        conversation_id,
+        dict(target='person', person_id=person_id, segment_ids=list(segment_ids or []), sample_rate=sample_rate),
+    )
+
+
+async def run_authorized_owner_learning(
+    uid: str, conversation_id: str, segment_ids: list, *, card_generation: Optional[int] = None
+) -> str:
+    return await _run_authorized_learning(
+        uid,
+        conversation_id,
+        dict(
+            target='owner',
+            person_id=None,
+            segment_ids=list(segment_ids or []),
+            card_generation=card_generation,
+        ),
+    )
 
 
 def schedule_reprocessed_learning(

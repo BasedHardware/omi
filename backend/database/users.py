@@ -897,11 +897,11 @@ def get_person(uid: str, person_id: str):
 
 def get_people(uid: str):
     people_ref = db.collection('users').document(uid).collection('people')
-    result = []
+    result, cache = [], {}
     for person in people_ref.stream():
         data = person.to_dict()
         data.setdefault('id', person.id)
-        result.append(project_person_learning(uid, data, firestore_client=db))
+        result.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
     return result
 
 
@@ -936,13 +936,13 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     # Use document ID fetches instead of where("id", "in", ...) to handle
     # legacy docs that may not have a stored 'id' field.
     doc_refs = [people_ref.document(pid) for pid in person_ids]
-    all_people = []
+    all_people, cache = [], {}
     for doc in db.get_all(doc_refs):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
             if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
-                all_people.append(project_person_learning(uid, data, firestore_client=db))
+                all_people.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
     return all_people
 
 

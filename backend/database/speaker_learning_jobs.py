@@ -17,17 +17,22 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1._helpers import encode_dict
+from google.cloud.firestore_v1.types import Document
 
 from database._client import get_firestore_client, run_transactional
 from database.speaker_profile_authority import owner_teaching_authorized, person_teaching_authorized
 from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import SOURCE_CARD
+from utils.observability.fallback import record_fallback
 from utils.observability.speaker_learning_jobs import record_speaker_learning_job_events
 from utils.owner_voice_evidence import authorized_owner_segments
+from utils.person_evidence import receipt_person_ids
 from utils.speaker_learning_policy import authorized_teaching_segments
 
 MAX_JOBS = 32
 MAX_SEGMENT_IDS = 200
+MAX_LEDGER_BYTES = 256 * 1024
 MAX_ATTEMPTS = 5
 JOB_LIFETIME = timedelta(days=7)
 LEASE_DURATION = timedelta(minutes=2)
@@ -134,8 +139,9 @@ def _new_job(
     segment_ids: list,
     card_generation: Any,
     now: datetime,
+    sample_rate: Optional[int] = None,
 ) -> dict:
-    return {
+    job = {
         'conversation_id': conversation_id,
         'target': target,
         'person_id': person_id,
@@ -151,6 +157,9 @@ def _new_job(
         'created_at': now,
         'expires_at': now + JOB_LIFETIME,
     }
+    if sample_rate is not None:
+        job['sample_rate'] = sample_rate
+    return job
 
 
 def _transition_terminal(job: dict, outcome: str) -> None:
@@ -317,23 +326,44 @@ def _reconcile_jobs(
     return events
 
 
+def _ledger_size(jobs: Mapping[str, Any]) -> int:
+    return len(Document.serialize(Document(fields=encode_dict({'jobs': dict(jobs)}))))
+
+
+def _job_created(job: Mapping[str, Any]) -> datetime:
+    return _as_utc(job.get('created_at')) or datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _trim_jobs(jobs: dict, events: list, protect: frozenset = frozenset()) -> bool:
+    """Evict oldest-terminal-then-oldest-active entries until count and byte budgets hold."""
+
+    def evict() -> bool:
+        pool = [jid for jid in jobs if jid not in protect]
+        if not pool:
+            return False
+        terminal = [jid for jid in pool if jobs[jid].get('state') == 'terminal']
+        victim = min(terminal or pool, key=lambda jid: _job_created(jobs[jid]))
+        if jobs[victim].get('state') != 'terminal':
+            events.append((jobs[victim].get('target') or 'person', 'capacity_exhausted'))
+        del jobs[victim]
+        return True
+
+    trimmed = False
+    while len(jobs) > MAX_JOBS and evict():
+        trimmed = True
+    while _ledger_size(jobs) > MAX_LEDGER_BYTES and evict():
+        trimmed = True
+    return trimmed
+
+
 def _admit(jobs: dict, job_id: str, job: dict, events: list) -> None:
-    if len(jobs) >= MAX_JOBS:
-        for victim_id in sorted(
-            (jid for jid, j in jobs.items() if j.get('state') == 'terminal'),
-            key=lambda jid: _as_utc(jobs[jid].get('created_at')) or datetime.min.replace(tzinfo=timezone.utc),
-        ):
-            del jobs[victim_id]
-            if len(jobs) < MAX_JOBS:
-                break
-    if len(jobs) >= MAX_JOBS:
-        victim_id = min(
-            jobs,
-            key=lambda jid: _as_utc(jobs[jid].get('created_at')) or datetime.min.replace(tzinfo=timezone.utc),
-        )
-        events.append((jobs[victim_id].get('target') or 'person', 'capacity_exhausted'))
-        del jobs[victim_id]
     jobs[job_id] = job
+    _trim_jobs(jobs, events, protect=frozenset({job_id}))
+    if _ledger_size(jobs) > MAX_LEDGER_BYTES:
+        job['segment_ids'] = []
+        if job.get('state') != 'terminal':
+            _transition_terminal(job, 'capacity_exhausted')
+            events.append((job.get('target') or 'person', 'capacity_exhausted'))
 
 
 def _person_state_update(
@@ -360,6 +390,89 @@ def _person_state_update(
     return update
 
 
+def _admit_legacy_jobs(
+    transaction: Any,
+    user_ref: Any,
+    uid: str,
+    conversation_id: str,
+    now: datetime,
+    conversation: Optional[Mapping[str, Any]],
+    user_doc: Mapping[str, Any],
+    people: dict,
+    jobs: dict,
+    writes: list,
+    events: list,
+) -> bool:
+    """One bounded admission of receipt-authorized work when the ledger never existed.
+
+    Labels written before the ledger shipped have a consent receipt but no
+    durable job; the first lifecycle claim rebuilds at most ``MAX_JOBS`` of
+    them under the normal attempt/expiry budgets. Identities come only from
+    receipted decisions and ``authorized_teaching_segments`` — never inferred.
+    """
+    from database import conversations as conversations_db
+
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        uid,
+        (conversation or {}).get('manual_speaker_assignments'),
+        bool((conversation or {}).get('manual_speaker_assignments_compressed')),
+    )
+    person_ids = receipt_person_ids(receipt)
+    if not person_ids or not user_doc.get('save_other_voice_profiles', True):
+        return False
+    try:
+        segments = (
+            conversations_db.decode_transcript_segments_verified(
+                uid,
+                (conversation or {}).get('transcript_segments') or [],
+                bool((conversation or {}).get('transcript_segments_compressed')),
+            )
+            or []
+        )
+    except Exception:
+        segments = []
+    if not segments:
+        return False
+    policy_conversation = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+    generation = receipt.get('generation', 0)
+    admitted = False
+    for person_id in person_ids[:MAX_JOBS]:
+        person = user_ref.collection('people').document(person_id).get(transaction=transaction).to_dict()
+        if person is not None:
+            people[person_id] = person
+        if person is None or voice_readiness(person) == VoiceReadiness.ready:
+            continue
+        ids = [
+            segment.get('id')
+            for segment in authorized_teaching_segments(policy_conversation, person_id)
+            if isinstance(segment.get('id'), str) and segment.get('id')
+        ]
+        if not ids:
+            continue
+        job_id = _job_id('person', person_id, generation, ids, None)
+        if job_id in jobs:
+            continue
+        job = _new_job(conversation_id, 'person', person_id, generation, ids[:MAX_SEGMENT_IDS], None, now)
+        if len(ids) > MAX_SEGMENT_IDS:
+            _transition_terminal(job, 'segment_limit')
+            _admit(jobs, job_id, job, events)
+            events.append(('person', 'segment_limit'))
+            admitted = True
+            continue
+        _admit(jobs, job_id, job, events)
+        admitted = True
+        if job.get('state') == 'terminal':
+            continue
+        events.append(('person', 'queued'))
+        writes.append(
+            (
+                user_ref.collection('people').document(person_id),
+                {'voice_learning_job': {'conversation_id': conversation_id, 'job_id': job_id}},
+            )
+        )
+    return admitted
+
+
 def _ledger_transaction(
     client: Any,
     uid: str,
@@ -380,6 +493,8 @@ def _ledger_transaction(
         ],
         bool,
     ],
+    *,
+    admit_legacy: bool = False,
 ) -> dict:
     """Read the ledger world, run ``body``, reconcile, and stage writes — reads first.
 
@@ -399,18 +514,43 @@ def _ledger_transaction(
         del events[:]
         result.clear()
         snapshot = ref.get(transaction=transaction)
+        ledger_missing = not snapshot.exists
         ledger = snapshot.to_dict() or {}
-        jobs = dict(ledger.get('jobs') or {})
+        jobs: dict[str, Any] = {jid: job for jid, job in (ledger.get('jobs') or {}).items() if isinstance(job, Mapping)}
+        dirty = _trim_jobs(jobs, events) or len(jobs) != len(ledger.get('jobs') or {})
         conversation, user_doc, people = _gather(transaction, user_ref, uid, conversation_id, jobs)
         check = _authority_check(transaction, user_ref, uid, conversation_id, user_doc, people)
         source_status = _source_status(conversation)
-        events.extend(_reconcile_jobs(jobs, source_status=source_status, now=now, check=check))
         writes: list = []
-        dirty = body(transaction, jobs, check, source_status, conversation, user_doc, people, user_ref, writes, events)
+        if ledger_missing and admit_legacy and source_status is None:
+            dirty = (
+                _admit_legacy_jobs(
+                    transaction,
+                    user_ref,
+                    uid,
+                    conversation_id,
+                    now,
+                    conversation,
+                    user_doc,
+                    people,
+                    jobs,
+                    writes,
+                    events,
+                )
+                or dirty
+            )
         events.extend(_reconcile_jobs(jobs, source_status=source_status, now=now, check=check))
+        dirty = (
+            body(transaction, jobs, check, source_status, conversation, user_doc, people, user_ref, writes, events)
+            or dirty
+        )
+        events.extend(_reconcile_jobs(jobs, source_status=source_status, now=now, check=check))
+        if ledger_missing and admit_legacy:
+            dirty = True
         for doc_ref, update in writes:
             transaction.update(doc_ref, update)
         if dirty or events:
+            _trim_jobs(jobs, events)
             transaction.set(ref, {'jobs': jobs})
         result.update(jobs=jobs, user_doc=user_doc, people=people, conversation=conversation)
 
@@ -428,6 +568,7 @@ def ensure_job(
     card_generation: Optional[int] = None,
     now: Optional[datetime] = None,
     firestore_client: Any = None,
+    sample_rate: Optional[int] = None,
 ) -> Optional[str]:
     """Persist the deferred job if its authorization still holds; return its id or None."""
     client = _client(firestore_client)
@@ -436,6 +577,11 @@ def ensure_job(
     segment_ids = [sid for sid in (segment_ids or []) if isinstance(sid, str) and sid]
     if not segment_ids:
         return None
+    rate = (
+        sample_rate
+        if isinstance(sample_rate, int) and not isinstance(sample_rate, bool) and 8000 <= sample_rate <= 48000
+        else None
+    )
     ensured: dict = {}
 
     def body(transaction, jobs, check, source_status, conversation, user_doc, people, user_ref, writes, events) -> bool:
@@ -453,6 +599,9 @@ def ensure_job(
         job_id = _job_id(target, person_id, generation, segment_ids, card_generation)
         existing = jobs.get(job_id)
         if existing is not None:
+            if rate is not None and existing.get('state') == 'pending' and existing.get('sample_rate') != rate:
+                existing['sample_rate'] = rate
+                return True
             return False
         wanted = set(segment_ids)
         decision_generation = 0
@@ -478,9 +627,11 @@ def ensure_job(
             decision_gen = (decision or {}).get('generation')
             if isinstance(decision_gen, int) and not isinstance(decision_gen, bool):
                 decision_generation = max(decision_generation, decision_gen)
-        for prior in jobs.values():
+        for prior in sorted(
+            jobs.values(), key=lambda job: (job.get('generation') or 0, _job_created(job)), reverse=True
+        ):
             if (
-                not isinstance(prior, Mapping)
+                not isinstance(prior, dict)
                 or prior.get('target') != target
                 or prior.get('person_id') != person_id
                 or prior.get('card_generation') != card_generation
@@ -495,6 +646,9 @@ def ensure_job(
             ):
                 continue
             if wanted <= set(prior.get('segment_ids') or []) and check(prior) in (None, 'stored'):
+                if rate is not None and prior.get('state') == 'pending' and prior.get('sample_rate') != rate:
+                    prior['sample_rate'] = rate
+                    return True
                 return False
         person_ref = user_ref.collection('people').document(person_id) if person_id else None
         person = person_ref.get(transaction=transaction).to_dict() if person_ref is not None else None
@@ -514,20 +668,26 @@ def ensure_job(
                 return False
         if len(segment_ids) > MAX_SEGMENT_IDS:
             job = _new_job(
-                conversation_id, target, person_id, generation, segment_ids[:MAX_SEGMENT_IDS], card_generation, now
+                conversation_id,
+                target,
+                person_id,
+                generation,
+                segment_ids[:MAX_SEGMENT_IDS],
+                card_generation,
+                now,
+                sample_rate=rate,
             )
             _transition_terminal(job, 'segment_limit')
             _admit(jobs, job_id, job, events)
             events.append((target, 'segment_limit'))
             return True
-        _admit(
-            jobs,
-            job_id,
-            _new_job(conversation_id, target, person_id, generation, segment_ids, card_generation, now),
-            events,
+        job = _new_job(
+            conversation_id, target, person_id, generation, segment_ids, card_generation, now, sample_rate=rate
         )
-        events.append((target, 'queued'))
+        _admit(jobs, job_id, job, events)
         ensured['job_id'] = job_id
+        if job.get('state') != 'terminal':
+            events.append((target, 'queued'))
         if person is not None:
             writes.append(
                 (
@@ -545,6 +705,7 @@ def claim_next_job(
     uid: str,
     conversation_id: str,
     *,
+    assignment: Optional[Mapping[str, Any]] = None,
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[dict]:
@@ -555,8 +716,22 @@ def claim_next_job(
 
     def body(transaction, jobs, check, source_status, conversation, user_doc, people, user_ref, writes, events) -> bool:
         claimed.clear()
+        candidates = list(jobs.items())
+        if assignment is not None:
+            candidates = [
+                (jid, job)
+                for jid, job in candidates
+                if (
+                    job.get('target') == assignment.get('target')
+                    and job.get('person_id') == assignment.get('person_id')
+                    and job.get('card_generation') == assignment.get('card_generation')
+                    and set(assignment.get('segment_ids') or []) <= set(job.get('segment_ids') or [])
+                )
+            ]
+            if candidates:
+                candidates = [max(candidates, key=lambda item: (item[1].get('generation') or 0, _job_created(item[1])))]
         eligible = []
-        for jid, job in jobs.items():
+        for jid, job in candidates:
             if job.get('state') == 'pending':
                 if (_as_utc(job.get('next_attempt_at')) or now) <= now:
                     eligible.append((jid, job))
@@ -582,7 +757,7 @@ def claim_next_job(
             writes.append((user_ref.collection('people').document(job['person_id']), update))
         return True
 
-    _ledger_transaction(client, uid, conversation_id, now, body)
+    _ledger_transaction(client, uid, conversation_id, now, body, admit_legacy=assignment is None)
     return dict(claimed) if claimed else None
 
 
@@ -665,7 +840,10 @@ def prepare_assignment_jobs(
     ref = jobs_ref(user_ref, conversation_id)
     snapshot = ref.get(transaction=transaction)
     ledger = snapshot.to_dict() or {}
-    jobs = dict(ledger.get('jobs') or {})
+    jobs: dict[str, Any] = {jid: job for jid, job in (ledger.get('jobs') or {}).items() if isinstance(job, Mapping)}
+    events: list = []
+    trimmed = len(jobs) != len(ledger.get('jobs') or {})
+    trimmed = _trim_jobs(jobs, events) or trimmed
     receipt = conversation.get('manual_speaker_assignments') or {}
     segments = conversation.get('transcript_segments') or []
     policy_conversation = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
@@ -709,7 +887,7 @@ def prepare_assignment_jobs(
         return None
 
     source_status = _source_status(conversation)
-    events = _reconcile_jobs(jobs, source_status=source_status, now=now, check=check)
+    events.extend(_reconcile_jobs(jobs, source_status=source_status, now=now, check=check))
     generation = receipt.get('generation', 0)
     new_ids: list = []
     card_generation: Optional[int] = None
@@ -729,7 +907,7 @@ def prepare_assignment_jobs(
         elif use_for_speech_training:
             granted = set(authorized_owner_segments(policy_conversation, resolved))
             new_ids = [sid for sid in resolved if sid in granted]
-    dirty = bool(events)
+    dirty = bool(events) or trimmed
     if target and new_ids:
         job_id = _job_id(target, person_id if target == 'person' else None, generation, new_ids, card_generation)
         if job_id not in jobs:
@@ -748,13 +926,10 @@ def prepare_assignment_jobs(
                 _admit(jobs, job_id, job, events)
                 events.append((target, 'segment_limit'))
             else:
-                _admit(
-                    jobs,
-                    job_id,
-                    _new_job(conversation_id, target, person_id, generation, new_ids, card_generation, now),
-                    events,
-                )
-                events.append((target, 'queued'))
+                job = _new_job(conversation_id, target, person_id, generation, new_ids, card_generation, now)
+                _admit(jobs, job_id, job, events)
+                if job.get('state') != 'terminal':
+                    events.append((target, 'queued'))
             dirty = True
         if target == 'person' and person_id:
             pointer = {'conversation_id': conversation_id, 'job_id': job_id}
@@ -763,6 +938,7 @@ def prepare_assignment_jobs(
                 updates.setdefault(person_id, {})['voice_learning_job'] = pointer
     if not dirty:
         return ref, None, events
+    _trim_jobs(jobs, events)
     return ref, {'jobs': jobs}, events
 
 
@@ -772,6 +948,7 @@ def project_person_learning(
     *,
     firestore_client: Any = None,
     now: Optional[datetime] = None,
+    projection_cache: Optional[dict] = None,
 ) -> dict:
     """Project the durable ledger onto a person's public learning state.
 
@@ -796,7 +973,14 @@ def project_person_learning(
             data['voice_needed_seconds'] = None
         return data
     client = _client(firestore_client)
-    result = _ledger_transaction(client, uid, conversation_id, now or _now(), _read_only_body)
+    cache = projection_cache if projection_cache is not None else {}
+    if conversation_id not in cache:
+        try:
+            cache[conversation_id] = _ledger_transaction(client, uid, conversation_id, now or _now(), _read_only_body)
+        except Exception:
+            record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+            cache[conversation_id] = {}
+    result = cache[conversation_id]
     user_doc = result.get('user_doc') or {}
     fresh = (result.get('people') or {}).get(person.get('id')) or person
     fresh_pointer = fresh.get('voice_learning_job') or {}

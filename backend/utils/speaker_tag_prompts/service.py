@@ -60,7 +60,8 @@ from utils.executors import (
 )
 from utils.conversations.audio_placement import CAPTURE_RETRY_MIN_SHIFT_SECONDS, capture_shift
 from utils.conversations.teaching_placement import OMI_SPEAKER_CAPTURE_RETRY_TOTAL, recover_teaching_clip
-from utils.speaker_learning_jobs import run_speaker_learning_jobs
+from utils.manual_speaker_assignments import teaching_segment_ids
+from utils.speaker_learning_jobs import run_authorized_owner_learning, run_authorized_person_learning
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
 from utils.speaker_learning_policy import union_seconds
@@ -500,31 +501,37 @@ def apply_answer(
         person_enrolled = bool(person.get('speaker_embedding'))
 
     if answer == SpeakerTagPromptAnswer.me:
-        conversation, resolved, voice_sample_queued = _assign(
+        conversation, resolved = _assign(
             uid, request, is_user=True, person_id=None, train=False, owner_segment_ids=request.segment_ids
         )
-        if voice_sample_queued and schedule is not None:
-            schedule(
-                run_speaker_learning_jobs,
-                uid=uid,
-                conversation_id=conversation.get('id') or request.conversation_id,
-            )
+        if schedule is not None:
+            assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
+            segment_ids = [sid for sid in request.segment_ids if sid in assigned]
+            if segment_ids:
+                schedule(
+                    run_authorized_owner_learning,
+                    uid=uid,
+                    conversation_id=conversation.get('id') or request.conversation_id,
+                    segment_ids=segment_ids,
+                    card_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+                )
+                voice_sample_queued = True
     elif person_id is not None:
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
-        conversation, resolved, voice_sample_queued = _assign(
-            uid, request, is_user=False, person_id=person_id, train=train
-        )
+        conversation, resolved = _assign(uid, request, is_user=False, person_id=person_id, train=train)
         if not train:
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='disabled_by_user').inc()
-        elif voice_sample_queued:
+        elif schedule is not None:
+            schedule(
+                run_authorized_person_learning,
+                uid=uid,
+                person_id=person_id,
+                conversation_id=conversation.get('id') or request.conversation_id,
+                segment_ids=teaching_segment_ids(conversation.get('transcript_segments') or [], resolved),
+            )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
-            if schedule is not None:
-                schedule(
-                    run_speaker_learning_jobs,
-                    uid=uid,
-                    conversation_id=conversation.get('id') or request.conversation_id,
-                )
+            voice_sample_queued = True
     elif answer in {
         SpeakerTagPromptAnswer.not_me,
         SpeakerTagPromptAnswer.someone_else,
@@ -541,9 +548,7 @@ def apply_answer(
             rejection = {'kind': 'not_person', 'person_id': request.suggested_person_id}
         else:
             rejection = None
-        conversation, resolved, _queued = _assign(
-            uid, request, is_user=False, person_id=None, train=False, rejection=rejection
-        )
+        conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {
@@ -596,7 +601,7 @@ def _assign(
     train: bool,
     rejection: Optional[Dict[str, Any]] = None,
     owner_segment_ids: Optional[List[str]] = None,
-) -> Tuple[Dict[str, Any], List[str], bool]:
+) -> Tuple[Dict[str, Any], List[str]]:
     """Label the whole diarized speaker in that conversation, like "apply to all" in the tag sheet."""
     raw, resolved, _removed, _before = conversations_db.assign_conversation_speaker(
         uid,
@@ -609,7 +614,8 @@ def _assign(
         **({'owner_segment_ids': owner_segment_ids} if owner_segment_ids else {}),
         **({'rejection': rejection} if rejection else {}),
     )
-    return raw, resolved, bool(raw.pop('_speaker_learning_queued', False))
+    raw.pop('_speaker_learning_queued', None)
+    return raw, resolved
 
 
 # ---------------------------------------------------------------------------

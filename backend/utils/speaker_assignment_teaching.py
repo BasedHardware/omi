@@ -10,8 +10,9 @@ successful assignment may schedule.
 from typing import Any, List, Mapping, Optional, Sequence
 
 from database import conversations as conversations_db
+from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.other.storage import delete_speech_profile_blob
-from utils.speaker_learning_jobs import run_speaker_learning_jobs
+from utils.speaker_learning_jobs import run_authorized_owner_learning, run_authorized_person_learning
 
 
 def commit_manual_assignment(
@@ -71,5 +72,18 @@ def schedule_assignment_teaching(
         background_tasks.add_task(delete_speech_profile_blob, path)
     if not use_for_speech_training:
         return
-    if person_id or is_user:
-        background_tasks.add_task(run_speaker_learning_jobs, uid, conversation_id)
+    if person_id:
+        background_tasks.add_task(
+            run_authorized_person_learning,
+            uid=uid,
+            person_id=person_id,
+            conversation_id=conversation_id,
+            segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
+        )
+    elif is_user:
+        background_tasks.add_task(
+            run_authorized_owner_learning,
+            uid=uid,
+            conversation_id=conversation_id,
+            segment_ids=list(resolved),
+        )

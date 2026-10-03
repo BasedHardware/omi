@@ -478,6 +478,7 @@ async def _websocket_util_trigger(
                         person_id=person_id,
                         conversation_id=conv_id,
                         segment_ids=segment_ids,
+                        sample_rate=sample_rate,
                     )
                 except Exception as e:
                     logger.error(f"Error extracting speaker samples: {e} {uid} {conv_id}")

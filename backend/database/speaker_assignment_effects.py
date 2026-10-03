@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from database import speaker_learning_jobs as learning_jobs
+from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
 
@@ -53,26 +54,35 @@ def persist_assignment_effects(
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}
-    jobs_ref_, payload, events = learning_jobs.prepare_assignment_jobs(
-        transaction,
-        user_ref,
-        conversation_id,
-        {
-            'transcript_segments': segments,
-            'manual_speaker_assignments': receipt,
-            'discarded': bool((source or {}).get('discarded')),
-        },
-        resolved,
-        person_id=person_id,
-        is_user=is_user,
-        use_for_speech_training=use_for_speech_training,
-        evidence_source=evidence_source,
-        user_doc={**user_doc, **owner_update},
-        people=projected_docs,
-        updates=updates,
-        now=now,
-        owner_segment_ids=owner_segment_ids,
-    )
+    job_updates = {pid: dict(update) for pid, update in updates.items()}
+    try:
+        jobs_ref_, payload, events = learning_jobs.prepare_assignment_jobs(
+            transaction,
+            user_ref,
+            conversation_id,
+            {
+                'transcript_segments': segments,
+                'manual_speaker_assignments': receipt,
+                'discarded': bool((source or {}).get('discarded')),
+            },
+            resolved,
+            person_id=person_id,
+            is_user=is_user,
+            use_for_speech_training=use_for_speech_training,
+            evidence_source=evidence_source,
+            user_doc={**user_doc, **owner_update},
+            people=projected_docs,
+            updates=job_updates,
+            now=now,
+            owner_segment_ids=owner_segment_ids,
+        )
+    except Exception:
+        jobs_ref_ = None
+        payload = None
+        events = []
+        record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+    else:
+        updates = job_updates
     if events:
         receipt[learning_jobs.JOB_EVENTS_KEY] = events
     if owner_update:

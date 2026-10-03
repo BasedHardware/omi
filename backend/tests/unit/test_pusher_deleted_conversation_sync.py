@@ -89,6 +89,7 @@ def private_cloud_session(monkeypatch):
     def upload(chunks, uid, conversation_id, protection_level):
         uploaded.append(conversation_id)
 
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
     monkeypatch.setattr(
         pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [_AudioFile()]

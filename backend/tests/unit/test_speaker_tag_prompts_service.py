@@ -97,7 +97,10 @@ def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
             'owner_segment_ids': ['s1'],
         }
     ]
-    assert world.scheduled[0][0] is service.run_speaker_learning_jobs
+    assert world.scheduled[0] == (
+        service.run_authorized_owner_learning,
+        {'uid': 'u', 'conversation_id': 'c1', 'segment_ids': ['s1'], 'card_generation': 0},
+    )
     assert response.voice_sample_queued and response.quality_outcome == Q.owner_missed
     assert world.answered == ['pid']
     name, properties = world.events[-1]
@@ -121,7 +124,12 @@ def test_naming_a_person_teaches_voice_when_allowed(monkeypatch):
     response = service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
     assert world.assignments[0]['person_id'] == 'p1' and world.assignments[0]['use_for_speech_training'] is True
     fn, kwargs = world.scheduled[0]
-    assert fn is service.run_speaker_learning_jobs and kwargs == {'uid': 'u', 'conversation_id': 'c1'}
+    assert fn is service.run_authorized_person_learning and kwargs == {
+        'uid': 'u',
+        'person_id': 'p1',
+        'conversation_id': 'c1',
+        'segment_ids': ['s1', 's2'],
+    }
     assert response.quality_outcome == Q.person_missed_known
 
 
@@ -134,7 +142,7 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
     assert response.quality_outcome == Q.person_not_enrolled
 
 
-def test_declined_durable_admission_reports_not_queued_and_no_metric(monkeypatch):
+def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch):
     world = World(monkeypatch)
 
     def assign(uid, conversation_id, **kwargs):
@@ -152,8 +160,14 @@ def test_declined_durable_admission_reports_not_queued_and_no_metric(monkeypatch
 
     monkeypatch.setattr(service, 'SPEAKER_TAG_PROMPT_VOICE_SAMPLES', _Counter())
     response = service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
-    assert not response.voice_sample_queued and world.scheduled == []
-    assert not any(labels.get('outcome') == 'queued' for labels in recorded)
+    assert response.voice_sample_queued
+    assert world.scheduled == [
+        (
+            service.run_authorized_person_learning,
+            {'uid': 'u', 'person_id': 'p1', 'conversation_id': 'c1', 'segment_ids': ['s1']},
+        )
+    ]
+    assert any(labels.get('outcome') == 'queued' for labels in recorded)
 
 
 def test_rejecting_an_automatic_label_clears_it(monkeypatch):
@@ -657,7 +671,12 @@ def test_owner_sample_gets_only_prompt_segments_still_assigned(monkeypatch):
         'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1', 'stale']), world.schedule, NOW
     )
     fn, kwargs = world.scheduled[0]
-    assert fn is service.run_speaker_learning_jobs and kwargs == {'uid': 'u', 'conversation_id': 'c1'}
+    assert fn is service.run_authorized_owner_learning and kwargs == {
+        'uid': 'u',
+        'conversation_id': 'c1',
+        'segment_ids': ['s1'],
+        'card_generation': 0,
+    }
     assert response.voice_sample_queued
 
 
