@@ -878,6 +878,17 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Drains a closing conversation's tail, on both closing paths. The drain runs before finalize's first
+  /// await, so the WALs that exist right after it hold everything recorded up to the close; they fence
+  /// the conversation's stamp. [closedAt] then opens the next conversation's window, once the caller
+  /// has reset the session.
+  ({Future<void> drained, Set<Wal>? walsAtClose, int closedAt}) _drainClosingConversation() {
+    final phoneSync = _wal.getSyncs().phone;
+    final drained = phoneSync.finalizeCurrentSession();
+    final walsAtClose = phoneSync is LocalWalSyncImpl ? phoneSync.walsNow() : null;
+    return (drained: drained, walsAtClose: walsAtClose, closedAt: _nowSeconds);
+  }
+
   /// The socket outlives a conversation that closes, on silence or with Process now, and the session
   /// start is set only when a socket opens. Restart the window at the close, so the next conversation's
   /// audio is stamped and confirmed like the first one's instead of staying unstamped and being
@@ -3157,17 +3168,13 @@ class CaptureController extends ChangeNotifier
       _sessionTransportInterrupted = false;
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so the coordinated transfer wake waits for the stamp. The drain runs before
-      // finalize's first await, so the WALs that exist right after it hold everything recorded up to
-      // the close.
-      final phoneSync = _wal.getSyncs().phone;
-      final drained = phoneSync.finalizeCurrentSession();
-      final walsAtClose = phoneSync is LocalWalSyncImpl ? phoneSync.walIdsNow() : null;
-      final closedAt = _nowSeconds;
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(drained, sessionStart, conversationId, walsAtClose);
+      // Store the future so the coordinated transfer wake waits for the stamp.
+      final close = _drainClosingConversation();
+      _pendingFinalizeAndStamp =
+          _finalizeAndStampSession(close.drained, sessionStart, conversationId, close.walsAtClose);
 
       _resetStateVariables();
-      _startNextConversationWindow(closedAt);
+      _startNextConversationWindow(close.closedAt);
 
       // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
       _pendingCloses.remove(conversationId)?.fallback.cancel();
@@ -3290,15 +3297,12 @@ class CaptureController extends ChangeNotifier
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
 
-    final drained = phoneSync.finalizeCurrentSession();
-    // The drain runs before finalize's first await, so these WALs hold everything recorded up to the close.
-    final walsAtClose = phoneSync is LocalWalSyncImpl ? phoneSync.walIdsNow() : null;
-    final closedAt = _nowSeconds;
-    await drained;
+    final close = _drainClosingConversation();
+    await close.drained;
     _clearSessionLocation();
 
     _resetStateVariables();
-    _startNextConversationWindow(closedAt);
+    _startNextConversationWindow(close.closedAt);
     final process = _processInProgressConversationOverride ?? processInProgressConversation;
     final request = process();
     _processInFlight = request.then((_) {}, onError: (_) {});
@@ -3310,7 +3314,7 @@ class CaptureController extends ChangeNotifier
       );
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: walsAtClose);
+          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: close.walsAtClose);
         }
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
@@ -3334,7 +3338,7 @@ class CaptureController extends ChangeNotifier
     Future<void> drained,
     int sessionStartSeconds,
     String conversationId,
-    Set<String>? walsAtClose,
+    Set<Wal>? walsAtClose,
   ) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;

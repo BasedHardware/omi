@@ -42,7 +42,7 @@ void main() {
     final backdated = wal(940);
     final closing = wal(1000);
     final sync = syncWith([backdated, closing]);
-    final walsAtClose = sync.walIdsNow();
+    final walsAtClose = sync.walsNow();
     // Created after the close, so the next conversation's, even when the start is backdated before it.
     final nextBackdated = wal(990);
     final next = wal(1200);
@@ -55,6 +55,22 @@ void main() {
     expect(closing.conversationId, 'c1');
     expect(nextBackdated.conversationId, isNull, reason: 'it was created after the close');
     expect(next.conversationId, isNull, reason: 'the recording went on into the next conversation');
+  });
+
+  test('the fence tells apart WALs that share an id', () async {
+    final closing = wal(1000);
+    final sync = syncWith([closing]);
+    final walsAtClose = sync.walsNow();
+    // A tail drained after the close in the same second gets the same id.
+    final sameSecond = wal(1000);
+    expect(sameSecond.id, closing.id);
+    sync.testWals = [closing, sameSecond];
+
+    sync.prepareConversationStamp('recording-1', walsAtClose: walsAtClose);
+    await sync.stampConversationId(1000, 'c1');
+
+    expect(closing.conversationId, 'c1');
+    expect(sameSecond.conversationId, isNull, reason: 'it was created after the close');
   });
 
   test('the fence holds for one stamp only', () async {
@@ -98,7 +114,7 @@ void main() {
         sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
       final drained = sync.finalizeCurrentSession();
-      final walsAtClose = sync.walIdsNow();
+      final walsAtClose = sync.walsNow();
       await drained;
       final tail = sync.testWals.single;
       expect(tail.timerStart, 10000, reason: "half a second rounds to the close's own second, so time can't fence it");

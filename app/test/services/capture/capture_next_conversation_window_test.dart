@@ -221,6 +221,9 @@ void main() {
     world.controller
         .onMessageEventReceived(ConversationEvent(memory: conversation('c1', firstStart, 140), messages: []));
     await settleFiles();
+    final afterLateEvent = await world.wal.syncs.phone.getAllWals();
+    expect(afterLateEvent.where((wal) => wal.conversationId == 'c2'), isNotEmpty,
+        reason: "c1's late event leaves c2's close, and its copies, alone");
     world.controller.onMessageEventReceived(ConversationEvent(memory: c2, messages: []));
 
     await walsReach('c2 released by its own event', (wals) => wals.every((wal) => wal.timerStart < secondSeconds));

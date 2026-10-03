@@ -194,7 +194,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   int? _sessionGeolocationSetAt;
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
-  Set<String>? _conversationStampWalsAtClose;
+  Set<Wal>? _conversationStampWalsAtClose;
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
@@ -205,19 +205,19 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// original signature so session spies do not have to learn a new argument.
   ///
   /// [walsAtClose] are the WALs that existed when the conversation closed, taken
-  /// with [walIdsNow] right after the close's drain. A recording can go on into
+  /// with [walsNow] right after the close's drain. A recording can go on into
   /// the next conversation, so the stamp leaves any WAL created after the close
   /// for that one.
-  void prepareConversationStamp(String? recordingSessionId, {Set<String>? walsAtClose}) {
+  void prepareConversationStamp(String? recordingSessionId, {Set<Wal>? walsAtClose}) {
     final trimmed = recordingSessionId?.trim();
     _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
     _conversationStampWalsAtClose = walsAtClose;
   }
 
-  /// The WALs that exist now. Read right after [finalizeCurrentSession] is called for a closing
-  /// conversation, whose drain runs before its first await, they hold everything recorded up to the
-  /// close, the tail included.
-  Set<String> walIdsNow() => {for (final wal in _wals) wal.id};
+  /// The WALs that exist now, by identity, since two tails drained in the same second share an id. Read
+  /// right after [finalizeCurrentSession] is called for a closing conversation, whose drain runs before
+  /// its first await, they hold everything recorded up to the close, the tail included.
+  Set<Wal> walsNow() => Set<Wal>.identity()..addAll(_wals);
 
   bool _isCancelled = false;
 
@@ -946,7 +946,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     _conversationStampWalsAtClose = null;
     for (final wal in _wals) {
       if (wal.status != WalStatus.miss || wal.conversationId != null) continue;
-      if (walsAtClose != null && !walsAtClose.contains(wal.id)) continue;
+      if (walsAtClose != null && !walsAtClose.contains(wal)) continue;
       final walRecording = wal.recordingSessionId;
       final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
       if (foreignRecording) continue;
