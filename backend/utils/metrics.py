@@ -540,7 +540,7 @@ CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
 JEV_SHADOW_OUTCOMES = frozenset(
     {'ok', 'jev_failed', 'http_429', 'timeout', 'deduped', 'cap', 'cohort', 'dropped', 'redis_unavailable'}
 )
-JEV_SHADOW_TOTAL = Counter('omi_jev_shadow_total', 'Relevance, owner and mentor shadow outcomes.', ['lane', 'outcome'])
+JEV_SHADOW_TOTAL = Counter('omi_jev_shadow_total', 'Relevance and owner shadow outcomes.', ['lane', 'outcome'])
 JEV_SHADOW_LATENCY = Histogram(
     'omi_jev_shadow_latency_seconds',
     'Shadow question latency including queue time.',
@@ -561,7 +561,7 @@ OWNER_JEV_SHADOW_SCORE = Histogram('omi_owner_jev_shadow_p_user', 'Shadow P(user
 def record_jev_shadow_outcome(lane: str, outcome: str) -> None:
     try:
         JEV_SHADOW_TOTAL.labels(
-            lane=lane if lane in {'relevance', 'owner', 'mentor'} else 'other',
+            lane=lane if lane in {'relevance', 'owner'} else 'other',
             outcome=outcome if outcome in JEV_SHADOW_OUTCOMES else 'jev_failed',
         ).inc()
     except Exception:

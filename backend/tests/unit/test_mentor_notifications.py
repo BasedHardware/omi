@@ -144,7 +144,6 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
     monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
     monkeypatch.setattr(app_int, 'mentor_plan_allows_evaluation', MagicMock(return_value=True))
-    monkeypatch.setenv('MENTOR_JEV_SHADOW_ENABLED', 'false')
     monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
     monkeypatch.setattr(app_int, 'dispatch_notification', mock_dispatch_notification)
     monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)

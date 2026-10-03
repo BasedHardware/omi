@@ -11,12 +11,6 @@ overlay:
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
-        MENTOR_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        MENTOR_JEV_SHADOW_DAILY_CAP:
-          value: '1400'
-          category: rollout
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -195,12 +189,6 @@ overlay:
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
-        MENTOR_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        MENTOR_JEV_SHADOW_DAILY_CAP:
-          value: '1400'
-          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -375,12 +363,6 @@ overlay:
         env:
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
             category: rollout
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.

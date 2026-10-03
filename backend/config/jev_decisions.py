@@ -40,8 +40,6 @@ MEMORY_OWNER_JEV_FLIP_ENABLED_ENV = 'MEMORY_OWNER_JEV_FLIP_ENABLED'
 CAPTURE_JEV_SHADOW_ENABLED_ENV = 'CAPTURE_JEV_SHADOW_ENABLED'
 CAPTURE_JEV_SHADOW_EXPIRY_ENV = 'CAPTURE_JEV_SHADOW_EXPIRY'
 CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY = '2026-10-18T00:00:00Z'
-MENTOR_JEV_SHADOW_ENABLED_ENV = 'MENTOR_JEV_SHADOW_ENABLED'
-MENTOR_JEV_SHADOW_DAILY_CAP_DEFAULT = 1400
 
 _TRUE_VALUES = frozenset({'1', 'true', 'yes', 'on'})
 
@@ -53,13 +51,6 @@ def _flag(name: str) -> bool:
 def conversation_relevance_jev_enabled() -> bool:
     """The model tier of conversation relevance asks Jev instead of ``conv_discard``."""
     return _flag(CONVERSATION_RELEVANCE_JEV_ENABLED_ENV)
-
-
-def mentor_jev_shadow_enabled() -> bool:
-    """Measurement only: dev-on when unset; other stages require explicit on."""
-    if os.getenv(MENTOR_JEV_SHADOW_ENABLED_ENV) is None:
-        return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
-    return _flag(MENTOR_JEV_SHADOW_ENABLED_ENV)
 
 
 def memory_owner_jev_flip_enabled() -> bool:

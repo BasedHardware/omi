@@ -355,12 +355,6 @@ environments:
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
-            category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -507,12 +501,6 @@ environments:
             value: http://diarizer.omiapi.com:80
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -1026,12 +1014,6 @@ environments:
               category: memory_rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
-              category: rollout
-            MENTOR_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            MENTOR_JEV_SHADOW_DAILY_CAP:
-              value: '1400'
               category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
@@ -2391,12 +2373,6 @@ environments:
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
-            category: rollout
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
@@ -2559,12 +2535,6 @@ environments:
             value: http://diarizer.omi.me:80
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
             category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
@@ -2963,12 +2933,6 @@ environments:
               category: memory_rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
-              category: rollout
-            MENTOR_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            MENTOR_JEV_SHADOW_DAILY_CAP:
-              value: '1400'
               category: rollout
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com

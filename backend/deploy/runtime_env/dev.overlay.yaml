@@ -11,12 +11,6 @@ overlay:
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
-        MENTOR_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        MENTOR_JEV_SHADOW_DAILY_CAP:
-          value: '1400'
-          category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -153,12 +147,6 @@ overlay:
       env:
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
-          category: rollout
-        MENTOR_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        MENTOR_JEV_SHADOW_DAILY_CAP:
-          value: '1400'
           category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
@@ -448,12 +436,6 @@ overlay:
         env:
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          MENTOR_JEV_SHADOW_DAILY_CAP:
-            value: '1400'
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'

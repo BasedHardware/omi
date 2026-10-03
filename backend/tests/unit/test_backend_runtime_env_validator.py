@@ -411,10 +411,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         '        ' + json.dumps({'name': name, 'value': value})
         for name, value in {
             **translation_defaults,
-            # EXP-005 and debounce are declared on this serving host too.
+            # Debounce is declared on this serving host too.
             'MENTOR_GATE_DEBOUNCE_ENABLED': 'true',
-            'MENTOR_JEV_SHADOW_ENABLED': 'true',
-            'MENTOR_JEV_SHADOW_DAILY_CAP': '1400',
         }.items()
     )
     payload = re.sub(
