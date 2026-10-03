@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -85,13 +86,13 @@ Future<SpeakerTagPromptsProvider> _pumpCard(AuditRun a, String kind, {bool playC
     answeredHold: Duration.zero,
   );
   final people = PeopleProvider(
-    loadPeople: () async => [
+    loadPeople: () async => PeopleListResponse(people: [
       _person('p-jordan', 'Jordan Lee', pinned: true, confidence: 'confirmed'),
       _person('p-sam', 'Sam Okafor'),
       _person('p-alex', 'Alex Rivera'),
       _person('p-priya', 'Priya Natarajan'),
       _person('p-because', 'Because', confidence: 'unverified'),
-    ],
+    ]),
   );
   await people.setPeople();
   await a.pump(

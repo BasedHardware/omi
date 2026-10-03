@@ -3842,5 +3842,6 @@
     "diagnosticsDropsPerHour": "ca. {count} i timen",
     "diagnosticsLongestGap": "Længste pause",
     "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
-    "diagnosticsLastDuration": "Seneste {duration}"
+    "diagnosticsLastDuration": "Seneste {duration}",
+    "peopleStatsIncomplete": "Antallene kan være ufuldstændige."
 }

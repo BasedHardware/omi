@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "noin {count} tunnissa",
     "diagnosticsLongestGap": "Pisin katko",
     "diagnosticsSincePairingSummary": "Parituksen jälkeen: katkoksia {drops}, epäonnistuneita yhteyksiä {failed}.",
-    "diagnosticsLastDuration": "Viimeiset {duration}"
+    "diagnosticsLastDuration": "Viimeiset {duration}",
+    "peopleStatsIncomplete": "Määrät voivat olla puutteellisia."
 }

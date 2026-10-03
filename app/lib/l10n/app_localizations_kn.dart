@@ -12328,4 +12328,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'ಕಳೆದ $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
 }

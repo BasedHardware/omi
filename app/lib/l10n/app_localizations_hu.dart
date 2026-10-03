@@ -12339,4 +12339,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Utolsó $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'A számok hiányosak lehetnek.';
 }

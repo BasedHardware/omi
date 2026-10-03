@@ -12289,4 +12289,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration گذشته';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
 }

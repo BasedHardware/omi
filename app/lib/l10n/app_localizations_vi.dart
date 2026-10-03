@@ -12286,4 +12286,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
 }

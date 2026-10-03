@@ -12319,4 +12319,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Останні $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
 }

@@ -17,6 +17,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -149,6 +150,50 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
+/// Pause tolerance for saved utterance gaps and WAL edges; coverage only suppresses automatic
+/// repair, never deletes audio, so short gaps are treated as pauses while the copy stays recoverable.
+const walTranscriptPauseToleranceSeconds = 30;
+
+/// Whether the saved transcript covers [wal]: [transcriptSpans] share its absolute epoch clock,
+/// must reach both edges within [walTranscriptPauseToleranceSeconds], have no longer interior
+/// hole, and include at least one actually overlapping span.
+@visibleForTesting
+bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conversationStartSeconds) {
+  final framesPerSecond = wal.codec.getFramesPerSecond();
+  if (wal.seconds <= 0 ||
+      (wal.totalFrames > 0 &&
+          (framesPerSecond <= 0 ||
+              wal.totalFrames % framesPerSecond != 0 ||
+              wal.totalFrames ~/ framesPerSecond != wal.seconds))) {
+    return false;
+  }
+  final start = wal.timerStart, end = wal.timerStart + wal.seconds;
+  final spans = transcriptSpans.where((span) => span.$2 > span.$1).toList()..sort((a, b) => a.$1.compareTo(b.$1));
+  final first = spans.indexWhere((span) => span.$2 > start); // first span that can touch the WAL
+  if (first < 0 || spans[first].$1 >= end) return false; // nothing actually overlaps it
+  var unionStart = spans[first].$1, unionEnd = spans[first].$2;
+  for (final span in spans.skip(first + 1)) {
+    if (unionEnd >= end || span.$1 >= end) break; // coverage finished, or no later span can touch the WAL
+    if (span.$1 > unionEnd + walTranscriptPauseToleranceSeconds) return false; // an interior hole longer than a pause
+    unionEnd = max(unionEnd, span.$2);
+  }
+  return unionStart <= start + walTranscriptPauseToleranceSeconds &&
+      unionEnd >= end - walTranscriptPauseToleranceSeconds;
+}
+
+/// Where a saved transcript starts on the phone's clock, from when its live segments last arrived:
+/// each arrives a moment after the segment's end, so arrival minus end is that start plus the
+/// transcription delay. The median ignores stray matches; non-finite ends and non-positive arrivals
+/// are skipped, and null means no usable live arrival.
+int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String, int> lastArrivals) {
+  final estimates = [
+    for (final (id, end) in segmentEnds)
+      if (end.isFinite)
+        if (lastArrivals[id] case final arrived? when arrived > 0) arrived - end.ceil(),
+  ]..sort();
+  return estimates.isEmpty ? null : estimates[estimates.length ~/ 2];
+}
+
 const _kDefinitiveUploadRefusalStatusCodes = {400, 403, 413};
 
 @visibleForTesting
@@ -170,6 +215,16 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
       )
       .take(_syncUploadBatchLimit)
       .toList();
+}
+
+typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
+
+double _walAudioSeconds(Wal wal) {
+  if (wal.totalFrames > 0) {
+    final framesPerSecond = wal.codec.getFramesPerSecond();
+    if (framesPerSecond > 0) return wal.totalFrames / framesPerSecond;
+  }
+  return max(0, wal.seconds).toDouble();
 }
 
 class LocalWalSyncImpl implements LocalWalSync {
@@ -312,6 +367,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
+  final WalCoverageTelemetryEmitter? _coverageTelemetryOverride;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
 
@@ -327,12 +383,14 @@ class LocalWalSyncImpl implements LocalWalSync {
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<List<Wal>> Function()? loadWals,
+    WalCoverageTelemetryEmitter? coverageTelemetry,
   })  : _uploadGateOverride = uploadGate,
         _nowOverride = now,
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,
         _persistWalsOverride = persistWals,
-        _loadWalsOverride = loadWals;
+        _loadWalsOverride = loadWals,
+        _coverageTelemetryOverride = coverageTelemetry;
 
   @override
   int get sessionGeneration => _sessionGeneration;
@@ -348,6 +406,12 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
+
+  @visibleForTesting
+  List<Wal> get testForeignWals => _foreignWals;
+
+  @visibleForTesting
+  List<Wal> get testRetiredWals => _retiredWals;
 
   @override
   void cancelSync() {
@@ -671,6 +735,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// user's local-storage preference; this policy specifically bounds audio
   /// retained because the backend has not acknowledged it.
   Future<int> _enforceRetentionPolicy() async {
+    final generation = _sessionGeneration;
     final retained = [..._retiredWals, ..._foreignWals, ..._wals]
         .where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced)
         .toList()
@@ -680,7 +745,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var evicted = 0;
     for (final wal in retained.take(excess).toList()) {
-      if (await _deleteWal(wal)) evicted++;
+      if (!_isCurrent(generation)) break;
+      if (await _deleteWal(wal, generation: generation)) evicted++;
     }
     if (evicted == 0) return 0;
 
@@ -734,7 +800,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var removed = 0;
     for (final wal in expired) {
-      if (await _deleteWal(wal)) removed++;
+      if (!_isCurrent(generation)) break;
+      if (await _deleteWal(wal, generation: generation)) removed++;
     }
     if (removed == 0) return 0;
 
@@ -763,18 +830,73 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _persistWalsOverride!(snapshot);
       return;
     }
-    await WalFileManager.saveWals(snapshot);
+    if (!await WalFileManager.saveWals(snapshot)) {
+      throw StateError('WAL index save reported failure');
+    }
   }
 
-  Future<bool> _deleteWal(Wal wal) async {
-    if (wal.filePath != null && wal.filePath!.isNotEmpty) {
+  /// In the `upload` phase [kept] holds only the members an upload accepted (HTTP 200/202).
+  void _emitWalTranscriptCoverage({
+    required int generation,
+    required String phase,
+    List<Wal> covered = const [],
+    List<Wal> kept = const [],
+    String? failClosedReason,
+  }) {
+    if (!_isCurrent(generation)) return;
+    double audioSeconds(List<Wal> wals) => wals.fold(0.0, (sum, wal) => sum + _walAudioSeconds(wal));
+    final fields = <String, Object?>{
+      'policy': 'retain_covered_upload_gaps',
+      'phase': phase,
+      'retained_covered_count': covered.length,
+      'retained_covered_seconds': audioSeconds(covered),
+      'kept_count': kept.length,
+      'kept_seconds': audioSeconds(kept),
+      'kept_uploaded_count': phase == 'upload' ? kept.length : 0,
+      'kept_uploaded_seconds': phase == 'upload' ? audioSeconds(kept) : 0.0,
+      if (failClosedReason != null) 'fail_closed_reason': failClosedReason,
+    };
+    final override = _coverageTelemetryOverride;
+    if (override != null) {
+      override(fields);
+      return;
+    }
+    DebugLogManager.logEvent('wal_transcript_coverage', fields);
+    AnalyticsManager().trackEvent('wal_transcript_coverage', properties: fields);
+  }
+
+  bool _fileReferencedByOtherWal(Wal wal, String fileName) {
+    for (final other in [..._retiredWals, ..._foreignWals, ..._wals]) {
+      if (identical(other, wal)) continue;
+      final otherPath = other.filePath;
+      final otherName = (otherPath != null && otherPath.isNotEmpty) ? otherPath.split('/').last : other.getFileName();
+      if (otherName == fileName) return true;
+    }
+    return false;
+  }
+
+  bool _isTrackedWal(Wal wal) =>
+      _wals.any((w) => identical(w, wal)) ||
+      _retiredWals.any((w) => identical(w, wal)) ||
+      _foreignWals.any((w) => identical(w, wal));
+
+  Future<bool> _deleteWal(Wal wal, {required int generation}) async {
+    if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
+    final filePath = wal.filePath;
+    if (filePath != null && filePath.isNotEmpty) {
       try {
-        final fullPath = await Wal.getFilePath(wal.filePath);
-        if (fullPath != null) {
-          final file = File(fullPath);
-          if (file.existsSync()) {
-            await file.delete();
+        final fullPath = await Wal.getFilePath(filePath);
+        if (fullPath == null) return false;
+        if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
+        final type = await FileSystemEntity.type(fullPath, followLinks: false);
+        if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
+        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
+          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+            await File(fullPath).delete();
+            if (!_isCurrent(generation)) return false;
           }
+        } else if (type != FileSystemEntityType.notFound) {
+          return false;
         }
       } catch (e) {
         Logger.debug(e.toString());
@@ -782,16 +904,41 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     }
 
-    _wals.removeWhere((w) => w.id == wal.id);
-    _retiredWals.removeWhere((w) => w.id == wal.id);
-    _foreignWals.removeWhere((w) => w.id == wal.id);
-    return true;
+    final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
+    return removed;
   }
 
   @override
   Future deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
-    await _deleteWal(wal);
+    Wal? target;
+    for (final candidate in _wals) {
+      if (identical(candidate, wal)) {
+        target = candidate;
+        break;
+      }
+    }
+    target ??= _wals
+        .where(
+          (w) =>
+              w.id == wal.id &&
+              w.storage == wal.storage &&
+              w.codec == wal.codec &&
+              w.ownerUid == wal.ownerUid &&
+              w.recordingSessionId == wal.recordingSessionId &&
+              (wal.filePath == null ||
+                  wal.filePath!.isEmpty ||
+                  ((w.filePath != null && w.filePath!.isNotEmpty) ? w.filePath!.split('/').last : w.getFileName()) ==
+                      wal.filePath!.split('/').last),
+        )
+        .singleOrNull;
+    if (target == null) {
+      _notifyUpdated(generation);
+      return;
+    }
+    if (await _deleteWal(target, generation: generation)) {
+      await _saveWalsToFile(generation);
+    }
     _notifyUpdated(generation);
   }
 
@@ -982,28 +1129,74 @@ class LocalWalSyncImpl implements LocalWalSync {
     return reset;
   }
 
-  /// Delete the durable safety copy after the server confirms that this live
-  /// session produced transcript content. Until this acknowledgement arrives,
-  /// socket writes are transport attempts—not delivery confirmation.
-  Future<int> confirmSessionTranscription(int sessionStartSeconds, String conversationId) async {
+  /// Judges each stamped WAL of [conversationId] against the saved transcript: a covered WAL moves
+  /// into synced retention (the `autoRemoveSyncedCopies` lifecycle) and is not uploaded — the saved
+  /// text suppresses the repair upload, never deletes the copy; an uncovered WAL stays `miss`,
+  /// marked `keptForTranscriptRecovery`, and uploads for repair. Without [transcriptSpans], or with
+  /// an explicit [failClosedReason], every eligible stamped WAL fails closed into repair.
+  Future<({int released, int kept})> confirmSessionTranscription(
+    int sessionStartSeconds,
+    String conversationId, {
+    List<(int, int)>? transcriptSpans,
+    int? conversationStartSeconds,
+    String? failClosedReason,
+  }) async {
     final generation = _sessionGeneration;
-    final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final confirmed = _wals
-        .where(
-          (wal) =>
-              wal.timerStart >= sessionStartSeconds && wal.timerStart <= now && wal.conversationId == conversationId,
-        )
-        .toList();
-    var deleted = 0;
-    for (final wal in confirmed) {
-      if (await _deleteWal(wal)) deleted++;
+    // A stamped WAL can start before the session window — its timerStart is backdated from its
+    // frame count — so the transcript evidence judges every stamped copy instead.
+    final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
+    if (stamped.isEmpty) return (released: 0, kept: 0);
+
+    final spans =
+        failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
+    final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
+    final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+    final covered = <Wal>[], kept = <Wal>[];
+    for (final wal in stamped) {
+      // Only phone-side pending copies and transport-only synced ones (socket sends, never
+      // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
+      final eligible = !wal.isSyncing &&
+          (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
+          (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
+      if (!eligible) continue;
+      if (spans != null && walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds)) {
+        wal.status = WalStatus.synced;
+        wal.syncedAt = nowSeconds;
+        wal.keptForTranscriptRecovery = false;
+        covered.add(wal);
+      } else {
+        // An uncovered transport-only synced copy reclassifies to miss so
+        // fail-closed recovery uploads it instead of status-skipping it.
+        _keepForTranscriptRepair(wal);
+        kept.add(wal);
+      }
     }
-    if (deleted > 0) {
-      await _saveWalsToFile(generation);
-      _notifyUpdated(generation);
-      DebugLogManager.logInfo('Pruned transcript-confirmed live-capture WALs', {'count': deleted});
+    if (covered.isNotEmpty || kept.isNotEmpty) {
+      try {
+        await _saveWalsToFile(generation);
+      } catch (_) {
+        // The durable index never recorded the coverage, so covered copies fail closed too.
+        if (_isCurrent(generation)) {
+          covered.where((wal) => _wals.any((tracked) => identical(tracked, wal))).forEach(_keepForTranscriptRepair);
+        }
+        rethrow;
+      }
     }
-    return deleted;
+    if (_isCurrent(generation) && covered.isNotEmpty) _notifyUpdated(generation);
+    _emitWalTranscriptCoverage(
+      generation: generation,
+      phase: 'confirmation',
+      covered: covered,
+      kept: kept,
+      failClosedReason: reason,
+    );
+    return (released: 0, kept: kept.length);
+  }
+
+  void _keepForTranscriptRepair(Wal wal) {
+    wal.status = WalStatus.miss;
+    wal.syncedAt = 0;
+    wal.keptForTranscriptRecovery = true;
   }
 
   /// Returns the approximate duration (in seconds) of UNSYNCED audio frames
@@ -1028,7 +1221,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     final generation = _sessionGeneration;
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
     for (final wal in syncedWals) {
-      await _deleteWal(wal);
+      if (!_isCurrent(generation)) break;
+      await _deleteWal(wal, generation: generation);
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
@@ -1039,7 +1233,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     final generation = _sessionGeneration;
     final pendingWals = _wals.where((w) => w.status == WalStatus.miss).toList();
     for (final wal in pendingWals) {
-      await _deleteWal(wal);
+      if (!_isCurrent(generation)) break;
+      await _deleteWal(wal, generation: generation);
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
@@ -1061,7 +1256,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         )
         .toList();
     for (final wal in corruptedWals) {
-      await _deleteWal(wal);
+      if (!_isCurrent(generation)) break;
+      await _deleteWal(wal, generation: generation);
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
@@ -1105,6 +1301,16 @@ class LocalWalSyncImpl implements LocalWalSync {
         break;
       }
     }
+  }
+
+  void _clearRecoveryMarkers(List<Wal> accepted, int generation) {
+    if (!_isCurrent(generation)) return;
+    final marked = accepted.where((wal) => wal.keptForTranscriptRecovery).toList();
+    if (marked.isEmpty) return;
+    for (final wal in marked) {
+      wal.keptForTranscriptRecovery = false;
+    }
+    _emitWalTranscriptCoverage(generation: generation, phase: 'upload', kept: marked);
   }
 
   @override
@@ -1318,6 +1524,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           _notifyUpdated(generation);
         }
 
+        _clearRecoveryMarkers(batchWals, generation);
         batchesCompleted++;
         reportUploadProgress();
       } on SyncRateLimitedException {
@@ -1610,6 +1817,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       rethrow;
     }
 
+    _clearRecoveryMarkers([walToSync], generation);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
 

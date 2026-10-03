@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "etwa {count} pro Stunde",
     "diagnosticsLongestGap": "Längste Lücke",
     "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
-    "diagnosticsLastDuration": "Letzte {duration}"
+    "diagnosticsLastDuration": "Letzte {duration}",
+    "peopleStatsIncomplete": "Die Angaben können unvollständig sein."
 }

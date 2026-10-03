@@ -12361,4 +12361,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últims $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
 }

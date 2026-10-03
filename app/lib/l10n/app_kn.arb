@@ -11357,5 +11357,6 @@
     "diagnosticsDropsPerHour": "ಗಂಟೆಗೆ ಸುಮಾರು {count}",
     "diagnosticsLongestGap": "ಅತಿ ದೀರ್ಘ ಅಂತರ",
     "diagnosticsSincePairingSummary": "ಜೋಡಿಯಾದಾಗಿನಿಂದ: {drops} ಕಡಿತಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
-    "diagnosticsLastDuration": "ಕಳೆದ {duration}"
+    "diagnosticsLastDuration": "ಕಳೆದ {duration}",
+    "peopleStatsIncomplete": "ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು."
 }
