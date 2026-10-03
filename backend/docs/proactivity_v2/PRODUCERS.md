@@ -5,8 +5,9 @@ conversation mentor through the v2 ledger and reserved gateway calls; invalid
 values invoke neither path, and a v2 failure never invokes legacy. Existing
 buffering, rate checks and debounce have a shared admission helper. Legacy code
 remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
-paid-only admission helper and default-on debounce; its EXP-005 shadow remains
-exclusive to legacy dispatch. V2 additionally enforces strict spine admission.
+paid-only admission helper and default-on debounce; its former EXP-005 transcript
+shadow was removed before merge. V2 additionally enforces strict spine admission,
+with draft usefulness measured only by its own budgeted shadow judge.
 Shared legacy formatting/admission and Cloud Tasks enqueue/OIDC helpers expose
 public Python APIs. In-tree callers migrate together; their implementation and
 legacy dispatch behavior are unchanged.
