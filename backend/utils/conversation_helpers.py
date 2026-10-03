@@ -14,5 +14,5 @@ def extract_memory_ids(memories: List[Any], limit: int = 5) -> List[str]:
             d = cast(Dict[str, Any], m)
             result.append(d.get('id', ''))
         else:
-            result.append(m.id)
+            result.append(str(getattr(m, 'id', '')))
     return result
