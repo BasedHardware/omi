@@ -5,6 +5,7 @@ import struct
 import time
 
 import pytest
+from websockets.exceptions import ConnectionClosedError
 
 import utils.listen_pusher_session as pusher_session
 from utils.listen_pusher_session import (
@@ -1055,3 +1056,214 @@ async def test_ack_wait_cancellation_does_not_fall_back():
     assert connect_queries == [AUDIO_TIMELINE_PROTOCOL]
     assert uncertain.closed_codes == []
     assert not session.pusher_connected
+
+
+def _timeline_ack_frame(**overrides):
+    payload = {"type": "audio_timeline_ack", "version": AUDIO_TIMELINE_PROTOCOL}
+    payload.update(overrides)
+    return struct.pack("<I", 202) + json.dumps(payload).encode("utf-8")
+
+
+async def _capable_timeline_session(monkeypatch, active_ref, sockets):
+    """Connect once on a capable socket; the caller drives the reconnect."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        return sockets.pop(0)
+
+    session = make_session(
+        active_ref=active_ref,
+        config_overrides={'audio_timeline_spans': True, 'audio_timeline_v2': False, 'max_audio_buffer_size': 16},
+        deps_overrides={'connect_to_pusher': connector, 'monotonic': time.monotonic},
+    )
+    await session.connect()
+    assert session.audio_timeline_active
+    return session
+
+
+async def _drive_suspension(session, active_ref):
+    """Reconnect onto the silent socket; the ACK wait times out and the
+    session keeps the socket but suspends timeline audio."""
+    session.pusher_connected = False
+    await session.connect()
+    assert session.audio_timeline_suspended
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('pending', [False, True])
+async def test_late_ack_on_suspended_socket_resumes_and_flushes(monkeypatch, pending):
+    """A late but valid ACK on the still-installed socket lifts the suspension
+    and flushes the retained audio through the ordinary path — with and
+    without a pending conversation request. The receive loop is already
+    parked on the pending-request event when suspension begins."""
+    active_ref = {"active": True}
+    first = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    second = FakePusherWebSocket()
+    session = await _capable_timeline_session(monkeypatch, active_ref, [first, second])
+    assert session.config.max_audio_buffer_size == 16
+
+    async def second_recv():
+        while not second.incoming and active_ref['active']:
+            await asyncio.sleep(0.005)
+        return second.incoming.pop(0) if second.incoming else b''
+
+    second.recv = second_recv
+    receiver = asyncio.create_task(session.pusher_receive())
+    await asyncio.sleep(0)
+    await _drive_suspension(session, active_ref)
+    assert session.pusher_ws is second
+
+    session.audio_bytes_send(b'abcdefgh', received_at=100.0, conversation_id='conv-1', start_wall=99.9)
+    await session._audio_bytes_flush()
+    assert session.audio_total_size == 8
+    assert [frame for frame in second.sent if frame_type(frame) == 101] == []
+    session.transcript_send([{'id': 'seg-1', 'text': 'hi', 'speaker': 'SPEAKER_00', 'start': 0.0, 'end': 1.0}])
+    await session._transcript_flush()
+    assert [frame for frame in second.sent if frame_type(frame) == 102]
+
+    if pending:
+        await session.request_conversation_processing('conv-1')
+    second.incoming.append(audio_timeline_ack_frame())
+    deadline = time.monotonic() + 5
+    while (session.audio_timeline_suspended or session.audio_total_size) and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    active_ref['active'] = False
+    for _ in range(400):
+        session.pending_request_event.set()
+        if receiver.done():
+            break
+        await asyncio.sleep(0.005)
+    await asyncio.wait_for(asyncio.shield(receiver), timeout=2)
+
+    assert not session.audio_timeline_suspended
+    assert session.pusher_connected
+    assert session.pusher_ws is second
+    assert session.audio_total_size == 0
+    audio_frames = [frame for frame in second.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 99.9
+    assert audio_frames[0][12:] == b'abcdefgh'
+
+    session.audio_bytes_send(b'ijklmnop', received_at=100.5, conversation_id='conv-1', start_wall=100.4)
+    session.audio_bytes_send(b'qrstuvwx', received_at=101.0, conversation_id='conv-1', start_wall=100.9)
+    await session._audio_bytes_flush()
+    audio_frames = [frame for frame in second.sent if frame_type(frame) == 101]
+    payloads = b''.join(frame[12:] for frame in audio_frames)
+    assert payloads == b'abcdefgh' + b'ijklmnop' + b'qrstuvwx'
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'frame',
+    [
+        _timeline_ack_frame(version=True),
+        _timeline_ack_frame(version=AUDIO_TIMELINE_PROTOCOL - 1),
+        _timeline_ack_frame(type='not_an_ack'),
+        struct.pack('<I', 202) + b'not-json',
+        struct.pack('<I', 202) + json.dumps([1, 2]).encode('utf-8'),
+    ],
+    ids=['bool_version', 'unsupported_version', 'wrong_type', 'malformed_json', 'non_dict'],
+)
+async def test_invalid_late_ack_never_resumes_suspension(monkeypatch, frame):
+    """The ordinary receive loop holds a late ACK to the exact handshake
+    validation; anything failing it leaves the suspension in place."""
+    active_ref = {"active": True}
+    first = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    second = FakePusherWebSocket()
+    session = await _capable_timeline_session(monkeypatch, active_ref, [first, second])
+    await _drive_suspension(session, active_ref)
+
+    second.incoming.append(frame)
+    second.on_recv = lambda: active_ref.update(active=False)
+    await asyncio.wait_for(session.pusher_receive(), timeout=15)
+
+    assert session.audio_timeline_suspended
+    assert session.pusher_connected
+    assert [f for f in second.sent if frame_type(f) == 101] == []
+
+
+@pytest.mark.anyio
+async def test_late_ack_on_replaced_socket_does_not_resume(monkeypatch):
+    """If the socket the ACK was read from is no longer the installed one, the
+    ACK belongs to a dead connection and must not lift the suspension."""
+    active_ref = {"active": True}
+    first = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()])
+    second = FakePusherWebSocket()
+    third = FakePusherWebSocket()
+    session = await _capable_timeline_session(monkeypatch, active_ref, [first, second])
+    await _drive_suspension(session, active_ref)
+
+    async def stale_ack():
+        session.pusher_ws = third
+        active_ref.update(active=False)
+        return audio_timeline_ack_frame()
+
+    second.recv = stale_ack
+    await asyncio.wait_for(session.pusher_receive(), timeout=15)
+
+    assert session.audio_timeline_suspended
+    assert [f for f in second.sent if frame_type(f) == 101] == []
+    assert [f for f in third.sent if frame_type(f) == 101] == []
+
+
+@pytest.mark.anyio
+async def test_late_ack_on_legacy_fallback_socket_is_ignored(monkeypatch):
+    """The v1 replacement socket never requested the capability, so an
+    unsolicited ACK on it can never promote it to timeline audio."""
+    monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    active_ref = {"active": True}
+    uncertain = FakePusherWebSocket()
+    fallback = FakePusherWebSocket()
+    sockets = [uncertain, fallback]
+
+    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+        return sockets.pop(0)
+
+    session = make_session(
+        active_ref=active_ref,
+        config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 64},
+        deps_overrides={'connect_to_pusher': connector, 'monotonic': time.monotonic},
+    )
+    await session.connect()
+    assert session.pusher_ws is fallback
+    assert not session.audio_timeline_active
+    assert not session.audio_timeline_suspended
+
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1', start_wall=99.9)
+    await session.request_conversation_processing('conv-1')
+    fallback.incoming.append(audio_timeline_ack_frame())
+    fallback.on_recv = lambda: active_ref.update(active=False)
+    await session.pusher_receive()
+
+    assert not session.audio_timeline_active
+    assert not session.audio_timeline_suspended
+    await session._audio_bytes_flush()
+    audio_frames = [frame for frame in fallback.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 100.0 - (4 / (8000 * 2))
+
+
+@pytest.mark.anyio
+async def test_replaced_socket_close_does_not_disconnect_new_socket():
+    """A ConnectionClosed raised by a replaced socket must not mark the newly
+    installed socket disconnected."""
+    active_ref = {"active": True}
+    stale = FakePusherWebSocket()
+    fresh = FakePusherWebSocket()
+    session = make_session(ws=fresh, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing('conv-1')
+
+    async def stale_close():
+        session.pusher_ws = fresh
+        session.pusher_connected = True
+        active_ref.update(active=False)
+        raise ConnectionClosedError(None, None)
+
+    session.pusher_ws = stale
+    stale.recv = stale_close
+    await session.pusher_receive()
+
+    assert session.pusher_connected
+    assert session.pusher_ws is fresh
+    assert session.reconnect_task is None

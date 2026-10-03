@@ -456,7 +456,7 @@ class ListenPusherSession:
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
         while self.deps.is_active():
-            if not self.pending_conversation_requests:
+            if not self.pending_conversation_requests and not self.audio_timeline_suspended:
                 self.pending_request_event.clear()
                 try:
                     await asyncio.wait_for(self.pending_request_event.wait(), timeout=5.0)
@@ -467,13 +467,17 @@ class ListenPusherSession:
                 await self.deps.sleep(0.5)
                 continue
 
+            sock = self.pusher_ws
             try:
-                msg = cast(bytes, await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0))
+                msg = cast(bytes, await asyncio.wait_for(sock.recv(), timeout=5.0))
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
 
-                if header_type == 201:
+                if header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
+                    if self._audio_timeline_ack_check(msg):
+                        await self._resume_audio_timeline(sock)
+                elif header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
 
@@ -566,8 +570,11 @@ class ListenPusherSession:
             except asyncio.CancelledError:
                 break
             except ConnectionClosed as e:
-                logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
+                if self.pusher_ws is sock:
+                    logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                else:
+                    logger.info(f"Pusher receive closed on a replaced socket: {e} {self.uid} {self.session_id}")
             except Exception as e:
                 logger.error(f"Pusher receive error: {e} {self.uid} {self.session_id}")
                 await self.deps.sleep(0.5)
@@ -715,6 +722,33 @@ class ListenPusherSession:
                     logger.error(f"Pusher draining failed: {e} {self.uid} {self.session_id}")
             await self._connect()
 
+    def _audio_timeline_ack_check(self, message: Any) -> Optional[bool]:
+        """Validate one received frame as the audio-timeline acknowledgment.
+
+        Shared by the connect-time wait and the ordinary receive loop: a late
+        ACK arriving on a suspended socket is held to exactly the same wire
+        contract. Returns ``None`` when the frame is not an ACK at all (short,
+        non-bytes, or a different opcode), otherwise whether the payload is a
+        supported ``audio_timeline_ack``.
+        """
+        if not isinstance(message, bytes) or len(message) < 4:
+            return None
+        if struct.unpack('<I', message[:4])[0] != PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
+            return None
+        try:
+            payload = json.loads(message[4:].decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(payload, dict):
+            return False
+        if payload.get('type') != 'audio_timeline_ack':
+            return False
+        version = payload.get('version')
+        if isinstance(version, bool) or not isinstance(version, int) or version < AUDIO_TIMELINE_PROTOCOL:
+            logger.warning(f"Pusher audio timeline ack version unsupported: {version} {self.uid} {self.session_id}")
+            return False
+        return True
+
     async def _await_audio_timeline_ack(self) -> bool:
         """Wait for the pusher's v2 acknowledgment on a fresh connection.
 
@@ -738,23 +772,32 @@ class ListenPusherSession:
             except Exception as e:
                 logger.warning(f"Audio timeline ack read failed: {e} {self.uid} {self.session_id}")
                 return False
-            if not isinstance(message, bytes) or len(message) < 4:
+            check = self._audio_timeline_ack_check(message)
+            if check is None:
                 continue
-            if struct.unpack('<I', message[:4])[0] != PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
-                continue
-            try:
-                payload = json.loads(message[4:].decode('utf-8'))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                return False
-            if not isinstance(payload, dict):
-                return False
-            if payload.get('type') != 'audio_timeline_ack':
-                return False
-            version = payload.get('version')
-            if isinstance(version, bool) or not isinstance(version, int) or version < AUDIO_TIMELINE_PROTOCOL:
-                logger.warning(f"Pusher audio timeline ack version unsupported: {version} {self.uid} {self.session_id}")
-                return False
-            return True
+            return check
+
+    async def _resume_audio_timeline(self, sock: Any) -> None:
+        """Accept a late audio-timeline ACK that arrived on the live socket.
+
+        Only a suspended session that negotiated a timeline on this very
+        socket may resume: an unsolicited ACK on the legacy fallback socket —
+        which never requested the capability — or on a replaced socket is
+        ignored, so it can never promote a connection the pusher did not
+        acknowledge. Resuming runs the ordinary flush, which replays the
+        retained runs verbatim with their pinned identity fields.
+        """
+        if not (
+            sock is self.pusher_ws
+            and self.pusher_connected
+            and (self.config.audio_timeline_v2 or self.config.audio_timeline_spans)
+            and self.audio_timeline_active
+            and self.audio_timeline_suspended
+        ):
+            return
+        self.audio_timeline_suspended = False
+        logger.info(f"Pusher audio timeline ack recovered on live socket; resuming audio {self.uid} {self.session_id}")
+        await self._audio_bytes_flush()
 
     async def _connect(self):
         try:
@@ -787,6 +830,7 @@ class ListenPusherSession:
                     # records as a coverage gap, and never terminate the
                     # recording or silently downgrade to v1 positions.
                     self.audio_timeline_suspended = True
+                    self.pending_request_event.set()
                     logger.warning(
                         f"Pusher lost audio-timeline capability mid-v2-recording; "
                         f"audio withheld as coverage gap {self.uid} {self.session_id}"

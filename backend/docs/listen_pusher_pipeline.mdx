@@ -2037,7 +2037,12 @@ reconnect; if it is missing mid-recording after v2 already ran active, the
 recording continues, transcripts and
 finalization keep flowing, but audio is withheld (a coverage gap) and
 audio-linked features are withheld for the gap — the recording is never
-terminated and never silently downgraded. Opcode 101 keeps its 12-byte header
+terminated and never silently downgraded. The suspended session keeps
+reading that same socket: a late ACK that passes the identical wire
+validation on the still-installed socket lifts the suspension and flushes
+the retained runs with their pinned positions, while a malformed,
+unsupported-version, or foreign-socket ACK is ignored. Opcode 101 keeps its
+12-byte header
 (`opcode | float64 timestamp | PCM`): the timestamp is the projected start of
 the run's first sample, retained per buffered run (with its conversation
 binding) from acceptance through replays and reconnects. Buffered runs are
@@ -2117,9 +2122,13 @@ newer audio or retimed, so the legacy header arithmetic stays identical for
 unambiguous sends. Before resending, the producer verifies how many leading
 bytes are already committed through `storage.reconcile_audio_chunk_prefix`
 (a bounded plaintext compare that decrypts enhanced-protection objects
-first): for spans it walks adjacent committed spans across rebatching, for
-legacy storage only the same rounded timestamp anchor plus a byte-equal
-prefix counts. Verified bytes are skipped and the retained tail keeps its
+first): for spans it walks adjacent committed spans across rebatching; for
+legacy storage the proof is a single covering raw object — either the same
+rounded timestamp anchor, or one strictly earlier listed object whose
+generation-pinned decoded PCM provably reaches the envelope's interior byte
+offset, with every plausible candidate read and ambiguity, unreadable
+evidence, or budget exhaustion all yielding zero proof. Verified bytes are
+skipped and the retained tail keeps its
 position shifted by exactly the trimmed samples; any unverifiable or raced
 evidence resends the whole envelope verbatim — zero proof is never
 permission to discard, so a concurrent old-socket commit landing after a
@@ -2130,8 +2139,9 @@ stores only the genuinely new tail; span objects are written create-only
 bounded attempts, while legacy writes are not atomic. The stable timestamp
 plus verified payload is bounded occurrence identity, not a universal
 producer id: an old listener that recomputes its retry timestamp, an anchor
-obscured by earlier batching, or a span session resending to an old pusher
-that never acked cannot be proven and can still double-store.
+whose only plausible covering object is unreadable, unpinned, or
+ambiguous, or a span session resending to an old pusher that never acked
+cannot be proven and can still double-store.
 
 Consumers. `segment_wall_window` / `covered_window` / `coverage_outcome`
 (`utils/audio_timeline.py`) are the one coordinate conversion and the

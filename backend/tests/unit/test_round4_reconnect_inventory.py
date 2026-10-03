@@ -15,6 +15,7 @@ import os
 import struct
 import subprocess
 import sys
+import time
 import types
 from datetime import timedelta
 from pathlib import Path
@@ -28,6 +29,7 @@ from tests.unit import test_conversation_speaker_resolution_stage as stagemod
 from tests.unit import test_listen_audio_timeline_stack as f
 from tests.unit.utils import test_listen_pusher_session as session_mod
 from utils import encryption
+from utils.other import audio_chunk_replay as replay_module
 from utils.other import storage as storage_module
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 
@@ -63,19 +65,54 @@ def _red_enabled():
 
 
 @pytest.fixture
-def round4_session():
+def round4_replay():
     if not _red_enabled():
         return None
-    return _optional_historical('r4_red_session', ROUND4_RED_SHA, 'backend/utils/listen_pusher_session.py')
+    return _optional_historical('r4_red_replay', ROUND4_RED_SHA, 'backend/utils/other/audio_chunk_replay.py')
+
+
+def _replay_backed_reconcile(replay_mod):
+    """Bind a historical ``audio_chunk_replay`` to the live storage seams.
+
+    Historical session/storage modules import ``reconcile_committed_prefix``
+    from the *current* tree at exec time; without this the red run would
+    silently exercise the fixed helper.
+    """
+
+    def reconcile(uid, conversation_id, timestamp, data, sample_rate, require_spans=False, **_kwargs):
+        return replay_mod.reconcile_committed_prefix(
+            uid,
+            conversation_id,
+            timestamp,
+            data,
+            sample_rate,
+            require_spans=require_spans,
+            bucket=storage_module.get_private_cloud_sync_bucket(),
+            list_chunks=storage_module.list_audio_chunks,
+        )
+
+    return reconcile
 
 
 @pytest.fixture
-def round4_storage(monkeypatch):
+def round4_session(monkeypatch, round4_replay):
+    if not _red_enabled():
+        return None
+    old = _optional_historical('r4_red_session', ROUND4_RED_SHA, 'backend/utils/listen_pusher_session.py')
+    if round4_replay is not None and 'reconcile_audio_chunk_prefix' in dir(old):
+        monkeypatch.setattr(old, 'reconcile_audio_chunk_prefix', _replay_backed_reconcile(round4_replay))
+    return old
+
+
+@pytest.fixture
+def round4_storage(monkeypatch, round4_replay):
     if not _red_enabled():
         return None
     old = _optional_historical('r4_red_storage', ROUND4_RED_SHA, 'backend/utils/other/storage.py')
     monkeypatch.setattr(old, '_get_storage_client', lambda: storage_module._get_storage_client())
     monkeypatch.setattr(old, 'private_cloud_sync_bucket', storage_module.private_cloud_sync_bucket)
+    if round4_replay is not None and 'reconcile_audio_chunk_prefix' in dir(old):
+        monkeypatch.setattr(old, 'reconcile_audio_chunk_prefix', _replay_backed_reconcile(round4_replay))
     return old
 
 
@@ -262,6 +299,114 @@ async def test_ambiguous_send_literal625_listen_residual_double_store(
     assert actual == a + a + b
 
 
+@pytest.fixture(scope='module')
+def old_main_session_module():
+    return _optional_historical('r4_main_session', 'origin/main', 'backend/utils/listen_pusher_session.py')
+
+
+async def _interior_prefix_run(mp, *, protection, session_module=None, peer=None, storage_peer=None):
+    """X commits, A's send is delivered-then-failed, the drained retry resends only A.
+
+    A lands inside the same committed object as X (the pusher batches the
+    conversation), so its retry's anchor is interior to the earlier blob —
+    the exact residual the reconcile extension must prove. All calls are
+    unbound/unprojected legacy ``audio_bytes_send`` on one conversation.
+    """
+    gcs = f.gcs.__wrapped__(mp)
+    f.pusher_env.__wrapped__(mp)
+    mp.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    if session_module is not None:
+        mp.setattr(f, 'ListenPusherSession', session_module.ListenPusherSession)
+        mp.setattr(f, 'ListenPusherSessionDeps', session_module.ListenPusherSessionDeps)
+        mp.setattr(
+            f,
+            'ListenPusherSessionConfig',
+            lambda **kw: session_module.ListenPusherSessionConfig(
+                **{k: v for k, v in kw.items() if k in session_module.ListenPusherSessionConfig.__dataclass_fields__}
+            ),
+        )
+    stack = f._Stack(mp, v2=False, spans=False, conversation_id=f.CONV1)
+    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    peer = peer or f.pusher
+    if storage_peer is not None:
+        mp.setattr(storage_peer, '_get_storage_client', lambda: storage_module._get_storage_client())
+        mp.setattr(storage_peer, 'private_cloud_sync_bucket', storage_module.private_cloud_sync_bucket)
+        old_upload = storage_peer.upload_audio_chunks_batch
+
+        def compat_upload(chunks, uid, cid, level, sample_rate=None):
+            if 'reconcile_audio_chunk_prefix' in dir(storage_peer):
+                return old_upload(chunks, uid, cid, level, sample_rate=sample_rate)
+            return old_upload(chunks, uid, cid, level)
+
+        mp.setattr(peer, 'upload_audio_chunks_batch', compat_upload)
+    try:
+        stack.build_session()
+        stack.start_pusher_server(peer=peer)
+        await stack.session.connect()
+        stack.session.deps.is_active = lambda: False
+        x, a = f._phrase(9, 1), f._phrase(1, 1)
+        stack.session.audio_bytes_send(x, f.T0 + 1)
+        await stack.session._audio_bytes_flush()
+        socket = stack.session.pusher_ws
+        original_send = socket.send
+
+        async def delivered_then_closed(data):
+            await original_send(data)
+            if struct.unpack('<I', data[:4])[0] == 101:
+                raise ConnectionClosedError(None, None)
+
+        socket.send = delivered_then_closed
+        stack.session.audio_bytes_send(a, f.T0 + 2)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+        stack.start_pusher_server(peer=peer)
+        await stack.session.connect()
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+        chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+        bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+        return _stored_pcm(bucket, f.UID, chunks), chunks
+    finally:
+        if stack.session.reconnect_task:
+            stack.session.reconnect_task.cancel()
+        stack.restore()
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+@pytest.mark.parametrize('old_peer', [False, True])
+@pytest.mark.parametrize('old_listen', [False, True])
+async def test_legacy_retry_interior_prefix_stores_exactly_once(
+    monkeypatch,
+    protection,
+    old_peer,
+    old_listen,
+    round4_session,
+    round4_storage,
+    old_main_session_module,
+    old_main_pusher_module,
+    old_main_storage_module,
+):
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    session_module = old_main_session_module if old_listen else round4_session
+    peer = old_main_pusher_module if old_peer else None
+    storage_peer = old_main_storage_module if old_peer else round4_storage
+    if old_peer:
+        _old_peer_wiring(monkeypatch, old_main_pusher_module, old_main_storage_module)
+    actual, chunks = await _interior_prefix_run(
+        monkeypatch,
+        protection=protection,
+        session_module=session_module,
+        peer=peer,
+        storage_peer=storage_peer,
+    )
+    assert actual == x + a, (protection, old_listen, old_peer, [c['path'] for c in chunks])
+    assert len(chunks) == 1, 'the retried A must reconcile against the object already holding X+A'
+    expected_suffix = '.batch.enc' if protection == 'enhanced' else '.batch.bin'
+    assert chunks[0]['path'].endswith(expected_suffix)
+    assert all(not c.get('span') for c in chunks), 'legacy storage stays spanless'
+    assert f.pusher.PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc.call_count == 0
+
+
 def _span_of(data, start):
     return {'start': start, 'samples': len(data) // 2, 'sample_rate': f.RATE}
 
@@ -386,6 +531,299 @@ def test_uploader_legacy_conflicting_prefix_refuses(monkeypatch):
     after = bucket.blob(storage_module.list_audio_chunks(f.UID, f.CONV1)[0]['path']).download_as_bytes()
     assert before == after
     assert len(storage_module.list_audio_chunks(f.UID, f.CONV1)) == 1
+
+
+def _write_raw_object(bucket, uid, cid, timestamp, pcm, protection):
+    data = encryption.encrypt_audio_chunk(pcm, uid) if protection == 'enhanced' else pcm
+    ext = 'batch.enc' if protection == 'enhanced' else 'batch.bin'
+    blob = bucket.blob(f'chunks/{uid}/{cid}/{timestamp:.3f}.{ext}')
+    blob._store(data)
+    return blob
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_uploader_legacy_interior_prefix_and_tail(monkeypatch, protection, round4_storage):
+    """A committed object strictly earlier than the upload's anchor proves the
+    overlapping interior prefix; only the genuinely new tail is stored."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    storage = round4_storage or storage_module
+    x, a, c = f._phrase(9, 1), f._phrase(1, 1), f._phrase(2, 1)
+    t0 = f.T0
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    _write_raw_object(bucket, f.UID, f.CONV1, t0, x + a, protection)
+    _uploader(
+        storage,
+        [{'data': a + c, 'timestamp': t0 + len(x) / (f.RATE * 2)}],
+        f.UID,
+        f.CONV1,
+        protection,
+        f.RATE,
+    )
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert len(chunks) == 2
+    assert _stored_pcm(bucket, f.UID, chunks) == x + a + c
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_uploader_legacy_interior_mismatch_proves_nothing(monkeypatch, protection, round4_storage):
+    """Unequal corresponding PCM at the interior offset yields zero proof —
+    the whole envelope is stored, no leading-equal-part trimming."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    storage = round4_storage or storage_module
+    x, a, c = f._phrase(9, 1), f._phrase(1, 1), f._phrase(2, 1)
+    other = bytes(b ^ 0xFF for b in a)
+    t0 = f.T0
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    _write_raw_object(bucket, f.UID, f.CONV1, t0, x + a, protection)
+    _uploader(
+        storage,
+        [{'data': other + c, 'timestamp': t0 + len(x) / (f.RATE * 2)}],
+        f.UID,
+        f.CONV1,
+        protection,
+        f.RATE,
+    )
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert len(chunks) == 2
+    assert _stored_pcm(bucket, f.UID, chunks) == x + a + other + c
+
+
+def test_reconcile_legacy_ambiguous_covering_objects_prove_nothing(monkeypatch):
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    t0 = f.T0
+    _write_raw_object(bucket, f.UID, f.CONV1, t0, x + a, 'standard')
+    _write_raw_object(bucket, f.UID, f.CONV1, t0 - 0.5, f._silence(0.5) + x + a, 'standard')
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID,
+        f.CONV1,
+        t0 + 1.0,
+        a,
+        f.RATE,
+        bucket=bucket,
+        list_chunks=lambda *args, **kwargs: chunks,
+    )
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_unpinned_candidate_proves_nothing(monkeypatch):
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    blob = _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
+    blob.generation = None
+    verified, proven = storage_module.reconcile_audio_chunk_prefix(f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE)
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_changed_generation_proves_nothing(monkeypatch):
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
+
+    def stale_list(*args, **kwargs):
+        chunks = storage_module.list_audio_chunks(*args, **kwargs)
+        for chunk in chunks:
+            chunk['generation'] = chunk['generation'] + 1
+        return chunks
+
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=stale_list
+    )
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_deleted_candidate_proves_nothing(monkeypatch):
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    blob = _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    blob._data = None
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=lambda *args, **kwargs: chunks
+    )
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_object_budget_exhaustion_proves_nothing(monkeypatch):
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(replay_module, 'RECONCILE_MAX_OBJECTS', 1)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    t0 = f.T0
+    _write_raw_object(bucket, f.UID, f.CONV1, t0, x + a, 'standard')
+    _write_raw_object(bucket, f.UID, f.CONV1, t0 - 0.5, b'\x00\x00' * (f.RATE // 2) + x + a, 'standard')
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID, f.CONV1, t0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=lambda *args, **kwargs: chunks
+    )
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_encrypted_size_is_not_coverage(monkeypatch):
+    """Ciphertext size bounds but never proves coverage: an enhanced object
+    whose decoded PCM ends exactly at the anchor offset does not cover it."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x, 'enhanced')
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert chunks[0]['size'] > len(x), 'enhanced ciphertext carries framing overhead'
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=lambda *args, **kwargs: chunks
+    )
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_legacy_extreme_timestamp_offset_proves_nothing(monkeypatch):
+    """A finite listed timestamp whose sample delta overflows to a non-finite
+    offset is an invalid candidate: it is skipped, so the envelope's prefix
+    stays unproven instead of crashing or proving by accident."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    chunks[0]['timestamp'] = -1e308
+    verified, proven = replay_module.reconcile_committed_prefix(
+        f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=lambda *args, **kwargs: chunks
+    )
+    assert verified == 0 and proven == []
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+async def test_late_ack_same_socket_resumes_through_real_pusher(monkeypatch, protection, round4_session):
+    """Real pusher + real storage: a delayed capability ACK arriving after the
+    connect-time timeout is processed by the ordinary receive loop, lifts the
+    suspension, and flushes the retained run with its pinned projection."""
+    used_module = round4_session or session_mod.pusher_session
+    monkeypatch.setattr(used_module, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
+    if round4_session is not None:
+        monkeypatch.setattr(f, 'ListenPusherSession', round4_session.ListenPusherSession)
+        monkeypatch.setattr(f, 'ListenPusherSessionDeps', round4_session.ListenPusherSessionDeps)
+        monkeypatch.setattr(
+            f,
+            'ListenPusherSessionConfig',
+            lambda **kw: round4_session.ListenPusherSessionConfig(
+                **{k: v for k, v in kw.items() if k in round4_session.ListenPusherSessionConfig.__dataclass_fields__}
+            ),
+        )
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    f.pusher_env.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    stack = f._Stack(monkeypatch, v2=False, spans=True, conversation_id=f.CONV1)
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    receiver_task = None
+
+    class DelayedRecv:
+        def __init__(self, inner):
+            self.inner = inner
+            self.pending_delay = True
+
+        async def send(self, data):
+            return await self.inner.send(data)
+
+        async def recv(self):
+            if self.pending_delay:
+                self.pending_delay = False
+                await asyncio.sleep(0.05)
+            return await self.inner.recv()
+
+        async def close(self, code=1000):
+            return await self.inner.close(code)
+
+    try:
+        stack.build_session()
+        session = stack.session
+        session.config.max_audio_buffer_size = 16
+        stack.start_pusher_server()
+        await session.connect()
+        assert session.audio_timeline_active
+        await stack.stop_pusher_server()
+
+        session.pusher_connected = False
+        stack.start_pusher_server()
+        plain_connect = session.deps.connect_to_pusher
+
+        async def delayed_connect(*args, **kwargs):
+            return DelayedRecv(await plain_connect(*args, **kwargs))
+
+        session.deps.connect_to_pusher = delayed_connect
+        seen_frames = []
+        server_ws = stack.server_ws
+        original_recv = server_ws.receive_bytes
+
+        async def recording_recv():
+            data = await original_recv()
+            seen_frames.append(bytes(data))
+            return data
+
+        server_ws.receive_bytes = recording_recv
+        await session.connect()
+        assert session.audio_timeline_suspended
+        assert session.pending_request_event.is_set()
+        resumed_socket = session.pusher_ws
+
+        runs = [b'aaaaaaaa', b'bbbbbbbb', b'cccccccc']
+        starts = [f.T0 + i * (len(runs[0]) / (f.RATE * 2)) for i in range(3)]
+        session.audio_bytes_send(runs[0], starts[0], conversation_id=f.CONV1, start_wall=starts[0])
+        await session._audio_bytes_flush()
+        assert session.audio_total_size == len(runs[0])
+
+        session.transcript_send([{'id': 'seg-x', 'text': 'hi', 'speaker': 'SPEAKER_00', 'start': 0.0, 'end': 1.0}])
+        await session._transcript_flush()
+        assert list(session.segment_buffers) == []
+
+        receiver_task = asyncio.create_task(session.pusher_receive())
+        deadline = time.monotonic() + 5
+        while session.audio_timeline_suspended and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert not session.audio_timeline_suspended, 'the late ACK must resume the same socket'
+        assert session.pusher_connected
+        assert session.pusher_ws is resumed_socket
+
+        for i in (1, 2):
+            session.audio_bytes_send(runs[i], starts[i], conversation_id=f.CONV1, start_wall=starts[i])
+            await session._audio_bytes_flush()
+        assert session.audio_total_size == 0
+        receiver_task.cancel()
+        try:
+            await asyncio.wait_for(receiver_task, timeout=2)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        receiver_task = None
+        await stack.stop_pusher_server()
+
+        expected_suffix = '.batch.enc' if protection == 'enhanced' else '.batch.bin'
+        chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+        assert all(c['path'].endswith(expected_suffix) for c in chunks)
+        bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+        stored = _stored_pcm(bucket, f.UID, chunks)
+        assert stored == b'aaaaaaaa' + b'bbbbbbbb' + b'cccccccc'
+        spans_seen = sorted((c['span'] for c in chunks if c.get('span')), key=lambda s: s['start'])
+        assert spans_seen, 'spans sessions store validated spans'
+        assert sum(s['samples'] for s in spans_seen) * 2 == len(stored)
+        assert abs(spans_seen[0]['start'] - starts[0]) < 0.001
+        for earlier, later in zip(spans_seen, spans_seen[1:]):
+            assert abs(later['start'] - (earlier['start'] + earlier['samples'] / f.RATE)) < 0.001
+        audio_frames = [frame for frame in seen_frames if struct.unpack('<I', frame[:4])[0] == 101]
+        assert audio_frames and abs(struct.unpack('d', audio_frames[0][4:12])[0] - starts[0]) < 0.001
+        assert any(
+            struct.unpack('<I', frame[:4])[0] == 102 for frame in seen_frames
+        ), 'transcripts must still flow while suspended'
+        assert f.pusher.PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc.call_count == 0
+    finally:
+        if receiver_task is not None:
+            receiver_task.cancel()
+        if stack.session and stack.session.reconnect_task:
+            stack.session.reconnect_task.cancel()
+        stack.restore()
 
 
 SR = stagemod.SR
