@@ -1185,16 +1185,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
     final startsTurn = previous == null ||
-        previous.isUser ||
+        previous.isUser != data.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
-        previous.speakerLabelSource != data.speakerLabelSource;
+        (data.speakerId == omiSpeakerId && !data.isUser);
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
     final asksToConfirm =
         person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
-    final unnamed = !data.isUser && !isOmi && person == null;
+    final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
     final seek = widget.onSegmentTap;
@@ -1210,42 +1210,47 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ? OmiDuration.offset(data.start)
             : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
 
-    final who = Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Flexible(
-          child: _speakerTarget(
-            data,
-            Text(
-              names.forSegment(data, person: person),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: label.copyWith(
-                decoration: unnamed ? TextDecoration.underline : null,
-                decorationStyle: TextDecorationStyle.dotted,
-                decorationColor: labelColor,
+    final who = !startsTurn
+        ? isTagging
+            ? const Row(children: [OmiSpinner(size: OmiSpinnerSize.small)])
+            : const SizedBox.shrink()
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: _speakerTarget(
+                  data,
+                  Text(
+                    names.forSegment(data, person: person),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: label.copyWith(
+                      decoration: unnamed ? TextDecoration.underline : null,
+                      decorationStyle: TextDecorationStyle.dotted,
+                      decorationColor: labelColor,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-        if (startsTurn && person != null && !isTagging) ...[
-          const SizedBox(width: 4),
-          SpeakerLabelBadge(source: data.speakerLabelSource),
-        ],
-        if (time != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            time,
-            style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ],
-        if (isTagging) ...[
-          const SizedBox(width: 6),
-          const OmiSpinner(size: OmiSpinnerSize.small),
-        ],
-      ],
-    );
+              if (startsTurn && person != null && !isTagging) ...[
+                const SizedBox(width: 4),
+                SpeakerLabelBadge(source: data.speakerLabelSource),
+              ],
+              if (time != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  time,
+                  style:
+                      label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ],
+              if (isTagging) ...[
+                const SizedBox(width: 6),
+                const OmiSpinner(size: OmiSpinnerSize.small),
+              ],
+            ],
+          );
 
     // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
     // on the words over the line's. A long press still selects.
@@ -1297,13 +1302,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          who,
+          if (startsTurn || isTagging) who,
           if (asksToConfirm)
             Padding(
               padding: const EdgeInsets.only(top: OmiSpacing.xxs),
               child: SpeakerLikelyConfirm(name: person.name, onYes: () => confirm(data), onNot: () => reject(data)),
             ),
-          const SizedBox(height: 3),
+          if (startsTurn || isTagging || asksToConfirm) const SizedBox(height: 3),
           words,
         ],
       ),
