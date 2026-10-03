@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ import websockets
 from websockets.legacy.server import serve
 
 from testing.live_stt_soak.manifest import render as soak_manifest
-from testing.live_stt_soak.run import metric_samples, session, summarize, validate_pod, public_pcm
+from testing.live_stt_soak.run import metric_samples, session, summarize, validate_pod, public_pcm, pod_generation
 from testing.live_stt_soak.safety import validate_environment, validate_target
 from testing.live_stt_soak.transport import ProviderConnections, fake_provider
 
@@ -27,6 +28,7 @@ IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
 
 
 @pytest.mark.parametrize('environment', ['prod', 'dev'])
+@pytest.mark.skipif(shutil.which('helm') is None, reason='Helm render contract requires helm')
 def test_canary_renders_only_independent_pinned_deployment(environment):
     candidate = renderer.render(environment, IMAGE, 2, {'STT_FAILOVER_RECOVERY_ENABLED': 'true'})
     baseline = renderer.render(environment, IMAGE, 2, {})
@@ -73,6 +75,22 @@ def test_dev_manifest_has_no_shared_identity_or_state():
     pod['spec']['containers'][0]['env'].append({'name': 'SERVICE_ACCOUNT_JSON', 'value': 'unexpected'})
     with pytest.raises(ValueError):
         validate_pod(pod)
+    pod['spec']['containers'][0]['env'][-1] = {
+        'name': 'SERVICE_ACCOUNT_JSON',
+        'valueFrom': {'secretKeyRef': {'name': 'shared', 'key': 'ADC'}},
+    }
+    with pytest.raises(ValueError):
+        validate_pod(pod)
+
+
+def test_pod_restart_detected_even_if_all_initial_counters_were_zero():
+    pod = {
+        'metadata': {'uid': 'same-pod'},
+        'status': {'containerStatuses': [{'name': 'listen', 'restartCount': 0, 'containerID': 'container-before'}]},
+    }
+    before = pod_generation(pod)
+    pod['status']['containerStatuses'][0].update(restartCount=1, containerID='container-after')
+    assert pod_generation(pod) != before
 
 
 @pytest.mark.parametrize(

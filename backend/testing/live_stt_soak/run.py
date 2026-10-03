@@ -58,6 +58,18 @@ def validate_pod(pod: dict) -> None:
     validate_environment({entry['name']: entry.get('value', '') for entry in container['env']})
 
 
+def pod_generation(pod: dict) -> tuple:
+    return (
+        pod['metadata']['uid'],
+        tuple(
+            sorted(
+                (row['name'], row.get('restartCount', 0), row.get('containerID', ''))
+                for row in pod.get('status', {}).get('containerStatuses', [])
+            )
+        ),
+    )
+
+
 def private_file(path: Path) -> str:
     info = path.stat()
     if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.getuid():
@@ -210,6 +222,7 @@ async def run(args: Any) -> dict:
     key, metrics_key = private_file(args.auth_file), private_file(args.metrics_file)
     pcm = public_pcm()
     args.output.mkdir(parents=True, exist_ok=False)
+    (args.output / 'pod-before.json').write_text(json.dumps(pod, indent=2))
     async with httpx.AsyncClient(base_url=args.url, timeout=10, trust_env=False) as client:
         safety = (await client.get('/soak-safety')).json()
         if not safety.get('isolated') or safety.get('project') != PROJECT or safety.get('sessions', 0) < args.sessions:
@@ -260,17 +273,28 @@ async def run(args: Any) -> dict:
         'sessions': results,
         'sessions_started': sum(r['started'] for r in results),
         'client_terminated_failures': sum(r['client_terminated_failure'] for r in results),
-        'faults_injected': final_safety['faults_injected'],
+        'faults_injected': final_safety['faults_injected'] - safety['faults_injected'],
         'rss_samples': rss,
         'rss_peak_bytes': max((r['bytes'] for r in rss if r['bytes'] is not None), default=None),
         'sampling_errors': sampling_errors,
     }
+    final_pod = json.loads(
+        subprocess.run(
+            ['kubectl', '--context', args.context, '-n', NAMESPACE, 'get', 'pod', args.pod, '-o', 'json'],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    (args.output / 'pod-after.json').write_text(json.dumps(final_pod, indent=2))
+    report['pod_restarted'] = pod_generation(final_pod) != pod_generation(pod)
     if (
         sampling_errors
         or report['rss_peak_bytes'] is None
         or not report['faults_injected']
         or not report['positive_replays_over_100ms_lower_bound']
         or report['client_terminated_failures']
+        or report['pod_restarted']
     ):
         report['gate'] = 'HOLD'
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
