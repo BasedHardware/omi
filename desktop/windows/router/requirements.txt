@@ -1,0 +1,5 @@
+# Omi local "brain" router — the only heavy deps are for the classifier itself.
+# Python 3.10+ (laya floor). torch/transformers pull in with laya.
+laya>=0.1
+fastapi>=0.110
+uvicorn>=0.29
