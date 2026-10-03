@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/goals/goals_page.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -98,6 +99,9 @@ final settingsPagesScenarios = <AuditScenario>[
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
       await a.shot('Pick a reason, skip feedback, reach the typed confirmation', step: 'confirm');
+      await a.tester.enterText(find.byKey(const Key('delete_account_confirm_field')), 'DELETE');
+      await a.settle();
+      await a.shot('Type DELETE: Delete Account becomes the live action', step: 'typed');
     },
   ),
   AuditScenario(
@@ -373,7 +377,7 @@ PeopleProvider _auditPeople() {
   return PeopleProvider(
     setPinned: (_, __) async => true,
     deletePersonById: (_) async => true,
-    loadPeople: () async => [
+    loadPeople: () async => PeopleListResponse(people: [
       person('p-maya', 'Maya Chen',
           count: 24,
           daysAgo: 0,
@@ -413,6 +417,6 @@ PeopleProvider _auditPeople() {
       person('p-leo', 'Leo', count: 1, daysAgo: 59, reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1}),
       person('p-ines', 'Inês Moreira', count: 0),
       person('p-thanks', 'Thanks', count: 0),
-    ],
+    ]),
   );
 }

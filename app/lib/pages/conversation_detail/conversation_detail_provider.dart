@@ -161,6 +161,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       previousSave,
     );
     _speakerSaveTail = pending.then((_) {});
+    _speakerSaveTail.ignore();
     return pending;
   }
 
@@ -376,6 +377,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       _speakerSaveTail,
     );
     _speakerSaveTail = pending.then((_) {});
+    _speakerSaveTail.ignore();
     return pending;
   }
 

@@ -28,6 +28,9 @@ const double _kTapTarget = 44;
 
 /// Shown when `_init()` throws before the app's first frame.
 ///
+/// The raw error sits behind a collapsed "Details" disclosure (open by default for a configuration
+/// error, whose message points at it).
+///
 /// Deliberately self-contained: no providers, no services and no theme lookups. Everything it could
 /// depend on is exactly what may have just failed to initialise, so it renders from Flutter, the
 /// design tokens (plain constants), the stateless [OmiSpinner] and the generated strings, looked up
@@ -71,56 +74,127 @@ class StartupFailureApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = _strings();
     final retry = _isConfiguration ? null : onRetry;
+    final details = (kDebugMode || kProfileMode) && stack != null ? '$error\n\n$stack' : '$error';
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: OmiColors.surface0,
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(OmiSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(l10n.startupFailedTitle, style: OmiType.title2),
-                ),
-                const SizedBox(height: OmiSpacing.sm),
-                Text(
-                  _isConfiguration ? l10n.startupFailedConfigMessage : l10n.startupFailedMessage,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                ),
-                const SizedBox(height: OmiSpacing.lg),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      // Selectable so the message can be copied off a device
-                      // that has no debugger attached — which is the situation
-                      // this screen exists for.
-                      (kDebugMode || kProfileMode) && stack != null ? '$error\n\n$stack' : '$error',
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
+          // Centred like the app's other error states: glyph, title, message, actions, and the raw
+          // error behind a Details disclosure that support can ask for.
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.all(OmiSpacing.xl),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight - OmiSpacing.xl * 2),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(Icons.error_outline, size: 40, color: OmiColors.textTertiary),
+                        ),
+                        const SizedBox(height: OmiSpacing.md),
+                        Semantics(
+                          header: true,
+                          child: Text(l10n.startupFailedTitle, style: OmiType.title2, textAlign: TextAlign.center),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        Text(
+                          _isConfiguration ? l10n.startupFailedConfigMessage : l10n.startupFailedMessage,
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
+                        ),
+                        const SizedBox(height: OmiSpacing.xl),
+                        if (retry != null) ...[
+                          _RetryButton(label: l10n.tryAgain, onRetry: retry),
+                          const SizedBox(height: OmiSpacing.xs),
+                        ],
+                        TextButton(
+                          key: const Key('startup_failure_contact_support'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: OmiColors.textPrimary,
+                            minimumSize: const Size.fromHeight(_kTapTarget),
+                          ),
+                          onPressed: () => launchUrl(_supportUri(l10n)),
+                          child: Text(l10n.contactSupportAction, style: OmiType.headline),
+                        ),
+                        const SizedBox(height: OmiSpacing.md),
+                        // A configuration message points at "the details below", so it opens them.
+                        _ErrorDetails(label: l10n.startupFailedDetails, text: details, initiallyOpen: _isConfiguration),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: OmiSpacing.md),
-                if (retry != null) ...[
-                  _RetryButton(label: l10n.tryAgain, onRetry: retry),
-                  const SizedBox(height: OmiSpacing.xs),
-                ],
-                TextButton(
-                  key: const Key('startup_failure_contact_support'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: OmiColors.textPrimary,
-                    minimumSize: const Size.fromHeight(_kTapTarget),
-                  ),
-                  onPressed: () => launchUrl(_supportUri(l10n)),
-                  child: Text(l10n.contactSupportAction, style: OmiType.headline),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The raw error, collapsed under "Details" until someone (usually support) asks for it. Selectable
+/// so it can be copied off a device with no debugger attached, which is the situation this screen
+/// exists for.
+class _ErrorDetails extends StatefulWidget {
+  const _ErrorDetails({required this.label, required this.text, required this.initiallyOpen});
+
+  final String label;
+  final String text;
+  final bool initiallyOpen;
+
+  @override
+  State<_ErrorDetails> createState() => _ErrorDetailsState();
+}
+
+class _ErrorDetailsState extends State<_ErrorDetails> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Semantics(
+            expanded: _open,
+            child: TextButton(
+              key: const Key('startup_failure_details'),
+              style: TextButton.styleFrom(
+                foregroundColor: OmiColors.textSecondary,
+                minimumSize: const Size(_kTapTarget, _kTapTarget),
+              ),
+              onPressed: () => setState(() => _open = !_open),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(widget.label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  const SizedBox(width: OmiSpacing.xxs),
+                  ExcludeSemantics(
+                    child:
+                        Icon(_open ? Icons.expand_less : Icons.expand_more, size: 18, color: OmiColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_open)
+          Container(
+            margin: const EdgeInsets.only(top: OmiSpacing.xs),
+            padding: const EdgeInsets.all(OmiSpacing.sm),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+            child: SelectableText(
+              widget.text,
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
+            ),
+          ),
+      ],
     );
   }
 }

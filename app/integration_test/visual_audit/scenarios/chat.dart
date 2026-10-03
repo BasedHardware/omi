@@ -35,8 +35,16 @@ final chatScenarios = <AuditScenario>[
     page: _page,
     state: 'The existing current-thread endpoint returns one saved assistant reply',
     run: (a) async {
-      final saved = ServerMessage('saved-answer', DateTime.utc(2026, 9, 29), 'Your existing conversation',
-          MessageSender.ai, MessageType.text, null, false, [], [], []);
+      // A real saved assistant reply. (The fixture used to read "Your existing conversation", which
+      // looked like a header but is an ordinary answer, so it rightly carries message actions.)
+      final saved = ServerMessage(
+          'saved-answer',
+          DateTime.utc(2026, 9, 29),
+          'You agreed to send Alex the revised design notes on Friday.',
+          MessageSender.ai,
+          MessageType.text,
+          null,
+          false, [], [], []);
       final body = jsonEncode([saved.toJson()]);
       a.server.failNext('GET', '/v2/messages', status: 200, body: body);
       await a.pump(const ChatPage());
@@ -50,6 +58,7 @@ final chatScenarios = <AuditScenario>[
       await a.pump(const ChatPage());
       expect(find.text(saved.text), findsOneWidget);
       expect(a.server.countOf('GET', '/v2/messages'), 2);
+      a.server.assistantReplyText = 'Picking up from there: want a reminder on Thursday to send them?';
       await _ask(a, 'Continue this conversation');
       expect(find.text(saved.text), findsOneWidget);
       expect(a.server.countOf('POST', '/v2/messages'), 1);

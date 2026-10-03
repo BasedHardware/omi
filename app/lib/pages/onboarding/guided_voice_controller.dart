@@ -68,6 +68,17 @@ class GuidedVoiceController extends ChangeNotifier {
   bool voiceSaved = false;
   double level = 0;
   double seconds = 0;
+
+  /// The most recent audio levels, oldest first, for the recording waveform. Capped at
+  /// [levelHistoryLength]; cleared for each prompt.
+  final levelHistory = <double>[];
+  static const levelHistoryLength = 32;
+
+  /// A frame at or above this level counts as hearing the speaker.
+  static const speechLevel = 0.04;
+
+  /// Seconds of audio since the microphone last heard speech, in this recording.
+  double _quietSeconds = 0;
   bool _disposed = false;
   int _generation = 0;
   Timer? _previewTimer;
@@ -169,6 +180,10 @@ class GuidedVoiceController extends ChangeNotifier {
         IntroductionStage.savingMemories
       ].contains(stage);
   bool get active => stage == IntroductionStage.recording;
+
+  /// Recording, but the microphone has heard nothing for a couple of seconds: time for the
+  /// "speak toward your phone" hint. False while speech is coming through.
+  bool get quiet => active && _quietSeconds >= 2;
   bool get canFinish => _frames.length >= 16000; // Half a second, never a voice-quality claim.
   int get keptCount => answers.where((a) => a.keep && a.text.trim().isNotEmpty).length;
   bool get allMemoriesSaved => answers.where((a) => a.keep && a.text.trim().isNotEmpty).every((a) => a.saved);
@@ -186,6 +201,7 @@ class GuidedVoiceController extends ChangeNotifier {
     final generation = ++_generation;
     stage = IntroductionStage.starting;
     error = null;
+    _quietSeconds = 0;
     _emit();
     try {
       if (!_prepared) {
@@ -204,6 +220,9 @@ class GuidedVoiceController extends ChangeNotifier {
           sum += sample * sample;
         }
         level = bytes.length < 2 ? 0 : (sqrt(sum / (bytes.length ~/ 2)) / 1800).clamp(0, 1);
+        _quietSeconds = level >= speechLevel ? 0 : _quietSeconds + bytes.length / 32000;
+        levelHistory.add(level);
+        if (levelHistory.length > levelHistoryLength) levelHistory.removeAt(0);
         _emit();
         if (seconds >= 45 && active) unawaited(pause());
       }, () {
@@ -317,6 +336,7 @@ class GuidedVoiceController extends ChangeNotifier {
     seconds = 0;
     transcript = '';
     level = 0;
+    levelHistory.clear();
     alternative = 0;
     error = null;
     promptIndex++;

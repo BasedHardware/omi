@@ -69,7 +69,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 if (provider.error != null) {
                   return _card(
                     OmiErrorState(
-                      message: context.l10n.errorWithMessage(provider.error!),
+                      message: context.l10n.couldNotLoadApiKeys,
                       onRetry: () => provider.fetchKeys(force: true),
                     ),
                   );

@@ -256,6 +256,26 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
+    index >= 0 &&
+    index < rows.length &&
+    rows[index].kind == _ConversationListRowKind.conversation &&
+    rows[index].conversation!.isLocked;
+
+/// For a locked conversation row in a run of two or more consecutive locked rows (one day): the
+/// whole run when [index] starts it, an empty list when an earlier row already drew it, and null
+/// for any other row, which draws itself.
+List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int index) {
+  if (!_isLockedRow(rows, index)) return null;
+  if (_isLockedRow(rows, index - 1)) return const [];
+  var end = index + 1;
+  while (_isLockedRow(rows, end)) {
+    end++;
+  }
+  if (end - index < 2) return null;
+  return [for (var i = index; i < end; i++) rows[i].conversation!];
+}
+
 /// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
@@ -672,6 +692,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           gap: row.captureGap!,
                         );
                       case _ConversationListRowKind.conversation:
+                        // Consecutive locked rows share one frosted card and one upgrade action;
+                        // the run's first row draws it and the rest of the run draws nothing.
+                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        if (lockedRun != null) {
+                          if (lockedRun.isEmpty) return const SizedBox.shrink();
+                          return LockedConversationRun(
+                            key: ValueKey('locked_run_${row.conversation!.id}'),
+                            conversations: lockedRun,
+                            date: row.date,
+                          );
+                        }
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
                           conversation: row.conversation!,
