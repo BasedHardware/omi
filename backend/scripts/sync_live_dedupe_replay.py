@@ -77,11 +77,14 @@ def _audio_plan(payload: dict) -> tuple[list[dict], dict]:
         samples = [_integer(value, 1) for value in samples]
         first = _integer(wal.get('source_frame_start'))
         rate = _integer(wal.get('rate_hz'), 1)
+        declared_count = _integer(wal.get('frame_count', len(samples)), 1)
+        if len(samples) > declared_count:
+            raise ValueError('decoded frames exceed the declared WAL frame count')
         claim = {
             'capture_root': wal.get('capture_root'),
             'clock_epoch': _integer(wal.get('clock_epoch')),
             'source_frame_start': first,
-            'frame_count': len(samples),
+            'frame_count': declared_count,
             'rate_hz': rate,
             'channel': wal.get('channel', 'mono'),
             'codec': wal.get('codec', 'pcm16'),

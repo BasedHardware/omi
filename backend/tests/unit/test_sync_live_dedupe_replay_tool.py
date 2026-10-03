@@ -417,6 +417,56 @@ def test_received_frames_drop_audio_candidates_and_plan_the_trim(tmp_path, skew)
     }
 
 
+@pytest.mark.parametrize('declared', [10, 12])
+def test_declared_wal_frame_count_at_or_above_decoded_keeps_the_plan(tmp_path, declared):
+    """A declared frame_count at or above the decoded prefix leaves the plan unchanged."""
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 7,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 56000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    coverage['wal_frames'][0]['frame_count'] = declared
+    result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
+    assert result.returncode == 0, result.stderr
+    out = decisions(result)
+    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == [[7, 10]]
+    assert out['audio_coverage']['totals'] == {'kept_seconds': 1.5, 'dropped_seconds': 3.5, 'context_seconds': 0.0}
+
+
+@pytest.mark.parametrize('declared', [9, 0, True])
+def test_declared_wal_frame_count_below_decoded_or_invalid_exits_2(tmp_path, declared):
+    coverage = audio_coverage(
+        [8000] * 10,
+        [
+            {
+                'source_frame_start': 0,
+                'source_frame_end': 7,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': 56000,
+                'samples_per_frame': 8000,
+            }
+        ],
+    )
+    coverage['wal_frames'][0]['frame_count'] = declared
+    payload = {
+        'live_segments': [],
+        'sync_segments': [sync_segment('private declared-count leak text', 0.0)],
+        'audio_coverage': coverage,
+    }
+    result = run_replay(tmp_path, payload)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert 'private declared-count leak text' not in result.stdout
+    assert 'private declared-count leak text' not in result.stderr
+    assert 'input.json' not in result.stdout and 'input.json' not in result.stderr
+
+
 def test_received_hole_leaves_unreceived_and_missed_frame_ranges(tmp_path):
     coverage = audio_coverage(
         [8000] * 10,
@@ -605,19 +655,21 @@ def production_replay():
     """Chargeable test call starts after imports and replay-module load complete."""
     import importlib.util
 
-    from config import sync_lineage
+    from config import sync_lineage, sync_live_dedupe
     from tests.unit import test_sync_lineage_dedupe_replay as helpers
     from tests.unit.test_sync_cross_job_assignment import intake
 
     spec = importlib.util.spec_from_file_location('replay_tool_under_test', SCRIPT)
     replay_tool = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(replay_tool)
-    return sync_lineage, helpers, intake, replay_tool
+    return sync_lineage, sync_live_dedupe, helpers, intake, replay_tool
 
 
 def test_cli_and_production_agree_appended_receipts_replace_live_proof(tmp_path, monkeypatch, production_replay):
     """An append persists sync receipts over the live runs; later intake repeats keep."""
-    sync_lineage, helpers, intake, replay_tool = production_replay
+    sync_lineage, live_dedupe, helpers, intake, replay_tool = production_replay
+    monkeypatch.setenv(live_dedupe.SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'true')
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
 
     texts = [
