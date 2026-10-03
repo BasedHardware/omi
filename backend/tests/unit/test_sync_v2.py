@@ -1403,6 +1403,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.sync.backfill',
             'utils.sync.content_id',
             'utils.speaker_assignment',
+            'utils.speaker_permissions',
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
@@ -1413,6 +1414,11 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
 
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is
@@ -1427,11 +1433,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
         sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
 
-        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
-        # models.structured.Structured at module scope; both would otherwise be
-        # MagicMocks here. Register a minimal real pydantic Structured and the real
-        # enum member BEFORE the exec — the module is pure, so its title logic
-        # then runs for real.
+        # Keep deterministic title logic real with Structured and CategoryEnum before exec.
         from pydantic import BaseModel as _BaseModel
 
         class _Structured(_BaseModel):
@@ -2933,7 +2935,8 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
             assert result['failed_segments'] == 1
             assert result['total_segments'] == 1
-            assert result['errors'] == ['stt_upstream_error']
+            assert result['errors'] == ['sync_persistence_failed']
+            assert result['provider'] == result['model'] == 'unknown'
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -3409,6 +3412,7 @@ class TestV2EndpointExecution:
             'utils.sync.backfill',
             'utils.sync.content_id',
             'utils.speaker_assignment',
+            'utils.speaker_permissions',
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
@@ -3419,6 +3423,11 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
 
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is
@@ -3433,11 +3442,7 @@ class TestV2EndpointExecution:
         saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
         sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
 
-        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
-        # models.structured.Structured at module scope; both would otherwise be
-        # MagicMocks here. Register a minimal real pydantic Structured and the real
-        # enum member BEFORE the exec — the module is pure, so its title logic
-        # then runs for real.
+        # Keep deterministic title logic real with Structured and CategoryEnum before exec.
         from pydantic import BaseModel as _BaseModel
 
         class _Structured(_BaseModel):

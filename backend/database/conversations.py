@@ -25,7 +25,6 @@ from utils.conversations.transcript_hash import (
 )
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
-from utils.person_evidence import person_updates_for_assignment
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
@@ -2603,15 +2602,18 @@ def assign_conversation_speaker(
     evidence_source=SOURCE_MANUAL,
     firestore_client=None,
     rejection=None,
+    owner_segment_ids=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
+    from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
+    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+
     rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
 
-    @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, bookkeeping):
         if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
         source_segments = None
@@ -2633,9 +2635,7 @@ def assign_conversation_speaker(
         ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
-        # A donor's numeric speaker IDs may have been reassigned on bridge.
-        # Carry its stable segment identities across instead of applying the
-        # number to a different voice in the surviving conversation.
+        # Bridge donors use stable segment IDs, never reassigned speaker numbers.
         if source_segments is not None:
             selected_segment_ids = donor_selected_ids(
                 source_segments,
@@ -2668,30 +2668,28 @@ def assign_conversation_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
         )
-        # Read every person before any write; corrections fence in-flight profiles and
-        # record label evidence in the same transaction as the label, not in a later task.
-        relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
-        rejected_person_id = (rejection or {}).get('person_id')
-        user_doc = user_ref.get(transaction=transaction).to_dict() or {}
-        save_other = bool(user_doc.get('save_other_voice_profiles', True))
-        people = {
-            pid: (pref := user_ref.collection('people').document(pid), pref.get(transaction=transaction).to_dict())
-            for pid in previous | {p for p in (person_id, rejected_person_id) if p}
-        }
-        if any(not people[pid][1] for pid in (person_id, rejected_person_id) if pid):
-            raise LookupError('Person not found')
-        docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
-        evidence = (docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now)
-        updates, removed = person_updates_for_assignment(
-            *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
-        )
-        for pid, update in updates.items():
-            transaction.update(people[pid][0], update)
-        payload = _prepare_conversation_for_write(
-            {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
+        removed, relabeled = persist_assignment_effects(
+            transaction,
+            user_ref,
             uid,
-            raw.get('data_protection_level', 'standard'),
+            current_id,
+            before,
+            segments,
+            receipt,
+            resolved,
+            previous,
+            person_id=person_id,
+            is_user=is_user,
+            use_for_speech_training=use_for_speech_training,
+            evidence_source=evidence_source,
+            rejection=rejection,
+            donor_ids=(current_id, *seen),
+            bookkeeping=bookkeeping,
+            owner_segment_ids=owner_segment_ids,
         )
+        extract_learning_receipt_markers(receipt, current)
+        written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+        payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         _invalidate_client_processing(payload)
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
@@ -2699,9 +2697,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_transactional(client, assign)
+    result = run_assignment_transaction(client, assign)
     current, _, _, before = result
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
+    record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
     return result
 
 

@@ -1060,6 +1060,8 @@ def shadow_env(monkeypatch):
 
 
 def _anchored_world(monkeypatch, shadow_flag: Optional[str]) -> World:
+    # This fixture verifies legacy replacement/anchor shadow parity; refresh has its own real-store suite.
+    monkeypatch.setenv('ACTION_ITEM_REFRESH_PRESERVE_ENABLED', 'false')
     world = World(monkeypatch)
     monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
     if shadow_flag is None:

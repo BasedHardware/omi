@@ -9,6 +9,7 @@ image proxy on the project's key.
 from __future__ import annotations
 
 import logging
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -32,6 +33,9 @@ async def get_static_map(
     pins: str = Query(..., description="Pipe-separated 'lat,lng' pairs (max 50 after de-duplication)"),
     width: int = Query(..., ge=64, le=1280, description='Requested image width in px'),
     height: int = Query(..., ge=64, le=1280, description='Requested image height in px'),
+    theme: Annotated[
+        Literal['light', 'dark'], Query(description='Map colors to match the app; builds that send none get dark')
+    ] = 'dark',
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'static_map:get')),
 ):
     try:
@@ -44,7 +48,7 @@ async def get_static_map(
         raise HTTPException(status_code=400, detail=detail) from error
 
     try:
-        image = await fetch_static_map(parsed, width, height)
+        image = await fetch_static_map(parsed, width, height, theme)
     except Exception as error:
         logger.warning("Static map provider fetch failed: %s: %s", type(error).__name__, error)
         record_fallback(

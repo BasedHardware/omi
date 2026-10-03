@@ -995,8 +995,64 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
-A reprocess (smart-merge survivor refresh, user reprocess, sync update, server
-recovery) replaces the conversation's tasks. A new item whose description has the
+Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
+`utils/conversations/action_item_refresh.py`: existing documents (including Apple
+links, completion, edited descriptions/dates, folders, manual assignments and
+provenance) are untouched, even when extraction omits them. Only missing exact
+normalized identities are appended. Repeated identical descriptions pair by
+occurrence, within this conversation only; segment-anchor shadow pairs never act.
+A bounded conversation receipt (`action_item_refresh`, generation + hashed keys
+and task ids) retains aliases after edits and suppresses recreation after hard
+deletion. Soft-deleted rows also suppress recreation. **Hard deletions and original
+titles edited before the first receipt are unknowable**; a delete-time identity
+tombstone would close that historical gap, but is outside this change.
+
+Before smart-merge or sync-bridge donor cleanup, an atomic transaction transfers donor task ids
+to the survivor without delivery. Exact matches are annotated with
+`refresh_duplicate_of`; both live rows remain visible because equal descriptions
+cannot prove their completion, edits, folders or external links are interchangeable.
+Only a user-deleted survivor target (soft deletion or missing receipt target) suppresses
+a matching donor. Donor provenance and user/external fields stay on their own rows.
+Pending donor delivery markers are retired atomically on transfer, so survivor refresh
+cannot export or reschedule them. Donor deletion receipts transfer too. Existing
+duplicate external objects are not deleted or reconciled.
+Transactions read current rows before writes and retry conflicts, check the
+conversation sync revision and account generation, and never fall back to replace
+on error. Bounds are 200 task documents, 200 identity hashes and 400 alias slots;
+overflow fails closed for that conversation: further automatic additions or donor
+cleanup can remain blocked until explicitly resolved. Manual task creation and other
+conversations are unaffected; rollback restores the destructive legacy behavior and
+must not be treated as a lossless capacity recovery. No receipt pruning is introduced.
+Pure planning and database/orchestration live in separate small modules.
+
+New tasks persist atomically with the receipt, then receive vectors, then a durable
+one-time delivery claim. Exported, completed, deleted, Apple-linked or pending
+Apple tasks are not delivered. The worker rereads current rows before delivery.
+Retries before a claim recover pending tasks; **a crash after a claim or ambiguous
+provider failure can leave an unexported task**. This is at-most-once submission,
+not provider exactly-once delivery; no new outbox sweeper is introduced. Other task
+export paths and a user mutation after the final read remain outside this fence.
+
+`ACTION_ITEM_REFRESH_PRESERVE_ENABLED` is default on (blank/unset/on/true/yes/1/enabled);
+false or any unknown value restores legacy replacement and donor cleanup for future
+work. It does not undo prior transfers. Declare it on backend, backend-sync,
+backend-sync-backfill, backend-integration, pusher and backend-listen. The content-free
+`event=action_item_identity mode=preserve` log and `omi_action_item_refresh_total`
+count kept_existing, added_new, transferred_from_donor, skipped_duplicate and disabled.
+
+For N existing rows and A additions, reconciliation reads two control/conversation
+documents, N projected query results and N full rows, plus A collision reads; it writes
+A new tasks and one receipt. An empty query is billed at least one read. Pending P
+rows add P vector-payload reads, P+2 transactional claim reads, up to P claim writes,
+and up to P worker reads (plus unchanged external integration reads/writes). Donor
+transfer adds one donor conversation read and a second query/full-read pair, and
+writes one patch per donor plus the survivor receipt. Retries multiply these counts;
+cache invalidation is unchanged infrastructure. Unscoped triggers and flag-off add
+no Firestore reads. First-time scoped processing probes for existing rows, then uses
+the unchanged legacy writer/delivery order.
+
+Legacy processing (`USER_REPROCESS`, `SERVER_RECOVERY`, first processing without
+prior rows/receipt, or preservation disabled) replaces the conversation's tasks. A new item whose description has the
 same exact canonical form (width/typography normalized, ordinary text case-folded,
 sentence punctuation and whitespace collapsed; internal punctuation, numeric signs,
 numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
@@ -1357,26 +1413,25 @@ can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
-pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
-one pooled WAV under the unchanged gates, and records one outcome on
-`voice_learning_*`. `audio_files` publish during capture and at finalization;
-REST tries immediately, sockets queue a delayed attempt, and fanout completion
-schedules a bounded retry for receipt-named people lacking a usable voiceprint
-(≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
+Manual assignments normally commit bounded person/owner teaching jobs beside the receipt. The ledger (`database/speaker_learning_jobs.py`) caps 32 jobs,
+200 segment ids, 256 KiB of serialized document, five attempts, two-minute leases and seven-day eligibility. Preparation/staging failures omit bookkeeping;
+confirmed aborts involving bookkeeping get one fresh label-only transaction that recomputes current authority, evidence and owner retraction. Ambiguous commit
+failures propagate. Immediate teaching remains fail-open. Person reads reconcile each ledger once per request; live sample rates persist; missing ledgers lazily
+admit receipted legacy work once. Manual attempts claim their newest matching job; audio publish/finalization/sync/reprocess run ≤5 jobs per 45 s pass with
+30/120/600/3600 s backoff, no timers/scheduler. Authority/quality fences stay unchanged; `omi_speaker_learning_jobs_total` reports queued/retried/stored/terminal.
+Only runnable authorized work is `pending`; other failures stay `unknown`. Expiry needs later access; clients still collapse unknown/timeout into more-speech.
 
-Legacy person teaching, owner confirmations and speaker-tag preview clips use
-`utils/speaker_audio.py`. Main's manifest timestamp selection is retained.
-Authoritative spans use strict sample placement: newest selected blobs fill
-positions first, earlier overlaps fill holes, and gaps/truncation always reject.
-No padding or rounding tolerance is permitted in this policy. Filename-only
-chunks and unverified legacy/live batches use main's exact merger and trim for
-the selected window, preserving its samples and format priority. These clips
-are labelled `compatibility/uncertain_timing`, never proven `covered`.
-Pooled teaching skips unavailable windows and includes only their contributors.
-The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and
-voiceprint publication gates are unchanged. Existing voiceprints survive
-rejected attempts. No producer, entitlement or feature-flag change is included.
+Legacy person teaching, owner confirmations and speaker-tag preview clips use `utils/speaker_audio.py` through one shared pure gate in `utils/conversations/audio_placement.py`:
+strict `locate` requires a real `started_at` and trusts only a fully validating v2 manifest or a `sync:`-scoped contributor union covering the window; other clocks answer
+`untrusted_clock` and may cut provisional candidates (a legacy preview can still seed from `created_at`) only behind the mandatory transcript verification, while `unplaced`,
+`invalid_window` and `missing_origin` refuse. Because legacy provider and stored-audio clocks may differ, flagged-off `SPEAKER_TEACHING_TEXT_PLACEMENT` adds a text-anchored
+re-cut on `text_mismatch` alone — person teaching only when exactly one fully decoded ≥10 s interval failed, owner on the existing ≥5 s clip — searching ±10 s (≤32 s of audio),
+one STT pass plus one final verification (≤44 audio-seconds under a shared 30 s STT deadline that suppresses internal provider retries), and refusing ambiguous or
+segment-granular word times. Main's manifest timestamp selection is retained. Authoritative spans use strict sample placement: newest selected blobs fill positions first, earlier
+overlaps fill holes, and gaps/truncation always reject. No padding or rounding tolerance is permitted in this policy. Filename-only chunks and unverified legacy/live batches use
+main's exact merger and trim for the selected window, preserving its samples and format priority. These clips are labelled `compatibility/uncertain_timing`, never proven `covered`.
+Pooled teaching skips unavailable windows and includes only their contributors. The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and voiceprint
+publication gates are unchanged. Existing voiceprints survive rejected attempts. No entitlement or deployed flag setting changes; future manual merges rebase segments from source wall-clock origins.
 
 One session shares listing and decoded cache across all legacy pooled windows.
 Both policies have identical limits: 32 actual download attempts including SDK
@@ -1393,7 +1448,7 @@ The 30 s value bounds admission, not preemption of a running SDK request or
 native decode. A final listing request/retry can overrun it by up to 2 s;
 CPU decode and transport scheduling cannot be assigned a strict wall-time
 upper bound by this synchronous API. No elapsed-time latency was measured.
-Person teaching retains 30 s / 12 windows, one verification and one embedding.
+Person teaching retains 30 s / 12 windows and one embedding; the default-off text-placement path alone can add its bounded search and re-verification.
 
 `omi_speaker_clip_coverage_total` uses bounded `outcome`, `reason` and `caller`
 labels: `complete`, `gap`, `uncertain_timing`, `download_limit`, `decode_failed`,
@@ -1658,8 +1713,8 @@ are still needed to size that gap before any v2 production flag change.
 server-STT live capture on a fresh conversation. Existing sockets, resumed v1
 conversations, multi-channel mixes, custom/BYOK STT, offline WAL sync and
 manually merged rows always stay v1. The flag is read at the call boundary
-(`config/audio_timeline.py`); flag off means the v1 wire, storage and
-persistence behavior is byte-for-byte unchanged.
+(`config/audio_timeline.py`); flag off preserves v1 transcript coordinates and wire behavior.
+Legacy storage additionally retains known private capture windows as described below.
 
 One coordinate. A per-listen-socket integer capture sample cursor
 (`utils/audio_timeline.CaptureTimeline`) owns the order of decoded PCM16 mono.
@@ -1963,11 +2018,11 @@ active VAD gate's `remap_segments` to provider timestamps exactly as
 `make_stream_callback` did on main — the epoch translation only *attaches*
 the private capture window without rewriting `start`/`end` — so
 provider-native segment times, conversation ownership and the pusher wire
-stay byte-identical to the flag-off baseline. Only the speaker-ID clip window
-relocates onto the capture clock, which is what keeps live recognition
-working after a Modulate→Soniox-style failover (the 2026-09-25 incident: the
-legacy `first_audio + raw_start` window landed minutes before the 60 s ring
-buffer and matching returned silently for the rest of the recording). With
+stay unchanged. Known windows also persist as private `audio_capture_start` and
+`audio_capture_end` (absolute Unix seconds); unknown windows add no fields.
+These fields are absent from generated client schemas and live/pusher frames.
+Text absorption unions only overlapping or touching windows; gaps, missing windows
+or partial sentence redistribution clear them without changing text or public times. With
 the flag on, the send-map translation replaces the gate mapper; both never
 apply. Introduction detection ("My name is …") runs on the merged segments in
 clock-only mode exactly as without windows; only the duplicate embedding
@@ -1977,15 +2032,15 @@ and the matcher's covered-audio subtraction already dedupes overlapping
 re-sends. The capture-positioned `AudioRingBuffer` walks its per-write span
 ledger on `extract`, so a clip window crossing a client stall returns the
 audio on both sides of the gap, never the gap itself as audio. Multi-channel
-and custom-STT sessions keep no capture clock.
+and custom-STT sessions keep no capture clock. The counter `omi_live_audio_capture_windows_total{outcome="persisted|unavailable",reason="known_window|missing_window|merge_unavailable"}` observes committed legacy segment versions after text merging, not distinct segments or provider tokens; identity-only history rewrites are excluded. Existing provider-reject metrics explain missing mappings. Capture-window presence does not prove durable legacy chunk alignment: burst arrival and wall-clock jumps can still disagree with arrival-stamped chunks. Consumers must validate placement/coverage; no buffer-retention or v2 rollout change is part of this additive write.
 
 `LIVE_SPEAKER_CAPTURE_CLOCK` (default on, read at the call boundary in
 `config/audio_timeline.py`) is the runtime kill switch for this always-on
 speaker path: a falsy value reverts both halves of the pair together — the
 ring buffer returns to arrival-timestamped writes and clock-only segments
-attach no capture window, so the matcher uses the legacy
-`first_audio + provider-time` formula — without a deploy and without touching
-the v2 persistence or the wire. It only applies to legacy (clock-only)
+attach no capture window, disabling new private-window writes as well as capture-based matching,
+without a deploy; already-stored windows remain. The v2 persistence and wire stay unchanged.
+It only applies to legacy (clock-only)
 sessions: while a session's v2 persistence is on, its speaker queries and
 persisted offsets project capture samples onto the wall axis, so the ring
 buffer stays capture-positioned even with the switch off (arrival spans under
@@ -1994,19 +2049,18 @@ recording, not just one buffer length). Flipping it mid-session can mismatch
 the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
-Every early return before a live speaker-ID match decision — in
-`speakers._match_unmapped` and in the callers that drop a queued detection —
-emits exactly one bounded reason as the `omi_speaker_id_match_exits_total`
-counter (label = reason only) plus one log line:
-`window_outside_buffer` (the post-failover signature), `too_short`, `no_pcm`,
-`stale_generation`, `already_mapped`. Pending evidence accumulation is not a
-drop (it logs and decides on the next clip). `speaker_id_evidence` /
-`speaker_id_decision` / the exit line carry `session=<recording session id>`
-— never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise attributable:
-`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
-Owner confirmation publication reads the current conversation receipt in the pooling transaction:
-a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
+Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs;
+owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
+Automatic non-owner naming (voiceprints and introductions) requires `named_speaker_prompts_allowed`.
+Live checks once per conversation (upgrade/downgrade observed at rotation/reconnect); sync/shadow
+reuse one batch snapshot, even with zero prints. Processing/history check once per request.
+Free users load only the owner print. Owner recognition, manual edits, rejection-only card answers,
+same-stream receipt carry, and teaching from free manual tags remain available on every plan.
+Owner teaching requires current receipt consent; a card grants teaching only to its exact generation.
+Corrections retract intersecting owner contributions and rebuild from the base and remaining sources;
+legacy provenance retracts at conversation granularity. Retries retain one contribution per conversation.
+Owner and person publication fence source existence and generation; person publication rechecks consent.
+Owner clip coordination uses `sync_executor`; history competes against all usable prints, including owner.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a
@@ -2100,6 +2154,36 @@ Reconnect IDs do not partition membership. Missing explicit targets and empty li
 stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
+
+Compatibility is equality of all three fields: two locked captures are compatible,
+so locked chunks merge, append to a locked explicit target and deduplicate on retry
+exactly as unlocked ones do. A mismatch means a field differs.
+
+`SYNC_ASSIGNMENT_RECOVERY_ENABLED` defaults on (unknown/blank values disable it).
+An explicit target whose source, device or lock state differs from the upload falls
+back to compatible temporal assignment, and the target remains untouched. This
+can retain speech already present in an incompatible live row as a second conversation:
+dedupe is scoped to compatible selected rows, not cross-device transcript similarity.
+With the flag off the mismatch is rejected (`SyncAssignmentConflict`,
+`provenance_mismatch`). In both modes a stored retry anchor whose source, device or
+lock state changed after it was written is rejected rather than replaced; an
+unchanged anchor is an ordinary retry. The flag is pinned on in both runtime
+overlays for every main.py service.
+
+Classified persistence failures (`provenance_mismatch` and `redirect_cycle`
+conflicts, the recognized Firestore document-size marker, and the data-shape
+exception classes) count as strikes in the repeat-failure cap: three matching
+failures of the same content within 24 hours pause it for 24 hours, after which it
+is admitted again automatically. Nothing pauses on the first occurrence and nothing
+pauses permanently. A batch with at least one classified failure earns the strike
+even when sibling segments succeeded; differing fingerprints in one batch share the
+`persistence:mixed` token. Sibling checkpoints and partial results are kept, the
+failed-job response retains local WAL audio, and completion is never reported.
+Unknown Firestore 400s, expired transactions, contention and transport failures are
+never strikes. `sync_assignment_target` reports bounded `mismatch` tokens (`lock`
+only when lock state differs); `sync_persistence_exception` reports `firestore_error`.
+Persistence failures use provider/model `unknown` and `sync_persistence_failed`,
+preserving STT provider attribution for STT failures only.
 
 `utils/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
@@ -2255,3 +2339,23 @@ the transactional deletion fence. Late commits after a worker timeout are valid 
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+
+### Empty-title presentation and diagnosis
+
+Flutter's presentation-only fallback uses the shared transcript parity fixtures and,
+without text, the localized Recording label plus `OmiDateFormat` in local time.
+It never changes `structured.title` or the title editor's value. The existing
+`Conversation Untitled Rendered` event measures use of this clock fallback;
+compare within a build. It fires at most once per conversation and surface per
+app session (subject to the session budget), **not once per newly created
+empty-title conversation**. Old recording dates and repeated sessions prevent
+using it as a daily creation count.
+
+`recovery_structure_unavailable` means no rich structure survived, not a provider
+timeout. Provider exceptions leave `_get_structured` through the existing typed
+processing-failure retry path. The `selfheal_guard` refusal log now includes a
+bounded `structure_reason`: `transcript_decode_failed` or `no_enriched_structure`.
+Neither field contains transcript content. Do not retry unreadable blobs as
+provider outages. The existing `omi-journey-capture-fail` alert
+uses the durable terminal projection; inspect the current alert manifest for
+its 30-minute denominator and dwell rather than adding a raw-count page.

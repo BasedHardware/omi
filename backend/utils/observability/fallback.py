@@ -127,6 +127,7 @@ ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
 ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
+        'gate_unavailable',
         'timeout',
         'provider_5xx',
         'provider_429',
@@ -182,6 +183,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
 
 ALLOWED_COMPONENTS = frozenset(
     {
+        'screen_task_gate',
         'sync_dispatch',
         'pusher',
         'stt_selection',
