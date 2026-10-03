@@ -12254,24 +12254,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Glas';
-
-  @override
-  String get assistantVoice => 'Glas pomočnika';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Vaša izbira glasu je skupna mobilni in namizni aplikaciji.';
-
-  @override
-  String get readChatRepliesAloud => 'Naglas beri odgovore klepeta';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Govori le, ko to dovoli \"Glasovni odgovor\".';
-
-  @override
-  String get voicePreviewSample => 'Živjo, sem Omi. To je moj glas.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
@@ -12339,6 +12321,39 @@ class AppLocalizationsSl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Zadnjih $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Povezava ni uspela. Preverite povezavo in poskusite znova.';
+
+  @override
+  String get chatReplyServerError => 'Na naši strani je šlo nekaj narobe. Poskusite znova.';
+
+  @override
+  String get chatReplyTimeout => 'Odgovor je trajal predolgo. Poskusite znova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se in poskusite znova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Aplikacij za klepet ni bilo mogoče naložiti. Poskusite znova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas pomočnika';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaša izbira glasu je skupna mobilni in namizni aplikaciji.';
+
+  @override
+  String get readChatRepliesAloud => 'Naglas beri odgovore klepeta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori le, ko to dovoli \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Živjo, sem Omi. To je moj glas.';
 
   @override
   String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';

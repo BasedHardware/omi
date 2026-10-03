@@ -47,7 +47,13 @@ def _enable(setup_completed_url: str) -> list[str]:
     client = _RecordingClient()
     with (
         patch.object(apps_router, 'get_available_app_by_id', lambda _app_id, _uid: _external_app(setup_completed_url)),
-        patch.object(apps_router, 'get_webhook_client', lambda: client),
+        # safe_request_targets does real DNS resolution; hermetic tests must pin without network.
+        patch.object(
+            apps_router,
+            'safe_request_targets',
+            lambda url: [(url, {'headers': {}, 'extensions': {}})],
+        ),
+        patch.object(apps_router, 'get_pinned_delivery_client', lambda: client),
         patch.object(apps_router, 'is_tester', lambda _uid: False),
         patch.object(apps_router, 'enable_app', lambda _uid, _app_id: None),
         patch.object(apps_router, 'increase_app_installs_count', lambda _app_id: None),

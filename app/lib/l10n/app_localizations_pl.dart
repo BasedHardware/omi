@@ -12263,24 +12263,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Głos';
-
-  @override
-  String get assistantVoice => 'Głos asystenta';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Wybrany głos jest wspólny dla wersji mobilnej i desktopowej.';
-
-  @override
-  String get readChatRepliesAloud => 'Czytaj odpowiedzi czatu na głos';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Mówi tylko wtedy, gdy pozwala na to Odpowiedź głosowa.';
-
-  @override
-  String get voicePreviewSample => 'Cześć, jestem Omi. To jest mój głos.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
@@ -12348,6 +12330,39 @@ class AppLocalizationsPl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ostatnie $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nie można się połączyć. Sprawdź połączenie i spróbuj ponownie.';
+
+  @override
+  String get chatReplyServerError => 'Coś poszło nie tak po naszej stronie. Spróbuj ponownie.';
+
+  @override
+  String get chatReplyTimeout => 'Odpowiedź trwała zbyt długo. Spróbuj ponownie.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nie jesteś zalogowany. Zaloguj się i spróbuj ponownie.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nie udało się załadować aplikacji czatu. Spróbuj ponownie.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Głos';
+
+  @override
+  String get assistantVoice => 'Głos asystenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Wybrany głos jest wspólny dla wersji mobilnej i desktopowej.';
+
+  @override
+  String get readChatRepliesAloud => 'Czytaj odpowiedzi czatu na głos';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Mówi tylko wtedy, gdy pozwala na to Odpowiedź głosowa.';
+
+  @override
+  String get voicePreviewSample => 'Cześć, jestem Omi. To jest mój głos.';
 
   @override
   String get peopleStatsIncomplete => 'Liczby mogą być niepełne.';

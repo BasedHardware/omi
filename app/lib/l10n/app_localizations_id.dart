@@ -12236,24 +12236,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Suara';
-
-  @override
-  String get assistantVoice => 'Suara Asisten';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Bacakan balasan chat';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
-
-  @override
-  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
@@ -12321,6 +12303,39 @@ class AppLocalizationsId extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration terakhir';
   }
+
+  @override
+  String get chatReplyOffline => 'Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Terjadi kesalahan di sisi kami. Silakan coba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons memakan waktu terlalu lama. Silakan coba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum masuk. Masuk dan coba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuat aplikasi chat. Silakan coba lagi.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Asisten';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Bacakan balasan chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
 
   @override
   String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';

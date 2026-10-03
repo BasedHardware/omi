@@ -898,14 +898,15 @@ def test_convert_tools_preserves_core_tool_order():
 
 
 # ---------------------------------------------------------------------------
-# Tests: Persona app bypasses cache optimization (expected)
+# Tests: Persona app keeps the shared prompt (overlay, not replacement)
 # ---------------------------------------------------------------------------
 
 
-def test_persona_app_overrides_system_prompt():
+def test_persona_app_keeps_shared_prompt_with_overlay():
     """
-    When app.is_a_persona() is True, the entire system prompt is replaced,
-    bypassing the cache-optimized structure. This is expected behavior.
+    When app.is_a_persona() is True, the persona text is appended inside a
+    <selected_chat_app> overlay; the shared cache-optimized prompt structure
+    is preserved rather than replaced.
     """
     chat_mod = _get_chat_module()
     fn = chat_mod._get_agentic_qa_prompt
@@ -914,13 +915,20 @@ def test_persona_app_overrides_system_prompt():
 
     mock_app = MagicMock()
     mock_app.is_a_persona.return_value = True
+    mock_app.name = "CaptainPersona"
+    mock_app.description = "A pirate persona"
     mock_app.persona_prompt = "You are a pirate captain. Talk like a pirate."
     mock_app.chat_prompt = "fallback"
 
     prompt = fn("uid_test", app=mock_app)
 
-    assert prompt == "You are a pirate captain. Talk like a pirate."
-    assert "<response_style>" not in prompt, "Persona prompt should not contain cache-optimized structure"
+    assert "<response_style>" in prompt, "Persona must not drop the shared prompt structure"
+    assert "<selected_chat_app>" in prompt
+    assert (
+        "<selected_app_instructions>\nYou are a pirate captain. Talk like a pirate.\n</selected_app_instructions>"
+        in prompt
+    )
+    assert "fallback" not in prompt, "persona_prompt must win over chat_prompt"
 
 
 # ---------------------------------------------------------------------------
@@ -946,6 +954,8 @@ def test_plugin_app_does_not_break_static_prefix():
     mock_app.is_a_persona.return_value = False
     mock_app.name = "WeatherBot"
     mock_app.description = "A weather assistant"
+    mock_app.chat_prompt = "CHAT_APP_MARKER"
+    mock_app.persona_prompt = None
 
     prompt_with_app = fn("uid_test", app=mock_app)
 
