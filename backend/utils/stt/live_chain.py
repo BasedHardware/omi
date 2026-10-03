@@ -36,7 +36,8 @@ from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.recovery_state import current_recovery
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_cost_health import CostHealthUnavailable
-from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
+from utils.stt.connect_backoff import ConnectLease, connect_backoff
+from utils.stt.live_metrics import CONNECT_BACKOFF, COST_DECISION, COST_FAIL_OPEN
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -48,6 +49,13 @@ from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMI
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
 logger = logging.getLogger(__name__)
+
+
+def _connect_backoff_event(provider: str, event: str) -> None:
+    CONNECT_BACKOFF.labels(provider=provider, event=event).inc()
+
+
+connect_backoff().on_event = _connect_backoff_event
 _connect_failure_lock = threading.Lock()
 _FAILURE_EVIDENCE_SECONDS = 60.0
 _recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
@@ -288,13 +296,37 @@ async def connect_configured_chain(
         return DEFAULT_IDS.get(service.value) or service.value
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
-        attempted = True
-        if active and backup(service, target):
-            target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
-            COST_DECISION.labels(target=target_id, reason='failover').inc()
+        nonlocal origin, prior_reason, prior_capacity_subtype, primary_open
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
+        backoff_lease = connect_backoff().acquire(attempt_identity(service, target), provider=service.value)
+        if backoff_lease is None:
+            on_close()
+            primary_open |= not backup(service, target)
+            prior_reason, prior_capacity_subtype = 'circuit_open', None
+            record_fallback(
+                component='stt_selection',
+                from_mode=origin,
+                to_mode=service.value,
+                reason='circuit_open',
+                outcome='degraded',
+            )
+            return None
+        try:
+            return await _attempt_dial(service, connect, target, circuit, on_success, on_close, backoff_lease)
+        finally:
+            backoff_lease.finish()
+
+    async def _attempt_dial(
+        service: STTService,
+        connect: Connect,
+        target,
+        circuit: ProviderCircuitBreaker,
+        on_success: Callable[[], None],
+        on_close: Callable[[], None],
+        backoff_lease: ConnectLease,
+    ) -> tuple[STTSocket, STTService] | None:
+        nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
         socket = None
         recovery = current_recovery.get()
         dial_budget = recovery.dial_budget() if recovery is not None else None
@@ -303,12 +335,18 @@ async def connect_configured_chain(
             remaining = recovery.remaining() if recovery is not None else None
             return min(2.0, max(0.0, remaining)) if remaining is not None else 2.0
 
+        attempted = True
+        if active and backup(service, target):
+            target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
+            COST_DECISION.labels(target=target_id, reason='failover').inc()
         try:
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
+                backoff_lease.finish()
                 return None
             if recovery is not None and not recovery.reserve(attempt_identity(service, target), service.value):
                 on_close()
+                backoff_lease.finish()
                 return None
             token = connecting_target.set(target)
             try:
@@ -348,6 +386,7 @@ async def connect_configured_chain(
                 raise RejectedStream(death_reason)
         except BaseException as error:
             if isinstance(error, asyncio.CancelledError):
+                backoff_lease.finish()
                 if prior_outcome is not None:
                     PendingLiveFailover(
                         component='stt_selection',
@@ -365,6 +404,7 @@ async def connect_configured_chain(
                     on_close()
                 raise
             if not isinstance(error, Exception):
+                backoff_lease.finish()
                 if socket is not None:
                     try:
                         await abort_replay_socket(socket, timeout=cleanup_budget())
@@ -374,6 +414,7 @@ async def connect_configured_chain(
                     on_close()
                 raise
             if isinstance(error, TargetEngineMismatch):
+                backoff_lease.finish()
                 if prior_outcome is not None:
                     PendingLiveFailover(
                         component='stt_selection',
@@ -408,6 +449,9 @@ async def connect_configured_chain(
                 )
             reason = normalize_live_stt_reason(
                 error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
+            )
+            backoff_lease.finish(
+                refused=reason in ('provider_429', PROVIDER_RATE_LIMITED) or isinstance(error, ConnectionRefusedError)
             )
             if prior_outcome is not None:
                 PendingLiveFailover(
@@ -482,6 +526,7 @@ async def connect_configured_chain(
             origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
+        backoff_lease.finish(success=True)
         _note_connect_result(failed_provider=None)
         record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
         attach_health = getattr(socket, 'set_health_callbacks', None)

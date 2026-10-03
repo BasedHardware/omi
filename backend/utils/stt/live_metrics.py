@@ -110,6 +110,11 @@ WINDOW_EMISSION_DROPS = Counter(
     'Windowed TDT segments dropped instead of emitted at a fabricated position',
     ['reason'],
 )
+CONNECT_BACKOFF = Counter(
+    'omi_stt_connect_backoff_total',
+    'Per-target connect-refusal backoff decisions at the configured live chain connect seam',
+    ['provider', 'event'],
+)
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
 RECONNECT = Counter(
@@ -226,3 +231,5 @@ for _source in PROVIDER_FAMILIES:
         RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
 for _provider in PROVIDER_FAMILIES:
     LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
+    for _event in ('opened', 'probe', 'skipped', 'reset'):
+        CONNECT_BACKOFF.labels(provider=_provider, event=_event)

@@ -46,6 +46,7 @@ from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
 from tests.unit.test_modulate_capacity_failover import dead_receiver
 from utils.stt.soniox import SonioxRateLimitError
 from utils.stt import live_chain, live_health, live_router, recovery_state, replay_delivery, resilient_stream
+from utils.stt.connect_backoff import ConnectRefusalBackoff
 from utils.stt import soniox as soniox_module
 from utils.stt.live_failure import live_stt_terminal_reason
 from utils.stt.live_metrics import LIVE_SESSION_TERMINAL_AFTER_TEXT, REPLAY_AUDIO, REPLAY_SKIPPED
@@ -2035,5 +2036,101 @@ async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench
         for raw in soniox_raws:
             assert raw._send_task.done() and raw._recv_task.done()
             assert raw._ws.closed
+        for release in releases:
+            release()
+
+
+@pytest.mark.asyncio
+async def test_sustained_soniox_429_storm_skips_then_probe_recovers(monkeypatch, virtual_clock):
+    """A sustained post-upgrade 429 storm opens the per-target connect backoff:
+    a fresh session skips the Soniox dial entirely (no recovery dial budget is
+    spent on it), and after the short cooldown one exclusive probe re-tests
+    Soniox; its success resets the gate so the next session dials it again."""
+
+    backoff = ConnectRefusalBackoff(clock=lambda: virtual_clock.now)
+    monkeypatch.setattr(live_chain, 'connect_backoff', lambda: backoff)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    admission = window.WindowAdmission()
+    monkeypatch.setattr(window, 'admission', admission)
+    releases = [admission.acquire() for _ in range(8)]
+    window_connect = AsyncMock(side_effect=AssertionError('full window must be skipped'))
+    monkeypatch.setattr(window, 'connect_window', window_connect)
+
+    soniox_raws = []
+    soniox_dials = {}
+
+    async def soniox(callback, *args, **kwargs):
+        controller = current_recovery.get()
+        soniox_dials.setdefault(controller, []).append(1)
+        raw = SafeSonioxSocket(Transport(), callback, asyncio.get_running_loop())
+        soniox_raws.append(raw)
+        if len(soniox_dials) <= 3:
+            raw._ws.inbound.put_nowait(json.dumps({'error_code': 429, 'error_type': 'concurrency_limit_exceeded'}))
+            await until(lambda: raw.is_connection_dead)
+            assert raw.typed_death_reason == 'provider_rate_limited'
+        return raw
+
+    async def deepgram(callback, *args, **kwargs):
+        return Replacement(callback)
+
+    monkeypatch.setattr(st, 'process_audio_soniox', soniox)
+    monkeypatch.setattr(st, 'process_audio_dg', deepgram)
+
+    def fresh_receiver():
+        actual = dead_receiver()
+        websocket = actual.host.request.websocket
+        websocket.client_state = WebSocketState.CONNECTED
+        websocket.application_state = WebSocketState.CONNECTED
+        actual.recovery.mark_attempted('modulate-velma-2')
+        return actual
+
+    actuals = [fresh_receiver() for _ in range(6)]
+    try:
+        for actual in actuals[:3]:
+            assert await actual._failover_stt_socket()
+            assert actual.host.stt_service == st.STTService.deepgram
+            assert len(soniox_dials[actual.recovery]) == 1
+            assert actual.recovery.dial_attempts == 3
+
+        skipped = actuals[3]
+        assert await skipped._failover_stt_socket()
+        assert skipped.host.stt_service == st.STTService.deepgram
+        assert skipped.recovery not in soniox_dials
+        assert skipped.recovery.dial_attempts == 2
+        assert skipped.recovery.attempted_targets == {'modulate-velma-2', 'deepgram'}
+
+        virtual_clock.now += 1.0
+        still_skipped = actuals[4]
+        assert await still_skipped._failover_stt_socket()
+        assert still_skipped.host.stt_service == st.STTService.deepgram
+        assert still_skipped.recovery not in soniox_dials
+
+        virtual_clock.now += 1.0
+        probe = actuals[5]
+        assert await probe._failover_stt_socket()
+        assert probe.host.stt_service == st.STTService.soniox
+        assert len(soniox_dials[probe.recovery]) == 1
+
+        recovered = fresh_receiver()
+        actuals.append(recovered)
+        assert await recovered._failover_stt_socket()
+        assert recovered.host.stt_service == st.STTService.soniox
+        assert len(soniox_dials[recovered.recovery]) == 1
+        for actual in actuals:
+            assert not actual.host.state.stt_terminal_failure
+            actual.host.request.websocket.close.assert_not_awaited()
+    finally:
+        for actual in actuals:
+            if actual.stt_socket is not None:
+                actual.stt_socket.finish()
+            await actual._drain_stt_sockets()
+        await stop(soniox_raws)
         for release in releases:
             release()

@@ -11,7 +11,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
-from utils.stt import live_failure, live_chain, live_health, live_session, live_router, streaming as st
+from utils.stt import (
+    connect_backoff as connect_backoff_module,
+    live_failure,
+    live_chain,
+    live_health,
+    live_session,
+    live_router,
+    streaming as st,
+)
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.live_signal import PROVIDER_FAILURE_REASONS, provider_observation
 from utils.stt.provider_resilience import ProviderCircuitBreaker
@@ -37,6 +45,7 @@ def controls(monkeypatch):
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
+    connect_backoff_module.connect_backoff().reset()
 
 
 def test_cost_capability_and_stable_ties():

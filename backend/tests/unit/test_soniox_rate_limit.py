@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from utils.stt import live_chain, live_router
+from utils.stt import connect_backoff, live_chain, live_router
 from routers.listen.receiver import ListenReceiver
 from utils.stt.soniox import (
     SONIOX_CONNECT_RETRY_DEADLINE_SECONDS,
@@ -25,6 +25,11 @@ from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.recovery_state import LiveRecoveryController
 from utils.stt import streaming
 from utils.stt.streaming import STTService, _classify_provider_account_rejection, _fallback_failure_reason
+
+
+@pytest.fixture(autouse=True)
+def fresh_connect_backoff():
+    connect_backoff.connect_backoff().reset()
 
 
 class Fake429(Exception):
