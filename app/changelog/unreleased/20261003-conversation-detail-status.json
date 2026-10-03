@@ -1,0 +1,3 @@
+{
+  "change": "Conversation pages show when the transcript is loading, failed to load, or is still being processed, show progress and a result for Reprocess, and report failed edits instead of silently undoing them."
+}
