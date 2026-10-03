@@ -37,9 +37,7 @@ class ChatAppsDrawer extends StatelessWidget {
     final l10n = context.l10n;
     return Drawer(
       backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
           builder: (context, messageProvider, appProvider, child) {

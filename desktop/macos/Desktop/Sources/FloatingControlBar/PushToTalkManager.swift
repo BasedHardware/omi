@@ -3582,7 +3582,7 @@ class PushToTalkManager: ObservableObject {
         area: "voice_typing", from: "llm_polish", to: "local_format", reason: "policy", outcome: .recovered)
     }
     if !text.isEmpty, polishPolicy == .required, allowNetwork, NetworkReachability.shared.isOnline,
-      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, workload: .interactive)
+      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, lane: .dictation, workload: .interactive)
     {
       do {
         if let polished = try await DictationPolisher.polish(text, context: context, using: client) {

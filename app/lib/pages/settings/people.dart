@@ -154,11 +154,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                         ? null
                         // Not awaited: the button should not spin behind the confirmation.
                         : () {
-                            confirmAndDeletePeople(
-                              context,
-                              provider,
-                              selected,
-                            );
+                            confirmAndDeletePeople(context, provider, selected);
                           },
                   ),
                 ),
@@ -188,10 +184,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             ),
         ],
         trailing: [
-          if (!selecting) ...[
-            const SizedBox(height: OmiSpacing.lg),
-            const VoiceProfileSettingsSection(),
-          ],
+          if (!selecting) ...[const SizedBox(height: OmiSpacing.lg), const VoiceProfileSettingsSection()],
         ],
       ),
     );

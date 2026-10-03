@@ -23,12 +23,8 @@ Widget host(int count, {bool reduced = false}) => MaterialApp(
 double opacity(WidgetTester tester, String key) =>
     tester.widget<Opacity>(find.descendant(of: find.byKey(Key(key)), matching: find.byType(Opacity)).first).opacity;
 
-ServerConversation conversation(String id, DateTime createdAt, {bool discarded = false}) => ServerConversation(
-      id: id,
-      createdAt: createdAt,
-      structured: Structured('', ''),
-      discarded: discarded,
-    );
+ServerConversation conversation(String id, DateTime createdAt, {bool discarded = false}) =>
+    ServerConversation(id: id, createdAt: createdAt, structured: Structured('', ''), discarded: discarded);
 
 void main() {
   testWidgets('V3 text, count-up and line movement share one bounded entrance', (tester) async {
