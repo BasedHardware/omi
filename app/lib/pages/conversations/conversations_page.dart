@@ -81,7 +81,8 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) => !succeeded && currentRequestKey == requestKey;
+}) =>
+    !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -93,17 +94,18 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) => [
-  query,
-  folderId ?? '',
-  speakerId ?? '',
-  startDate?.toIso8601String() ?? '',
-  endDate?.toIso8601String() ?? '',
-  starredOnly,
-  discarded,
-  shortOnly,
-  shortThreshold,
-].join('|');
+}) =>
+    [
+      query,
+      folderId ?? '',
+      speakerId ?? '',
+      startDate?.toIso8601String() ?? '',
+      endDate?.toIso8601String() ?? '',
+      starredOnly,
+      discarded,
+      shortOnly,
+      shortThreshold,
+    ].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -528,8 +530,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings =
-            convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
@@ -550,28 +551,26 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
         };
         final apiPhase = snapshot.apiViewPhase;
-        final bool showTypedStatus =
-            apiPhase == ApiViewPhase.error ||
+        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
             apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton =
-            isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
         final bool showCaptureGaps = _captureGapsEligible(convoProvider) && !convoProvider.isSelectionModeActive;
-        final captureGapsByDate = showCaptureGaps
-            ? _captureGaps.gapsByDate
-            : const <DateTime, List<CalendarCaptureGap>>{};
+        final captureGapsByDate =
+            showCaptureGaps ? _captureGaps.gapsByDate : const <DateTime, List<CalendarCaptureGap>>{};
         final mergedDates = <DateTime>{
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           if (showCaptureGaps) ...captureGapsByDate.keys,
           ...processingByDate.keys,
-        }.toList()..sort((a, b) => b.compareTo(a));
+        }.toList()
+          ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,

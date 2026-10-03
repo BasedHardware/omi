@@ -30,13 +30,8 @@ class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
 
-  const FoundDevices({
-    super.key,
-    required this.goNext,
-    required this.isFromOnboarding,
-    this.onRescan,
-    this.showStatus = true,
-  });
+  const FoundDevices(
+      {super.key, required this.goNext, required this.isFromOnboarding, this.onRescan, this.showStatus = true});
 
   /// Draws the "Searching for devices" / "N devices found" line. Off once a scan has ended with
   /// nothing found, where the page shows its own empty state instead.
@@ -314,7 +309,10 @@ class _FoundDevicesState extends State<FoundDevices> {
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 )
               else
-                Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                Text(
+                  context.l10n.pairingSuccessful,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
               if (provider.isConnected)
@@ -343,10 +341,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                           color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
                         ),
                         const SizedBox(width: OmiSpacing.xxs),
-                        Text(
-                          '${provider.batteryPercentage}%',
-                          style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
-                        ),
+                        Text('${provider.batteryPercentage}%',
+                            style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
