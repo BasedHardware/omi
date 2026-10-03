@@ -14,22 +14,19 @@ final class AssistantVoiceStoreTests: XCTestCase {
     ],
     defaultVoiceId: "Charon")
 
-  private var fixture: RuntimeOwnerAuthorityTestFixture!
+  private let fixture = RuntimeOwnerAuthorityTestFixture()
 
   override func setUp() async throws {
-    try await super.setUp()
-    fixture = RuntimeOwnerAuthorityTestFixture()
     await fixture.establish(authOwnerID: "owner-1")
   }
 
   override func tearDown() async throws {
     await fixture.restore()
-    try await super.tearDown()
   }
 
-  private func makeDefaults() -> UserDefaults {
+  private func makeDefaults() throws -> UserDefaults {
     let name = "AssistantVoiceStoreTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: name)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
     addTeardownBlock { defaults.removePersistentDomain(forName: name) }
     return defaults
   }
@@ -41,20 +38,20 @@ final class AssistantVoiceStoreTests: XCTestCase {
     defaults: UserDefaults? = nil,
     notificationCenter: NotificationCenter = NotificationCenter(),
     observeOwnerChanges: Bool = false
-  ) -> AssistantVoiceStore {
+  ) throws -> AssistantVoiceStore {
     AssistantVoiceStore(
       fetchCatalog: { _ in catalog },
       fetchPreference: { _ in AssistantVoicePreferenceResponse(voiceId: preference) },
       savePreference: { voiceID, _ in
         try await (saveHandler ?? { AssistantVoicePreferenceResponse(voiceId: $0) })(voiceID)
       },
-      defaults: defaults ?? makeDefaults(),
+      defaults: try defaults ?? makeDefaults(),
       notificationCenter: notificationCenter,
       observeOwnerChanges: observeOwnerChanges)
   }
 
-  func testRefreshAppliesRemoteSelectionAndCatalog() async {
-    let store = makeStore(preference: "Kore")
+  func testRefreshAppliesRemoteSelectionAndCatalog() async throws {
+    let store = try makeStore(preference: "Kore")
     await store.refresh()
     XCTAssertEqual(store.selectedVoiceID, "Kore")
     XCTAssertEqual(store.defaultVoiceID, "Charon")
@@ -62,7 +59,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertNil(store.lastError)
   }
 
-  func testSignedOutOwnerPerformsNoRequest() async {
+  func testSignedOutOwnerPerformsNoRequest() async throws {
     await fixture.establish(authOwnerID: nil)
     var requestCount = 0
     let store = AssistantVoiceStore(
@@ -78,7 +75,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
         requestCount += 1
         return AssistantVoicePreferenceResponse(voiceId: "Kore")
       },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
     await store.refresh()
@@ -87,16 +84,16 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertEqual(store.currentVoiceID, AssistantVoiceStore.defaultVoiceID)
   }
 
-  func testSaveAppliesServerAckNotRequestedID() async {
-    let store = makeStore(
+  func testSaveAppliesServerAckNotRequestedID() async throws {
+    let store = try makeStore(
       saveHandler: { _ in AssistantVoicePreferenceResponse(voiceId: "Charon") })
     await store.save(voiceID: "MadeUpVoice")
     XCTAssertEqual(store.selectedVoiceID, "Charon")
     XCTAssertFalse(store.isSaving)
   }
 
-  func testFailedSaveRetainsPreviousSelection() async {
-    let store = makeStore(
+  func testFailedSaveRetainsPreviousSelection() async throws {
+    let store = try makeStore(
       preference: "Kore",
       saveHandler: { _ in throw APIError.unauthorized })
     await store.refresh()
@@ -106,23 +103,23 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertNotNil(store.lastError)
   }
 
-  func testSelectionIsOwnerScopedInLocalCache() async {
-    let defaults = makeDefaults()
-    let store = makeStore(preference: "Kore", defaults: defaults)
+  func testSelectionIsOwnerScopedInLocalCache() async throws {
+    let defaults = try makeDefaults()
+    let store = try makeStore(preference: "Kore", defaults: defaults)
     await store.refresh()
-    XCTAssertEqual(defaults.string(forKey: "assistantVoiceID.owner-1"), "Kore")
-    XCTAssertNil(defaults.string(forKey: "assistantVoiceID.owner-2"))
+    XCTAssertEqual(defaults.string(forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-1")), "Kore")
+    XCTAssertNil(defaults.string(forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-2")))
   }
 
-  func testRemoteSelectionOutsideCatalogResolvesDefault() async {
-    let store = makeStore(preference: "GhostVoice")
+  func testRemoteSelectionOutsideCatalogResolvesDefault() async throws {
+    let store = try makeStore(preference: "GhostVoice")
     await store.refresh()
     XCTAssertEqual(store.selectedVoiceID, "Charon")
     XCTAssertEqual(store.currentVoiceID, "Charon")
   }
 
-  func testCatalogDuplicateIDsAreDedupedForStableListKeys() async {
-    let store = makeStore(
+  func testCatalogDuplicateIDsAreDedupedForStableListKeys() async throws {
+    let store = try makeStore(
       catalog: AssistantVoiceCatalogResponse(
         voices: [
           AssistantVoiceEntry(id: "Charon", name: "Charon"),
@@ -135,15 +132,15 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertEqual(store.catalog.last?.name, "Kore Renamed")
   }
 
-  func testCurrentVoiceIDDropsPreviousOwnerDuringAuthTransition() async {
-    let store = makeStore(preference: "Kore")
+  func testCurrentVoiceIDDropsPreviousOwnerDuringAuthTransition() async throws {
+    let store = try makeStore(preference: "Kore")
     await store.refresh()
     XCTAssertEqual(store.currentVoiceID, "Kore")
     await fixture.establish(authOwnerID: nil)
     XCTAssertEqual(store.currentVoiceID, AssistantVoiceStore.defaultVoiceID)
   }
 
-  func testStaleFetchCallbackCannotOverwriteNewerSelection() async {
+  func testStaleFetchCallbackCannotOverwriteNewerSelection() async throws {
     let gate = AsyncGate()
     let store = AssistantVoiceStore(
       fetchCatalog: { _ in
@@ -152,7 +149,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
       },
       fetchPreference: { _ in AssistantVoicePreferenceResponse(voiceId: "Kore") },
       savePreference: { voiceID, _ in AssistantVoicePreferenceResponse(voiceId: voiceID) },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
 
@@ -164,7 +161,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertEqual(store.selectedVoiceID, "Puck")
   }
 
-  func testSaveDuringRefreshClearsLoadingFlag() async {
+  func testSaveDuringRefreshClearsLoadingFlag() async throws {
     let gate = AsyncGate()
     let store = AssistantVoiceStore(
       fetchCatalog: { _ in
@@ -173,7 +170,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
       },
       fetchPreference: { _ in AssistantVoicePreferenceResponse(voiceId: "Kore") },
       savePreference: { voiceID, _ in AssistantVoicePreferenceResponse(voiceId: voiceID) },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
 
@@ -187,7 +184,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertFalse(store.isLoading)
   }
 
-  func testRefreshDuringSaveDoesNotSupersedeOrStrandFlags() async {
+  func testRefreshDuringSaveDoesNotSupersedeOrStrandFlags() async throws {
     let gate = AsyncGate()
     let store = AssistantVoiceStore(
       fetchCatalog: { _ in
@@ -199,7 +196,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
         await gate.wait()
         return AssistantVoicePreferenceResponse(voiceId: voiceID)
       },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
 
@@ -223,7 +220,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
         return AssistantVoiceStoreTests.catalogResponse
       },
       fetchPreference: { _ in AssistantVoicePreferenceResponse(voiceId: "Kore") },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
 
@@ -246,7 +243,7 @@ final class AssistantVoiceStoreTests: XCTestCase {
         return AssistantVoiceStoreTests.catalogResponse
       },
       fetchPreference: { _ in AssistantVoicePreferenceResponse(voiceId: "Kore") },
-      defaults: makeDefaults(),
+      defaults: try makeDefaults(),
       notificationCenter: NotificationCenter(),
       observeOwnerChanges: false)
 
@@ -261,13 +258,13 @@ final class AssistantVoiceStoreTests: XCTestCase {
     XCTAssertEqual(capturedSnapshots.map(\.ownerID), ["owner-1"])
   }
 
-  func testEmptyRemotePreferenceResolvesDefault() async {
-    let store = makeStore(preference: "")
+  func testEmptyRemotePreferenceResolvesDefault() async throws {
+    let store = try makeStore(preference: "")
     await store.refresh()
     XCTAssertEqual(store.selectedVoiceID, "Charon")
   }
 
-  func testSelectionChangePostsHandoffNotificationOnce() async {
+  func testSelectionChangePostsHandoffNotificationOnce() async throws {
     let center = NotificationCenter()
     let posts = MutableBox(0)
     let observer = center.addObserver(forName: .assistantVoiceDidChange, object: nil, queue: nil) { _ in
@@ -275,15 +272,15 @@ final class AssistantVoiceStoreTests: XCTestCase {
     }
     defer { center.removeObserver(observer) }
 
-    let store = makeStore(preference: "Kore", notificationCenter: center)
+    let store = try makeStore(preference: "Kore", notificationCenter: center)
     await store.refresh()
     XCTAssertEqual(posts.value, 1)
     await store.refresh()
     XCTAssertEqual(posts.value, 1)
   }
 
-  func testOwnerChangeResetsAndRefreshesForNewAccount() async {
-    let defaults = makeDefaults()
+  func testOwnerChangeResetsAndRefreshesForNewAccount() async throws {
+    let defaults = try makeDefaults()
     let currentOwner = MutableBox("owner-1")
     let store = AssistantVoiceStore(
       fetchCatalog: { _ in AssistantVoiceStoreTests.catalogResponse },
@@ -298,14 +295,14 @@ final class AssistantVoiceStoreTests: XCTestCase {
       observeOwnerChanges: false)
     await store.refresh()
     XCTAssertEqual(store.selectedVoiceID, "Kore")
-    XCTAssertEqual(defaults.string(forKey: "assistantVoiceID.owner-1"), "Kore")
+    XCTAssertEqual(defaults.string(forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-1")), "Kore")
 
     await fixture.establish(authOwnerID: "owner-2")
     currentOwner.value = "owner-2"
     await store.handleRuntimeOwnerDidChange()
     XCTAssertEqual(store.selectedVoiceID, "Puck")
-    XCTAssertEqual(defaults.string(forKey: "assistantVoiceID.owner-2"), "Puck")
-    XCTAssertEqual(defaults.string(forKey: "assistantVoiceID.owner-1"), "Kore")
+    XCTAssertEqual(defaults.string(forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-2")), "Puck")
+    XCTAssertEqual(defaults.string(forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-1")), "Kore")
   }
 }
 

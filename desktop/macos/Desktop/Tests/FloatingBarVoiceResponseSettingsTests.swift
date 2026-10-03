@@ -41,11 +41,11 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
     XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
   }
 
-  func testLegacyOpenAIVoiceDefaultsKeyIsIgnored() {
-    let suite = UserDefaults(suiteName: "AssistantVoiceStoreTests.legacy")!
+  func testLegacyOpenAIVoiceDefaultsKeyIsIgnored() throws {
+    let suite = try XCTUnwrap(UserDefaults(suiteName: "AssistantVoiceStoreTests.legacy"))
     defer { suite.removePersistentDomain(forName: "AssistantVoiceStoreTests.legacy") }
-    suite.set("openai:shimmer", forKey: "shortcut_selectedVoiceID")
-    suite.set("Puck", forKey: "assistantVoiceID.owner-1")
+    suite.set("openai:shimmer", forKey: ScopedDefaultsKey.legacyShortcutSelectedVoiceID)
+    suite.set("Puck", forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-1"))
     let store = AssistantVoiceStore(
       fetchCatalog: { _ in AssistantVoiceCatalogResponse(voices: [], defaultVoiceId: "Charon") },
       fetchPreference: { _ in throw APIError.invalidResponse },

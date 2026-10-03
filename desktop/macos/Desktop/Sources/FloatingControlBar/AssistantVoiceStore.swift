@@ -105,9 +105,9 @@ final class AssistantVoiceStore: ObservableObject {
     return selectedVoiceID
   }
 
-  private var cacheKey: String? {
+  private var cacheKey: ScopedDefaultsKey? {
     guard let ownerID = ownerIDProvider() else { return nil }
-    return "assistantVoiceID.\(ownerID)"
+    return .assistantVoiceID(ownerID: ownerID)
   }
 
   private func applyCachedSelection() {
