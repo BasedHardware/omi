@@ -57,6 +57,60 @@ void main() {
       expect(find.text('Clear All'), findsNothing);
       expect(tester.takeException(), isNull);
     });
+    testWidgets('clear actions remain readable and reachable on a narrow French sheet in $brightness', (tester) async {
+      final previous = OmiColors.active;
+      OmiColors.active = OmiColors.forBrightness(brightness);
+      addTearDown(() => OmiColors.active = previous);
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('fr'),
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: Padding(
+          padding: const EdgeInsets.all(OmiSpacing.xl),
+          child: OfflineSyncStorageSheet(
+            syncedCount: 2,
+            pendingCount: 3,
+            totalCount: 5,
+            onClearSynced: () {},
+            onClearPending: () {},
+            onClearAll: () {},
+          ),
+        ))),
+      ));
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(OfflineSyncStorageSheet));
+      final l10n = AppLocalizations.of(context);
+      expect(find.text(l10n.synced), findsOneWidget);
+      expect(find.text(l10n.pending), findsOneWidget);
+      final clear = find.text(l10n.clear);
+      expect(clear, findsNWidgets(2));
+      for (final element in clear.evaluate()) {
+        final text = element.widget as Text;
+        final target = element.findAncestorWidgetOfExactType<Container>()!;
+        final fill = (target.decoration! as BoxDecoration).color!;
+        expect(contrast(text.style!.color!, Color.alphaBlend(fill, OmiColors.surface2)), greaterThanOrEqualTo(4.5));
+        final finder = find.ancestor(of: find.byWidget(text), matching: find.byType(OmiButton)).first;
+        await tester.ensureVisible(finder);
+        await tester.pumpAndSettle();
+        final bounds = tester.getRect(finder);
+        expect(bounds.width, greaterThanOrEqualTo(kOmiMinTapTarget));
+        expect(bounds.height, greaterThanOrEqualTo(kOmiMinTapTarget));
+        expect(finder.hitTestable(), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Home empty state stays visible in $brightness', (tester) async {
       final previous = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);

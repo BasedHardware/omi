@@ -49,7 +49,6 @@ class OfflineSyncStorageSheet extends StatelessWidget {
             count: pendingCount,
             onClear: pendingCount > 0 ? onClearPending : null,
             clearLabel: context.l10n.clear,
-            isWarning: true,
           ),
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
@@ -69,7 +68,6 @@ class _StorageRow extends StatelessWidget {
   final int count;
   final VoidCallback? onClear;
   final String clearLabel;
-  final bool isWarning;
 
   const _StorageRow({
     required this.icon,
@@ -79,7 +77,6 @@ class _StorageRow extends StatelessWidget {
     required this.count,
     required this.onClear,
     required this.clearLabel,
-    this.isWarning = false,
   });
 
   @override
@@ -87,67 +84,67 @@ class _StorageRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: OmiRadius.mdAll,
+      child: LayoutBuilder(builder: (context, constraints) {
+        final actionBelow = constraints.maxWidth < 280 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
+        final clear = OmiButton.secondary(
+          label: clearLabel,
+          size: OmiButtonSize.compact,
+          onPressed: onClear,
+        );
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: OmiRadius.mdAll,
+              ),
+              child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
             ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                        borderRadius: OmiRadius.smAll,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                        ),
                       ),
-                      child: Text(
-                        '$count',
-                        style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: OmiColors.textPrimary.withValues(alpha: 0.08),
+                          borderRadius: OmiRadius.smAll,
+                        ),
+                        child: Text(
+                          '$count',
+                          style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
-              ],
-            ),
-          ),
-          if (onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: OmiRadius.pillAll,
-                ),
-                child: Text(
-                  clearLabel,
-                  style: OmiType.footnote.copyWith(
-                    color: isWarning ? OmiColors.warning : OmiColors.danger,
-                    fontWeight: FontWeight.w500,
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 3),
+                  Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
+                ],
               ),
             ),
-        ],
-      ),
+            if (onClear != null && !actionBelow) clear,
+          ]),
+          if (onClear != null && actionBelow)
+            Padding(
+              padding: const EdgeInsets.only(top: OmiSpacing.xs),
+              child: Align(alignment: AlignmentDirectional.centerEnd, child: clear),
+            ),
+        ]);
+      }),
     );
   }
 }

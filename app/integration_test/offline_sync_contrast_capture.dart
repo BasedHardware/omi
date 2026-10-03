@@ -22,6 +22,7 @@ class _ContrastCapture extends StatefulWidget {
 
 class _ContrastCaptureState extends State<_ContrastCapture> {
   Brightness _brightness = Brightness.light;
+  bool _hasRecordings = false;
   @override
   Widget build(BuildContext context) {
     OmiColors.active = OmiColors.forBrightness(_brightness);
@@ -42,9 +43,9 @@ class _ContrastCaptureState extends State<_ContrastCapture> {
                       title: context.l10n.manageStorage,
                       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
                       builder: (_) => OfflineSyncStorageSheet(
-                        syncedCount: 0,
-                        pendingCount: 0,
-                        totalCount: 0,
+                        syncedCount: _hasRecordings ? 2 : 0,
+                        pendingCount: _hasRecordings ? 3 : 0,
+                        totalCount: _hasRecordings ? 5 : 0,
                         onClearSynced: () {},
                         onClearPending: () {},
                         onClearAll: () {},
@@ -55,6 +56,10 @@ class _ContrastCaptureState extends State<_ContrastCapture> {
                     onPressed: () => setState(
                         () => _brightness = _brightness == Brightness.light ? Brightness.dark : Brightness.light),
                     child: const Text('Toggle appearance'),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _hasRecordings = !_hasRecordings),
+                    child: const Text('Toggle sample counts'),
                   ),
                   const SizedBox(height: 24),
                 ]),
