@@ -12305,6 +12305,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
+
+  @override
   String get reprocessingConversationProgress => 'Memproses ulang percakapan…';
 
   @override

@@ -12108,6 +12108,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
+
+  @override
   String get reprocessingConversationProgress => '대화를 다시 처리하는 중…';
 
   @override

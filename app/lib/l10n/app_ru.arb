@@ -3836,6 +3836,7 @@
     "diagnosticsLongestGap": "Самый долгий перерыв",
     "diagnosticsSincePairingSummary": "С момента сопряжения: обрывов — {drops}, неудачных подключений — {failed}.",
     "diagnosticsLastDuration": "Последние {duration}",
+    "peopleStatsIncomplete": "Подсчёты могут быть неполными.",
     "reprocessingConversationProgress": "Повторная обработка разговора…",
     "conversationReprocessed": "Разговор обновлён",
     "loadingTranscript": "Загрузка расшифровки…",

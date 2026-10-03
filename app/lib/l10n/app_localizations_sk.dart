@@ -12289,6 +12289,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
+
+  @override
   String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
 
   @override

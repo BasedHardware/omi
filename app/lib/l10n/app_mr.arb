@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
     "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
     "diagnosticsLastDuration": "गेले {duration}",
+    "peopleStatsIncomplete": "मोजणी अपूर्ण असू शकते.",
     "reprocessingConversationProgress": "संभाषण पुन्हा प्रक्रिया होत आहे…",
     "conversationReprocessed": "संभाषण अपडेट झाले",
     "loadingTranscript": "उतारा लोड होत आहे…",

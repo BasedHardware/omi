@@ -12338,6 +12338,9 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Бройките може да са непълни.';
+
+  @override
   String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';
 
   @override

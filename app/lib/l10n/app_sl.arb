@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Najdaljši premor",
     "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
+    "peopleStatsIncomplete": "Števila so lahko nepopolna.",
     "reprocessingConversationProgress": "Ponovna obdelava pogovora…",
     "conversationReprocessed": "Pogovor posodobljen",
     "loadingTranscript": "Nalaganje prepisa…",

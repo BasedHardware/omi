@@ -12276,6 +12276,9 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'गिनती अधूरी हो सकती है।';
+
+  @override
   String get reprocessingConversationProgress => 'बातचीत फिर से प्रोसेस हो रही है…';
 
   @override

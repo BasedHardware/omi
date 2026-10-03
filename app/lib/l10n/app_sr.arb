@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Најдужи прекид",
     "diagnosticsSincePairingSummary": "Од упаривања: прекида {drops}, неуспелих веза {failed}.",
     "diagnosticsLastDuration": "Последњих {duration}",
+    "peopleStatsIncomplete": "Бројеви можда нису потпуни.",
     "reprocessingConversationProgress": "Поновна обрада разговора…",
     "conversationReprocessed": "Разговор је ажуриран",
     "loadingTranscript": "Учитавање транскрипта…",

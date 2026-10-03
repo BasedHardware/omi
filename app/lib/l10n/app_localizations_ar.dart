@@ -12222,6 +12222,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
+
+  @override
   String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';
 
   @override

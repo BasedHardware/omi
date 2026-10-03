@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "أطول انقطاع",
     "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
     "diagnosticsLastDuration": "آخر {duration}",
+    "peopleStatsIncomplete": "قد تكون الأعداد غير مكتملة.",
     "reprocessingConversationProgress": "جارٍ إعادة معالجة المحادثة…",
     "conversationReprocessed": "تم تحديث المحادثة",
     "loadingTranscript": "جارٍ تحميل النص…",

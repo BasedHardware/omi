@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
     "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
     "diagnosticsLastDuration": "শেষ {duration}",
+    "peopleStatsIncomplete": "সংখ্যাগুলো অসম্পূর্ণ হতে পারে।",
     "reprocessingConversationProgress": "কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…",
     "conversationReprocessed": "কথোপকথন আপডেট হয়েছে",
     "loadingTranscript": "ট্রান্সক্রিপ্ট লোড হচ্ছে…",

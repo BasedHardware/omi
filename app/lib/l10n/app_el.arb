@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
     "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
     "diagnosticsLastDuration": "Τελευταία {duration}",
+    "peopleStatsIncomplete": "Οι μετρήσεις μπορεί να είναι ελλιπείς.",
     "reprocessingConversationProgress": "Γίνεται επανεπεξεργασία της συνομιλίας…",
     "conversationReprocessed": "Η συνομιλία ενημερώθηκε",
     "loadingTranscript": "Φόρτωση απομαγνητοφώνησης…",

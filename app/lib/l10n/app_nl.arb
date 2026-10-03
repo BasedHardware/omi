@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Langste onderbreking",
     "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
     "diagnosticsLastDuration": "Laatste {duration}",
+    "peopleStatsIncomplete": "De aantallen zijn mogelijk onvolledig.",
     "reprocessingConversationProgress": "Gesprek wordt opnieuw verwerkt…",
     "conversationReprocessed": "Gesprek bijgewerkt",
     "loadingTranscript": "Transcript laden…",

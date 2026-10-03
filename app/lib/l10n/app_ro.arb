@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
     "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
     "diagnosticsLastDuration": "Ultimele {duration}",
+    "peopleStatsIncomplete": "Numărătorile pot fi incomplete.",
     "reprocessingConversationProgress": "Se reprocesează conversația…",
     "conversationReprocessed": "Conversație actualizată",
     "loadingTranscript": "Se încarcă transcrierea…",

@@ -12377,6 +12377,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
   String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';
 
   @override

@@ -12353,6 +12353,9 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Бројките може да се нецелосни.';
+
+  @override
   String get reprocessingConversationProgress => 'Разговорот повторно се обработува…';
 
   @override

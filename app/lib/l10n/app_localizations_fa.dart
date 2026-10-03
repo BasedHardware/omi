@@ -12291,6 +12291,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
   String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';
 
   @override

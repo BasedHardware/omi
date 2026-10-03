@@ -12341,6 +12341,9 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'A számok hiányosak lehetnek.';
+
+  @override
   String get reprocessingConversationProgress => 'A beszélgetés újrafeldolgozása…';
 
   @override

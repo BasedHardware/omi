@@ -12389,6 +12389,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Die Angaben können unvollständig sein.';
+
+  @override
   String get reprocessingConversationProgress => 'Gespräch wird neu verarbeitet…';
 
   @override

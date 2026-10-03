@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Längsta uppehåll",
     "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
     "diagnosticsLastDuration": "Senaste {duration}",
+    "peopleStatsIncomplete": "Antalen kan vara ofullständiga.",
     "reprocessingConversationProgress": "Bearbetar samtalet igen…",
     "conversationReprocessed": "Samtalet har uppdaterats",
     "loadingTranscript": "Läser in transkription…",

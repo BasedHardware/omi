@@ -12348,6 +12348,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
+
+  @override
   String get reprocessingConversationProgress => 'Se reprocesează conversația…';
 
   @override

@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Längste Lücke",
     "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
     "diagnosticsLastDuration": "Letzte {duration}",
+    "peopleStatsIncomplete": "Die Angaben können unvollständig sein.",
     "reprocessingConversationProgress": "Gespräch wird neu verarbeitet…",
     "conversationReprocessed": "Gespräch aktualisiert",
     "loadingTranscript": "Transkript wird geladen…",

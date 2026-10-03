@@ -12297,6 +12297,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
   String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
 
   @override

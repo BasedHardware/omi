@@ -12306,6 +12306,9 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
+
+  @override
   String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';
 
   @override

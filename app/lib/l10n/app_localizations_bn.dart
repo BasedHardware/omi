@@ -12293,6 +12293,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
   String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';
 
   @override

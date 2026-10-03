@@ -3897,6 +3897,7 @@
     "diagnosticsLongestGap": "Leghosszabb kiesés",
     "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
     "diagnosticsLastDuration": "Utolsó {duration}",
+    "peopleStatsIncomplete": "A számok hiányosak lehetnek.",
     "reprocessingConversationProgress": "A beszélgetés újrafeldolgozása…",
     "conversationReprocessed": "A beszélgetés frissítve",
     "loadingTranscript": "Átirat betöltése…",

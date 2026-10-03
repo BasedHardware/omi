@@ -12325,6 +12325,9 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
   String get reprocessingConversationProgress => 'Паўторная апрацоўка размовы…';
 
   @override

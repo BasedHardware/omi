@@ -12104,6 +12104,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
   String get reprocessingConversationProgress => '会話を再処理しています…';
 
   @override

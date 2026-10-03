@@ -12311,6 +12311,9 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'As contagens podem estar incompletas.';
+
+  @override
   String get reprocessingConversationProgress => 'Reprocessando a conversa…';
 
   @override

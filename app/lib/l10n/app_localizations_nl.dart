@@ -12329,6 +12329,9 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
   String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';
 
   @override

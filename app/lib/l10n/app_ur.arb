@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "طویل ترین وقفہ",
     "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
     "diagnosticsLastDuration": "پچھلے {duration}",
+    "peopleStatsIncomplete": "گنتی نامکمل ہو سکتی ہے۔",
     "reprocessingConversationProgress": "گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…",
     "conversationReprocessed": "گفتگو اپ ڈیٹ ہو گئی",
     "loadingTranscript": "ٹرانسکرپٹ لوڈ ہو رہی ہے…",

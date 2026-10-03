@@ -12281,6 +12281,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Counts may be incomplete.';
+
+  @override
   String get reprocessingConversationProgress => 'Reprocessing conversation…';
 
   @override

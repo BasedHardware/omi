@@ -14676,6 +14676,7 @@
             }
         }
     },
+    "peopleStatsIncomplete": "Counts may be incomplete.",
     "reprocessingConversationProgress": "Reprocessing conversation…",
     "@reprocessingConversationProgress": {
         "description": "Shown with a progress bar while the open conversation is reprocessed."

@@ -12202,6 +12202,9 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
+
+  @override
   String get reprocessingConversationProgress => 'מעבד מחדש את השיחה…';
 
   @override

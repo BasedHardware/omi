@@ -12373,6 +12373,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Οι μετρήσεις μπορεί να είναι ελλιπείς.';
+
+  @override
   String get reprocessingConversationProgress => 'Γίνεται επανεπεξεργασία της συνομιλίας…';
 
   @override

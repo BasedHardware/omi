@@ -3836,6 +3836,7 @@
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
     "diagnosticsLastDuration": "{duration} terakhir",
+    "peopleStatsIncomplete": "Jumlah mungkin belum lengkap.",
     "reprocessingConversationProgress": "Memproses ulang percakapan…",
     "conversationReprocessed": "Percakapan diperbarui",
     "loadingTranscript": "Memuat transkrip…",

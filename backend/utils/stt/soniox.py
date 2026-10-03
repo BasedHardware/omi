@@ -18,6 +18,7 @@ import websockets
 
 from config.stt_provider_policy import normalized_stt_language, soniox_accepts_language_hint
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
@@ -140,7 +141,7 @@ def _rate_limit_persistent_error(message: str, *, force: bool = False) -> None:
         if now - _last_rate_limit_error_log < SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS:
             return
         _last_rate_limit_error_log = now
-    logger.error('Soniox real-time rate limiting persists: %s', message)
+    logger.error('Soniox real-time rate limiting persists: %s', sanitize_provider_error(message, code=429))
 
 
 def _websocket_status(error: BaseException) -> Optional[int]:
@@ -369,13 +370,21 @@ class SafeSonioxSocket(STTSocket):
                         # hiding behind the idle/rotation WARNING that hid this
                         # signature. Monthly budget used to miss the typed set
                         # and log at WARNING for 27.5h.
-                        logger.error(f'Soniox streaming error: {err}')
+                        logger.error(
+                            'Soniox streaming error: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code')),
+                        )
                     else:
                         # Idle-timeout and documented rotation are the
                         # protocol answering how the session was used, not a
                         # provider fault; failing to discriminate kept this the
                         # top backend-listen error signature with no signal.
-                        logger.warning('Soniox stream closed: %s', err)
+                        logger.warning(
+                            'Soniox stream closed: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code')),
+                        )
                         if typed == PROVIDER_RATE_LIMITED:
                             _rate_limit_persistent_error(err)
                     self._done_event.set()

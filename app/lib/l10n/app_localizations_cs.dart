@@ -12297,6 +12297,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
+
+  @override
   String get reprocessingConversationProgress => 'Konverzace se znovu zpracovává…';
 
   @override

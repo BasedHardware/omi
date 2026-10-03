@@ -12323,6 +12323,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
+
+  @override
   String get reprocessingConversationProgress => 'Ponovna obdelava pogovora…';
 
   @override

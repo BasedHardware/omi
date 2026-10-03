@@ -12227,6 +12227,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'จำนวนอาจไม่ครบถ้วน';
+
+  @override
   String get reprocessingConversationProgress => 'กำลังประมวลผลการสนทนาอีกครั้ง…';
 
   @override

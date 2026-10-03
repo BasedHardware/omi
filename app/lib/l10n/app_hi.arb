@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "सबसे लंबा अंतराल",
     "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
     "diagnosticsLastDuration": "पिछले {duration}",
+    "peopleStatsIncomplete": "गिनती अधूरी हो सकती है।",
     "reprocessingConversationProgress": "बातचीत फिर से प्रोसेस हो रही है…",
     "conversationReprocessed": "बातचीत अपडेट हो गई",
     "loadingTranscript": "ट्रांसक्रिप्ट लोड हो रहा है…",

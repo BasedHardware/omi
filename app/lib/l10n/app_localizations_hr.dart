@@ -12329,6 +12329,9 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
   String get reprocessingConversationProgress => 'Ponovna obrada razgovora…';
 
   @override

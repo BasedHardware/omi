@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Najdlhší výpadok",
     "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
     "diagnosticsLastDuration": "Posledných {duration}",
+    "peopleStatsIncomplete": "Počty môžu byť neúplné.",
     "reprocessingConversationProgress": "Konverzácia sa znova spracúva…",
     "conversationReprocessed": "Konverzácia aktualizovaná",
     "loadingTranscript": "Načítava sa prepis…",

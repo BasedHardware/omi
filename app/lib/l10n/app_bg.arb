@@ -3801,6 +3801,7 @@
     "diagnosticsLongestGap": "Най-дълго прекъсване",
     "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
     "diagnosticsLastDuration": "Последните {duration}",
+    "peopleStatsIncomplete": "Бройките може да са непълни.",
     "reprocessingConversationProgress": "Разговорът се обработва повторно…",
     "conversationReprocessed": "Разговорът е обновен",
     "loadingTranscript": "Транскрипцията се зарежда…",

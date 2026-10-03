@@ -3836,6 +3836,7 @@
     "diagnosticsLongestGap": "En uzun kesinti",
     "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
     "diagnosticsLastDuration": "Son {duration}",
+    "peopleStatsIncomplete": "Sayımlar eksik olabilir.",
     "reprocessingConversationProgress": "Konuşma yeniden işleniyor…",
     "conversationReprocessed": "Konuşma güncellendi",
     "loadingTranscript": "Döküm yükleniyor…",

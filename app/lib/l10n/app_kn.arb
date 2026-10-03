@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "ಅತಿ ದೀರ್ಘ ಅಂತರ",
     "diagnosticsSincePairingSummary": "ಜೋಡಿಯಾದಾಗಿನಿಂದ: {drops} ಕಡಿತಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
     "diagnosticsLastDuration": "ಕಳೆದ {duration}",
+    "peopleStatsIncomplete": "ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.",
     "reprocessingConversationProgress": "ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…",
     "conversationReprocessed": "ಸಂಭಾಷಣೆಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ",
     "loadingTranscript": "ಪ್ರತಿಲೇಖನ ಲೋಡ್ ಆಗುತ್ತಿದೆ…",

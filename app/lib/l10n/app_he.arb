@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "הפער הארוך ביותר",
     "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
     "diagnosticsLastDuration": "{duration} אחרונות",
+    "peopleStatsIncomplete": "הספירות עשויות להיות חלקיות.",
     "reprocessingConversationProgress": "מעבד מחדש את השיחה…",
     "conversationReprocessed": "השיחה עודכנה",
     "loadingTranscript": "טוען תמליל…",

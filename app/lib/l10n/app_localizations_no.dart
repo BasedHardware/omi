@@ -12293,6 +12293,9 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Antallene kan være ufullstendige.';
+
+  @override
   String get reprocessingConversationProgress => 'Behandler samtalen på nytt…';
 
   @override

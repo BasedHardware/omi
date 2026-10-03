@@ -12344,6 +12344,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
+
+  @override
   String get reprocessingConversationProgress => 'సంభాషణను మళ్లీ ప్రాసెస్ చేస్తోంది…';
 
   @override

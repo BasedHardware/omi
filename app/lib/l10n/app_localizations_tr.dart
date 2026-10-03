@@ -12305,6 +12305,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
   String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
 
   @override

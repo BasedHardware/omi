@@ -12287,6 +12287,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
+
+  @override
   String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
 
   @override

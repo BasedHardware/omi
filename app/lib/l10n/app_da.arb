@@ -3843,6 +3843,7 @@
     "diagnosticsLongestGap": "Længste pause",
     "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
     "diagnosticsLastDuration": "Seneste {duration}",
+    "peopleStatsIncomplete": "Antallene kan være ufuldstændige.",
     "reprocessingConversationProgress": "Samtalen genbehandles…",
     "conversationReprocessed": "Samtalen er opdateret",
     "loadingTranscript": "Indlæser transskription…",

@@ -12394,6 +12394,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
   String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';
 
   @override

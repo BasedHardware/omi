@@ -11358,6 +11358,7 @@
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
     "diagnosticsLastDuration": "Апошнія {duration}",
+    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
     "reprocessingConversationProgress": "Паўторная апрацоўка размовы…",
     "conversationReprocessed": "Размова абноўлена",
     "loadingTranscript": "Загрузка транскрыпцыі…",
