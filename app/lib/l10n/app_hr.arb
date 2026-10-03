@@ -2267,11 +2267,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "SUČELJE APLIKACIJE",
+    "appInterfaceSectionTitle": "Sučelje aplikacije",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "GOVOR I TRANSKRIPCIJA",
+    "speechTranscriptionSectionTitle": "Govor i transkripcija",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Snimanje",
+    "settingsSectionSupport": "Podrška",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +4998,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "VAŠ API KLJUČ",
+    "yourApiKey": "Vaš API ključ",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5021,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "NAZIV KLJUČA",
+    "keyNameLabel": "Naziv ključa",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5029,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "DOZVOLE",
+    "permissionsLabel": "Dozvole",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10089,7 +10091,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "POHRANA",
+    "storageSection": "Pohrana",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10942,7 +10944,6 @@
     "batteryLevelSemantics": "Baterija {level} %",
     "updateOmiGlassFirmware": "Ažuriraj OmiGlass firmver",
     "deviceConnecting": "Povezivanje…",
-    "recordOptionsTip": "Savjet: dodirnite strelicu na gumbu za snimanje da biste snimili telefonski poziv.",
     "firmwareUpdateFailedTitle": "Ažuriranje nije uspjelo",
     "firmwareUpdateFailedMessage": "Ažuriranje nije dovršeno. Uređaj je i dalje na trenutačnom firmveru i siguran je za upotrebu. Držite ga napunjenim i blizu telefona pa pokušajte ponovno.",
     "firmwareDownloadFailedMessage": "Ažuriranje se nije moglo preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu pa pokušajte ponovno.",
@@ -11095,7 +11096,6 @@
     "pendantPausesDuringCall": "Privjesak je pauziran tijekom poziva",
     "keepUsingPendant": "Nastavi s privjeskom",
     "recordWith": "Snimaj pomoću",
-    "moreWaysToRecord": "Više načina snimanja",
     "openCall": "Otvori poziv",
     "captureRecoveryBanner": "Omi ne šalje zvuk — dodirnite za ponovno povezivanje",
     "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privjesku prije snimanja telefonom.",
@@ -11108,7 +11108,6 @@
     "captureStarting": "Pokretanje…",
     "capturePhoneStorageFull": "Pohrana telefona je puna",
     "captureStorageAlmostFull": "Pohrana je gotovo puna",
-    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.",
     "participantsSummaryUncounted": "{name} i drugi",
     "deviceOnboardingVoiceReplyTitle": "Poslušajte Omijeve odgovore",
     "deviceOnboardingVoiceReplySample": "U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.",
@@ -11339,5 +11338,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{To traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama kako bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
     "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}",
     "speakerLabelText": "{part, select, likely{Vjerojatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg zadnjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
-    "speakerLabelTalkTime": "{duration} ovog glasa"
+    "speakerLabelTalkTime": "{duration} ovog glasa",
+    "askAnythingButton": "Pitaj bilo što",
+    "pendantLostConnection": "Privjesak je izgubio vezu s ovim telefonom.",
+    "pendantReconnectsOnItsOwn": "Omi će se sam ponovno povezati kad je privjesak uključen i u blizini.",
+    "pendantRecordingSafe": "Sve dosad snimljeno je sigurno."
 }

@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "பதிவு",
+    "settingsSectionSupport": "ஆதரவு",
     "@account": {
         "description": "Account section label"
     },
@@ -10942,7 +10944,6 @@
     "batteryLevelSemantics": "பேட்டரி {level}%",
     "updateOmiGlassFirmware": "OmiGlass ஃபர்ம்வேரைப் புதுப்பி",
     "deviceConnecting": "இணைக்கிறது…",
-    "recordOptionsTip": "குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.",
     "firmwareUpdateFailedTitle": "புதுப்பிப்பு தோல்வியடைந்தது",
     "firmwareUpdateFailedMessage": "புதுப்பிப்பு முடியவில்லை. உங்கள் சாதனம் இன்னும் தற்போதைய ஃபர்ம்வேரில் உள்ளது, பயன்படுத்தப் பாதுகாப்பானது. சார்ஜ் செய்து ஃபோன் அருகில் வைத்து மீண்டும் முயலுங்கள்.",
     "firmwareDownloadFailedMessage": "புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை, உங்கள் சாதனம் மாற்றப்படவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.",
@@ -11095,7 +11096,6 @@
     "pendantPausesDuringCall": "அழைப்பின்போது பதக்கம் இடைநிறுத்தப்படும்",
     "keepUsingPendant": "பதக்கத்தையே பயன்படுத்தவும்",
     "recordWith": "பதிவுசெய்யும் முறை",
-    "moreWaysToRecord": "பதிவுசெய்ய மேலும் வழிகள்",
     "openCall": "அழைப்பைத் திறக்கவும்",
     "captureRecoveryBanner": "Omi ஆடியோவை அனுப்பவில்லை — மீண்டும் இணைக்கத் தட்டவும்",
     "phoneRecordingBlockedByPendantBatch": "உங்கள் தொலைபேசியில் பதிவு செய்வதற்கு முன் உங்கள் பெண்டன்டில் Transcribe Later ஐ நிறுத்தவும்.",
@@ -11108,7 +11108,6 @@
     "captureStarting": "தொடங்குகிறது…",
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
-    "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
     "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
     "deviceOnboardingVoiceReplyTitle": "Omi-யின் பதில்களைக் கேளுங்கள்",
     "deviceOnboardingVoiceReplySample": "புரிந்தது. உங்கள் அடுத்த சந்திப்பு இருபது நிமிடங்களில் தொடங்கும்.",
@@ -11339,5 +11338,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{அடுத்த முறை Omi {name} அவர்களை அடையாளம் காணும்.} pending{இதற்கு சில விநாடிகள் ஆகும்.} disabled{Omi {name} அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.} other{Omi-க்கு {name} அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.}}",
     "speakerLabelEarlierMatches": "இந்தக் குரலுடன் முந்தைய உரையாடல்கள்: {count}",
     "speakerLabelText": "{part, select, likely{சாத்தியம்} soundsLike{{name} போல ஒலிக்கிறது} notPerson{{name} இல்லை} carried{இன்னும் {name}. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.} change{மாற்று} alsoTitle{இதுவும் {name} தானா?} alsoBody{முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.} confirmed{இந்த லேபிளை உறுதிப்படுத்தினீர்கள்} other{மதிப்பாய்வு}}",
-    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}"
+    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}",
+    "askAnythingButton": "எதையும் கேளுங்கள்",
+    "pendantLostConnection": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது.",
+    "pendantReconnectsOnItsOwn": "பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும்.",
+    "pendantRecordingSafe": "இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன."
 }

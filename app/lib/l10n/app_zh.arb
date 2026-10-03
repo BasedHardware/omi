@@ -1154,6 +1154,8 @@
     "selectAudioInput": "选择音频输入",
     "loadingDevices": "正在加载设备…",
     "settingsHeader": "设置",
+    "settingsSectionRecording": "录音",
+    "settingsSectionSupport": "支持",
     "plansAndBilling": "计划与账单",
     "calendarIntegration": "日历集成",
     "dailySummary": "每日总结",
@@ -3385,7 +3387,6 @@
     "batteryLevelSemantics": "电量 {level}%",
     "updateOmiGlassFirmware": "更新 OmiGlass 固件",
     "deviceConnecting": "正在连接…",
-    "recordOptionsTip": "提示：点按录音按钮上的箭头即可录制电话通话。",
     "firmwareUpdateFailedTitle": "更新失败",
     "firmwareUpdateFailedMessage": "更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。",
     "firmwareDownloadFailedMessage": "无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。",
@@ -3538,7 +3539,6 @@
     "pendantPausesDuringCall": "通话期间吊坠将暂停",
     "keepUsingPendant": "继续使用吊坠",
     "recordWith": "录音方式",
-    "moreWaysToRecord": "更多录音方式",
     "openCall": "打开通话",
     "captureRecoveryBanner": "Omi 未发送音频 — 轻点以重新连接",
     "phoneRecordingBlockedByPendantBatch": "在用手机录音之前，请先停止吊坠上的“稍后转录”。",
@@ -3551,7 +3551,6 @@
     "captureStarting": "正在启动…",
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
-    "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
     "participantsSummaryUncounted": "{name}等人",
     "deviceOnboardingVoiceReplyTitle": "聆听 Omi 的回答",
     "deviceOnboardingVoiceReplySample": "明白了。你的下一场会议将在二十分钟后开始。",
@@ -3782,5 +3781,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{下次 Omi 就能认出 {name}。} pending{这需要几秒钟。} disabled{请在设置中开启声音保存，以便 Omi 能认出 {name}。} other{Omi 需要 {name} 更清晰的语音，并会继续尝试。}}",
     "speakerLabelEarlierMatches": "与此声音的过往对话：{count}",
     "speakerLabelText": "{part, select, likely{可能} soundsLike{听起来像 {name}} notPerson{不是 {name}} carried{仍是 {name}。沿用自你的上一段对话。} change{更改} alsoTitle{这也是 {name} 吗？} alsoBody{Omi 在之前的对话中发现了相同的声音。} confirmed{你已确认此标签} other{查看}}",
-    "speakerLabelTalkTime": "此声音共 {duration}"
+    "speakerLabelTalkTime": "此声音共 {duration}",
+    "askAnythingButton": "随便问问",
+    "pendantLostConnection": "吊坠与这部手机的连接已断开。",
+    "pendantReconnectsOnItsOwn": "吊坠开机并在附近时，Omi 会自动重新连接。",
+    "pendantRecordingSafe": "此前录下的内容都已保存。"
 }

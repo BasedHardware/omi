@@ -3710,6 +3710,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsHeader => '設定';
 
   @override
+  String get settingsSectionRecording => '録音';
+
+  @override
+  String get settingsSectionSupport => 'サポート';
+
+  @override
   String get plansAndBilling => 'プランと請求';
 
   @override
@@ -10485,9 +10491,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceConnecting => '接続中…';
 
   @override
-  String get recordOptionsTip => 'ヒント：録音ボタンの矢印をタップすると通話を録音できます。';
-
-  @override
   String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
 
   @override
@@ -11023,9 +11026,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get recordWith => '録音方法';
 
   @override
-  String get moreWaysToRecord => 'その他の録音方法';
-
-  @override
   String get openCall => '通話を開く';
 
   @override
@@ -11062,10 +11062,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '空き容量わずか';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12027,4 +12023,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get askAnythingButton => '何でも聞いてください';
+
+  @override
+  String get pendantLostConnection => 'ペンダントとこのスマートフォンの接続が切れました。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。';
+
+  @override
+  String get pendantRecordingSafe => 'それまでに録音した内容は保存されています。';
 }

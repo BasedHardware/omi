@@ -3705,6 +3705,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHeader => '设置';
 
   @override
+  String get settingsSectionRecording => '录音';
+
+  @override
+  String get settingsSectionSupport => '支持';
+
+  @override
   String get plansAndBilling => '计划与账单';
 
   @override
@@ -10467,9 +10473,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnecting => '正在连接…';
 
   @override
-  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
-
-  @override
   String get firmwareUpdateFailedTitle => '更新失败';
 
   @override
@@ -11004,9 +11007,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordWith => '录音方式';
 
   @override
-  String get moreWaysToRecord => '更多录音方式';
-
-  @override
   String get openCall => '打开通话';
 
   @override
@@ -11041,9 +11041,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '存储空间即将用完';
-
-  @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12006,4 +12003,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get askAnythingButton => '随便问问';
+
+  @override
+  String get pendantLostConnection => '吊坠与这部手机的连接已断开。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '吊坠开机并在附近时，Omi 会自动重新连接。';
+
+  @override
+  String get pendantRecordingSafe => '此前录下的内容都已保存。';
 }

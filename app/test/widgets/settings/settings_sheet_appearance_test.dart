@@ -14,11 +14,10 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-/// Switching Light/Dark from a page opened on the Settings sheet, then going back, left the sheet on
-/// the old surface under rows and header drawn in the new palette (black sheet behind white rows
-/// in Light, and the reverse in Dark), because the route's background colour was fixed when the
-/// sheet opened. The root below mirrors main.dart: the palette follows [AppearanceProvider], the
-/// theme follows `themeMode`, and the navigator is re-keyed by brightness.
+/// Switching Light/Dark from a page opened on Settings, then going back, must not leave Settings on
+/// the old background under rows drawn in the new palette (a sheet once kept the colour it opened
+/// with). The root below mirrors main.dart: the palette follows [AppearanceProvider], the theme
+/// follows `themeMode`, and the navigator is re-keyed by brightness.
 
 class _Device extends ChangeNotifier implements DeviceProvider {
   @override
@@ -43,6 +42,10 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+Color _settingsPage(WidgetTester tester) => tester
+    .widget<Scaffold>(find.descendant(of: find.byType(SettingsDrawer), matching: find.byType(Scaffold)).first)
+    .backgroundColor!;
 
 Color _sheetSurface(WidgetTester tester) => tester
     .widget<Material>(find.descendant(of: find.byType(BottomSheet), matching: find.byType(Material)).first)
@@ -109,19 +112,20 @@ void main() {
     return appearance;
   }
 
-  testWidgets('the open Settings sheet repaints its surface when the appearance changes', (tester) async {
+  testWidgets('open Settings repaints its page when the appearance changes', (tester) async {
     final appearance = await pumpApp(tester, start: ThemeMode.dark, open: 'settings');
     expect(find.byType(SettingsDrawer), findsOneWidget);
-    expect(_sheetSurface(tester), OmiPalette.dark.surface0);
+    expect(find.byType(BottomSheet), findsNothing, reason: 'Settings is a pushed page, not a sheet');
+    expect(_settingsPage(tester), OmiPalette.dark.groupedPage);
 
     await appearance.setMode(ThemeMode.light);
     await tester.pumpAndSettle();
-    expect(find.byType(SettingsDrawer), findsOneWidget, reason: 'the sheet stays open across the switch');
-    expect(_sheetSurface(tester), OmiPalette.light.surface0);
+    expect(find.byType(SettingsDrawer), findsOneWidget, reason: 'Settings stays open across the switch');
+    expect(_settingsPage(tester), OmiPalette.light.groupedPage);
 
     await appearance.setMode(ThemeMode.dark);
     await tester.pumpAndSettle();
-    expect(_sheetSurface(tester), OmiPalette.dark.surface0);
+    expect(_settingsPage(tester), OmiPalette.dark.groupedPage);
   });
 
   testWidgets('an open showOmiSheet follows the appearance on surface1', (tester) async {

@@ -2233,10 +2233,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appLanguage => 'Език на приложението';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЙС НА ПРИЛОЖЕНИЕТО';
+  String get appInterfaceSectionTitle => 'Интерфейс на приложението';
 
   @override
-  String get speechTranscriptionSectionTitle => 'РЕЧ И ТРАНСКРИПЦИЯ';
+  String get speechTranscriptionSectionTitle => 'Реч и транскрипция';
 
   @override
   String get languageSettingsHelperText =>
@@ -3783,6 +3783,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Записване';
+
+  @override
+  String get settingsSectionSupport => 'Поддръжка';
+
+  @override
   String get plansAndBilling => 'Планове и Фактуриране';
 
   @override
@@ -4385,7 +4391,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get saveKeyWarning => 'Запазете този ключ сега! Няма да можете да го видите отново.';
 
   @override
-  String get yourApiKey => 'ВАШИЯТ API КЛЮЧ';
+  String get yourApiKey => 'Вашият API ключ';
 
   @override
   String get tapToCopy => 'Докоснете за копиране';
@@ -4400,13 +4406,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get accessDataProgrammatically => 'Достъп до данните ви програмно';
 
   @override
-  String get keyNameLabel => 'ИМЕ НА КЛЮЧА';
+  String get keyNameLabel => 'Име на ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моята интеграция';
 
   @override
-  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+  String get permissionsLabel => 'Разрешения';
 
   @override
   String get permissionsInfoNote => 'R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.';
@@ -8507,7 +8513,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get tipAutoSync => 'Записите се синхронизират автоматично';
 
   @override
-  String get storageSection => 'СЪХРАНЕНИЕ';
+  String get storageSection => 'Съхранение';
 
   @override
   String get permissions => 'Разрешения';
@@ -10702,9 +10708,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceConnecting => 'Свързване…';
 
   @override
-  String get recordOptionsTip => 'Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
 
   @override
@@ -11249,9 +11252,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get recordWith => 'Запис с';
 
   @override
-  String get moreWaysToRecord => 'Още начини за запис';
-
-  @override
   String get openCall => 'Отвори обаждането';
 
   @override
@@ -11289,10 +11289,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12268,4 +12264,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get askAnythingButton => 'Попитайте каквото и да е';
+
+  @override
+  String get pendantLostConnection => 'Висулката загуби връзка с този телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ще се свърже отново сам, когато висулката е включена и наблизо.';
+
+  @override
+  String get pendantRecordingSafe => 'Всичко записано дотук е запазено.';
 }

@@ -2242,10 +2242,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get appLanguage => 'Idioma de l\'aplicació';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFÍCIE DE L\'APLICACIÓ';
+  String get appInterfaceSectionTitle => 'Interfície de l\'aplicació';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VEU I TRANSCRIPCIÓ';
+  String get speechTranscriptionSectionTitle => 'Veu i transcripció';
 
   @override
   String get languageSettingsHelperText =>
@@ -3794,6 +3794,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get settingsHeader => 'CONFIGURACIÓ';
 
   @override
+  String get settingsSectionRecording => 'Enregistrament';
+
+  @override
+  String get settingsSectionSupport => 'Assistència';
+
+  @override
   String get plansAndBilling => 'Plans i Facturació';
 
   @override
@@ -4397,7 +4403,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get saveKeyWarning => 'Desa aquesta clau ara! No la podràs veure de nou.';
 
   @override
-  String get yourApiKey => 'LA TEVA CLAU API';
+  String get yourApiKey => 'La teva clau API';
 
   @override
   String get tapToCopy => 'Toca per copiar';
@@ -4412,13 +4418,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedeix a les teves dades programàticament';
 
   @override
-  String get keyNameLabel => 'NOM DE LA CLAU';
+  String get keyNameLabel => 'Nom de la clau';
 
   @override
   String get keyNamePlaceholder => 'p. ex., La meva integració';
 
   @override
-  String get permissionsLabel => 'PERMISOS';
+  String get permissionsLabel => 'Permisos';
 
   @override
   String get permissionsInfoNote => 'R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.';
@@ -6143,7 +6149,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'La transcripció en directe integrada dOmi està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
+      'La transcripció en directe integrada d\'Omi està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
 
   @override
   String get reset => 'Restablir';
@@ -8524,7 +8530,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tipAutoSync => 'Els enregistraments es sincronitzen automàticament';
 
   @override
-  String get storageSection => 'EMMAGATZEMATGE';
+  String get storageSection => 'Emmagatzematge';
 
   @override
   String get permissions => 'Permisos';
@@ -10723,9 +10729,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
 
   @override
@@ -11271,9 +11274,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get recordWith => 'Grava amb';
 
   @override
-  String get moreWaysToRecord => 'Més maneres de gravar';
-
-  @override
   String get openCall => 'Obre la trucada';
 
   @override
@@ -11311,10 +11311,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12292,4 +12288,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
+
+  @override
+  String get askAnythingButton => 'Pregunta qualsevol cosa';
+
+  @override
+  String get pendantLostConnection => 'El penjoll ha perdut la connexió amb aquest telèfon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot el que s\'ha gravat abans és segur.';
 }

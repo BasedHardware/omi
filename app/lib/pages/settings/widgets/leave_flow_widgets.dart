@@ -67,12 +67,9 @@ class LeaveFlowStepScaffold extends StatelessWidget {
       onPopInvokedWithResult: (didPop, _) => onPopInvoked?.call(didPop),
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
-        child: Scaffold(
-          backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: OmiBackButton(onPressed: canPop ? null : () {}),
-            title: _StepIndicator(step: step, count: stepCount),
-          ),
+        child: OmiGroupedPage(
+          titleWidget: _StepIndicator(step: step, count: stepCount),
+          onBack: canPop ? null : () {},
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -158,10 +155,10 @@ class LeaveFlowReasonTile extends StatelessWidget {
       selected: selected,
       inMutuallyExclusiveGroup: true,
       child: Material(
-        color: selected ? OmiColors.surface2 : OmiColors.surface1,
+        color: selected ? OmiColors.iconTile : OmiColors.groupedCard,
         shape: RoundedRectangleBorder(
           borderRadius: OmiRadius.mdAll,
-          side: BorderSide(color: selected ? OmiColors.textTertiary : OmiColors.border),
+          side: BorderSide(color: selected ? OmiColors.textTertiary : OmiColors.groupedBorder),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -214,9 +211,9 @@ class LeaveFlowConsequenceRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 56),
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
         decoration: BoxDecoration(
-          color: OmiColors.surface1,
+          color: OmiColors.groupedCard,
           borderRadius: OmiRadius.mdAll,
-          border: Border.all(color: OmiColors.border),
+          border: Border.all(color: OmiColors.groupedBorder),
         ),
         child: Row(
           children: [
@@ -299,9 +296,9 @@ InputDecoration leaveFlowInputDecoration({String? hint, Color? focusColor}) {
     hintText: hint,
     hintStyle: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
     filled: true,
-    fillColor: OmiColors.surface1,
-    border: border(OmiColors.border),
-    enabledBorder: border(OmiColors.border),
+    fillColor: OmiColors.groupedCard,
+    border: border(OmiColors.groupedBorder),
+    enabledBorder: border(OmiColors.groupedBorder),
     focusedBorder: border(focusColor ?? OmiColors.textTertiary),
     counterStyle: OmiType.caption.copyWith(color: OmiColors.textTertiary),
     contentPadding: const EdgeInsets.all(OmiSpacing.md),
@@ -320,7 +317,7 @@ class _IconBadge extends StatelessWidget {
       child: Container(
         width: 36,
         height: 36,
-        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.iconTile, borderRadius: OmiRadius.smAll),
         child: Center(child: FaIcon(icon, size: 14, color: color)),
       ),
     );

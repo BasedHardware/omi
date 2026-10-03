@@ -15,82 +15,35 @@ class DevApiKeyListItem extends StatelessWidget {
 
   const DevApiKeyListItem({super.key, required this.apiKey});
 
-  List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) {
-    if (scopes == null || scopes.isEmpty) {
-      return [_buildChip(context.l10n.readOnlyScope)];
-    }
+  /// "Read · Write", "Full Access" or "Read Only": what the key can do, for the row's subtitle.
+  String _scopeLabel(BuildContext context, List<String>? scopes) {
+    if (scopes == null || scopes.isEmpty) return context.l10n.readOnlyScope;
 
     final hasRead = scopes.any((s) => s.endsWith(':read'));
     final hasWrite = scopes.any((s) => s.endsWith(':write'));
 
-    if (hasRead && hasWrite && scopes.length == 8) {
-      return [_buildChip(context.l10n.fullAccessScope)];
-    }
-
-    final chips = <Widget>[];
-    if (hasRead) chips.add(_buildChip(context.l10n.readScope));
-    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope));
-
-    return chips;
-  }
-
-  Widget _buildChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-      child: Text(
-        label,
-        style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
-      ),
-    );
+    if (hasRead && hasWrite && scopes.length == 8) return context.l10n.fullAccessScope;
+    return [
+      if (hasRead) context.l10n.readScope,
+      if (hasWrite) context.l10n.writeScope,
+    ].join(' · ');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(OmiSpacing.xs),
-                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: Icon(Icons.key, color: OmiColors.textTertiary, size: 18),
-              ),
-              const SizedBox(width: OmiSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      apiKey.name,
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: OmiSpacing.xxs),
-                    Text(
-                      '${apiKey.keyPrefix}***  •  ${OmiDateFormat.of(context).date(apiKey.createdAt)}',
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: OmiSpacing.xs),
-              OmiButton.destructive(
-                label: context.l10n.revoke,
-                size: OmiButtonSize.compact,
-                // Not `=>`: a returned future would spin the button while the dialog is open.
-                onPressed: () {
-                  _confirmRevoke(context);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xs, children: _buildScopeChips(context, apiKey.scopes)),
-        ],
+    return OmiSettingsRow(
+      leading: const OmiSettingsIconTile(OmiLineGlyph.key),
+      title: apiKey.name,
+      subtitle: '${apiKey.keyPrefix}*** · ${OmiDateFormat.of(context).date(apiKey.createdAt)}\n'
+          '${_scopeLabel(context, apiKey.scopes)}',
+      trailing: OmiIconButton(
+        icon: const OmiLineIcon(OmiLineGlyph.trash),
+        label: context.l10n.revoke,
+        isDestructive: true,
+        // Not `=>`: a returned future would spin the button while the dialog is open.
+        onPressed: () {
+          _confirmRevoke(context);
+        },
       ),
     );
   }

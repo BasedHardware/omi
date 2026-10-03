@@ -4332,13 +4332,13 @@ abstract class AppLocalizations {
   /// Section title for app interface language settings
   ///
   /// In en, this message translates to:
-  /// **'APP INTERFACE'**
+  /// **'App Interface'**
   String get appInterfaceSectionTitle;
 
   /// Section title for speech and transcription language settings
   ///
   /// In en, this message translates to:
-  /// **'SPEECH & TRANSCRIPTION'**
+  /// **'Speech & Transcription'**
   String get speechTranscriptionSectionTitle;
 
   /// Helper text explaining the difference between app language and speech language
@@ -7269,6 +7269,18 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
+  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsSectionRecording;
+
+  /// Settings section header above the Help & About and Feedback / Bug rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsSectionSupport;
+
   /// Plans and billing section
   ///
   /// In en, this message translates to:
@@ -8346,7 +8358,7 @@ abstract class AppLocalizations {
   /// Label for API key display section
   ///
   /// In en, this message translates to:
-  /// **'YOUR API KEY'**
+  /// **'Your API Key'**
   String get yourApiKey;
 
   /// Hint text for tap to copy action
@@ -8376,7 +8388,7 @@ abstract class AppLocalizations {
   /// Label for key name input field
   ///
   /// In en, this message translates to:
-  /// **'KEY NAME'**
+  /// **'Key Name'**
   String get keyNameLabel;
 
   /// Placeholder text for key name input
@@ -8388,7 +8400,7 @@ abstract class AppLocalizations {
   /// Label for permissions section
   ///
   /// In en, this message translates to:
-  /// **'PERMISSIONS'**
+  /// **'Permissions'**
   String get permissionsLabel;
 
   /// Info note explaining permission toggles
@@ -11544,7 +11556,7 @@ abstract class AppLocalizations {
   /// Description of Omi transcription features
   ///
   /// In en, this message translates to:
-  /// **'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
+  /// **'Omi\'s built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
   String get omiTranscriptionOptimized;
 
   /// Reset button label
@@ -15834,7 +15846,7 @@ abstract class AppLocalizations {
   /// Section header for storage settings
   ///
   /// In en, this message translates to:
-  /// **'STORAGE'**
+  /// **'Storage'**
   String get storageSection;
 
   /// Title for the permissions settings page
@@ -19497,12 +19509,6 @@ abstract class AppLocalizations {
   /// **'Connecting…'**
   String get deviceConnecting;
 
-  /// One-time hint after the first phone-mic recording
-  ///
-  /// In en, this message translates to:
-  /// **'Tip: tap the arrow on the record button to record a phone call.'**
-  String get recordOptionsTip;
-
   /// Title of the firmware update failed state
   ///
   /// In en, this message translates to:
@@ -20415,12 +20421,6 @@ abstract class AppLocalizations {
   /// **'Record with'**
   String get recordWith;
 
-  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
-  ///
-  /// In en, this message translates to:
-  /// **'More ways to record'**
-  String get moreWaysToRecord;
-
   /// Accessibility hint on the live card during a call; tapping opens the call screen.
   ///
   /// In en, this message translates to:
@@ -20492,12 +20492,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
-
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
 
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
@@ -21884,6 +21878,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Home button that opens AI chat, beside a speech-bubble icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask anything'**
+  String get askAnythingButton;
+
+  /// Disconnected sheet: first line, what happened when the pendant dropped
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone.'**
+  String get pendantLostConnection;
+
+  /// Disconnected sheet: reassurance that reconnecting needs no action
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own when the pendant is on and nearby.'**
+  String get pendantReconnectsOnItsOwn;
+
+  /// Disconnected sheet: reassurance that nothing recorded is lost
+  ///
+  /// In en, this message translates to:
+  /// **'Everything recorded before this is safe.'**
+  String get pendantRecordingSafe;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

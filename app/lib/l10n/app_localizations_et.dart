@@ -2228,10 +2228,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get appLanguage => 'Rakenduse keel';
 
   @override
-  String get appInterfaceSectionTitle => 'RAKENDUSE LIIDES';
+  String get appInterfaceSectionTitle => 'Rakenduse liides';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KÕNE JA TRANSKRIPTSIOON';
+  String get speechTranscriptionSectionTitle => 'Kõne ja transkriptsioon';
 
   @override
   String get languageSettingsHelperText =>
@@ -3774,6 +3774,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get settingsHeader => 'SEADED';
 
   @override
+  String get settingsSectionRecording => 'Salvestamine';
+
+  @override
+  String get settingsSectionSupport => 'Tugi';
+
+  @override
   String get plansAndBilling => 'Plaanid ja Arveldus';
 
   @override
@@ -4372,7 +4378,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get saveKeyWarning => 'Salvesta see võti kohe! Sa ei näe seda enam kunagi.';
 
   @override
-  String get yourApiKey => 'TEIE API VÕTI';
+  String get yourApiKey => 'Teie API võti';
 
   @override
   String get tapToCopy => 'Puudutage kopeerimiseks';
@@ -4387,13 +4393,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pääsete oma andmetele programmiliselt juurde';
 
   @override
-  String get keyNameLabel => 'VÕTME NIMI';
+  String get keyNameLabel => 'Võtme nimi';
 
   @override
   String get keyNamePlaceholder => 'nt. Minu rakenduse integratsioon';
 
   @override
-  String get permissionsLabel => 'ÕIGUSED';
+  String get permissionsLabel => 'Õigused';
 
   @override
   String get permissionsInfoNote =>
@@ -8473,7 +8479,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tipAutoSync => 'Salvestised sünkroonitakse automaatselt';
 
   @override
-  String get storageSection => 'SALVESTUSRUUM';
+  String get storageSection => 'Salvestusruum';
 
   @override
   String get permissions => 'Õigused';
@@ -10659,9 +10665,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceConnecting => 'Ühendamine…';
 
   @override
-  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
 
   @override
@@ -11205,9 +11208,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get recordWith => 'Salvestusviis';
 
   @override
-  String get moreWaysToRecord => 'Rohkem salvestusviise';
-
-  @override
   String get openCall => 'Ava kõne';
 
   @override
@@ -11245,10 +11245,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12221,4 +12217,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get askAnythingButton => 'Küsi mida tahes';
+
+  @override
+  String get pendantLostConnection => 'Ripats kaotas ühenduse selle telefoniga.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.';
+
+  @override
+  String get pendantRecordingSafe => 'Kõik varem salvestatu on alles.';
 }

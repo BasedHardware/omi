@@ -2241,10 +2241,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & transcription';
 
   @override
   String get languageSettingsHelperText =>
@@ -3804,6 +3804,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get settingsHeader => 'SETTINGS';
 
   @override
+  String get settingsSectionRecording => 'Pagre-record';
+
+  @override
+  String get settingsSectionSupport => 'Suporta';
+
+  @override
   String get plansAndBilling => 'Mga Plano & Pagbabayad';
 
   @override
@@ -4406,7 +4412,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saveKeyWarning => 'I-save ang key na ito ngayon! Hindi mo na makikita ito ulit.';
 
   @override
-  String get yourApiKey => 'ANG IYONG API KEY';
+  String get yourApiKey => 'Ang iyong API key';
 
   @override
   String get tapToCopy => 'Itap upang kopyahin';
@@ -4421,13 +4427,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accessDataProgrammatically => 'I-access ang iyong data nang programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults sa read-only kung walang napiling selection.';
@@ -8550,7 +8556,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tipAutoSync => 'Ang mga recordings ay nag-sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -10754,9 +10760,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
 
   @override
@@ -11305,9 +11308,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get recordWith => 'Mag-record gamit ang';
 
   @override
-  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
-
-  @override
   String get openCall => 'Buksan ang tawag';
 
   @override
@@ -11345,10 +11345,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12327,4 +12323,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get askAnythingButton => 'Tanungin ang kahit ano';
+
+  @override
+  String get pendantLostConnection => 'Nawalan ng koneksyon ang iyong pendant sa teleponong ito.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.';
+
+  @override
+  String get pendantRecordingSafe => 'Ligtas ang lahat ng na-record bago nito.';
 }

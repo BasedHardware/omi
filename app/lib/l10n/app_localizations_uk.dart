@@ -2231,10 +2231,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get appLanguage => 'Мова додатка';
 
   @override
-  String get appInterfaceSectionTitle => 'ІНТЕРФЕЙС ДОДАТКУ';
+  String get appInterfaceSectionTitle => 'Інтерфейс додатку';
 
   @override
-  String get speechTranscriptionSectionTitle => 'МОВЛЕННЯ ТА ТРАНСКРИПЦІЯ';
+  String get speechTranscriptionSectionTitle => 'Мовлення та транскрипція';
 
   @override
   String get languageSettingsHelperText =>
@@ -3775,6 +3775,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get settingsHeader => 'НАЛАШТУВАННЯ';
 
   @override
+  String get settingsSectionRecording => 'Запис';
+
+  @override
+  String get settingsSectionSupport => 'Підтримка';
+
+  @override
   String get plansAndBilling => 'Плани та Оплата';
 
   @override
@@ -4374,7 +4380,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get saveKeyWarning => 'Збережіть цей ключ зараз! Ви більше не зможете його побачити.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЛЮЧ';
+  String get yourApiKey => 'Ваш API-ключ';
 
   @override
   String get tapToCopy => 'Торкніться, щоб скопіювати';
@@ -4389,13 +4395,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get accessDataProgrammatically => 'Програмний доступ до ваших даних';
 
   @override
-  String get keyNameLabel => 'НАЗВА КЛЮЧА';
+  String get keyNameLabel => 'Назва ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моя інтеграція';
 
   @override
-  String get permissionsLabel => 'ДОЗВОЛИ';
+  String get permissionsLabel => 'Дозволи';
 
   @override
   String get permissionsInfoNote => 'R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.';
@@ -8485,7 +8491,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get tipAutoSync => 'Записи синхронізуються автоматично';
 
   @override
-  String get storageSection => 'СХОВИЩЕ';
+  String get storageSection => 'Сховище';
 
   @override
   String get permissions => 'Дозволи';
@@ -10683,9 +10689,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceConnecting => 'Підключення…';
 
   @override
-  String get recordOptionsTip => 'Порада: торкніться стрілки на кнопці запису, щоб записати телефонний дзвінок.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Не вдалося оновити';
 
   @override
@@ -11229,9 +11232,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get recordWith => 'Записати через';
 
   @override
-  String get moreWaysToRecord => 'Інші способи запису';
-
-  @override
   String get openCall => 'Відкрити дзвінок';
 
   @override
@@ -11268,10 +11268,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Пам’ять майже заповнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12248,4 +12244,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
+
+  @override
+  String get askAnythingButton => 'Запитайте що завгодно';
+
+  @override
+  String get pendantLostConnection => 'Кулон втратив зв’язок із цим телефоном.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi перепідключиться сам, коли кулон буде ввімкнений і поруч.';
+
+  @override
+  String get pendantRecordingSafe => 'Усе, що записано до цього, збережено.';
 }

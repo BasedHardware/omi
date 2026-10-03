@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -51,16 +50,15 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     final l10n = context.l10n;
     final isEnabled = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnPhone)),
+    return OmiGroupedPage(
+      title: l10n.storeAudioOnPhone,
       body: ListView(
-        padding: const EdgeInsets.all(OmiSpacing.md),
+        padding: OmiGroupedPage.padding,
         children: [
           OmiSettingsGroup(
             footer: l10n.storeAudioDescription,
             children: [
               OmiSettingsRow.toggle(
-                leading: const FaIcon(FontAwesomeIcons.mobile),
                 title: l10n.enableLocalStorage,
                 value: isEnabled,
                 onChanged: _isSaving ? null : _toggleLocalStorage,

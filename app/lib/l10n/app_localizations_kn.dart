@@ -2232,7 +2232,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get appLanguage => 'ಅ್ಯಪ್ ಭಾಷೆ';
 
   @override
-  String get appInterfaceSectionTitle => 'ಅ್ಯಪ್ ಇಂಟರ್ಫೇಸ್';
+  String get appInterfaceSectionTitle => 'ಆ್ಯಪ್ ಇಂಟರ್‌ಫೇಸ್';
 
   @override
   String get speechTranscriptionSectionTitle => 'ಭಾಷಣ ಮತ್ತು ಟ್ರಾನ್ಸ್ಕ್ರಿಪ್ಷನ್';
@@ -3784,6 +3784,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
+
+  @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
 
   @override
   String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';
@@ -10695,9 +10701,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceConnecting => 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override
-  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ';
 
   @override
@@ -11242,9 +11245,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get recordWith => 'ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ';
 
   @override
-  String get moreWaysToRecord => 'ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು';
-
-  @override
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 
   @override
@@ -11282,10 +11282,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12261,4 +12257,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
+
+  @override
+  String get pendantLostConnection => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ.';
+
+  @override
+  String get pendantRecordingSafe => 'ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 }

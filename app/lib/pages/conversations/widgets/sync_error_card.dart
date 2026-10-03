@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Red banner shown on the sync page when a sync fails. The message must
-/// reflow in full: it carries the recovery instruction (e.g. "press the
-/// Pendant's button to stop recording, then sync again"), so it is never
-/// clamped or ellipsized — a truncated error hides exactly what the user
+/// The card shown on the sync pages when a sync fails: an outlined card like the rest of Settings,
+/// the message in red beside an error tile, and Retry under it. The message must reflow in full: it carries
+/// the recovery instruction (e.g. "press the Pendant's button to stop recording, then sync
+/// again"), so it is never clamped or ellipsized — a truncated error hides exactly what the user
 /// needs to do, and truncation is worse at large accessibility text scales.
 class SyncErrorCard extends StatelessWidget {
   final String message;
@@ -15,39 +16,34 @@ class SyncErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-      ),
+    return OmiGroupedCard(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
       child: Row(
-        // Top-align so the icon and Retry pill stay put when the message wraps
-        // to several lines (long errors, or large accessibility text scales).
+        // Top-align so the tile stays put when the message wraps to several lines (long errors, or
+        // large accessibility text scales).
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 12),
+          OmiSettingsIconTile.custom(child: OmiLineIcon(OmiLineGlyph.info, color: OmiColors.danger)),
+          const SizedBox(width: OmiSpacing.md),
           Expanded(
-            // No maxLines/overflow: the message reflows in full.
-            child: Text(
-              message,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: onRetry,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                context.l10n.retry,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+            child: Padding(
+              // Centres a one-line message on the 44 pt tile.
+              padding: const EdgeInsets.only(top: OmiSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // No maxLines/overflow: the message reflows in full, across the card's width
+                  // (Retry sits under it, not beside it).
+                  Text(message, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+                  const SizedBox(height: OmiSpacing.sm),
+                  // Wraps rather than ellipsizes: a long localized Retry still reads in full.
+                  OmiButton.secondary(
+                    label: context.l10n.retry,
+                    size: OmiButtonSize.compact,
+                    wrapLabel: true,
+                    onPressed: onRetry,
+                  ),
+                ],
               ),
             ),
           ),

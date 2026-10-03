@@ -2267,7 +2267,7 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ಅ್ಯಪ್ ಇಂಟರ್ಫೇಸ್",
+    "appInterfaceSectionTitle": "ಆ್ಯಪ್ ಇಂಟರ್‌ಫೇಸ್",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "ರೆಕಾರ್ಡಿಂಗ್",
+    "settingsSectionSupport": "ಬೆಂಬಲ",
     "@account": {
         "description": "Account section label"
     },
@@ -10942,7 +10944,6 @@
     "batteryLevelSemantics": "ಬ್ಯಾಟರಿ {level}%",
     "updateOmiGlassFirmware": "OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
     "deviceConnecting": "ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
-    "recordOptionsTip": "ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "firmwareUpdateFailedTitle": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ",
     "firmwareUpdateFailedMessage": "ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "firmwareDownloadFailedMessage": "ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11095,7 +11096,6 @@
     "pendantPausesDuringCall": "ಕರೆಯ ಸಮಯದಲ್ಲಿ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ",
     "keepUsingPendant": "ಪೆಂಡೆಂಟ್ ಬಳಸುವುದನ್ನು ಮುಂದುವರಿಸಿ",
     "recordWith": "ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ",
-    "moreWaysToRecord": "ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು",
     "openCall": "ಕರೆ ತೆರೆಯಿರಿ",
     "captureRecoveryBanner": "Omi ಆಡಿಯೊ ಕಳುಹಿಸುತ್ತಿಲ್ಲ — ಮರುಸಂಪರ್ಕಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "phoneRecordingBlockedByPendantBatch": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ.",
@@ -11108,7 +11108,6 @@
     "captureStarting": "ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…",
     "capturePhoneStorageFull": "ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ",
     "captureStorageAlmostFull": "ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ",
-    "capturePendantDisconnectedDetail": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
     "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು",
     "deviceOnboardingVoiceReplyTitle": "Omi ಉತ್ತರಗಳನ್ನು ಕೇಳಿ",
     "deviceOnboardingVoiceReplySample": "ಅರ್ಥವಾಯಿತು. ನಿಮ್ಮ ಮುಂದಿನ ಸಭೆ ಇಪ್ಪತ್ತು ನಿಮಿಷಗಳಲ್ಲಿ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
@@ -11339,5 +11338,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
     "speakerLabelEarlierMatches": "ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: {count}",
     "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
-    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}"
+    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
+    "askAnythingButton": "ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ",
+    "pendantLostConnection": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ.",
+    "pendantReconnectsOnItsOwn": "ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ.",
+    "pendantRecordingSafe": "ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ."
 }

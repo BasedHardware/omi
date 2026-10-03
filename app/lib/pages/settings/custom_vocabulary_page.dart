@@ -39,22 +39,15 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
     final isAdding = userProvider.isUpdatingVocabulary && !_isDeletingBatch;
     final words = userProvider.transcriptionVocabulary;
 
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+    return OmiGroupedCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header row with icon
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                child: Center(child: FaIcon(FontAwesomeIcons.book, color: OmiColors.textSecondary, size: 16)),
-              ),
-              const SizedBox(width: 14),
+              const OmiSettingsIconTile(OmiLineGlyph.book),
+              const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,7 +63,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                           excludeSemantics: true,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-                            decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                            decoration: BoxDecoration(color: OmiColors.iconTile, borderRadius: OmiRadius.smAll),
                             child: Text(
                               '${words.length}',
                               style: OmiType.caption.copyWith(
@@ -103,7 +96,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                     hintText: l10n.vocabularyHint,
                     hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                     filled: true,
-                    fillColor: OmiColors.surface2,
+                    fillColor: OmiColors.iconTile,
                     contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
                     border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
                     enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
@@ -126,7 +119,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                 OmiIconButton.filled(
                   icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
                   label: l10n.add,
-                  fillColor: OmiColors.surface2,
+                  fillColor: OmiColors.iconTile,
                   diameter: kOmiMinTapTarget,
                   onPressed: userProvider.isUpdatingVocabulary ? null : () => _addWord(userProvider),
                 ),
@@ -136,8 +129,6 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
           // Words chips section
           if (words.isNotEmpty) ...[
             const SizedBox(height: OmiSpacing.lg),
-            Divider(height: 1, color: OmiColors.border),
-            const SizedBox(height: OmiSpacing.md),
             Wrap(
               spacing: OmiSpacing.xs,
               runSpacing: OmiSpacing.xs,
@@ -147,17 +138,23 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                 return Container(
                   padding: const EdgeInsets.only(left: 14),
                   decoration: BoxDecoration(
-                    color: isPendingDelete ? OmiColors.surface1 : OmiColors.surface2,
+                    color: isPendingDelete ? OmiColors.groupedCard : OmiColors.iconTile,
                     borderRadius: OmiRadius.pillAll,
+                    border: Border.all(color: OmiColors.groupedBorder),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        word,
-                        style: OmiType.subhead.copyWith(
-                          color: isPendingDelete ? OmiColors.textTertiary : OmiColors.textPrimary,
-                          fontWeight: FontWeight.w500,
+                      // A word longer than the card ellipsizes instead of pushing the chip off it.
+                      Flexible(
+                        child: Text(
+                          word,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: OmiType.subhead.copyWith(
+                            color: isPendingDelete ? OmiColors.textTertiary : OmiColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                       if (isPendingDelete)
@@ -248,12 +245,12 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.customVocabularyTitle)),
+      child: OmiGroupedPage(
+        title: context.l10n.customVocabularyTitle,
         body: Consumer<UserProvider>(
           builder: (context, userProvider, _) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
+              padding: OmiGroupedPage.padding,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

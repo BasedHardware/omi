@@ -2230,10 +2230,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appLanguage => 'Ngôn ngữ ứng dụng';
 
   @override
-  String get appInterfaceSectionTitle => 'GIAO DIỆN ỨNG DỤNG';
+  String get appInterfaceSectionTitle => 'Giao diện ứng dụng';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GIỌNG NÓI & PHIÊN ÂM';
+  String get speechTranscriptionSectionTitle => 'Giọng nói & phiên âm';
 
   @override
   String get languageSettingsHelperText =>
@@ -3777,6 +3777,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
+  String get settingsSectionRecording => 'Ghi âm';
+
+  @override
+  String get settingsSectionSupport => 'Hỗ trợ';
+
+  @override
   String get plansAndBilling => 'Gói và Thanh toán';
 
   @override
@@ -4376,7 +4382,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saveKeyWarning => 'Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.';
 
   @override
-  String get yourApiKey => 'KHÓA API CỦA BẠN';
+  String get yourApiKey => 'Khóa API của bạn';
 
   @override
   String get tapToCopy => 'Nhấn để sao chép';
@@ -4391,13 +4397,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accessDataProgrammatically => 'Truy cập dữ liệu của bạn theo chương trình';
 
   @override
-  String get keyNameLabel => 'TÊN KHÓA';
+  String get keyNameLabel => 'Tên khóa';
 
   @override
   String get keyNamePlaceholder => 'vd: Tích hợp ứng dụng của tôi';
 
   @override
-  String get permissionsLabel => 'QUYỀN';
+  String get permissionsLabel => 'Quyền';
 
   @override
   String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';
@@ -8473,7 +8479,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tipAutoSync => 'Bản ghi tự động đồng bộ';
 
   @override
-  String get storageSection => 'BỘ NHỚ';
+  String get storageSection => 'Bộ nhớ';
 
   @override
   String get permissions => 'Quyền';
@@ -10656,9 +10662,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceConnecting => 'Đang kết nối…';
 
   @override
-  String get recordOptionsTip => 'Mẹo: nhấn vào mũi tên trên nút ghi âm để ghi âm cuộc gọi điện thoại.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
 
   @override
@@ -11202,9 +11205,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get recordWith => 'Ghi âm bằng';
 
   @override
-  String get moreWaysToRecord => 'Thêm cách ghi âm';
-
-  @override
   String get openCall => 'Mở cuộc gọi';
 
   @override
@@ -11242,10 +11242,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12216,4 +12212,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
+
+  @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
+
+  @override
+  String get pendantLostConnection => 'Mặt dây chuyền đã mất kết nối với điện thoại này.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.';
+
+  @override
+  String get pendantRecordingSafe => 'Mọi thứ đã ghi trước đó vẫn an toàn.';
 }

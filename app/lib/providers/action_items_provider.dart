@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
@@ -43,6 +44,7 @@ typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String i
 
 typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(String id,
     {String? description, bool? completed, DateTime? dueAt});
+typedef ExportItemRequest = Future<ExportResult> Function(ActionItemWithMetadata item, TaskIntegrationApp platform);
 
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
@@ -52,8 +54,10 @@ class ActionItemsProvider extends ChangeNotifier {
     BulkDeleteActionItemsRequest? bulkDeleteActionItemsRequest,
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
+    ExportItemRequest? exportItemRequest,
     api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _exportItemRequest = exportItemRequest ?? ActionItemExportService.export,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
@@ -69,7 +73,11 @@ class ActionItemsProvider extends ChangeNotifier {
   final BulkDeleteActionItemsRequest _bulkDeleteActionItemsRequest;
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
+  final ExportItemRequest _exportItemRequest;
   final api.ActionItemsApi? _actionItemsApi;
+
+  /// Tasks with an export in flight; a second request for one of them is skipped until it settles.
+  final Set<String> _exportingIds = {};
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
@@ -79,6 +87,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   List<ActionItemWithMetadata> _actionItems = [];
   int _sessionGeneration = 0;
+
+  /// Latest in-flight state toggle per task id; see [updateActionItemState].
+  final Map<String, int> _stateMutationTokens = {};
 
   bool _isLoading = false;
   bool _isFetching = false;
@@ -510,6 +521,11 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
     final generation = _sessionGeneration;
+    // Toggling again before the first request answers makes the earlier response stale: only the
+    // latest toggle for an item may revert or adopt what the server says.
+    final token = (_stateMutationTokens[item.id] ?? 0) + 1;
+    _stateMutationTokens[item.id] = token;
+    bool isLatest() => _stateMutationTokens[item.id] == token;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
       surface: ProductSurface.tasks,
@@ -528,13 +544,16 @@ class ActionItemsProvider extends ChangeNotifier {
       }
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
-        notifyListeners();
+        if (isLatest()) {
+          _findAndUpdateItemState(item.id, !newState);
+          notifyListeners();
+        }
         Logger.debug('Failed to update action item state on server');
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
       SiriIntegration.current.queueUpsertTasks([success]);
+      if (isLatest()) _adoptServerRecord(success);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -1005,16 +1024,44 @@ class ActionItemsProvider extends ChangeNotifier {
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
     ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
+    // Completing stamps the moment locally so the Completed section sorts it newest-first at
+    // once; the server's own timestamp replaces it when the write comes back.
+    final completedAt = newState ? DateTime.now() : null;
     if (mainIndex != -1) {
-      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
+      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState, completedAt: completedAt);
       updated = _actionItems[mainIndex];
     }
     final homeIndex = _homeDayItems.indexWhere((item) => item.id == itemId);
     if (homeIndex != -1) {
-      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState);
+      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState, completedAt: completedAt);
       updated ??= _homeDayItems[homeIndex];
     }
     return updated;
+  }
+
+  /// Replaces the local copies of [record] with the server's version (timestamps included).
+  /// After a state update is confirmed, take the server's completion stamps over the local
+  /// provisional ones, so the Completed order matches what the next refresh will show. Only the
+  /// fields a state update owns are adopted: the response may be partial, and sort order, indent
+  /// and lock state keep whatever the list already holds.
+  void _adoptServerRecord(ActionItemWithMetadata record) {
+    ActionItemWithMetadata merge(ActionItemWithMetadata local) => local.copyWith(
+          completed: record.completed,
+          completedAt: record.completedAt ?? local.completedAt,
+          updatedAt: record.updatedAt ?? local.updatedAt,
+        );
+    var changed = false;
+    final mainIndex = _actionItems.indexWhere((item) => item.id == record.id);
+    if (mainIndex != -1) {
+      _actionItems[mainIndex] = merge(_actionItems[mainIndex]);
+      changed = true;
+    }
+    final homeIndex = _homeDayItems.indexWhere((item) => item.id == record.id);
+    if (homeIndex != -1) {
+      _homeDayItems[homeIndex] = merge(_homeDayItems[homeIndex]);
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
@@ -1117,11 +1164,66 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// Selects every loaded task that can be acted on. Paywalled tasks are left out: the backend
+  /// refuses every write on them, so a bulk export or delete that included one would fail on it.
   void selectAllItems() {
     _selectedItems
       ..clear()
-      ..addAll(_actionItems.map((i) => i.id));
+      ..addAll(selectableItems.map((i) => i.id));
     notifyListeners();
+  }
+
+  // Bumped on every notification so derived lists can be cached per change rather than per build.
+  int _changeVersion = 0;
+  int _completedSortedVersion = -1;
+  List<ActionItemWithMetadata> _completedSorted = const [];
+
+  @override
+  void notifyListeners() {
+    _changeVersion++;
+    super.notifyListeners();
+  }
+
+  /// Done tasks, newest first (by completion, else last update, else creation). Sorted once per
+  /// change of the list, so a rebuild of the page does not re-sort a long done history.
+  List<ActionItemWithMetadata> get completedItemsNewestFirst {
+    if (_completedSortedVersion != _changeVersion) {
+      DateTime? when(ActionItemWithMetadata i) => i.completedAt ?? i.updatedAt ?? i.createdAt;
+      final items = completedItems;
+      items.sort((a, b) {
+        final x = when(a), y = when(b);
+        if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+        return y.compareTo(x);
+      });
+      _completedSorted = List.unmodifiable(items);
+      _completedSortedVersion = _changeVersion;
+    }
+    return _completedSorted;
+  }
+
+  /// The loaded tasks a bulk action may include (not paywalled).
+  List<ActionItemWithMetadata> get selectableItems => _actionItems.where((i) => !i.isLocked).toList(growable: false);
+
+  /// Whether every selectable task is selected and nothing is left to load.
+  bool get allSelectableSelected =>
+      !_hasMore && selectableItems.isNotEmpty && selectableItems.every((i) => _selectedItems.contains(i.id));
+
+  /// "Select All" for the whole task set, not just the loaded page: pulls the remaining pages
+  /// first (bounded, so a runaway server can't spin this forever), then selects what can be acted on.
+  Future<void> selectAllTasks({int maxPages = 40}) async {
+    if (!_isSelectionMode) startSelection();
+    var pages = 0;
+    while (_hasMore && pages < maxPages) {
+      if (_isFetching) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        continue;
+      }
+      final before = _actionItems.length;
+      await loadMoreActionItems();
+      pages++;
+      if (_actionItems.length == before && !_hasMore) break;
+    }
+    selectAllItems();
   }
 
   void selectAllItemsFromTab(int tabIndex) {
@@ -1267,26 +1369,57 @@ class ActionItemsProvider extends ChangeNotifier {
 
     final ids = _selectedItems.toList(growable: false);
     final selected = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
-    // Exported items can now be selected (Delete shares the bar), but Export
-    // itself silently no-ops on them so the user doesn't double-create on the
-    // integration side.
-    final items = selected.where((i) => !i.exported).toList(growable: false);
+    await exportItems(context, selected, platform, onSettled: endSelection);
+  }
+
+  /// Exports [candidates] to [platform] and posts one snackbar for the outcome. Already-exported
+  /// items are skipped so the integration never gets a duplicate; each candidate is checked against
+  /// the provider's current record, not the copy the caller holds, because a page that stays open
+  /// after an export still holds the pre-export task. [onSettled] runs once the work is done and
+  /// before the outcome is shown.
+  Future<void> exportItems(
+    BuildContext context,
+    List<ActionItemWithMetadata> candidates,
+    TaskIntegrationApp platform, {
+    VoidCallback? onSettled,
+  }) async {
+    final current =
+        candidates.map((c) => _actionItems.firstWhere((i) => i.id == c.id, orElse: () => c)).toList(growable: false);
+    final pending = current.where((i) => !i.exported).toList(growable: false);
+    // An export already running for a task (a double tap, the row menu and the page at once) is
+    // left to finish; this call only takes what nothing else is exporting.
+    final items = pending.where((i) => !_exportingIds.contains(i.id)).toList(growable: false);
     final total = items.length;
 
+    if (total == 0 && pending.isNotEmpty) {
+      onSettled?.call();
+      return;
+    }
     if (total == 0) {
-      OmiFeedback.info(context, context.l10n.bulkExportAlreadyExported);
-      endSelection();
+      final only = current.length == 1 ? current.single : null;
+      OmiFeedback.info(
+        context,
+        only?.exportPlatform != null
+            ? context.l10n.alreadyExportedTo(taskExportPlatformLabel(only!.exportPlatform!))
+            : context.l10n.bulkExportAlreadyExported,
+      );
+      onSettled?.call();
       return;
     }
 
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
-    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    _exportingIds.addAll(items.map((i) => i.id));
+    final List<ExportResult> results;
+    try {
+      results = await Future.wait(items.map((i) => _exportItemRequest(i, platform)));
+      // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
+      await fetchActionItems();
+    } finally {
+      _exportingIds.removeAll(items.map((i) => i.id));
+    }
     final successCount = results.where((r) => r == ExportResult.success).length;
-
-    // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
-    await fetchActionItems();
-    endSelection();
+    onSettled?.call();
 
     if (!context.mounted) {
       return;
@@ -1308,3 +1441,8 @@ class ActionItemsProvider extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// The name a task's `exportPlatform` wire value shows as ("google_tasks" → "Google Tasks"), the
+/// same name Task Integrations uses for that app; an unknown value shows as it came.
+String taskExportPlatformLabel(String platform) =>
+    TaskIntegrationApp.values.firstWhereOrNull((app) => app.key == platform)?.displayName ?? platform;

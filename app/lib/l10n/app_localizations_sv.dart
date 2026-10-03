@@ -2230,10 +2230,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APPGRÄNSSNITT';
+  String get appInterfaceSectionTitle => 'Appgränssnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TAL OCH TRANSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Tal och transkription';
 
   @override
   String get languageSettingsHelperText =>
@@ -3778,6 +3778,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settingsHeader => 'INSTÄLLNINGAR';
 
   @override
+  String get settingsSectionRecording => 'Inspelning';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
   String get plansAndBilling => 'Planer och Fakturering';
 
   @override
@@ -4376,7 +4382,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get saveKeyWarning => 'Spara denna nyckel nu! Du kommer inte att kunna se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NYCKEL';
+  String get yourApiKey => 'Din API-nyckel';
 
   @override
   String get tapToCopy => 'Tryck för att kopiera';
@@ -4391,13 +4397,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get accessDataProgrammatically => 'Få programmatisk åtkomst till dina data';
 
   @override
-  String get keyNameLabel => 'NYCKELNAMN';
+  String get keyNameLabel => 'Nyckelnamn';
 
   @override
   String get keyNamePlaceholder => 't.ex., Min app-integration';
 
   @override
-  String get permissionsLabel => 'BEHÖRIGHETER';
+  String get permissionsLabel => 'Behörigheter';
 
   @override
   String get permissionsInfoNote => 'R = Läs, W = Skriv. Standard endast läsning om inget är valt.';
@@ -8478,7 +8484,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tipAutoSync => 'Inspelningar synkroniseras automatiskt';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Behörigheter';
@@ -10669,9 +10675,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceConnecting => 'Ansluter…';
 
   @override
-  String get recordOptionsTip => 'Tips: tryck på pilen på inspelningsknappen för att spela in ett telefonsamtal.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Uppdateringen misslyckades';
 
   @override
@@ -11216,9 +11219,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get recordWith => 'Spela in med';
 
   @override
-  String get moreWaysToRecord => 'Fler sätt att spela in';
-
-  @override
   String get openCall => 'Öppna samtal';
 
   @override
@@ -11256,10 +11256,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen är nästan full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12231,4 +12227,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av den här rösten';
   }
+
+  @override
+  String get askAnythingButton => 'Fråga vad som helst';
+
+  @override
+  String get pendantLostConnection => 'Hängsmycket tappade anslutningen till den här telefonen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ansluter igen av sig själv när hängsmycket är på och i närheten.';
+
+  @override
+  String get pendantRecordingSafe => 'Allt som spelats in innan är säkert.';
 }

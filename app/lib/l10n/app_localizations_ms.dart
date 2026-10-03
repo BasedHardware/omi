@@ -2236,10 +2236,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appLanguage => 'Bahasa Aplikasi';
 
   @override
-  String get appInterfaceSectionTitle => 'ANTARA MUKA APLIKASI';
+  String get appInterfaceSectionTitle => 'Antara muka aplikasi';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PERTUTURAN & TRANSKRIPSI';
+  String get speechTranscriptionSectionTitle => 'Pertuturan & transkripsi';
 
   @override
   String get languageSettingsHelperText =>
@@ -3785,6 +3785,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
+  String get settingsSectionRecording => 'Rakaman';
+
+  @override
+  String get settingsSectionSupport => 'Sokongan';
+
+  @override
   String get plansAndBilling => 'Pelan & Pengebilan';
 
   @override
@@ -4386,7 +4392,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan dapat melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API anda';
 
   @override
   String get tapToCopy => 'Ketik untuk menyalin';
@@ -4401,13 +4407,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data anda secara programatik';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'cth., Integrasi Apl Saya';
 
   @override
-  String get permissionsLabel => 'KEBENARAN';
+  String get permissionsLabel => 'Kebenaran';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.';
@@ -8497,7 +8503,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tipAutoSync => 'Rakaman disegerakkan secara automatik';
 
   @override
-  String get storageSection => 'STORAN';
+  String get storageSection => 'Storan';
 
   @override
   String get permissions => 'Kebenaran';
@@ -10690,9 +10696,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceConnecting => 'Menyambung…';
 
   @override
-  String get recordOptionsTip => 'Petua: ketik anak panah pada butang rakam untuk merakam panggilan telefon.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
 
   @override
@@ -11236,9 +11239,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get recordWith => 'Rakam dengan';
 
   @override
-  String get moreWaysToRecord => 'Lebih banyak cara merakam';
-
-  @override
   String get openCall => 'Buka panggilan';
 
   @override
@@ -11276,10 +11276,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12256,4 +12252,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
+
+  @override
+  String get askAnythingButton => 'Tanya apa sahaja';
+
+  @override
+  String get pendantLostConnection => 'Loket anda terputus sambungan dengan telefon ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang dirakam sebelum ini selamat.';
 }

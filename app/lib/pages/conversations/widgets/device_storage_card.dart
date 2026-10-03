@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/ui.dart';
 
 /// On-device ring-buffer storage usage indicator, shown on the Auto Sync page
-/// for firmware 3.0.20+ devices. Compact card: title + % full, a slim usage
-/// bar (amber ≥80%, red ≥95%), and a "used of total · free" summary line.
+/// for firmware 3.0.20+ devices. An outlined card: title + % full, a slim ink
+/// usage bar (amber ≥80%, red ≥95%), and a "used of total · free" summary line.
 class DeviceStorageCard extends StatelessWidget {
   final RingStatus status;
 
@@ -24,55 +23,44 @@ class DeviceStorageCard extends StatelessWidget {
     final percent = (fraction * 100).round();
     final nearlyFull = fraction >= 0.95;
 
-    // Neutral white for normal usage (brand INV-UI-1: white/neutral accents);
-    // amber/red are reserved for the near-full warning/critical bands.
-    final Color barColor = fraction >= 0.95
-        ? ResponsiveHelper.errorColor
-        : (fraction >= 0.80 ? ResponsiveHelper.warningColor : OmiColors.accent);
+    // Ink for normal usage, like the rest of Settings; amber and red only for the near-full
+    // warning and critical bands.
+    final Color barColor =
+        fraction >= 0.95 ? OmiColors.danger : (fraction >= 0.80 ? OmiColors.warning : OmiColors.textPrimary);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
+    return OmiGroupedCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(
-                  l.deviceStorageTitle,
-                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                ),
+                child: Text(l.deviceStorageTitle, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
               ),
               Text(
                 l.deviceStoragePercentFull(percent),
-                style: TextStyle(color: barColor, fontSize: 14, fontWeight: FontWeight.w600),
+                style: OmiType.subhead.copyWith(color: barColor, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: OmiRadius.pillAll,
             child: LinearProgressIndicator(
               value: fraction,
               minHeight: 6,
-              backgroundColor: OmiColors.active == OmiPalette.light ? OmiColors.surface3 : Colors.grey.shade800,
+              backgroundColor: OmiColors.surface3,
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: OmiSpacing.sm),
           Text(
             '${l.deviceStorageUsedOfTotal(WavBytesUtil.formatBytes(used, decimals: 0), WavBytesUtil.formatBytes(total, decimals: 0))}  ·  ${l.deviceStorageFree(WavBytesUtil.formatBytes(free, decimals: 0))}',
-            style: OmiType.footnote.copyWith(
-              color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade500,
-            ),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
           ),
           if (nearlyFull) ...[
-            const SizedBox(height: 8),
-            Text(
-              l.deviceStorageNearlyFull,
-              style: const TextStyle(color: ResponsiveHelper.errorColor, fontSize: 13, fontWeight: FontWeight.w400),
-            ),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(l.deviceStorageNearlyFull, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
           ],
         ],
       ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
@@ -52,18 +51,17 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     final l10n = context.l10n;
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        return Scaffold(
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnCloud)),
+        return OmiGroupedPage(
+          title: l10n.storeAudioOnCloud,
           body: userProvider.isLoading
               ? const OmiLoadingState()
               : ListView(
-                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  padding: OmiGroupedPage.padding,
                   children: [
                     OmiSettingsGroup(
                       footer: l10n.storeAudioCloudDescription,
                       children: [
                         OmiSettingsRow.toggle(
-                          leading: const FaIcon(FontAwesomeIcons.cloud),
                           title: l10n.enableCloudStorage,
                           value: userProvider.privateCloudSyncEnabled,
                           onChanged: _isSaving ? null : _togglePrivateCloudSync,

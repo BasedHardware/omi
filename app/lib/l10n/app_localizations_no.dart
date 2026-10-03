@@ -2225,10 +2225,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-GRENSESNITT';
+  String get appInterfaceSectionTitle => 'App-grensesnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TALE OG TRANSKRIPSJON';
+  String get speechTranscriptionSectionTitle => 'Tale og transkripsjon';
 
   @override
   String get languageSettingsHelperText =>
@@ -3772,6 +3772,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get settingsHeader => 'INNSTILLINGER';
 
   @override
+  String get settingsSectionRecording => 'Opptak';
+
+  @override
+  String get settingsSectionSupport => 'Støtte';
+
+  @override
   String get plansAndBilling => 'Planer og Fakturering';
 
   @override
@@ -4371,7 +4377,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get saveKeyWarning => 'Lagre denne nøkkelen nå! Du vil ikke kunne se den igjen.';
 
   @override
-  String get yourApiKey => 'DIN API-NØKKEL';
+  String get yourApiKey => 'Din API-nøkkel';
 
   @override
   String get tapToCopy => 'Trykk for å kopiere';
@@ -4386,13 +4392,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get accessDataProgrammatically => 'Få tilgang til dataene dine programmatisk';
 
   @override
-  String get keyNameLabel => 'NØKKELNAVN';
+  String get keyNameLabel => 'Nøkkelnavn';
 
   @override
   String get keyNamePlaceholder => 'f.eks., Min app-integrasjon';
 
   @override
-  String get permissionsLabel => 'TILLATELSER';
+  String get permissionsLabel => 'Tillatelser';
 
   @override
   String get permissionsInfoNote => 'R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt.';
@@ -8469,7 +8475,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tipAutoSync => 'Opptak synkroniseres automatisk';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Tillatelser';
@@ -10663,9 +10669,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceConnecting => 'Kobler til…';
 
   @override
-  String get recordOptionsTip => 'Tips: trykk på pilen på opptaksknappen for å ta opp en telefonsamtale.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Oppdateringen mislyktes';
 
   @override
@@ -11208,9 +11211,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get recordWith => 'Ta opp med';
 
   @override
-  String get moreWaysToRecord => 'Flere måter å ta opp på';
-
-  @override
   String get openCall => 'Åpne anrop';
 
   @override
@@ -11248,10 +11248,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen er nesten full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12223,4 +12219,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get askAnythingButton => 'Spør om hva som helst';
+
+  @override
+  String get pendantLostConnection => 'Anhenget mistet forbindelsen til denne telefonen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi kobler til igjen av seg selv når anhenget er på og i nærheten.';
+
+  @override
+  String get pendantRecordingSafe => 'Alt som ble tatt opp før dette, er trygt.';
 }

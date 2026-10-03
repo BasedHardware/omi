@@ -3710,6 +3710,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsHeader => '설정';
 
   @override
+  String get settingsSectionRecording => '녹음';
+
+  @override
+  String get settingsSectionSupport => '지원';
+
+  @override
   String get plansAndBilling => '플랜 및 결제';
 
   @override
@@ -10489,9 +10495,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceConnecting => '연결 중…';
 
   @override
-  String get recordOptionsTip => '팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.';
-
-  @override
   String get firmwareUpdateFailedTitle => '업데이트 실패';
 
   @override
@@ -11027,9 +11030,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get recordWith => '녹음 방법';
 
   @override
-  String get moreWaysToRecord => '다른 녹음 방법';
-
-  @override
   String get openCall => '통화 열기';
 
   @override
@@ -11066,10 +11066,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '저장 공간 거의 참';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12031,4 +12027,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get askAnythingButton => '무엇이든 물어보세요';
+
+  @override
+  String get pendantLostConnection => '펜던트와 이 휴대폰의 연결이 끊겼어요.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요.';
+
+  @override
+  String get pendantRecordingSafe => '그 전에 녹음된 내용은 안전하게 보관돼요.';
 }

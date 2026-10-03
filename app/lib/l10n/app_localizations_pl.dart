@@ -2231,10 +2231,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get appLanguage => 'Język aplikacji';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFEJS APLIKACJI';
+  String get appInterfaceSectionTitle => 'Interfejs aplikacji';
 
   @override
-  String get speechTranscriptionSectionTitle => 'MOWA I TRANSKRYPCJA';
+  String get speechTranscriptionSectionTitle => 'Mowa i transkrypcja';
 
   @override
   String get languageSettingsHelperText =>
@@ -3777,6 +3777,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settingsHeader => 'USTAWIENIA';
 
   @override
+  String get settingsSectionRecording => 'Nagrywanie';
+
+  @override
+  String get settingsSectionSupport => 'Pomoc';
+
+  @override
   String get plansAndBilling => 'Plany i Rozliczenia';
 
   @override
@@ -4378,7 +4384,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get saveKeyWarning => 'Zapisz ten klucz teraz! Nie będziesz mógł go ponownie zobaczyć.';
 
   @override
-  String get yourApiKey => 'TWÓJ KLUCZ API';
+  String get yourApiKey => 'Twój klucz API';
 
   @override
   String get tapToCopy => 'Dotknij, aby skopiować';
@@ -4393,13 +4399,13 @@ class AppLocalizationsPl extends AppLocalizations {
   String get accessDataProgrammatically => 'Uzyskaj programowy dostęp do swoich danych';
 
   @override
-  String get keyNameLabel => 'NAZWA KLUCZA';
+  String get keyNameLabel => 'Nazwa klucza';
 
   @override
   String get keyNamePlaceholder => 'np. Moja integracja';
 
   @override
-  String get permissionsLabel => 'UPRAWNIENIA';
+  String get permissionsLabel => 'Uprawnienia';
 
   @override
   String get permissionsInfoNote => 'R = Odczyt, W = Zapis. Domyślnie tylko odczyt, jeśli nic nie wybrano.';
@@ -8492,7 +8498,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get tipAutoSync => 'Nagrania synchronizują się automatycznie';
 
   @override
-  String get storageSection => 'PAMIĘĆ';
+  String get storageSection => 'Pamięć';
 
   @override
   String get permissions => 'Uprawnienia';
@@ -10695,10 +10701,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceConnecting => 'Łączenie…';
 
   @override
-  String get recordOptionsTip =>
-      'Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizacja nie powiodła się';
 
   @override
@@ -11243,9 +11245,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get recordWith => 'Nagraj za pomocą';
 
   @override
-  String get moreWaysToRecord => 'Więcej sposobów nagrywania';
-
-  @override
   String get openCall => 'Otwórz połączenie';
 
   @override
@@ -11283,10 +11282,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12260,4 +12255,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get askAnythingButton => 'Zapytaj o cokolwiek';
+
+  @override
+  String get pendantLostConnection => 'Wisiorek utracił połączenie z tym telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu.';
+
+  @override
+  String get pendantRecordingSafe => 'Wszystko nagrane wcześniej jest bezpieczne.';
 }

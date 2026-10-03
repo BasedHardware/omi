@@ -2232,10 +2232,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appLanguage => 'Lietotnes valoda';
 
   @override
-  String get appInterfaceSectionTitle => 'LIETOJUMPROGRAMMAS INTERFEISS';
+  String get appInterfaceSectionTitle => 'Lietojumprogrammas interfeiss';
 
   @override
-  String get speechTranscriptionSectionTitle => 'RUNA UN TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Runa un transkripcija';
 
   @override
   String get languageSettingsHelperText =>
@@ -3778,6 +3778,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get settingsHeader => 'IESTATĪJUMI';
 
   @override
+  String get settingsSectionRecording => 'Ierakstīšana';
+
+  @override
+  String get settingsSectionSupport => 'Atbalsts';
+
+  @override
   String get plansAndBilling => 'Plāni un Norēķini';
 
   @override
@@ -4379,7 +4385,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get saveKeyWarning => 'Saglabājiet šo atslēgu tagad! Jūs to vairs nevarēsiet redzēt.';
 
   @override
-  String get yourApiKey => 'JŪSU API ATSLĒGA';
+  String get yourApiKey => 'Jūsu API atslēga';
 
   @override
   String get tapToCopy => 'Pieskarieties, lai kopētu';
@@ -4394,13 +4400,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get accessDataProgrammatically => 'Piekļūstiet saviem datiem programmatiski';
 
   @override
-  String get keyNameLabel => 'ATSLĒGAS NOSAUKUMS';
+  String get keyNameLabel => 'Atslēgas nosaukums';
 
   @override
   String get keyNamePlaceholder => 'piem., Manas lietotnes integrācija';
 
   @override
-  String get permissionsLabel => 'ATĻAUJAS';
+  String get permissionsLabel => 'Atļaujas';
 
   @override
   String get permissionsInfoNote => 'R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts.';
@@ -8491,7 +8497,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tipAutoSync => 'Ieraksti tiek sinhronizēti automātiski';
 
   @override
-  String get storageSection => 'KRĀTUVE';
+  String get storageSection => 'Krātuve';
 
   @override
   String get permissions => 'Atļaujas';
@@ -10688,9 +10694,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceConnecting => 'Savienojas…';
 
   @override
-  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
 
   @override
@@ -11234,9 +11237,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get recordWith => 'Ierakstīt ar';
 
   @override
-  String get moreWaysToRecord => 'Citi ierakstīšanas veidi';
-
-  @override
   String get openCall => 'Atvērt zvanu';
 
   @override
@@ -11273,10 +11273,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12249,4 +12245,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
+
+  @override
+  String get askAnythingButton => 'Jautājiet jebko';
+
+  @override
+  String get pendantLostConnection => 'Kulons zaudēja savienojumu ar šo tālruni.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.';
+
+  @override
+  String get pendantRecordingSafe => 'Viss, kas ierakstīts līdz šim, ir drošībā.';
 }

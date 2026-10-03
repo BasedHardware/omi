@@ -83,49 +83,35 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.appSettings(widget.appName)),
-        actions: [
-          if (widget.showRefresh)
-            OmiIconButton(icon: const Icon(Icons.refresh), label: context.l10n.refresh, onPressed: widget.onRefresh),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: context.l10n.appSettings(widget.appName),
+      actions: [
+        if (widget.showRefresh)
+          OmiIconButton(icon: const Icon(Icons.refresh), label: context.l10n.refresh, onPressed: widget.onRefresh),
+      ],
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(OmiSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(OmiSpacing.sm),
-                margin: const EdgeInsets.only(bottom: OmiSpacing.xl),
-                decoration: BoxDecoration(
-                  color: OmiColors.successSurface,
-                  borderRadius: OmiRadius.smAll,
-                  border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
-                ),
+              // Connected: a quiet ink check in an outlined card, not a green banner.
+              OmiGroupedCard(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+                    Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 18),
                     const SizedBox(width: OmiSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        context.l10n.connectedToApp(widget.appName),
-                        style: OmiType.subhead.copyWith(color: OmiColors.success),
-                      ),
-                    ),
+                    Expanded(child: Text(context.l10n.connectedToApp(widget.appName), style: OmiType.subhead)),
                   ],
                 ),
               ),
-              Text(context.l10n.account, style: OmiType.headline),
-              const SizedBox(height: OmiSpacing.xs),
-              Text(
-                widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              const SizedBox(height: OmiSpacing.xl),
+              OmiSettingsGroup(
+                header: context.l10n.account,
+                children: [OmiSettingsRow(title: widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName))],
               ),
-              const SizedBox(height: OmiSpacing.xxl),
+              const SizedBox(height: OmiSpacing.xl),
               // Wrap children in Expanded with SingleChildScrollView to handle overflow
               Expanded(
                 child: SingleChildScrollView(

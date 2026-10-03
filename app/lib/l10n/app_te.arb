@@ -2267,7 +2267,7 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ఆ విషయానికి సంబంధించిన ఇంటర్ఫేస్",
+    "appInterfaceSectionTitle": "యాప్ ఇంటర్‌ఫేస్",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "రికార్డింగ్",
+    "settingsSectionSupport": "మద్దతు",
     "@account": {
         "description": "Account section label"
     },
@@ -10942,7 +10944,6 @@
     "batteryLevelSemantics": "బ్యాటరీ {level}%",
     "updateOmiGlassFirmware": "OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి",
     "deviceConnecting": "కనెక్ట్ అవుతోంది…",
-    "recordOptionsTip": "చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.",
     "firmwareUpdateFailedTitle": "అప్‌డేట్ విఫలమైంది",
     "firmwareUpdateFailedMessage": "అప్‌డేట్ పూర్తి కాలేదు. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది, ఉపయోగించడం సురక్షితం. ఛార్జ్ చేసి ఫోన్ దగ్గర ఉంచి మళ్లీ ప్రయత్నించండి.",
     "firmwareDownloadFailedMessage": "అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
@@ -11095,7 +11096,6 @@
     "pendantPausesDuringCall": "కాల్ సమయంలో పెండెంట్ పాజ్‌లో ఉంటుంది",
     "keepUsingPendant": "పెండెంట్‌నే ఉపయోగించండి",
     "recordWith": "రికార్డ్ చేసే విధానం",
-    "moreWaysToRecord": "రికార్డ్ చేయడానికి మరిన్ని మార్గాలు",
     "openCall": "కాల్‌ను తెరవండి",
     "captureRecoveryBanner": "Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి",
     "phoneRecordingBlockedByPendantBatch": "మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.",
@@ -11108,7 +11108,6 @@
     "captureStarting": "ప్రారంభమవుతోంది…",
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
-    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
     "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
@@ -11339,5 +11338,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
     "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}",
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
-    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}"
+    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
+    "askAnythingButton": "ఏదైనా అడగండి",
+    "pendantLostConnection": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.",
+    "pendantReconnectsOnItsOwn": "పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.",
+    "pendantRecordingSafe": "దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి."
 }

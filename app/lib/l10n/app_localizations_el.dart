@@ -2246,10 +2246,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get appLanguage => 'Γλώσσα Εφαρμογής';
 
   @override
-  String get appInterfaceSectionTitle => 'ΔΙΕΠΑΦΉ ΕΦΑΡΜΟΓΉΣ';
+  String get appInterfaceSectionTitle => 'Διεπαφή εφαρμογής';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ΟΜΙΛΊΑ ΚΑΙ ΜΕΤΑΓΡΑΦΉ';
+  String get speechTranscriptionSectionTitle => 'Ομιλία και μεταγραφή';
 
   @override
   String get languageSettingsHelperText =>
@@ -3801,6 +3801,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsHeader => 'ΡΥΘΜΙΣΕΙΣ';
 
   @override
+  String get settingsSectionRecording => 'Εγγραφή';
+
+  @override
+  String get settingsSectionSupport => 'Υποστήριξη';
+
+  @override
   String get plansAndBilling => 'Πλάνα & Χρέωση';
 
   @override
@@ -4406,7 +4412,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saveKeyWarning => 'Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.';
 
   @override
-  String get yourApiKey => 'ΤΟ ΚΛΕΙΔΙ API ΣΑΣ';
+  String get yourApiKey => 'Το κλειδί API σας';
 
   @override
   String get tapToCopy => 'Πατήστε για αντιγραφή';
@@ -4421,13 +4427,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accessDataProgrammatically => 'Πρόσβαση στα δεδομένα σας μέσω προγραμματισμού';
 
   @override
-  String get keyNameLabel => 'ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ';
+  String get keyNameLabel => 'Όνομα κλειδιού';
 
   @override
   String get keyNamePlaceholder => 'π.χ., Η ενσωμάτωσή μου';
 
   @override
-  String get permissionsLabel => 'ΔΙΚΑΙΩΜΑΤΑ';
+  String get permissionsLabel => 'Δικαιώματα';
 
   @override
   String get permissionsInfoNote => 'R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.';
@@ -8535,7 +8541,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tipAutoSync => 'Οι εγγραφές συγχρονίζονται αυτόματα';
 
   @override
-  String get storageSection => 'ΑΠΟΘΗΚΕΥΣΗ';
+  String get storageSection => 'Αποθήκευση';
 
   @override
   String get permissions => 'Δικαιώματα';
@@ -10735,9 +10741,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
 
   @override
@@ -11283,9 +11286,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get recordWith => 'Εγγραφή με';
 
   @override
-  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
-
-  @override
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
@@ -11323,10 +11323,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12304,4 +12300,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
+
+  @override
+  String get pendantLostConnection => 'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά.';
+
+  @override
+  String get pendantRecordingSafe => 'Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 }

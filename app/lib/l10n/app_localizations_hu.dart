@@ -2242,10 +2242,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appLanguage => 'Alkalmazás nyelve';
 
   @override
-  String get appInterfaceSectionTitle => 'ALKALMAZÁS FELÜLET';
+  String get appInterfaceSectionTitle => 'Az alkalmazás felülete';
 
   @override
-  String get speechTranscriptionSectionTitle => 'BESZÉD ÉS ÁTÍRÁS';
+  String get speechTranscriptionSectionTitle => 'Beszéd és átírás';
 
   @override
   String get languageSettingsHelperText =>
@@ -3792,6 +3792,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settingsHeader => 'BEÁLLÍTÁSOK';
 
   @override
+  String get settingsSectionRecording => 'Felvétel';
+
+  @override
+  String get settingsSectionSupport => 'Támogatás';
+
+  @override
   String get plansAndBilling => 'Csomagok és Számlázás';
 
   @override
@@ -4393,7 +4399,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saveKeyWarning => 'Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.';
 
   @override
-  String get yourApiKey => 'AZ ÖN API KULCSA';
+  String get yourApiKey => 'Az Ön API-kulcsa';
 
   @override
   String get tapToCopy => 'Másoláshoz érintse meg';
@@ -4408,13 +4414,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accessDataProgrammatically => 'Programozott hozzáférés az adataihoz';
 
   @override
-  String get keyNameLabel => 'KULCS NEVE';
+  String get keyNameLabel => 'Kulcs neve';
 
   @override
   String get keyNamePlaceholder => 'pl. Az én integrációm';
 
   @override
-  String get permissionsLabel => 'ENGEDÉLYEK';
+  String get permissionsLabel => 'Engedélyek';
 
   @override
   String get permissionsInfoNote =>
@@ -8508,7 +8514,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tipAutoSync => 'A felvételek automatikusan szinkronizálódnak';
 
   @override
-  String get storageSection => 'TÁRHELY';
+  String get storageSection => 'Tárhely';
 
   @override
   String get permissions => 'Engedélyek';
@@ -10703,9 +10709,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
 
   @override
@@ -11250,9 +11253,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get recordWith => 'Rögzítés ezzel';
 
   @override
-  String get moreWaysToRecord => 'További rögzítési módok';
-
-  @override
   String get openCall => 'Hívás megnyitása';
 
   @override
@@ -11290,10 +11290,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12269,4 +12265,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get askAnythingButton => 'Kérdezz bármit';
+
+  @override
+  String get pendantLostConnection => 'A medál elvesztette a kapcsolatot ezzel a telefonnal.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.';
+
+  @override
+  String get pendantRecordingSafe => 'Minden, amit eddig rögzített, biztonságban van.';
 }

@@ -60,8 +60,8 @@ class _FairUsePageState extends State<FairUsePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.fairUsePolicy)),
+    return OmiGroupedPage(
+      title: context.l10n.fairUsePolicy,
       body: _isLoading
           ? const OmiLoadingState()
           : _error != null || _status == null

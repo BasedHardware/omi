@@ -2226,10 +2226,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appLanguage => 'Programėlės kalba';
 
   @override
-  String get appInterfaceSectionTitle => 'PROGRAMOS SĄSAJA';
+  String get appInterfaceSectionTitle => 'Programos sąsaja';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KALBA IR TRANSKRIBAVIMAS';
+  String get speechTranscriptionSectionTitle => 'Kalba ir transkribavimas';
 
   @override
   String get languageSettingsHelperText =>
@@ -3769,6 +3769,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get settingsHeader => 'NUSTATYMAI';
 
   @override
+  String get settingsSectionRecording => 'Įrašymas';
+
+  @override
+  String get settingsSectionSupport => 'Pagalba';
+
+  @override
   String get plansAndBilling => 'Planai ir Atsiskaitymas';
 
   @override
@@ -4368,7 +4374,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saveKeyWarning => 'Išsaugokite šį raktą dabar! Daugiau jo nematysite.';
 
   @override
-  String get yourApiKey => 'JŪSŲ API RAKTAS';
+  String get yourApiKey => 'Jūsų API raktas';
 
   @override
   String get tapToCopy => 'Bakstelėkite, kad nukopijuotumėte';
@@ -4383,13 +4389,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pasiekite savo duomenis programiškai';
 
   @override
-  String get keyNameLabel => 'RAKTO PAVADINIMAS';
+  String get keyNameLabel => 'Rakto pavadinimas';
 
   @override
   String get keyNamePlaceholder => 'pvz., Mano programėlės integracija';
 
   @override
-  String get permissionsLabel => 'LEIDIMAI';
+  String get permissionsLabel => 'Leidimai';
 
   @override
   String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';
@@ -8479,7 +8485,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tipAutoSync => 'Įrašai sinchronizuojami automatiškai';
 
   @override
-  String get storageSection => 'SAUGYKLA';
+  String get storageSection => 'Saugykla';
 
   @override
   String get permissions => 'Leidimai';
@@ -10679,9 +10685,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceConnecting => 'Jungiamasi…';
 
   @override
-  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, bakstelėkite rodyklę ant įrašymo mygtuko.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atnaujinti nepavyko';
 
   @override
@@ -11226,9 +11229,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get recordWith => 'Įrašyti naudojant';
 
   @override
-  String get moreWaysToRecord => 'Daugiau įrašymo būdų';
-
-  @override
   String get openCall => 'Atidaryti skambutį';
 
   @override
@@ -11266,10 +11266,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12243,4 +12239,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get askAnythingButton => 'Klauskite bet ko';
+
+  @override
+  String get pendantLostConnection => 'Pakabukas prarado ryšį su šiuo telefonu.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.';
+
+  @override
+  String get pendantRecordingSafe => 'Viskas, kas įrašyta iki šiol, išsaugota.';
 }

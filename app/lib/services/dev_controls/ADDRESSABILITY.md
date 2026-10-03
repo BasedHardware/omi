@@ -49,7 +49,7 @@ fallbacks to satisfy old starter data. Other controls retain normal accessibilit
 
 `AppAddressability` adapts the existing Navigator, HomeProvider and providers.
 Home uses lazy IndexedStack slots 0/1/2/3 (home/conversations/tasks/apps); pushed pages use existing constructors;
-settings uses SettingsDrawer.show. Put `OmiKeys.homeRoot` on a stable
+settings uses SettingsDrawer.show (a pushed page). Put `OmiKeys.homeRoot` on a stable
 KeyedSubtree **inside slot 0**, wrapping HomeContentPage; retain its existing
 GlobalKey on HomeContentPage itself. Likewise for other tabs. A key
 on the whole shell would incorrectly remain visible on every tab. Shell controls stay outside the tab root. Add apps route/root for slot3; its

@@ -2227,10 +2227,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appLanguage => 'Sovelluksen kieli';
 
   @override
-  String get appInterfaceSectionTitle => 'SOVELLUKSEN KÄYTTÖLIITTYMÄ';
+  String get appInterfaceSectionTitle => 'Sovelluksen käyttöliittymä';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PUHE JA LITTEROINTI';
+  String get speechTranscriptionSectionTitle => 'Puhe ja litterointi';
 
   @override
   String get languageSettingsHelperText =>
@@ -3773,6 +3773,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get settingsHeader => 'ASETUKSET';
 
   @override
+  String get settingsSectionRecording => 'Tallennus';
+
+  @override
+  String get settingsSectionSupport => 'Tuki';
+
+  @override
   String get plansAndBilling => 'Suunnitelmat ja Laskutus';
 
   @override
@@ -4372,7 +4378,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveKeyWarning => 'Tallenna tämä avain nyt! Et näe sitä enää uudelleen.';
 
   @override
-  String get yourApiKey => 'API-AVAIMESI';
+  String get yourApiKey => 'API-avaimesi';
 
   @override
   String get tapToCopy => 'Kopioi napauttamalla';
@@ -4387,13 +4393,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accessDataProgrammatically => 'Käytä tietojasi ohjelmallisesti';
 
   @override
-  String get keyNameLabel => 'AVAIMEN NIMI';
+  String get keyNameLabel => 'Avaimen nimi';
 
   @override
   String get keyNamePlaceholder => 'esim. Oma sovellus';
 
   @override
-  String get permissionsLabel => 'OIKEUDET';
+  String get permissionsLabel => 'Oikeudet';
 
   @override
   String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';
@@ -8474,7 +8480,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tipAutoSync => 'Nauhoitukset synkronoidaan automaattisesti';
 
   @override
-  String get storageSection => 'TALLENNUSTILA';
+  String get storageSection => 'Tallennustila';
 
   @override
   String get permissions => 'Käyttöoikeudet';
@@ -10665,9 +10671,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceConnecting => 'Yhdistetään…';
 
   @override
-  String get recordOptionsTip => 'Vinkki: tallenna puhelu napauttamalla tallennuspainikkeen nuolta.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
 
   @override
@@ -11210,9 +11213,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get recordWith => 'Tallennustapa';
 
   @override
-  String get moreWaysToRecord => 'Lisää tallennustapoja';
-
-  @override
   String get openCall => 'Avaa puhelu';
 
   @override
@@ -11250,10 +11250,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12227,4 +12223,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
+
+  @override
+  String get pendantLostConnection => 'Riipus menetti yhteyden tähän puhelimeen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.';
+
+  @override
+  String get pendantRecordingSafe => 'Kaikki tätä ennen tallennettu on tallessa.';
 }

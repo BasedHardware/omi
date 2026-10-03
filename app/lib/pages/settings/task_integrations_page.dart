@@ -503,20 +503,17 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final provider = context.watch<TaskIntegrationProvider>();
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.taskIntegrations),
-        actions: [
-          // Settings icon for apps that have configuration options
-          if (_shouldShowSettingsIcon())
-            OmiIconButton(
-              icon: const Icon(Icons.settings),
-              label: context.l10n.configureSettings,
-              onPressed: _openSelectedAppSettings,
-            ),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: context.l10n.taskIntegrations,
+      actions: [
+        // Settings icon for apps that have configuration options
+        if (_shouldShowSettingsIcon())
+          OmiIconButton(
+            icon: const Icon(Icons.settings),
+            label: context.l10n.configureSettings,
+            onPressed: _openSelectedAppSettings,
+          ),
+      ],
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(OmiSpacing.lg),

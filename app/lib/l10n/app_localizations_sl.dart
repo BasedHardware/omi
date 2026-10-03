@@ -2228,10 +2228,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get appLanguage => 'Jezik aplikacije';
 
   @override
-  String get appInterfaceSectionTitle => 'VMESNIK APLIKACIJE';
+  String get appInterfaceSectionTitle => 'Vmesnik aplikacije';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GOVOR IN TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Govor in transkripcija';
 
   @override
   String get languageSettingsHelperText =>
@@ -3779,6 +3779,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settingsHeader => 'NASTAVITVE';
 
   @override
+  String get settingsSectionRecording => 'Snemanje';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
   String get plansAndBilling => 'Načrti in obračun';
 
   @override
@@ -4377,7 +4383,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get saveKeyWarning => 'Shranite ta ključ zdaj! Ga ne boste mogli videti znova.';
 
   @override
-  String get yourApiKey => 'VAŠ KLJUČ API';
+  String get yourApiKey => 'Vaš ključ API';
 
   @override
   String get tapToCopy => 'Tapnite za kopiranje';
@@ -4392,13 +4398,13 @@ class AppLocalizationsSl extends AppLocalizations {
   String get accessDataProgrammatically => 'Dostopajte do podatkov programsko';
 
   @override
-  String get keyNameLabel => 'IME KLJUČA';
+  String get keyNameLabel => 'Ime ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOVOLJENJA';
+  String get permissionsLabel => 'Dovoljenja';
 
   @override
   String get permissionsInfoNote => 'R = Branje, W = Pisanje. Privzeto samo za branje, če ničesar ni izbrano.';
@@ -8496,7 +8502,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tipAutoSync => 'Posnetki se sinhronizirajo samodejno';
 
   @override
-  String get storageSection => 'SHRAMBA';
+  String get storageSection => 'Shramba';
 
   @override
   String get permissions => 'Dovoljenja';
@@ -10695,9 +10701,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
 
   @override
@@ -11239,9 +11242,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get recordWith => 'Snemaj z';
 
   @override
-  String get moreWaysToRecord => 'Več načinov snemanja';
-
-  @override
   String get openCall => 'Odpri klic';
 
   @override
@@ -11278,10 +11278,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12254,4 +12250,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
+
+  @override
+  String get askAnythingButton => 'Vprašaj karkoli';
+
+  @override
+  String get pendantLostConnection => 'Obesek je izgubil povezavo s tem telefonom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini.';
+
+  @override
+  String get pendantRecordingSafe => 'Vse, kar je bilo posneto prej, je varno.';
 }

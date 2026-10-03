@@ -2267,11 +2267,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Pagre-record",
+    "settingsSectionSupport": "Suporta",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +4998,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ANG IYONG API KEY",
+    "yourApiKey": "Ang iyong API key",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5021,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "KEY NAME",
+    "keyNameLabel": "Key name",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5029,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "PERMISSIONS",
+    "permissionsLabel": "Permissions",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10089,7 +10091,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10942,7 +10944,6 @@
     "batteryLevelSemantics": "Baterya {level}%",
     "updateOmiGlassFirmware": "I-update ang Firmware ng OmiGlass",
     "deviceConnecting": "Kumokonekta…",
-    "recordOptionsTip": "Tip: i-tap ang arrow sa record button para mag-record ng tawag.",
     "firmwareUpdateFailedTitle": "Nabigo ang Update",
     "firmwareUpdateFailedMessage": "Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.",
     "firmwareDownloadFailedMessage": "Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.",
@@ -11095,7 +11096,6 @@
     "pendantPausesDuringCall": "Naka-pause ang pendant habang may tawag",
     "keepUsingPendant": "Ituloy ang paggamit ng pendant",
     "recordWith": "Mag-record gamit ang",
-    "moreWaysToRecord": "Iba pang paraan ng pag-record",
     "openCall": "Buksan ang tawag",
     "captureRecoveryBanner": "Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta",
     "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
@@ -11108,7 +11108,6 @@
     "captureStarting": "Nagsisimula…",
     "capturePhoneStorageFull": "Puno na ang storage ng telepono",
     "captureStorageAlmostFull": "Halos puno na ang storage",
-    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
     "participantsSummaryUncounted": "{name} at iba pa",
     "deviceOnboardingVoiceReplyTitle": "Pakinggan ang mga sagot ni Omi",
     "deviceOnboardingVoiceReplySample": "Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.",
@@ -11339,5 +11338,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
     "speakerLabelEarlierMatches": "Mga naunang usapan na may ganitong boses: {count}",
     "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
-    "speakerLabelTalkTime": "{duration} ng boses na ito"
+    "speakerLabelTalkTime": "{duration} ng boses na ito",
+    "askAnythingButton": "Tanungin ang kahit ano",
+    "pendantLostConnection": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito.",
+    "pendantReconnectsOnItsOwn": "Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.",
+    "pendantRecordingSafe": "Ligtas ang lahat ng na-record bago nito."
 }
