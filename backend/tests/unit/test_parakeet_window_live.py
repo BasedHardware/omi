@@ -183,7 +183,8 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     url, kwargs = client.requests[0]
     assert url.endswith('/v1/transcribe')
     assert list(kwargs) == ['files', 'headers']  # no language parameter; exclude live from prerecorded metrics
-    assert kwargs['headers'] == {'X-Omi-STT-Surface': 'live-window'}
+    assert kwargs['headers']['X-Omi-STT-Surface'] == 'live-window'
+    assert 0.0 <= float(kwargs['headers']['X-Omi-STT-Timeout-Seconds']) <= socket.raw._post_timeout
     assert kwargs['files']['file'][1].startswith(b'RIFF')
     assert recv.emitted[0]['text'] == 'hello'
     assert recv.emitted[0]['start'] >= 1.0
@@ -194,6 +195,54 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT._sum.get() > before_first
+
+
+@pytest.mark.asyncio
+async def test_post_window_budget_header_reduced_by_semaphore_wait(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+
+    class StallSemaphore:
+        async def __aenter__(self):
+            monkeypatch.setattr(loop, 'time', lambda: real_time() + 1.5)
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(window, 'get_stt_semaphore', lambda: StallSemaphore())
+    sock = window.WindowedParakeetSocket(lambda _segs: None, 'http://tdt.invalid', 16000, lambda: None)
+    response = await sock._post_window(b'\x01\x00' * 32000)
+    assert response.status_code == 200
+    headers = client.requests[0][1]['headers']
+    assert headers['X-Omi-STT-Surface'] == 'live-window'
+    budget = float(headers['X-Omi-STT-Timeout-Seconds'])
+    assert 0.0 <= budget <= sock._post_timeout
+    assert budget == pytest.approx(sock._post_timeout - 1.5, abs=0.05)
+
+
+@pytest.mark.asyncio
+async def test_post_window_exhausted_budget_raises_without_posting(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+
+    class StallSemaphore:
+        async def __aenter__(self):
+            monkeypatch.setattr(loop, 'time', lambda: real_time() + 9.0)
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(window, 'get_stt_semaphore', lambda: StallSemaphore())
+    sock = window.WindowedParakeetSocket(lambda _segs: None, 'http://tdt.invalid', 16000, lambda: None)
+    with pytest.raises(TimeoutError):
+        await sock._post_window(b'\x01\x00' * 32000)
+    assert client.requests == []
 
 
 @pytest.mark.asyncio

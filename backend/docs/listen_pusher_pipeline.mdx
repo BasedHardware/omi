@@ -713,6 +713,16 @@ to report fresh telemetry; busy plus unknown replicas reaching half the pool
 stands down. A single hot pod in a larger healthy pool does not deny the fleet.
 DNS failure and lost quorum still stand down; admission performs no I/O. The
 window POST explicitly marks its live lane; unmarked requests remain backfill.
+Each live POST also carries `X-Omi-STT-Timeout-Seconds`, the caller's remaining
+POST budget sampled at local STT-semaphore admission. The service converts it
+into a monotonic queue deadline — request start plus the lesser of the supplied
+budget and an 8-second cap, defaulting to 8 when the header is absent; a
+malformed, non-finite, or non-positive budget is rejected 400 before the upload
+is written. Queued live requests are pruned when the caller cancels or the
+deadline expires; owned uploads are unlinked only while still pending, since a
+dispatched batch owns its files until GPU completion. An expired queued request
+fails with a bounded 503 counted as a `queue_timeout` lane refusal. Backfill
+requests ignore the header and never carry a deadline.
 A partial replay retains **all un-emitted audio**, including bytes accepted by
 a replacement that dies before returning text, for the next vendor leg. The
 ring continues across downstream providers; emitted capture positions trim it.
