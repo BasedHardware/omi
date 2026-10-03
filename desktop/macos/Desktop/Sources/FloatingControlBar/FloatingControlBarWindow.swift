@@ -3261,7 +3261,6 @@ class FloatingControlBarManager {
   func resetOwnerProjection() {
     activeQueryGeneration &+= 1
     cancelNotificationDismissTimer()
-    window?.state.notificationBarHovering = false
     notificationBarHovering = false
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
