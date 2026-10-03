@@ -154,3 +154,91 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_export_json_stdout(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "Export me", "category": "work", "visibility": "private", "tags": ["python"]}]
+    )
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert len(payload) == 1
+    assert payload[0]["id"] == "m1"
+
+
+def test_memory_export_csv_to_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "CSV export", "category": "work", "visibility": "private", "tags": ["tag1"]}]
+    )
+    out_file = tmp_path / "export.csv"
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "csv", "--output", str(out_file)])
+    assert result.exit_code == 0
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8")
+    # Verify UTF-8 BOM prefix
+    assert content.startswith("\ufeff")
+    assert "id,category,visibility,content,tags" in content
+    assert "m1,work,private,CSV export,tag1" in content
+
+
+def test_memory_export_csv_formula_injection_guard(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[
+            {
+                "id": "m1",
+                "content": "=1+1",
+                "category": "+work",
+                "visibility": "-private",
+                "tags": ["@tag"],
+            }
+        ]
+    )
+    out_file = tmp_path / "export_formula.csv"
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "csv", "--output", str(out_file)])
+    assert result.exit_code == 0
+    content = out_file.read_text(encoding="utf-8")
+    assert "'=1+1" in content
+    assert "'+work" in content
+    assert "'-private" in content
+    assert "'@tag" in content
+
+
+def test_memory_export_pagination_scans_past_short_page(authed_profile, respx_mock, cli_runner) -> None:
+    """A short non-final page must not stop export early; scan until an empty page."""
+    import httpx
+
+    page1 = [{"id": f"m{i}", "content": "x", "category": "work"} for i in range(50)]
+    page2 = [{"id": "target", "content": "later page", "category": "work"}]
+    page3 = []
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2), httpx.Response(200, json=page3)]
+    )
+
+    result = cli_runner.invoke(app, ["memory", "export", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert len(payload) == 51
+    assert payload[-1]["id"] == "target"
+    assert len(route.calls) == 3
+
+
+def test_memory_export_passes_categories_param(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "filtered", "category": "work"}]
+    )
+    result = cli_runner.invoke(app, ["memory", "export", "--categories", "work,skills"])
+    assert result.exit_code == 0
+    assert route.calls.last.request.url.params["categories"] == "work,skills"
+
+
+def test_memory_export_markdown_stdout(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "Markdown export", "category": "skills", "visibility": "public", "tags": []}]
+    )
+    result = cli_runner.invoke(app, ["memory", "export", "-f", "markdown"])
+    assert result.exit_code == 0
+    assert "type: omi-memories" in result.stdout
+    assert "### Memory `m1`" in result.stdout
+    assert "Markdown export" in result.stdout
