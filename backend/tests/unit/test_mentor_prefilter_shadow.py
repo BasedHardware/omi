@@ -198,6 +198,7 @@ def test_shadow_record_is_content_free_and_uses_existing_writer_and_ids(worker):
         'luna_gate_latency_ms',
         'pipeline_latency_ms',
         'lane',
+        'env_stage',
         'evaluation_id',
         'uid_hash',
         'question_version',

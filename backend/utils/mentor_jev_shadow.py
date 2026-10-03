@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 import threading
 import time
@@ -98,9 +99,11 @@ def submit_mentor_shadow(uid: str, state: str, observed: dict[str, Any]) -> None
             record_jev_shadow_outcome('mentor', 'dropped')
             return
         evaluation_id = uuid.uuid4().hex
+        stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
         record = {
             **observed,
             'lane': 'mentor',
+            'env_stage': stage if stage in {'dev', 'prod'} else 'other',
             'evaluation_id': evaluation_id,
             'uid_hash': _sha(uid),
             'question_version': QUESTION_VERSION,

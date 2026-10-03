@@ -79,7 +79,7 @@ is SHA256(uid), using the shared shadow hashing helper. The parent user path
 still contains the UID, as in EXP-004; hashes are pseudonyms, not anonymity.
 Client rules deny this subcollection and account deletion recursively wipes it.
 
-Stored fields: lane, evaluation_id, uid_hash, evaluated_at, frequency,
+Stored fields: lane, env_stage (dev/prod/other), evaluation_id, uid_hash, evaluated_at, frequency,
 question_version, state_chars, served_model, jev_score (nullable), jev_outcome,
 luna_gate_verdict (raw boolean), luna_gate_score, luna_gate_passed (boolean
 including frequency threshold), draft_passed, critic_passed, notification_sent,
@@ -117,6 +117,7 @@ WITH rows AS (
   SELECT DISTINCT ON (uid_hash, record_id) *
   FROM read_ndjson('/secure/mentor-shadow.ndjson')
   WHERE lane = 'mentor' AND question_version = 'mentor_worthwhile_v1'
+    AND env_stage = 'prod'
     AND evaluated_at >= '2026-10-03T00:00:00Z'
     AND evaluated_at < '2026-10-24T00:00:00Z'
   ORDER BY uid_hash, record_id, created_at
