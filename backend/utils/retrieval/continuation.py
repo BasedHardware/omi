@@ -9,7 +9,7 @@ Ensures that when a user sends an unambiguous continuation command (e.g. "Contin
 """
 
 import re
-from typing import Any, List, Optional, Sequence
+from typing import Optional, Sequence
 
 from models.chat import Message
 
@@ -59,7 +59,7 @@ def get_continuation_target(messages: Sequence[Message]) -> Optional[Message]:
 
 def format_continuation_user_prompt(original_text: str, prior_tail: str) -> str:
     """Format the continuation request with explicit resumption guidance referencing the prior tail."""
-    clean_tail = prior_tail.strip()[-120:] if prior_tail else ""
+    clean_tail = prior_tail.strip()[-300:] if prior_tail else ""
     anchor_hint = f' [Resuming immediately after: "...{clean_tail}"]' if clean_tail else ""
     directive = (
         f"[Instruction: Resume your immediately preceding answer{anchor_hint}. "
@@ -79,7 +79,7 @@ def inject_continuation_directive(anthropic_messages: list, prior_text: Optional
         if msg.get("role") != "user":
             continue
         content = msg.get("content")
-        prior_tail = (prior_text or "").strip()[-120:]
+        prior_tail = (prior_text or "").strip()[-300:]
         directive = format_continuation_user_prompt("", prior_tail).strip()
         if isinstance(content, str):
             msg["content"] = f"{content}\n\n{directive}"
