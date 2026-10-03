@@ -408,7 +408,7 @@ void main() {
 
   testWidgets('playback position marks and follows the current transcript line', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -453,7 +453,7 @@ void main() {
   testWidgets('a waveform scrub before Play stores the point without fetching, then maps on Play', (tester) async {
     final fake = _FakeAudioDevice();
     var fetches = 0;
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -509,7 +509,7 @@ void main() {
   testWidgets('tapping a transcript line seeks strict and plays on, past the segment end', (tester) async {
     final fake = _FakeAudioDevice();
     var fetches = 0;
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -542,7 +542,7 @@ void main() {
 
   testWidgets('a reader drag during playback suspends follow until Back to Current', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -588,7 +588,7 @@ void main() {
 
   testWidgets('a paused reader drag makes Play start at the new top line', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -701,7 +701,7 @@ void main() {
   testWidgets('the newest scrub wins while a seek is still initializing', (tester) async {
     final fake = _FakeAudioDevice();
     final release = Completer<ApiResult<AudioUrlsResponse>>();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -733,7 +733,7 @@ void main() {
 
   testWidgets('a reader drag cancels a locate in flight', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 500; i++) _segment('seg$i', i * 2.0, i * 2.0 + 1.5)];
+    final segments = [for (var i = 0; i < 500; i++) _segment('seg$i', i * 2.0, i * 2.0 + 1.5, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -758,7 +758,7 @@ void main() {
 
   testWidgets('a paused reader drag replaces the resume point with the new top line start', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -797,7 +797,7 @@ void main() {
     final fake = _FakeAudioDevice();
     final controller = ConversationPlaybackController();
     addTearDown(controller.dispose);
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     final conversation = _conversation(segments: segments);
     fetch(id) async =>
         ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
@@ -832,7 +832,7 @@ void main() {
 
   testWidgets('a completed stream presents Play and restarts from the beginning', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     final harness = await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -900,7 +900,7 @@ void main() {
 
   testWidgets("a failed seek surfaces Couldn't Load Audio with Try Again", (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -927,7 +927,7 @@ void main() {
 
   testWidgets('a line tap after the track completed really plays from the tapped line', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
       tester,
       _conversation(segments: segments),
@@ -997,7 +997,7 @@ void main() {
 
   testWidgets('audio without timestamps plays without inventing a transcript clock', (tester) async {
     final fake = _FakeAudioDevice();
-    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8)];
+    final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     final harness = await _pumpDetail(
       tester,
       _conversation(
