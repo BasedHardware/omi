@@ -87,13 +87,39 @@ def test_is_transaction_contention_native_grpc():
     assert not is_transaction_contention(DummyGrpcError(DummyGrpcStatus("NOT_FOUND", 5)))
 
 
-def test_is_transaction_contention_excludes_unrelated_http_errors():
-    class HTTPException(Exception):
-        __module__ = "starlette.exceptions"
-        def __init__(self, status_code=409):
-            self.status_code = status_code
+def test_is_transaction_contention_native_sdk_retry_error():
+    try:
+        from google.api_core.exceptions import Aborted as NativeAborted, RetryError
+    except ImportError:
+        class NativeAborted(FirestoreAborted):
+            pass
 
-    assert not is_transaction_contention(HTTPException(409))
+        class RetryError(Exception):
+            def __init__(self, message, cause):
+                super().__init__(message)
+                self.cause = cause
+
+    retry_err = RetryError("Exhausted retries", NativeAborted("contention"))
+    assert is_transaction_contention(retry_err)
+
+
+@pytest.mark.parametrize(
+    "unrelated_mod",
+    ["fastapi.exceptions", "starlette.exceptions", "requests.exceptions", "httpx", "stripe.error", "custom.domain"],
+)
+def test_is_transaction_contention_excludes_unrelated_packages(unrelated_mod):
+    class Aborted(Exception):
+        __module__ = unrelated_mod
+
+    assert not is_transaction_contention(Aborted("unrelated aborted"))
+
+    class FakeGrpcLike(Exception):
+        __module__ = unrelated_mod
+
+        def code(self):
+            return 10
+
+    assert not is_transaction_contention(FakeGrpcLike())
 
 
 def test_is_transaction_contention_cause_traversal():

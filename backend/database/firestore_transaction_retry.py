@@ -38,7 +38,7 @@ class FirestoreContentionExhausted(RuntimeError):
 
 
 def is_transaction_contention(error: BaseException) -> bool:
-    """Return True if error or any wrapped cause signals transaction contention."""
+    """Return True if error or any wrapped cause signals Firestore transaction contention."""
     if not isinstance(error, BaseException):
         return False
 
@@ -52,43 +52,53 @@ def is_transaction_contention(error: BaseException) -> bool:
             continue
         seen.add(curr_id)
 
-        # 1. Type match
+        # 1. Direct type match on FirestoreAborted (google.api_core.exceptions.Aborted)
         if isinstance(curr, FirestoreAborted):
             return True
 
         name = type(curr).__name__
         mod = getattr(type(curr), "__module__", "") or ""
 
-        # Narrow check to Aborted (contention), never generic Conflict or HTTPException
-        if name in ("Aborted", "FirestoreAborted"):
-            if not any(pkg in mod for pkg in ("fastapi", "starlette", "requests", "httpx")):
+        # Positive domain anchor: match Aborted/gRPC codes originating from Google, gRPC, or local/test scopes
+        is_google_or_grpc = (
+            mod.startswith(("google.", "grpc", "database.", "tests.", "__main__"))
+            or not mod
+        )
+
+        if is_google_or_grpc:
+            if name in ("Aborted", "FirestoreAborted"):
                 return True
 
-        # 2. Status code or gRPC code match
-        raw_code = getattr(curr, "code", None)
-        if callable(raw_code):
-            try:
-                grpc_code = raw_code()
-            except Exception:
-                grpc_code = None
-        else:
-            grpc_code = raw_code
+            # Status code or gRPC code match
+            raw_code = getattr(curr, "code", None)
+            if callable(raw_code):
+                try:
+                    grpc_code = raw_code()
+                except Exception:
+                    grpc_code = None
+            else:
+                grpc_code = raw_code
 
-        if grpc_code is not None:
-            code_name = getattr(grpc_code, "name", None)
-            if code_name == "ABORTED" or str(grpc_code) in ("10", "ABORTED", "StatusCode.ABORTED"):
+            if grpc_code is not None:
+                code_name = getattr(grpc_code, "name", None)
+                if code_name == "ABORTED" or str(grpc_code) in ("10", "ABORTED", "StatusCode.ABORTED"):
+                    return True
+                if grpc_code == 10:
+                    return True
+
+            grpc_status = getattr(curr, "grpc_status_code", None)
+            if grpc_status in (10, "10", "ABORTED"):
                 return True
-            if grpc_code == 10:
-                return True
 
-        grpc_status = getattr(curr, "grpc_status_code", None)
-        if grpc_status in (10, "10", "ABORTED"):
-            return True
-
-        # 3. Traverse explicit cause (__cause__)
+        # 2. Traverse explicit cause (__cause__)
         cause = getattr(curr, "__cause__", None)
         if isinstance(cause, BaseException) and id(cause) not in seen:
             queue.append(cause)
+
+        # 3. Traverse SDK wrapper cause (e.g. google.api_core.exceptions.RetryError.cause)
+        sdk_cause = getattr(curr, "cause", None)
+        if isinstance(sdk_cause, BaseException) and id(sdk_cause) not in seen:
+            queue.append(sdk_cause)
 
         # 4. Traverse ExceptionGroup / BaseExceptionGroup exceptions (PEP 654)
         exceptions = getattr(curr, "exceptions", None)
