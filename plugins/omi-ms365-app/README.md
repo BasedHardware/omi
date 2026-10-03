@@ -84,6 +84,16 @@ Create or update your Omi app and set:
 
 The manifest auto-populates absolute endpoint URLs based on `APP_BASE_URL`.
 
+### Chat-tool caller authentication
+
+`/tools/*` acts on a user's stored Microsoft Graph token using the `uid` in the
+request body, so it is reachable only with the `MS365_TOOLS_SECRET` shared
+secret — sent as `Authorization: Bearer <secret>` or as an `ms365_tools_token`
+query parameter on the registered endpoint URL. The route fails closed: 503
+while the secret is unset, 401 for a missing or wrong one. Set the secret in
+this service and give the same value to the Omi backend when registering the
+app, or every tool call is rejected.
+
 ## Local development
 
 ```bash
@@ -104,6 +114,7 @@ Verify a tool:
 ```bash
 curl -X POST http://localhost:8080/tools/search_emails \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $MS365_TOOLS_SECRET" \
   -d '{"uid":"test-user","query":"invoice","limit":5}'
 ```
 
@@ -143,6 +154,7 @@ how the Omi backend calls every chat tool. Run the hermetic dispatch tests with
 | `/setup_check?uid=...` | Return `{is_setup_completed: bool}` for Omi |
 | `/.well-known/omi-tools.json` | Tool manifest Omi consumes |
 | `/webhook/memory` | Memory webhook (no-op placeholder) |
+| `/tools/<tool_name>` | Tool execution — requires the `MS365_TOOLS_SECRET` shared secret |
 
 ## Required environment variables
 
@@ -154,6 +166,7 @@ how the Omi backend calls every chat tool. Run the hermetic dispatch tests with
 | `MICROSOFT_REDIRECT_URI` | Must match Azure redirect URI exactly |
 | `APP_BASE_URL` | Public base URL of this service |
 | `SESSION_SECRET` | Random string used to sign OAuth state |
+| `MS365_TOOLS_SECRET` | Shared secret the Omi backend must present to call `/tools/*` |
 | `REDIS_URL` | Optional — Redis connection URL for token persistence |
 | `LOG_LEVEL` | `INFO`, `DEBUG`, etc. |
 
