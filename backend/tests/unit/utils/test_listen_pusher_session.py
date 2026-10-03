@@ -303,20 +303,243 @@ async def test_failed_transcript_send_retains_buffer_for_retry():
 
 
 @pytest.mark.anyio
-async def test_failed_audio_send_retains_buffer_for_retry(monkeypatch):
-    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
+async def test_failed_legacy_audio_send_discards_only_the_attempted_envelope(monkeypatch):
+    """A legacy socket cannot prove an attempted 101: only that envelope is
+    discarded and counted once; the next new audio still flushes normally."""
+    discarded = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
     ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed"), None])
     session = make_session(ws=ws)
     await session.connect()
     session.audio_bytes_send(b"abcd", received_at=100.0)
 
     await session._audio_bytes_flush()
-    assert b"".join(run.data for run in session.audio_runs) == b"abcd"
-    assert session.audio_total_size == 4
+    assert list(session.audio_runs) == []
+    assert session.audio_total_size == 0
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded
+        == 4
+    )
+
+    session.audio_bytes_send(b"efgh", received_at=101.0)
+    await session._audio_bytes_flush()
+    assert ws.sent[-1][12:] == b"efgh"
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded
+        == 4
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('error', [RuntimeError("send failed"), ConnectionClosedError(None, None)])
+@pytest.mark.parametrize('delivered', [False, True])
+async def test_legacy_uncertain_send_discards_attempted_envelope_and_counts_bytes_once(monkeypatch, error, delivered):
+    """For every send failure shape — with the frame delivered before the
+    error or never delivered — the attempted legacy envelope is discarded
+    (never retained, never replayed) and its bytes counted exactly once."""
+    ws = FakePusherWebSocket()
+    if delivered:
+        inner_send = ws.send
+        raise_once = []
+
+        async def delivered_then_raise(data):
+            await inner_send(data)
+            if frame_type(data) == 101 and not raise_once:
+                raise_once.append(True)
+                raise error
+
+        ws.send = delivered_then_raise
+    else:
+        ws.send_errors = [None, error]
+    session = make_session(ws=ws)
+    discarded_before = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
 
     await session._audio_bytes_flush()
     assert list(session.audio_runs) == []
     assert session.audio_total_size == 0
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded_before
+        == 4
+    )
+
+    session.pusher_connected = True
+    session.audio_bytes_send(b"efgh", received_at=101.0)
+    await session._audio_bytes_flush()
+    assert ws.sent[-1][12:] == b"efgh"
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded_before
+        == 4
+    )
+
+
+@pytest.mark.anyio
+async def test_legacy_cancelled_audio_send_discards_attempted_envelope(monkeypatch):
+    """Cancellation counts the same discard: the attempted envelope's bytes
+    are metered once and nothing is retained for replay."""
+    ws = FakePusherWebSocket(send_errors=[asyncio.CancelledError()])
+    session = make_session(ws=ws, current_conversation_id=None)
+    discarded_before = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
+
+    with pytest.raises(asyncio.CancelledError):
+        await session._audio_bytes_flush()
+    assert list(session.audio_runs) == []
+    assert session.audio_total_size == 0
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded_before
+        == 4
+    )
+
+
+@pytest.mark.anyio
+async def test_legacy_unattempted_later_envelope_stays_retained(monkeypatch):
+    """A failed send on envelope one discards only it: the never-attempted
+    second envelope stays retained and flushes on the next attempt."""
+    discarded = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed")])
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    await session.connect()
+    session.audio_bytes_send(b"aaaa", received_at=100.0, conversation_id='conv-1')
+    session.audio_bytes_send(b"bbbb", received_at=101.0, conversation_id='conv-2')
+
+    await session._audio_bytes_flush()
+    assert b"".join(run.data for run in session.audio_runs) == b"bbbb"
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded
+        == 4
+    )
+
+    await session._audio_bytes_flush()
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert audio_frames[-1][12:] == b"bbbb"
+
+
+@pytest.mark.anyio
+async def test_legacy_failed_announcement_retains_every_unattempted_envelope(monkeypatch):
+    """If the conversation announcement fails, no 101 was attempted: every
+    buffered envelope stays retained and nothing is counted as discarded."""
+    discarded = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed")])
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    await session.connect()
+    session.audio_bytes_send(b"aaaa", received_at=100.0, conversation_id='conv-1')
+
+    await session._audio_bytes_flush()
+    assert b"".join(run.data for run in session.audio_runs) == b"aaaa"
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        == discarded
+    )
+
+    await session._audio_bytes_flush()
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert audio_frames[-1][12:] == b"aaaa"
+
+
+@pytest.mark.anyio
+async def test_legacy_already_uncertain_envelope_is_counted_and_skipped_without_reconcile(monkeypatch):
+    """Defensive: an already-uncertain envelope on a legacy socket is counted
+    once and skipped with no reconcile call."""
+    monkeypatch.setattr(
+        pusher_session,
+        'reconcile_audio_chunk_prefix',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('legacy must not reconcile')),
+    )
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    discarded_before = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0, conversation_id='conv-1')
+    session.audio_runs[0].uncertain = True
+    session.audio_runs[0].header_timestamp = 99.9
+
+    await session._audio_bytes_flush()
+    assert list(session.audio_runs) == []
+    assert session.audio_total_size == 0
+    assert [frame for frame in ws.sent if frame_type(frame) == 101] == []
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded_before
+        == 4
+    )
+
+
+@pytest.mark.anyio
+async def test_legacy_send_failure_uses_socket_mode_pinned_at_flush_start(monkeypatch):
+    """A send that flips session.audio_timeline_active mid-flush — e.g. a
+    simultaneous capable replacement racing the old socket — must not promote
+    the originally-legacy frame to span retention: the pinned legacy mode
+    still discards it and counts its bytes once."""
+    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    inner_send = ws.send
+
+    async def flip_then_raise(data):
+        await inner_send(data)
+        if frame_type(data) == 101:
+            session.audio_timeline_active = True
+            raise RuntimeError("send failed")
+
+    ws.send = flip_then_raise
+    discarded = pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(
+        reason='legacy_uncertain_send'
+    )._value.get()
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
+
+    await session._audio_bytes_flush()
+    assert list(session.audio_runs) == []
+    assert session.audio_total_size == 0
+    assert (
+        pusher_session.OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send')._value.get()
+        - discarded
+        == 4
+    )
+
+
+@pytest.mark.anyio
+async def test_span_socket_send_failure_retains_uncertain_while_mode_stays_active(monkeypatch):
+    """A negotiated socket whose mode stays active through the failing send
+    retains the frozen envelope as uncertain and reconciles it on resend."""
+    calls = []
+
+    def recording_reconcile(*args, **kwargs):
+        calls.append(kwargs.get('require_spans'))
+        return 0, []
+
+    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', recording_reconcile)
+    ws = FakePusherWebSocket(incoming=[audio_timeline_ack_frame()], send_errors=[None, RuntimeError("send failed")])
+    session = make_session(ws=ws, config_overrides={'audio_timeline_spans': True})
+    await session.connect()
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b"abcd", received_at=100.0, conversation_id='conv-1', start_wall=100.0)
+
+    await session._audio_bytes_flush()
+    assert session.audio_runs and session.audio_runs[0].uncertain
+
+    await session._audio_bytes_flush()
+    assert calls == [True]
     assert ws.sent[-1][12:] == b"abcd"
 
 
@@ -335,8 +558,8 @@ async def test_cancelled_send_retains_buffer(flush):
         session.audio_bytes_send(b"abcd", received_at=100.0)
         with pytest.raises(asyncio.CancelledError):
             await session._audio_bytes_flush()
-        assert b"".join(run.data for run in session.audio_runs) == b"abcd"
-        assert session.audio_total_size == 4
+        assert list(session.audio_runs) == []
+        assert session.audio_total_size == 0
 
 
 @pytest.mark.anyio
@@ -736,7 +959,9 @@ async def test_spans_active_run_without_projection_falls_back_to_legacy_header(m
     projection-honoring, close_group used to leave ``header_timestamp`` as
     ``None`` for a ``start_wall=None`` run, so ``struct.pack`` failed and the
     envelope stalled instead of keeping the legacy arrival-minus-duration
-    estimate. The ambiguous-retry leg must resend that same header verbatim.
+    estimate. The negotiated leg must resend that same header verbatim; the
+    declared-flag-only leg is not span proof and discards the attempted
+    envelope like any legacy socket.
     """
     monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
     config = {'max_audio_buffer_size': 1_000_000}
@@ -759,6 +984,10 @@ async def test_spans_active_run_without_projection_falls_back_to_legacy_header(m
 
     expected_header = 100.5 - len(run) / (rate * 2)
     assert [frame for frame in ws.sent if frame_type(frame) == 101] == []
+    if span_state == 'config_v2':
+        assert not session.audio_timeline_active
+        assert list(session.audio_runs) == []
+        return
     assert session.audio_runs and session.audio_runs[0].uncertain
 
     await session._audio_bytes_flush()

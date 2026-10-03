@@ -645,7 +645,14 @@ def reconcile_audio_chunk_prefix(
     *,
     require_spans: bool = False,
 ) -> Tuple[int, List[str]]:
-    """Compose the live storage I/O seams for ``reconcile_committed_prefix``."""
+    """Compose the live storage I/O seams for ``reconcile_committed_prefix``.
+
+    Only span-bearing uploads reconcile; a spanless payload returns
+    ``(0, [])`` before any bucket or listing I/O so the caller streams it
+    verbatim like the literal main uploader.
+    """
+    if not require_spans:
+        return 0, []
     return reconcile_committed_prefix(
         uid,
         conversation_id,
@@ -681,9 +688,12 @@ def upload_audio_chunks_batch(
         conversation_id: Conversation ID.
         data_protection_level: Optional cached protection level. When provided,
             skips the Firestore read. Falls back to DB read when None.
-        sample_rate: PCM sample rate supplied by the caller (pusher). It lets
-            the uploader reconcile a replayed or rebatched payload against the
-            committed prefix before writing; it is never persisted.
+        sample_rate: PCM sample rate supplied by the caller (pusher). Kept as a
+            caller/testing seam; the rate used for reconciliation is derived
+            only from a chunk's own span, so spanless uploads never infer
+            replay against legacy objects and are streamed verbatim —
+            including an overwrite at the same filename key — exactly like
+            main. It is never persisted.
 
     Returns:
         List of GCS paths now holding the payload: already-committed prefix
@@ -719,7 +729,7 @@ def upload_audio_chunks_batch(
         if total_samples > 0:
             span = {**span, 'samples': total_samples}
 
-    rate = int(span['sample_rate']) if span is not None else (int(sample_rate) if sample_rate else None)
+    rate = int(span['sample_rate']) if span is not None else None
 
     committed_paths: List[str] = []
     attempts = 0
@@ -728,7 +738,7 @@ def upload_audio_chunks_batch(
             payload = b''.join(chunk['data'] for chunk in sorted_chunks)
             first_ts = float(sorted_chunks[0]['timestamp'])
             verified, proven = reconcile_audio_chunk_prefix(
-                uid, conversation_id, first_ts, payload, rate, require_spans=span is not None
+                uid, conversation_id, first_ts, payload, rate, require_spans=True
             )
             if verified >= len(payload):
                 return committed_paths + proven
@@ -752,7 +762,7 @@ def upload_audio_chunks_batch(
         try:
             with owner_storage_write_gate(uid, bucket):
                 blob = bucket.blob(path)
-                if span is not None or rate is not None:
+                if span is not None:
                     payload = b''.join(chunk['data'] for chunk in sorted_chunks)
                     payload_digest = hashlib.sha256(payload)
                     try:
@@ -783,8 +793,7 @@ def upload_audio_chunks_batch(
                             # Identical retry: never overwrite or double-write.
                             return committed_paths + [path]
                         raise ValueError(f'v2 audio blob content conflict at {path}')
-                    if span is not None:
-                        blob.metadata = span_blob_metadata(span)
+                    blob.metadata = span_blob_metadata(span)
                 create_only = {'if_generation_match': 0} if span is not None else {}
                 if protection_level == 'enhanced':
                     # Encrypt each chunk individually (length-prefixed), stream to GCS

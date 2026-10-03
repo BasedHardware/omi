@@ -2155,36 +2155,49 @@ at actual uncovered ends or overlaps; `AudioFile.chunk_spans` exposes
 validated contiguous coverage (absent on legacy files) and joins the artifact
 fingerprint.
 
-Ambiguous sends are reconciled before replay. A run's identity fields are
-fixed into an envelope — resolved conversation, exact opcode-101 header
-timestamp, PCM and projected start — before its first send attempt; the only
-mutation it ever undergoes is trimming a verified committed prefix, it is
-not a literally frozen value. A send that raises marks only that envelope
-uncertain; it is replayed verbatim, in order, and is never recombined with
-newer audio or retimed, so the legacy header arithmetic stays identical for
-unambiguous sends. Before resending, the producer verifies how many leading
+Ambiguous sends are reconciled before replay only on a negotiated
+audio-timeline socket. A run's identity fields are fixed into an envelope —
+resolved conversation, exact opcode-101 header timestamp, PCM and projected
+start — before its first send attempt; the only mutation it ever undergoes
+is trimming a verified committed prefix, it is not a literally frozen value.
+On a socket whose pusher acknowledged the timeline, a send that raises
+(including cancellation) marks only that envelope uncertain; it is replayed
+verbatim, in order, and is never recombined with newer audio or retimed, so
+the legacy header arithmetic stays identical for unambiguous sends. On a
+legacy socket the same failure discards only that attempted envelope — its
+bytes are counted once in
+`omi_listen_pusher_audio_discarded_bytes_total{reason="legacy_uncertain_send"}`
+and it is never retained or replayed; envelopes never attempted (a failed
+conversation announcement or a later 101 in the same flush) stay retained
+normally. Legacy spanless storage carries zero replay inference:
+`storage.reconcile_audio_chunk_prefix` returns no proof and performs no
+listing, existence, or download I/O when `require_spans=False`, so a
+legacy retry behaves like the literal main uploader and streams its payload
+verbatim — including an overwrite at the same 3-decimal filename key.
+Before a spans resend, the producer verifies how many leading
 bytes are already committed through `storage.reconcile_audio_chunk_prefix`
 (a bounded plaintext compare that decrypts enhanced-protection objects
-first): for spans it walks adjacent committed spans across rebatching; for
-legacy storage the proof is a single covering raw object — either the same
-rounded timestamp anchor, or one strictly earlier listed object whose
-generation-pinned decoded PCM provably reaches the envelope's interior byte
-offset, with every plausible candidate read and ambiguity, unreadable
-evidence, or budget exhaustion all yielding zero proof. Verified bytes are
+first): it walks adjacent committed spans across rebatching while every
+overlapping PCM byte is compared. Verified bytes are
 skipped and the retained tail keeps its
-position shifted by exactly the trimmed samples; any unverifiable or raced
-evidence resends the whole envelope verbatim — zero proof is never
-permission to discard, so a concurrent old-socket commit landing after a
-zero-proof query can still double-store. The uploader runs the same
-reconciliation independently, so a rebatch or an old producer's `A+B` resend
-stores only the genuinely new tail; span objects are written create-only
+position shifted by exactly the trimmed samples; on the negotiated span
+path, unverifiable or raced evidence resends the whole envelope verbatim —
+zero proof is never permission to discard, so a concurrent commit landing
+after a zero-proof span query can still double-store. The uploader runs the
+same reconciliation independently for span-bearing uploads, so a rebatch or
+a replayed `A+B` resend stores only the genuinely new tail; span objects
+are written create-only
 (`if_generation_match=0`) with precondition races re-reconciled within
-bounded attempts, while legacy writes are not atomic. The stable timestamp
-plus verified payload is bounded occurrence identity, not a universal
-producer id: an old listener that recomputes its retry timestamp, an anchor
-whose only plausible covering object is unreadable, unpinned, or
-ambiguous, or a span session resending to an old pusher that never acked
-cannot be proven and can still double-store.
+bounded attempts and refuse existence/content collisions, while legacy
+writes are not atomic and never probe. The storage helper itself takes no
+span or upload argument: it performs no listing, existence, or download I/O
+when `require_spans=False`, so spanless calls return zero proof
+unconditionally. Only on the negotiated span path does the stable timestamp
+plus verified payload act as bounded occurrence identity, not a universal
+producer id: a resend whose only plausible covering span evidence is
+unreadable, unpinned, or ambiguous cannot be proven and can still
+double-store; spanless legacy payloads carry no such identity and stream
+verbatim, overwriting at the same key like the literal main uploader.
 
 Consumers. `segment_wall_window` / `covered_window` / `coverage_outcome`
 (`utils/audio_timeline.py`) are the one coordinate conversion and the

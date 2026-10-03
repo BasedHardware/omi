@@ -468,7 +468,10 @@ def test_uploader_reconciles_multiple_committed_prefixes(monkeypatch, protection
 
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
-def test_uploader_legacy_anchor_reconciles(monkeypatch, protection, round4_storage):
+def test_uploader_legacy_same_key_overwrites(monkeypatch, protection, round4_storage):
+    """Spanless storage has zero replay inference: A then A+B at the same
+    filename key ends in one A+B blob, exactly like the literal main
+    uploader."""
     gcs = f.gcs.__wrapped__(monkeypatch)
     monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     storage = round4_storage or storage_module
@@ -477,8 +480,78 @@ def test_uploader_legacy_anchor_reconciles(monkeypatch, protection, round4_stora
     _uploader(storage, [{'data': a, 'timestamp': t0}], f.UID, f.CONV1, protection, f.RATE)
     _uploader(storage, [{'data': a + b, 'timestamp': t0}], f.UID, f.CONV1, protection, f.RATE)
     chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
-    assert len(chunks) == 2
+    assert len(chunks) == 1
     assert _stored_pcm(gcs.bucket(storage_module.private_cloud_sync_bucket), f.UID, chunks) == a + b
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_uploader_legacy_fresh_occurrence_stores_verbatim(monkeypatch, protection, round4_storage):
+    """A fresh occurrence whose PCM happens to match an earlier object's
+    interior is a new capture, not a replay: the whole batch is stored under
+    its own key with no prefix trimmed. Reproduces the round-6 fresh-
+    occurrence loss: X+A committed, then a new (suffix A)+C send."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    storage = round4_storage or storage_module
+    x, a = f._phrase(9, 1), f._phrase(1, 1)
+    t0 = f.T0
+    _uploader(storage, [{'data': x + a, 'timestamp': t0}], f.UID, f.CONV1, protection, f.RATE)
+    fresh = a[int(0.3 * f.RATE) * 2 :] + f._phrase(2, 0.1)
+    _uploader(storage, [{'data': fresh, 'timestamp': t0 + 1.3}], f.UID, f.CONV1, protection, f.RATE)
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert len(chunks) == 2
+    actual = _stored_pcm(gcs.bucket(storage_module.private_cloud_sync_bucket), f.UID, chunks)
+    assert actual == x + a + fresh
+    assert len(actual) == 89600
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_uploader_legacy_ambiguous_tail_overwrites_same_key(monkeypatch, protection, round4_storage):
+    """An earlier covering spanless object must not invalidate the same-key
+    retry: Q committed at T0-2 and A at T0, then replayed A plus new B at T0
+    ends in Q+A+B — B preserved, existing data intact, like literal main."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+    storage = round4_storage or storage_module
+    q, a, b = f._phrase(7, 3), f._phrase(1, 1), f._phrase(2, 1)
+    t0 = f.T0
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    _write_raw_object(bucket, f.UID, f.CONV1, t0 - 2, q, protection)
+    _uploader(storage, [{'data': a, 'timestamp': t0}], f.UID, f.CONV1, protection, f.RATE)
+    _uploader(storage, [{'data': a + b, 'timestamp': t0}], f.UID, f.CONV1, protection, f.RATE)
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert len(chunks) == 2
+    actual = _stored_pcm(bucket, f.UID, chunks)
+    assert actual == q + a + b
+    assert len(actual) == 160000
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_uploader_legacy_does_no_listing_or_probe(monkeypatch, protection):
+    """Even with sample_rate supplied, a spanless upload performs no
+    reconciliation listing and no existence/content probe."""
+    gcs = f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('legacy upload must not reconcile or probe')
+
+    monkeypatch.setattr(storage_module, 'reconcile_audio_chunk_prefix', forbidden)
+    monkeypatch.setattr(storage_module, 'list_audio_chunks', forbidden)
+    monkeypatch.setattr(f.FakeBlob, 'exists', forbidden)
+    monkeypatch.setattr(f.FakeBlob, 'download_as_bytes', forbidden)
+    a = f._phrase(1, 1)
+    paths = storage_module.upload_audio_chunks_batch(
+        [{'data': a, 'timestamp': f.T0}], f.UID, f.CONV1, protection, sample_rate=f.RATE
+    )
+    assert len(paths) == 1
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    assert len(bucket.blobs) == 1
+    stored = next(iter(bucket.blobs.values()))
+    data = stored._data
+    if stored.name.endswith('.enc'):
+        data = encryption.decrypt_audio_file(data, f.UID)
+    assert data == a
 
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
@@ -515,7 +588,9 @@ def test_uploader_conflicting_prefix_refuses(monkeypatch):
     assert len(storage_module.list_audio_chunks(f.UID, f.CONV1)) == 1
 
 
-def test_uploader_legacy_conflicting_prefix_refuses(monkeypatch):
+def test_uploader_legacy_conflicting_key_overwrites_like_main(monkeypatch):
+    """A spanless unequal collision at the same filename key overwrites like
+    literal main: existence/content refusal applies only to span uploads."""
     gcs = f.gcs.__wrapped__(monkeypatch)
     a, other = f._phrase(1, 1), f._phrase(9, 1)
     t0 = f.T0
@@ -523,14 +598,12 @@ def test_uploader_legacy_conflicting_prefix_refuses(monkeypatch):
         [{'data': a, 'timestamp': t0}], f.UID, f.CONV1, 'standard', sample_rate=f.RATE
     )
     bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
-    before = bucket.blob(storage_module.list_audio_chunks(f.UID, f.CONV1)[0]['path']).download_as_bytes()
-    with pytest.raises(ValueError):
-        storage_module.upload_audio_chunks_batch(
-            [{'data': other, 'timestamp': t0}], f.UID, f.CONV1, 'standard', sample_rate=f.RATE
-        )
-    after = bucket.blob(storage_module.list_audio_chunks(f.UID, f.CONV1)[0]['path']).download_as_bytes()
-    assert before == after
-    assert len(storage_module.list_audio_chunks(f.UID, f.CONV1)) == 1
+    storage_module.upload_audio_chunks_batch(
+        [{'data': other, 'timestamp': t0}], f.UID, f.CONV1, 'standard', sample_rate=f.RATE
+    )
+    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    assert len(chunks) == 1
+    assert bucket.blob(chunks[0]['path']).download_as_bytes() == other
 
 
 def _write_raw_object(bucket, uid, cid, timestamp, pcm, protection):
@@ -542,9 +615,10 @@ def _write_raw_object(bucket, uid, cid, timestamp, pcm, protection):
 
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
-def test_uploader_legacy_interior_prefix_and_tail(monkeypatch, protection, round4_storage):
-    """A committed object strictly earlier than the upload's anchor proves the
-    overlapping interior prefix; only the genuinely new tail is stored."""
+def test_uploader_legacy_interior_occurrence_stores_verbatim(monkeypatch, protection, round4_storage):
+    """Fresh legacy occurrences cannot be inferred from an earlier object's
+    interior: X+A committed, then a new A+C send stores the whole payload —
+    X+A+A+C — exactly like the literal main uploader."""
     gcs = f.gcs.__wrapped__(monkeypatch)
     monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     storage = round4_storage or storage_module
@@ -562,13 +636,14 @@ def test_uploader_legacy_interior_prefix_and_tail(monkeypatch, protection, round
     )
     chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
     assert len(chunks) == 2
-    assert _stored_pcm(bucket, f.UID, chunks) == x + a + c
+    assert _stored_pcm(bucket, f.UID, chunks) == x + a + a + c
 
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
-def test_uploader_legacy_interior_mismatch_proves_nothing(monkeypatch, protection, round4_storage):
-    """Unequal corresponding PCM at the interior offset yields zero proof —
-    the whole envelope is stored, no leading-equal-part trimming."""
+def test_uploader_legacy_interior_mismatch_stores_verbatim(monkeypatch, protection, round4_storage):
+    """Unequal PCM at a would-be interior offset is stored verbatim: legacy
+    storage does no coverage inference, so the whole envelope is a new
+    object — no leading-equal-part trimming either."""
     gcs = f.gcs.__wrapped__(monkeypatch)
     monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     storage = round4_storage or storage_module
@@ -590,22 +665,19 @@ def test_uploader_legacy_interior_mismatch_proves_nothing(monkeypatch, protectio
     assert _stored_pcm(bucket, f.UID, chunks) == x + a + other + c
 
 
-def test_reconcile_legacy_ambiguous_covering_objects_prove_nothing(monkeypatch):
+def _forbidden_io(*args, **kwargs):
+    raise AssertionError('legacy reconciliation must perform no listing or download I/O')
+
+
+def test_reconcile_legacy_performs_no_io(monkeypatch):
+    """require_spans=False returns zero proof before any listing, download, or
+    bucket acquisition — spanless storage carries zero replay inference."""
     gcs = f.gcs.__wrapped__(monkeypatch)
     bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
     x, a = f._phrase(9, 1), f._phrase(1, 1)
-    t0 = f.T0
-    _write_raw_object(bucket, f.UID, f.CONV1, t0, x + a, 'standard')
-    _write_raw_object(bucket, f.UID, f.CONV1, t0 - 0.5, f._silence(0.5) + x + a, 'standard')
-    chunks = storage_module.list_audio_chunks(f.UID, f.CONV1)
+    _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
     verified, proven = replay_module.reconcile_committed_prefix(
-        f.UID,
-        f.CONV1,
-        t0 + 1.0,
-        a,
-        f.RATE,
-        bucket=bucket,
-        list_chunks=lambda *args, **kwargs: chunks,
+        f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE, bucket=bucket, list_chunks=_forbidden_io
     )
     assert verified == 0 and proven == []
 
@@ -616,6 +688,17 @@ def test_reconcile_legacy_unpinned_candidate_proves_nothing(monkeypatch):
     x, a = f._phrase(9, 1), f._phrase(1, 1)
     blob = _write_raw_object(bucket, f.UID, f.CONV1, f.T0, x + a, 'standard')
     blob.generation = None
+    verified, proven = storage_module.reconcile_audio_chunk_prefix(f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE)
+    assert verified == 0 and proven == []
+
+
+def test_reconcile_storage_seam_legacy_acquires_no_bucket(monkeypatch):
+    """The storage-level helper must not even obtain a bucket for a spanless
+    reconciliation."""
+    f.gcs.__wrapped__(monkeypatch)
+    monkeypatch.setattr(storage_module, 'get_private_cloud_sync_bucket', _forbidden_io)
+    monkeypatch.setattr(storage_module, 'list_audio_chunks', _forbidden_io)
+    a = f._phrase(1, 1)
     verified, proven = storage_module.reconcile_audio_chunk_prefix(f.UID, f.CONV1, f.T0 + 1.0, a, f.RATE)
     assert verified == 0 and proven == []
 
@@ -1107,22 +1190,29 @@ def test_inventory_decoded_span_count_mismatch_refuses(round4_stage):
 
 
 async def test_uncertain_envelope_retries_verbatim_with_later_runs(monkeypatch):
+    """Negotiated spans only: an uncertain envelope reconciles with
+    require_spans=True and resends its frozen header and PCM verbatim."""
     calls = []
 
     def recording_reconcile(*args, **kwargs):
-        calls.append(args[1:5])
+        calls.append((args[1:5], kwargs.get('require_spans')))
         return 0, []
 
     monkeypatch.setattr(session_mod.pusher_session, 'reconcile_audio_chunk_prefix', recording_reconcile)
-    ws = session_mod.FakePusherWebSocket(send_errors=[None, RuntimeError('send failed')])
-    session = session_mod.make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    ws = session_mod.FakePusherWebSocket(
+        incoming=[session_mod.audio_timeline_ack_frame()], send_errors=[None, RuntimeError('send failed')]
+    )
+    session = session_mod.make_session(
+        ws=ws, config_overrides={'max_audio_buffer_size': 64, 'audio_timeline_spans': True}
+    )
     await session.connect()
-    session.audio_bytes_send(b'aaaa', received_at=100.0)
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b'aaaa', received_at=100.0, conversation_id='conv-1', start_wall=100.0)
     await session._audio_bytes_flush()
     session.audio_bytes_send(b'bbbb', received_at=101.0)
     session.audio_bytes_send(b'cccc', received_at=102.0)
     await session._audio_bytes_flush()
-    assert calls == [('conv-1', 100.0 - 4 / 16000, b'aaaa', 8000)]
+    assert calls == [(('conv-1', 100.0, b'aaaa', 8000), True)]
     audio_frames = [frame for frame in ws.sent if session_mod.frame_type(frame) == 101]
     assert audio_frames[-2][12:] == b'aaaa'
     assert audio_frames[-1][12:] == b'bbbbcccc'
@@ -1130,26 +1220,38 @@ async def test_uncertain_envelope_retries_verbatim_with_later_runs(monkeypatch):
 
 async def test_uncertain_envelope_keeps_frozen_conversation_across_rollover(monkeypatch):
     monkeypatch.setattr(session_mod.pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
-    ws = session_mod.FakePusherWebSocket(send_errors=[None, RuntimeError('send failed')])
-    session = session_mod.make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    ws = session_mod.FakePusherWebSocket(
+        incoming=[session_mod.audio_timeline_ack_frame()], send_errors=[None, RuntimeError('send failed')]
+    )
+    session = session_mod.make_session(
+        ws=ws, config_overrides={'max_audio_buffer_size': 64, 'audio_timeline_spans': True}
+    )
     await session.connect()
-    session.audio_bytes_send(b'aaaa', received_at=100.0, conversation_id='conv-1')
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b'aaaa', received_at=100.0, conversation_id='conv-1', start_wall=100.0)
     await session._audio_bytes_flush()
     session.deps.get_current_conversation_id = lambda: 'conv-2'
-    session.audio_bytes_send(b'bbbb', received_at=101.0, conversation_id='conv-2')
+    session.audio_bytes_send(b'bbbb', received_at=101.0, conversation_id='conv-2', start_wall=101.0)
     await session._audio_bytes_flush()
     boundary = [frame[4:].decode() for frame in ws.sent if session_mod.frame_type(frame) == 103]
     assert boundary == ['conv-1', 'conv-2']
 
 
 async def test_cancelled_send_retains_frozen_envelope_verbatim(monkeypatch):
+    """On a negotiated socket even cancellation retains the frozen envelope
+    for a verbatim resend."""
     monkeypatch.setattr(session_mod.pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
-    ws = session_mod.FakePusherWebSocket(send_errors=[asyncio.CancelledError()])
+    ws = session_mod.FakePusherWebSocket(
+        incoming=[session_mod.audio_timeline_ack_frame()], send_errors=[asyncio.CancelledError()]
+    )
     session = session_mod.make_session(
-        ws=ws, current_conversation_id=None, config_overrides={'max_audio_buffer_size': 64}
+        ws=ws,
+        current_conversation_id=None,
+        config_overrides={'max_audio_buffer_size': 64, 'audio_timeline_spans': True},
     )
     await session.connect()
-    session.audio_bytes_send(b'xyzw', received_at=100.0)
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b'xyzw', received_at=100.0, start_wall=100.0)
     with pytest.raises(asyncio.CancelledError):
         await session._audio_bytes_flush()
     assert b''.join(run.data for run in session.audio_runs) == b'xyzw'
@@ -1160,14 +1262,19 @@ async def test_cancelled_send_retains_frozen_envelope_verbatim(monkeypatch):
 async def test_unbound_runs_freeze_to_acceptance_conversation(monkeypatch):
     monkeypatch.setattr(session_mod.pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
     current = {'id': 'conv-1'}
-    ws = session_mod.FakePusherWebSocket(send_errors=[None, RuntimeError('send failed')])
-    session = session_mod.make_session(ws=ws, config_overrides={'max_audio_buffer_size': 64})
+    ws = session_mod.FakePusherWebSocket(
+        incoming=[session_mod.audio_timeline_ack_frame()], send_errors=[None, RuntimeError('send failed')]
+    )
+    session = session_mod.make_session(
+        ws=ws, config_overrides={'max_audio_buffer_size': 64, 'audio_timeline_spans': True}
+    )
     session.deps.get_current_conversation_id = lambda: current['id']
     await session.connect()
-    session.audio_bytes_send(b'aaaa', received_at=100.0)
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b'aaaa', received_at=100.0, start_wall=100.0)
     await session._audio_bytes_flush()
     current['id'] = 'conv-2'
-    session.audio_bytes_send(b'bbbb', received_at=101.0)
+    session.audio_bytes_send(b'bbbb', received_at=101.0, start_wall=101.0)
     await session._audio_bytes_flush()
     boundary = [frame[4:].decode() for frame in ws.sent if session_mod.frame_type(frame) == 103]
     assert boundary[0] == 'conv-1'

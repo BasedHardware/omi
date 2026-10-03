@@ -113,14 +113,10 @@ def reconcile_committed_prefix(
     With ``require_spans`` the proof chain uses each object's authoritative
     span (start + samples + rate) on the half-open sample grid: adjacent
     committed spans are reconciled across rebatching while every overlapping
-    PCM byte is compared. Legacy proof is deliberately narrower: a single
-    raw object may prove a prefix — the one at the same rounded timestamp
-    anchor (byte offset 0), or one strictly earlier listed object whose
-    decoded PCM provably reaches past the anchor's byte offset — and only
-    when it is the sole actually covering candidate. Timestamps only select
-    candidates and compute the offset; commitment is proven solely by the
-    generation-pinned plaintext compare, so placement is never inferred
-    inside arbitrary or ambiguous historical blobs.
+    PCM byte is compared. Legacy spanless storage carries zero replay
+    inference: ``require_spans=False`` returns ``(0, [])`` before any
+    listing or download, and the caller streams the payload verbatim exactly
+    like the literal main uploader.
 
     Bounds: the listing is a single bounded full inventory (SDK timeout plus
     caller deadline, at most 10,000 entries — a larger inventory raises and
@@ -128,9 +124,12 @@ def reconcile_committed_prefix(
     bytes are downloaded within 10 seconds; any oversize candidate rejects
     before download so the byte cap is never exceeded. Transient listing or
     download failure also proves nothing — zero proof keeps the retained
-    envelope for a verbatim resend. Reconciliation is not a commit ACK:
-    unavailable proof can still cause a collision or a legacy duplicate.
+    envelope for a verbatim resend. Reconciliation is not a commit ACK: on
+    the negotiated span path, unavailable proof can still cause a collision
+    or a duplicate store; spanless callers never reach this branch.
     """
+    if not require_spans:
+        return 0, []
     if not data or sample_rate <= 0:
         return 0, []
     try:
@@ -159,95 +158,22 @@ def reconcile_committed_prefix(
     while verified < len(data):
         if time.monotonic() >= deadline or downloads >= RECONCILE_MAX_OBJECTS or bytes_seen >= RECONCILE_MAX_BYTES:
             break
-        if require_spans:
-            candidates = []
-            for c in chunks:
-                offset = _span_candidate_offset(c, position, sample_rate)
-                if offset is not None:
-                    candidates.append((c, offset))
-        else:
-            if verified or paths:
-                break
-            anchor = f'{position:.3f}'
-            candidates = []
-            for c in chunks:
-                if get_extension_for_path(str(c.get('path'))) not in (
-                    'batch.bin',
-                    'batch.enc',
-                    'bin',
-                    'enc',
-                ):
-                    continue
-                ts_value = c.get('timestamp')
-                if not isinstance(ts_value, (int, float)) or isinstance(ts_value, bool):
-                    continue
-                ts = float(ts_value)
-                if not math.isfinite(ts):
-                    continue
-                if f'{ts:.3f}' == anchor:
-                    candidates.append((c, 0))
-                    continue
-                if ts >= position:
-                    continue
-                offset_delta = (position - ts) * sample_rate
-                if not math.isfinite(offset_delta):
-                    continue
-                offset = round(offset_delta)
-                if offset <= 0:
-                    continue
-                declared = c.get('size')
-                if (
-                    isinstance(declared, int)
-                    and not isinstance(declared, bool)
-                    and declared > 0
-                    and offset * 2 >= declared
-                ):
-                    continue
+        candidates = []
+        for c in chunks:
+            offset = _span_candidate_offset(c, position, sample_rate)
+            if offset is not None:
                 candidates.append((c, offset))
-        if require_spans:
-            if len(candidates) != 1:
-                break
-            chunk, offset_samples = candidates[0]
-            pcm, charged = _raw_chunk_object_pcm(bucket, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
-            downloads += 1
-            bytes_seen += charged
-            if pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
-                break
-            if len(pcm) != chunk['span']['samples'] * 2:
-                break
-            comparable = pcm[offset_samples * 2 :]
-        else:
-            if not candidates:
-                break
-            covering = None
-            unproven = False
-            for cand_chunk, cand_offset in candidates:
-                if (
-                    time.monotonic() >= deadline
-                    or downloads >= RECONCILE_MAX_OBJECTS
-                    or bytes_seen >= RECONCILE_MAX_BYTES
-                ):
-                    unproven = True
-                    break
-                cand_pcm, cand_charged = _raw_chunk_object_pcm(
-                    bucket, cand_chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen
-                )
-                downloads += 1
-                bytes_seen += cand_charged
-                if cand_pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
-                    unproven = True
-                    break
-                covered = len(cand_pcm) > 0 if cand_offset == 0 else cand_offset * 2 < len(cand_pcm)
-                if covered:
-                    if covering is not None:
-                        unproven = True
-                        covering = None
-                        break
-                    covering = (cand_chunk, cand_offset, cand_pcm)
-            if unproven or covering is None:
-                break
-            chunk, offset_samples, pcm = covering
-            comparable = pcm[offset_samples * 2 :]
+        if len(candidates) != 1:
+            break
+        chunk, offset_samples = candidates[0]
+        pcm, charged = _raw_chunk_object_pcm(bucket, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
+        downloads += 1
+        bytes_seen += charged
+        if pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
+            break
+        if len(pcm) != chunk['span']['samples'] * 2:
+            break
+        comparable = pcm[offset_samples * 2 :]
         available = min(len(comparable), len(data) - verified)
         if available <= 0 or comparable[:available] != data[verified : verified + available]:
             break

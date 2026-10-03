@@ -17,7 +17,11 @@ else:
     WebSocketClientProtocol = Any
 
 from utils.executors import run_blocking, storage_executor
-from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
+from utils.metrics import (
+    OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL,
+    PUSHER_CIRCUIT_BREAKER_REJECTIONS,
+    PUSHER_SESSION_DEGRADED,
+)
 from utils.other.storage import reconcile_audio_chunk_prefix
 from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
@@ -103,9 +107,11 @@ class AudioRun:
     has been framed for a first send attempt freezes into an immutable
     envelope: ``header_timestamp`` pins the exact opcode-101 wire timestamp,
     the conversation binding is resolved, and ``uncertain`` marks a send that
-    raised after the frame may have been delivered — such an envelope is
-    reconciled against committed storage before any resend instead of being
-    recombined with newer audio or retimed.
+    raised after the frame may have been delivered. Only a negotiated
+    timeline socket can prove such an envelope: it is reconciled against
+    committed storage before any resend instead of being recombined with
+    newer audio or retimed. On a legacy socket the attempted envelope is
+    discarded once and counted, never retained or replayed.
     """
 
     conversation_id: Optional[str]
@@ -325,6 +331,7 @@ class ListenPusherSession:
             pending_total_size = self.audio_total_size
             self.audio_runs = deque()
             self.audio_total_size = 0
+            timeline_active = self.audio_timeline_active
             sent_envelopes = 0
             envelopes: List[AudioRun] = []
             try:
@@ -381,32 +388,39 @@ class ListenPusherSession:
                 close_group()
 
                 for envelope in envelopes:
-                    if envelope.uncertain and envelope.conversation_id and envelope.header_timestamp is not None:
-                        try:
-                            verified, _committed = await run_blocking(
-                                storage_executor,
-                                reconcile_audio_chunk_prefix,
-                                self.uid,
-                                envelope.conversation_id,
-                                envelope.header_timestamp,
-                                envelope.data,
-                                effective_rate,
-                                require_spans=self.audio_timeline_active,
+                    if envelope.uncertain:
+                        if not timeline_active:
+                            OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
+                                len(envelope.data)
                             )
-                        except Exception as error:
-                            logger.info(
-                                f"Uncertain audio envelope reconcile failed, resending whole: {error} {self.uid} {self.session_id}"
-                            )
-                            verified = 0
-                        if verified >= len(envelope.data):
                             sent_envelopes += 1
                             continue
-                        if verified > 0:
-                            envelope.data = envelope.data[verified:]
-                            shift = verified / (effective_rate * 2)
-                            envelope.header_timestamp = envelope.header_timestamp + shift
-                            if envelope.start_wall is not None:
-                                envelope.start_wall += shift
+                        if envelope.conversation_id and envelope.header_timestamp is not None:
+                            try:
+                                verified, _committed = await run_blocking(
+                                    storage_executor,
+                                    reconcile_audio_chunk_prefix,
+                                    self.uid,
+                                    envelope.conversation_id,
+                                    envelope.header_timestamp,
+                                    envelope.data,
+                                    effective_rate,
+                                    require_spans=True,
+                                )
+                            except Exception as error:
+                                logger.info(
+                                    f"Uncertain audio envelope reconcile failed, resending whole: {error} {self.uid} {self.session_id}"
+                                )
+                                verified = 0
+                            if verified >= len(envelope.data):
+                                sent_envelopes += 1
+                                continue
+                            if verified > 0:
+                                envelope.data = envelope.data[verified:]
+                                shift = verified / (effective_rate * 2)
+                                envelope.header_timestamp = envelope.header_timestamp + shift
+                                if envelope.start_wall is not None:
+                                    envelope.start_wall += shift
                     conversation = envelope.conversation_id
                     if conversation and conversation != self.last_synced_conversation_id:
                         header = bytearray()
@@ -421,7 +435,13 @@ class ListenPusherSession:
                     try:
                         await pusher_ws.send(cast(bytes, data))
                     except (asyncio.CancelledError, Exception):
-                        envelope.uncertain = True
+                        if timeline_active:
+                            envelope.uncertain = True
+                        else:
+                            sent_envelopes += 1
+                            OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
+                                len(envelope.data)
+                            )
                         raise
                     sent_envelopes += 1
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:

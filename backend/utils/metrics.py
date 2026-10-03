@@ -243,6 +243,11 @@ OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL = Counter(
     'Successful audio chunk upload completions, by span metadata presence; an idempotent retry can complete the same object more than once',
     ['reason'],
 )
+OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL = Counter(
+    'omi_listen_pusher_audio_discarded_bytes_total',
+    'Listen-side pusher audio envelope bytes discarded without resend, by bounded reason',
+    ['reason'],
+)
 OMI_AUDIO_PLACEMENT_TOTAL = Counter(
     'omi_audio_placement_total',
     'Audio placement outcomes for embeddable segments, by reason',
