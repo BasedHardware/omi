@@ -6796,7 +6796,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Tietosi on suojattu asetuksillasi';
+    return 'Tietosi on nyt suojattu uusilla $level-asetuksilla.';
   }
 
   @override
