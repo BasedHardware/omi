@@ -58,10 +58,7 @@ Future<int> cleanupStaleExportDirectories(
 
 typedef StaleExportSweep = Future<int> Function(Set<String> protectedPaths);
 
-Future<void> sweepStaleExportDirectories(
-  StaleExportSweep? sweep, {
-  required Set<String> protectedPaths,
-}) async {
+Future<void> sweepStaleExportDirectories(StaleExportSweep? sweep, {required Set<String> protectedPaths}) async {
   try {
     if (sweep != null) {
       await sweep(protectedPaths);

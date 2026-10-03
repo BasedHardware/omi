@@ -251,7 +251,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   void initState() {
     super.initState();
     unawaited(
-        SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id));
+      SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
+    );
     unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
 
     // The supplied conversation can be a list projection whose app results
@@ -510,10 +511,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     trackConversationAction(ConversationActionAction.separate, ConversationActionSurface.detailBody);
     final detail = context.read<ConversationDetailProvider>();
     final list = context.read<ConversationProvider>();
-    return _separation.separate(recording.id, reload: () async {
-      await detail.refreshConversation();
-      await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
-    });
+    return _separation.separate(
+      recording.id,
+      reload: () async {
+        await detail.refreshConversation();
+        await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
+      },
+    );
   }
 
   static const _overflowActions = {
@@ -932,10 +936,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     ];
     final groups = [summaryGroup, organizeGroup, wordsGroup, developerGroup, deleteGroup].where((g) => g.isNotEmpty);
     return [
-      for (final (index, group) in groups.indexed) ...[
-        if (index > 0) const PullDownMenuDivider.large(),
-        ...group,
-      ],
+      for (final (index, group) in groups.indexed) ...[if (index > 0) const PullDownMenuDivider.large(), ...group],
     ];
   }
 

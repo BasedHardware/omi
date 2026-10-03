@@ -79,7 +79,12 @@ void main() {
       tester,
       people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
       suggestion: SpeakerLabelSuggestionEvent(
-          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+        speakerId: 0,
+        personId: '',
+        personName: 'Maya',
+        segmentId: 'seg0',
+        suggestedPersonId: 'maya',
+      ),
       onSpeakerAssigned: (_, id, __, ___, ____) async {
         assignments.add(id);
         return false;

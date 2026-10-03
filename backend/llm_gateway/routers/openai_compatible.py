@@ -865,6 +865,8 @@ def _accounting_context(
         api_surface=api_surface,
         payer=payer,
         app_platform=caller.app_platform,
+        product_lane=caller.product_lane,
+        client_platform=caller.client_platform,
         jit_run_id=jit_budget.run_id if jit_budget is not None else None,
         jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
     )

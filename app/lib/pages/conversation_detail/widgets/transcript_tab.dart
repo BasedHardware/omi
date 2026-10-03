@@ -244,12 +244,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     final temporaryId = newPerson ? 'optimistic-person:${DateTime.now().microsecondsSinceEpoch}' : null;
     if (temporaryId != null) {
       peopleProvider.addOptimisticPerson(
-        Person(
-          id: temporaryId,
-          name: personName,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
+        Person(id: temporaryId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
     }
     var resolvedId = personId;
@@ -293,9 +288,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       pending.then((saved) {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
         if (saved) {
-          PlatformManager.instance.analytics.taggedSegment(
-            resolvedId == 'user' ? 'User' : 'User Person',
-          );
+          PlatformManager.instance.analytics.taggedSegment(resolvedId == 'user' ? 'User' : 'User Person');
           if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {
             _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
           }
@@ -329,10 +322,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   text: (conversation.externalIntegration?.text ?? '').decodeString,
                   maxLines: 1000,
                   linkColor: OmiColors.textSecondary,
-                  style: OmiType.subhead.copyWith(
-                    color: OmiColors.textSecondary,
-                    height: 1.3,
-                  ),
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
                   toggleExpand: provider.toggleIsTranscriptExpanded,
                   isExpanded: provider.isTranscriptExpanded,
                 ),

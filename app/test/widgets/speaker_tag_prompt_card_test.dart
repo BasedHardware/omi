@@ -77,10 +77,12 @@ Future<_Harness> _pumpCard(
     dismiss: () async => const ApiSuccess<void>(null),
     submitAnswer: (request) async {
       answers.add(request);
-      return ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(
-        qualityOutcome: 'skipped',
-        personId: request.personId ?? (request.answer == 'new_person' ? 'p-new' : null),
-      ));
+      return ApiSuccess(
+        GeneratedSpeakerTagPromptAnswerResponse(
+          qualityOutcome: 'skipped',
+          personId: request.personId ?? (request.answer == 'new_person' ? 'p-new' : null),
+        ),
+      );
     },
     updateSettings: ({bool? speakerTagPromptsEnabled, bool? saveOtherVoiceProfiles, required String source}) async {
       saves.add(saveOtherVoiceProfiles);
@@ -101,8 +103,9 @@ Future<_Harness> _pumpCard(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: reduceMotion),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: reduceMotion),
           child: child!,
         ),
         home: const Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
@@ -151,17 +154,23 @@ void main() {
       expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue, reason: key);
     }
     await tester.pumpWidget(const SizedBox.shrink());
-    await _pumpCard(tester, prompts: [
-      _prompt('b', 'identify', candidates: [
-        const GeneratedSpeakerTagCandidate(personId: 'p1', name: 'Maya', matchLevel: 2),
-      ])
-    ]);
+    await _pumpCard(
+      tester,
+      prompts: [
+        _prompt(
+          'b',
+          'identify',
+          candidates: [const GeneratedSpeakerTagCandidate(personId: 'p1', name: 'Maya', matchLevel: 2)],
+        ),
+      ],
+    );
     expect(
-        tester
-            .getSemantics(find.byKey(const Key('speaker_tag_prompt_candidate_p1')))
-            .getSemanticsData()
-            .hasAction(SemanticsAction.tap),
-        isTrue);
+      tester
+          .getSemantics(find.byKey(const Key('speaker_tag_prompt_candidate_p1')))
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
     handle.dispose();
   });
 
@@ -175,8 +184,9 @@ void main() {
     }
   });
 
-  testWidgets('owner then confirm: answers send after their Undo window, then the card thanks the user',
-      (tester) async {
+  testWidgets('owner then confirm: answers send after their Undo window, then the card thanks the user', (
+    tester,
+  ) async {
     final h = await _pumpCard(
       tester,
       prompts: [_prompt('a', 'owner_check'), _prompt('b', 'confirm_person')],
@@ -287,15 +297,20 @@ void main() {
     expect(find.text('Is this you?'), findsOneWidget);
   });
 
-  testWidgets('identify ranks server candidates by voice match, pinned first, and a pick sends that person',
-      (tester) async {
+  testWidgets('identify ranks server candidates by voice match, pinned first, and a pick sends that person', (
+    tester,
+  ) async {
     final h = await _pumpCard(
       tester,
       prompts: [
-        _prompt('a', 'identify', candidates: const [
-          GeneratedSpeakerTagCandidate(personId: 'p2', name: 'Jordan', matchLevel: 2, pinned: true),
-          GeneratedSpeakerTagCandidate(personId: 'p3', name: 'Alex', matchLevel: 1),
-        ]),
+        _prompt(
+          'a',
+          'identify',
+          candidates: const [
+            GeneratedSpeakerTagCandidate(personId: 'p2', name: 'Jordan', matchLevel: 2, pinned: true),
+            GeneratedSpeakerTagCandidate(personId: 'p3', name: 'Alex', matchLevel: 1),
+          ],
+        ),
       ],
       people: [_person('p2', 'Jordan', pinned: true), _person('p3', 'Alex')],
     );
@@ -315,7 +330,7 @@ void main() {
     final h = await _pumpCard(
       tester,
       prompts: [
-        _prompt('a', 'identify', suggestedPersonIds: ['p2'])
+        _prompt('a', 'identify', suggestedPersonIds: ['p2']),
       ],
       people: [_person('p2', 'Ana')],
       loadPeople: false,

@@ -681,7 +681,7 @@ done < <(cut -f1 "$suite_map" | sort -u)
 # LocalEmbeddingIndexer.indexFinalizedSession captures and revalidates the
 # effective owner, which reads the production-standard auth defaults domain.
 # Keep its caller suites out of parallel cfprefsd traffic on hosted macOS.
-auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession'
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession|UserDefaults\.standard\.(set|removeObject).*forKey: \.authUserId'
 declare -a auth_domain_files=()
 while IFS= read -r auth_domain_file; do
   auth_domain_files+=("$auth_domain_file")

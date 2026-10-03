@@ -79,6 +79,7 @@ actor InsightAssistant: ProactiveAssistant {
       apiKey: apiKey,
       model: ModelQoS.Gemini.insight,
       fallbackModel: ModelQoS.Gemini.lightweight,
+      lane: .insight,
       workload: .extraction)
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))

@@ -1760,9 +1760,7 @@ class CaptureController extends ChangeNotifier
         // Cut off any in-flight voice playback from a prior reply so the
         // new recording starts clean.
         if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(
-            source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
-          );
+          OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
         }
         _lastVoiceCommandAutoSubmitAt = null;
         _voiceCommandSession = _now();
@@ -3263,7 +3261,8 @@ class CaptureController extends ChangeNotifier
           _pendingAutoSyncConversationId = null;
           _pendingAutoSyncNeedsRepair = false;
           Logger.debug(
-              'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)');
+            'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
+          );
           unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
         }
       });
@@ -3477,13 +3476,11 @@ class CaptureController extends ChangeNotifier
         // segments arrived; without any, use the server's start, or this session's when the row has
         // none.
         final startedAt = conversation.startedAt;
-        final anchor = transcriptStartOnDevice(
-              [for (final segment in valid) (segment.id, segment.end)],
-              segmentArrivals,
-            ) ??
-            (startedAt != null
-                ? startedAt.millisecondsSinceEpoch ~/ 1000
-                : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
+        final anchor =
+            transcriptStartOnDevice([for (final segment in valid) (segment.id, segment.end)], segmentArrivals) ??
+                (startedAt != null
+                    ? startedAt.millisecondsSinceEpoch ~/ 1000
+                    : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
         if (anchor == null || anchor <= 0) {
           failClosedReason = 'anchor_unavailable';
         } else {

@@ -33,6 +33,8 @@
 //    functionResponse turn (NOT role:"function");
 //  - only toolCalls[0] is consumed by the caller; parallel calls are its concern.
 import { net } from 'electron'
+import { GeminiLane } from '../../../shared/geminiAttribution'
+import { geminiClientPlatform, geminiProxyFetch } from '../../../shared/geminiProxy'
 import { getAbortSignal, type BackendSession } from '../core/session'
 import type { GeminiTool, ToolCall } from '../insight/models'
 
@@ -196,18 +198,17 @@ async function callModel(model: string, opts: TurnOpts): Promise<ToolTurn> {
   return withTimeout(
     TASK_REQUEST_TIMEOUT_MS,
     async (signal) => {
-      const res = await net.fetch(
-        `${opts.session.desktopApiBase}/v1/proxy/gemini/models/${model}:generateContent`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${opts.session.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(buildBody(opts)),
-          signal
-        }
-      )
+      const res = await geminiProxyFetch(net.fetch, {
+        baseURL: opts.session.desktopApiBase,
+        model,
+        action: 'generateContent',
+        token: opts.session.token,
+        lane: GeminiLane.taskExtraction,
+        workload: 'extraction',
+        platform: geminiClientPlatform(process.platform),
+        signal,
+        body: JSON.stringify(buildBody(opts))
+      })
       if (!res.ok)
         throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return parseTurn(await res.json())

@@ -1039,10 +1039,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             const SizedBox(width: 4),
                             SpeakerLabelBadge(source: data.speakerLabelSource),
                           ],
-                          if (isTagging) ...[
-                            const SizedBox(width: 6),
-                            const OmiSpinner(size: OmiSpinnerSize.small),
-                          ],
+                          if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],
                       ),
                     ),

@@ -178,10 +178,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       builder: (context, provider, _) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.memories),
-          ),
+          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
           body: Stack(
             children: [
               RefreshIndicator(
@@ -290,10 +287,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             child: Container(
               margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
               height: 88, // Approximate height of a memory item
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.mdAll,
-              ),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
           );
         },
