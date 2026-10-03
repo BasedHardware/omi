@@ -433,12 +433,13 @@ class UserProvider with ChangeNotifier {
     try {
       await PrivacyApi.startMigration(targetLevel);
 
+      final l10n = ctx?.l10n;
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
         title: ctx?.l10n.omiSays ?? 'omi says',
-        body: ctx != null
-            ? ctx.l10n.migratingToProtection(dataProtectionLevelLabel(ctx.l10n, targetLevel))
-            : 'Migrating to $targetLevel protection...',
+        body: l10n == null
+            ? 'Migrating to $targetLevel protection...'
+            : l10n.migratingToProtection(dataProtectionLevelLabel(l10n, targetLevel)),
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
       );
@@ -502,12 +503,13 @@ class UserProvider with ChangeNotifier {
     _processedCount = 0;
     _migrationQueue = [];
 
+    final l10n = ctx?.l10n;
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
       title: ctx?.l10n.omiSays ?? 'omi says',
-      body: ctx != null
-          ? ctx.l10n.dataProtectedWithSettings(dataProtectionLevelLabel(ctx.l10n, targetLevel))
-          : 'Your data is now protected with the new $targetLevel settings.',
+      body: l10n == null
+          ? 'Your data is now protected with the new $targetLevel settings.'
+          : l10n.dataProtectedWithSettings(dataProtectionLevelLabel(l10n, targetLevel)),
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
     );
