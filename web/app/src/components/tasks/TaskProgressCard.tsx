@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Flame, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 
 interface TaskProgressCardProps {
   overdueCount: number;
@@ -151,7 +151,7 @@ export function TaskProgressCard({
                   'bg-error/10 text-error',
                 )}
               >
-                {t('{count} overdue', { count: overdueCount })}
+                {tn(overdueCount, '{count} overdue', '{count} overdue')}
               </span>
             </div>
           )}
@@ -160,8 +160,8 @@ export function TaskProgressCard({
 
           {/* Counts */}
           <div className="flex items-center gap-3 text-xs text-text-quaternary">
-            <span>{t('{count} pending', { count: totalPending })}</span>
-            <span>{t('{count} completed', { count: totalCompleted })}</span>
+            <span>{tn(totalPending, '{count} pending', '{count} pending')}</span>
+            <span>{tn(totalCompleted, '{count} completed', '{count} completed')}</span>
           </div>
         </div>
       </div>
@@ -220,7 +220,7 @@ export function TaskProgressCard({
           <span className="text-xs text-text-quaternary">
             {streak === 0
               ? t('Complete a task to start!')
-              : t('day streak')}
+              : tn(streak, 'day streak', 'day streak')}
           </span>
         </div>
       </div>

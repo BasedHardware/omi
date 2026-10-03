@@ -13,7 +13,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { copyTasksToClipboard, downloadTasks } from '@/lib/taskExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
-import { t as i18n } from '@/lib/i18n';
+import { t as i18n, formatLocale } from '@/lib/i18n';
 
 type ViewMode = 'hub' | 'list';
 
@@ -351,7 +351,7 @@ export function TaskHub() {
       return {
         pending,
         completed,
-        dateLabel: selectedDate.toLocaleDateString('en-US', {
+        dateLabel: selectedDate.toLocaleDateString(formatLocale(), {
           weekday: 'long',
           month: 'short',
           day: 'numeric',
@@ -505,7 +505,7 @@ export function TaskHub() {
                 {searchQuery && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-secondary">
-                      {i18n('Showing tasks matching "')}{searchQuery}{i18n('"')}
+                      {i18n('Showing tasks matching "{query}"', { query: searchQuery })}
                     </span>
                     <button
                       onClick={() => setSearchQuery('')}
@@ -520,7 +520,7 @@ export function TaskHub() {
                 {viewMode === 'hub' && selectedDate && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-secondary">
-                      {i18n('Showing tasks for')}{' '}{filteredView?.dateLabel}
+                      {i18n('Showing tasks for {date}', { date: filteredView?.dateLabel })}
                     </span>
                     <button
                       onClick={() => setSelectedDate(null)}

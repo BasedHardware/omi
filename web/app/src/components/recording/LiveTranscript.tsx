@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from './RecordingContext';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 
 interface LiveTranscriptProps {
   segments: TranscriptSegment[];
@@ -164,7 +164,7 @@ export function LiveTranscriptCompact({
 
       {segments.length > maxItems && (
         <p className="text-[10px] text-text-quaternary text-center">
-          {t('+{count} more segments', { count: segments.length - maxItems })}
+          {tn(segments.length - maxItems, '+{count} more segment', '+{count} more segments')}
         </p>
       )}
     </div>

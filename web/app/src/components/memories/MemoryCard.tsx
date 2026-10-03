@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
 import type { MemoryUseAction } from '@/lib/api';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 type MemoryBeliefView = Memory & {
   belief_class?: string | null;
@@ -189,7 +189,7 @@ export const MemoryCard = memo(function MemoryCard({
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(formatLocale(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -211,7 +211,7 @@ export const MemoryCard = memo(function MemoryCard({
     if (!dateString) return null;
     const date = new Date(dateString);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(formatLocale(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -399,7 +399,7 @@ export const MemoryCard = memo(function MemoryCard({
                         ? t('Assessed {value}', {
                             value:
                               formatEvidenceDate(beliefMemory.belief_computed_at) ||
-                              'recently',
+                              t('recently'),
                           })
                         : undefined
                     }

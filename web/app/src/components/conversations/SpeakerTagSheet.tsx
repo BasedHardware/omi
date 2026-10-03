@@ -252,7 +252,7 @@ export function SpeakerTagSheet({
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-text-primary">
-                  {t('Tag Speaker')}{' '}{(segment.speaker_id ?? 0) + 1}
+                  {t('Tag Speaker {number}', { number: (segment.speaker_id ?? 0) + 1 })}
                 </h2>
                 <p className="text-sm text-text-tertiary truncate mt-0.5">
                   {t('"{text}..."', { text: segment.text.slice(0, 50) })}

@@ -27,26 +27,28 @@ export function getAuthErrorMessage(
       ? String(error.code)
       : '';
   if (code === 'auth/unauthorized-domain') {
-    return 'This sign-in link is not enabled for this web address yet.';
+    return t('This sign-in link is not enabled for this web address yet.');
   }
   if (code === 'auth/popup-blocked') {
-    return 'Your browser blocked the sign-in window. Allow pop-ups and try again.';
+    return t('Your browser blocked the sign-in window. Allow pop-ups and try again.');
   }
   if (
     code === 'auth/popup-closed-by-user' ||
     code === 'auth/redirect-cancelled-by-user'
   ) {
-    return 'The sign-in window was closed before sign-in finished.';
+    return t('The sign-in window was closed before sign-in finished.');
   }
   if (code === 'auth/operation-not-supported-in-this-environment') {
-    return 'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.';
+    return t(
+      'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.',
+    );
   }
   if (code === 'auth/configuration-not-found') {
-    return 'Sign-in is not configured in this local preview.';
+    return t('Sign-in is not configured in this local preview.');
   }
   return provider
-    ? `Failed to sign in with ${provider}. Please try again.`
-    : 'Sign-in failed. Please try again.';
+    ? t('Failed to sign in with {provider}. Please try again.', { provider })
+    : t('Sign-in failed. Please try again.');
 }
 
 const omiMarkDots = [
@@ -107,13 +109,13 @@ export function LoginClient() {
       });
       if (!result.claimed) {
         referralClaimStarted.current = false;
-        setReferralClaimFailure('This free month is only available to new accounts.');
+        setReferralClaimFailure(t('This free month is only available to new accounts.'));
         return;
       }
       navigateToDesktopDownload();
     } catch (claimError) {
       referralClaimStarted.current = false;
-      setReferralClaimFailure('We could not apply this referral. Please try again.');
+      setReferralClaimFailure(t('We could not apply this referral. Please try again.'));
       console.error(claimError);
     }
   }, [referralCode, referralEnvironment]);

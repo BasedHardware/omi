@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 
 interface BulkActionBarProps {
   selectedCount: number;
@@ -274,7 +274,7 @@ export function BulkActionBar({
 
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">
-          {t('{count} selected', { count: selectedCount })}
+          {tn(selectedCount, '{count} selected', '{count} selected')}
         </span>
         {!inline && (
           <button

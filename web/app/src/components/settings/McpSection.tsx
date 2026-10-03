@@ -7,7 +7,7 @@ import { hostedMcpConfigJson, hostedMcpUrl } from '@/lib/mcpConfig';
 import { CLAUDE_CONNECTOR_OAUTH } from '@/lib/settingsSections';
 import type { McpApiKey } from '@/types/user';
 import { Card } from './SettingsCard';
-import { t } from '@/lib/i18n';
+import { t, uiLocale } from '@/lib/i18n';
 
 // Create MCP Key Dialog
 function CreateMcpKeyDialog({
@@ -237,9 +237,13 @@ export function McpSection({
                     </code>
                   </div>
                   <p className="mt-1 text-xs text-text-quaternary">
-                    {t('Created')} {new Date(key.created_at).toLocaleDateString()}
+                    {t('Created {date}', {
+                      date: new Date(key.created_at).toLocaleDateString(uiLocale()),
+                    })}
                     {key.last_used_at &&
-                      ` • Last used ${new Date(key.last_used_at).toLocaleDateString()}`}
+                      ` • ${t('Last used {date}', {
+                        date: new Date(key.last_used_at).toLocaleDateString(uiLocale()),
+                      })}`}
                   </p>
                 </div>
                 <button
@@ -387,12 +391,9 @@ export function McpSection({
 
         <p className="mb-4 text-sm text-text-secondary">
           {t(
-            'Connect over MCP so Claude reads your memories live, or copy a memory pack. Each field below maps to Claude’s',
-          )}{' '}
-          <span className="text-text-tertiary">
-            {t('Settings → Connectors → Add custom connector')}
-          </span>{' '}
-          {t('form.')}
+            'Connect over MCP so Claude reads your memories live, or copy a memory pack. Each field below maps to Claude’s {path} form.',
+            { path: t('Settings → Connectors → Add custom connector') },
+          )}
         </p>
 
         <div className="space-y-3">
@@ -531,8 +532,10 @@ export function McpSection({
               {t(', paste OAuth Client ID + Secret')}
             </li>
             <li>
-              {t('Click')} <span className="text-text-secondary">{t('Add')}</span>
-              {t(', then')} <span className="text-text-secondary">{t('Connect')}</span>
+              {t('Click')} <span className="text-text-secondary">{t('Add')}
+            </span>
+              {t(', then')} <span className="text-text-secondary">{t('Connect')}
+            </span>
             </li>
           </ol>
         </div>

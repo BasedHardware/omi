@@ -92,7 +92,7 @@ export function HomeTaskList({ items, loading, error, onComplete }: HomeTaskList
           href="/tasks"
           className="mt-2 block px-3 text-xs text-text-quaternary transition-colors hover:text-text-secondary"
         >
-          {overflow} {t('more in Tasks')}
+          {t('{count} more in Tasks', { count: overflow })}
         </Link>
       )}
     </div>

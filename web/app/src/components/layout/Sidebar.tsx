@@ -124,8 +124,13 @@ const SETTINGS_SECTION_ICONS: Record<SettingsSectionId, LucideIcon> = {
   account: Settings,
 };
 
+// A getter, not a spread: spreading would read the translated label at module load,
+// before the UI catalog is available.
 const settingsMenuItems = SETTINGS_SECTIONS.map((section) => ({
-  ...section,
+  id: section.id,
+  get label() {
+    return section.label;
+  },
   icon: SETTINGS_SECTION_ICONS[section.id],
 }));
 

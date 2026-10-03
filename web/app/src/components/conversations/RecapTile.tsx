@@ -73,7 +73,9 @@ export const RecapTile = memo(function RecapTile({
           ? 'bg-bg-quaternary border-white/40'
           : 'bg-bg-raised border-white/15 hover:bg-bg-tertiary hover:border-white/30',
       )}
-      aria-label={t('Recap: {headline}', { headline: recap.headline })}
+      aria-label={
+        recap.headline ? t('Recap: {headline}', { headline: recap.headline }) : t('Daily Recap')
+      }
       aria-pressed={isSelected}
     >
       <div className="flex items-center gap-1.5 mb-2">

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { getConversation } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface ConversationPreviewPanelProps {
   conversationIds: string[];
@@ -19,7 +19,7 @@ interface ConversationPreviewPanelProps {
 function formatTime(dateString: string | null): string {
   if (!dateString) return '';
   const date = new Date(dateString);
-  return date.toLocaleTimeString('en-US', {
+  return date.toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
   });

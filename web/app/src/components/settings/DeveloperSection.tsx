@@ -19,7 +19,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { t, tc, uiLocale } from '@/lib/i18n';
+import { t, tc, uiLocale, tn } from '@/lib/i18n';
 import type { DeveloperApiKey, McpApiKey, DeveloperWebhooks } from '@/types/user';
 import { Toggle } from './SettingsToggle';
 import { Card } from './SettingsCard';
@@ -410,7 +410,7 @@ export function DeveloperSection({
                       </code>
                       {apiKey.scopes && apiKey.scopes.length > 0 && (
                         <span className="rounded bg-white/[0.08] px-2 py-0.5 text-xs text-text-secondary">
-                          {t('{count} scopes', { count: apiKey.scopes.length })}
+                          {tn(apiKey.scopes.length, '{count} scope', '{count} scopes')}
                         </span>
                       )}
                     </div>

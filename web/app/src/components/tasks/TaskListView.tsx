@@ -76,7 +76,7 @@ export function TaskListView({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-sm text-text-tertiary">
-          {i18n('No tasks match "')}{searchQuery}{i18n('"')}
+          {i18n('No tasks match "{query}"', { query: searchQuery })}
         </p>
       </div>
     );

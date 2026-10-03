@@ -39,8 +39,10 @@ export function AppDisabledNotice({
             {app.disabled_reason === 'webhook_failures'
               ? t('Its endpoint failed for 72 hours in a row, so deliveries were stopped.')
               : t('It was disabled by Omi.')}
-            {app.disabled_at && ` Disabled on ${app.disabled_at.slice(0, 10)}.`}
-            {app.disabled_error && ` Last error: ${app.disabled_error}.`}
+            {app.disabled_at &&
+              ` ${t('Disabled on {date}.', { date: app.disabled_at.slice(0, 10) })}`}
+            {app.disabled_error &&
+              ` ${t('Last error: {error}.', { error: app.disabled_error })}`}
           </p>
           {isOwner ? (
             <>

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatDueStatus } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
 import { formatDateInputValue } from '@/lib/dateInput';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface TaskCardProps {
   task: ActionItem;
@@ -446,10 +446,11 @@ export function TaskCard({
             <div className="flex items-center gap-1.5 mt-1">
               <Check className="w-3 h-3 text-success" />
               <span className="text-xs text-text-quaternary">
-                {t('Completed')}{' '}
-                {new Date(task.completed_at).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
+                {t('Completed {date}', {
+                  date: new Date(task.completed_at).toLocaleDateString(formatLocale(), {
+                    month: 'short',
+                    day: 'numeric',
+                  }),
                 })}
               </span>
             </div>

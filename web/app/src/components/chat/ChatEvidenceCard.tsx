@@ -19,13 +19,21 @@ type EvidenceStatus = {
   className: string;
 };
 
-const KIND_LABELS: Record<ChatEvidenceReference['kind'], string> = {
-  conversation_summary: 'Conversation summary',
-  conversation_segment: 'Conversation segment',
-  screen: 'Screen',
-  keyframe: 'Keyframe',
-  request: 'Request',
-};
+// A function, not a lookup table: t() must not run at module scope.
+function kindLabelFor(kind: ChatEvidenceReference['kind']): string {
+  switch (kind) {
+    case 'conversation_summary':
+      return t('Conversation summary');
+    case 'conversation_segment':
+      return t('Conversation segment');
+    case 'screen':
+      return t('Screen');
+    case 'keyframe':
+      return t('Keyframe');
+    case 'request':
+      return t('Request');
+  }
+}
 
 function statusFor(state: ChatEvidenceReference['state']): EvidenceStatus {
   switch (state) {
@@ -58,7 +66,7 @@ function statusFor(state: ChatEvidenceReference['state']): EvidenceStatus {
 
 function ChatEvidenceReferenceCard({ reference }: { reference: ChatEvidenceReference }) {
   const { label: statusLabel, Icon, className: statusClass } = statusFor(reference.state);
-  const kindLabel = KIND_LABELS[reference.kind];
+  const kindLabel = kindLabelFor(reference.kind);
   const title = reference.title || kindLabel;
 
   return (

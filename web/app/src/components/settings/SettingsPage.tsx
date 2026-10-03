@@ -94,6 +94,7 @@ import {
   t,
   UI_LANGUAGES,
   type UiLanguagePreference,
+  formatLocale,
 } from '@/lib/i18n';
 
 // ============================================================================
@@ -344,6 +345,9 @@ function ProfileSection({
   onDailySummaryHourChange: (hour: number) => void;
 }) {
   const [copiedUserId, setCopiedUserId] = useState(false);
+  const [uiLanguagePreference, setUiLanguagePreferenceState] = useState(
+    readUiLanguagePreference,
+  );
   const [newWord, setNewWord] = useState('');
 
   const handleCopy = () => {
@@ -448,12 +452,15 @@ function ProfileSection({
             )}
           >
             <Dropdown
-              value={readUiLanguagePreference()}
+              value={uiLanguagePreference}
               options={UI_LANGUAGES.map((l) => ({
                 value: l.code,
                 label: l.code === 'system' ? t('System default') : l.label,
               }))}
-              onChange={(value) => setUiLanguagePreference(value as UiLanguagePreference)}
+              onChange={(value) => {
+                setUiLanguagePreferenceState(value as UiLanguagePreference);
+                setUiLanguagePreference(value as UiLanguagePreference);
+              }}
             />
           </SettingRow>
         </Card>
@@ -931,7 +938,7 @@ function UsageSectionContent({
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+    return new Date(timestamp * 1000).toLocaleDateString(formatLocale(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1632,10 +1639,13 @@ function UsageSectionContent({
         title={t('Cancel Subscription?')}
         message={
           subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(
-                subscription.current_period_end,
-              )}. After that, you'll be moved to the Free plan.`
-            : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
+            ? t(
+                "Your subscription will remain active until {value}. After that, you'll be moved to the Free plan.",
+                { value: formatDate(subscription.current_period_end) },
+              )
+            : t(
+                "Are you sure you want to cancel your subscription? You'll lose access to unlimited features.",
+              )
         }
         confirmLabel={t('Cancel Subscription')}
         onConfirm={handleCancelSubscription}
@@ -2341,7 +2351,7 @@ export function SettingsPage() {
       <ConfirmDialog
         isOpen={showSignOutDialog}
         title={t('Sign Out')}
-        message="Are you sure you want to sign out?"
+        message={t('Are you sure you want to sign out?')}
         confirmLabel={t('Sign Out')}
         onConfirm={handleSignOut}
         onCancel={() => setShowSignOutDialog(false)}
@@ -2350,7 +2360,9 @@ export function SettingsPage() {
       <ConfirmDialog
         isOpen={showDeleteDialog}
         title={t('Delete Account')}
-        message="This action cannot be undone. All your data, conversations, and settings will be permanently deleted."
+        message={t(
+          'This action cannot be undone. All your data, conversations, and settings will be permanently deleted.',
+        )}
         confirmLabel={t('Delete Account')}
         onConfirm={handleDeleteAccount}
         onCancel={() => setShowDeleteDialog(false)}

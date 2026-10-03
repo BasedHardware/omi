@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Check, Clock, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
-import { t as i18n } from '@/lib/i18n';
+import { t as i18n, formatLocale } from '@/lib/i18n';
 
 interface UpcomingTasksCardProps {
   tasks: ActionItem[];
@@ -24,15 +24,15 @@ function formatDueText(dueAt: string | null | undefined): string {
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) {
-    return `${Math.abs(diffDays)}d late`;
+    return i18n('{count}d late', { count: Math.abs(diffDays) });
   } else if (diffDays === 0) {
-    return 'Today';
+    return i18n('Today');
   } else if (diffDays === 1) {
-    return 'Tomorrow';
+    return i18n('Tomorrow');
   } else if (diffDays <= 7) {
-    return due.toLocaleDateString('en-US', { weekday: 'short' });
+    return due.toLocaleDateString(formatLocale(), { weekday: 'short' });
   } else {
-    return due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return due.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric' });
   }
 }
 
@@ -74,7 +74,7 @@ export function UpcomingTasksCard({
           {i18n('Coming Up')}
         </h3>
         <span className="text-xs text-text-quaternary flex-shrink-0">
-          {i18n('Next')}{' '}{upcomingTasks.length}
+          {i18n('Next {count}', { count: upcomingTasks.length })}
         </span>
       </div>
 

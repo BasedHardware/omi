@@ -143,7 +143,7 @@ export function AppDetail({ appId }: AppDetailProps) {
       });
     } catch (err) {
       setReEnableError(
-        err instanceof Error ? err.message : 'Failed to re-enable this app',
+        err instanceof Error ? err.message : t('Failed to re-enable this app'),
       );
     } finally {
       setIsReEnabling(false);
@@ -278,7 +278,9 @@ export function AppDetail({ appId }: AppDetailProps) {
                 )}
                 <span className="flex items-center gap-1">
                   <Download className="h-4 w-4" />
-                  {formatInstalls(app.installs)} {t('installs')}
+                  {tn(app.installs ?? 0, '{count} install', '{count} installs', {
+                    count: formatInstalls(app.installs),
+                  })}
                 </span>
               </div>
 

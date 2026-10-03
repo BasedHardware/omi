@@ -15,7 +15,7 @@ import { Calendar, User, FolderOpen, Puzzle, ArrowRight, DollarSign } from 'luci
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
-import { t, tn } from '@/lib/i18n';
+import { t, tn, formatLocale } from '@/lib/i18n';
 
 /**
  * moonshine emits its own `<head>` and has no per-route metadata hook — its own
@@ -125,7 +125,7 @@ function formatDate(dateString: string | null | undefined): string | null {
   const date = new Date(dateString);
   // Check for invalid date or Unix epoch (which indicates null/invalid data)
   if (isNaN(date.getTime()) || date.getTime() === 0) return null;
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -181,7 +181,9 @@ export default function PluginDetailPage() {
         className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0B0F17] px-6 text-center"
       >
         <h1 className="text-3xl font-bold text-white">{t('App not found')}</h1>
-        <p className="text-gray-400">{t('We couldn\'t find an app with the id “')}{id}”.</p>
+        <p className="text-gray-400">
+          {t('We couldn\'t find an app with the id “{id}”.', { id })}
+        </p>
         <Link
           href="/apps"
           className="rounded-xl bg-[#6C8EEF] px-6 py-3 text-base font-medium text-white transition-all hover:bg-[#5A7DE8]"
@@ -274,7 +276,7 @@ export default function PluginDetailPage() {
                     <div className="h-8 w-px bg-white/5" />
                     <div className="flex items-center">
                       <span className="text-3xl font-bold text-[#6C8EEF]">
-                        {plugin.installs.toLocaleString()}
+                        {plugin.installs.toLocaleString(formatLocale())}
                       </span>
                       <span className="ml-2 text-sm text-gray-400">{t('downloads')}</span>
                     </div>
@@ -351,14 +353,14 @@ export default function PluginDetailPage() {
                   <div className="mt-1 pl-7">
                     <span className="text-base font-semibold text-amber-400">
                       ${plugin.price?.toFixed(2)}
-                      {plugin.payment_plan === 'monthly_recurring' ? '/month' : ''}
+                      {plugin.payment_plan === 'monthly_recurring' ? t('/month') : ''}
                     </span>
                     <span className="ml-2 text-sm text-gray-400">
                       {plugin.payment_plan === 'monthly_recurring'
                         ? t('(Monthly subscription)')
                         : plugin.payment_plan === 'one_time'
                           ? t('(One-time purchase)')
-                          : '(Paid)'}
+                          : t('(Paid)')}
                     </span>
                   </div>
                 </div>
@@ -411,7 +413,7 @@ export default function PluginDetailPage() {
           {relatedApps.length > 0 && (
             <section className="mt-16 pb-12">
               <h2 className="mb-8 text-2xl font-bold text-white">
-                {t('More')}{' '}{categoryName} {t('Apps')}
+                {t('More {category} Apps', { category: categoryName })}
               </h2>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {relatedApps.map((app, index) => (

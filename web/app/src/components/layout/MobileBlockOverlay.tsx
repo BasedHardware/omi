@@ -161,7 +161,7 @@ export function MobileBlockOverlay() {
           className="inline-flex items-center gap-3 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-gray-100 transition-colors mb-4"
         >
           <StoreIcon className="w-6 h-6" />
-          <span>{t('Download on')}{' '}{storeName}</span>
+          <span>{t('Download on {store}', { store: storeName })}</span>
         </a>
 
         {/* Continue to web button */}

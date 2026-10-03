@@ -8,7 +8,7 @@ import { formatDueBadge } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
 import { SuccessCheck } from '@/components/ui/SuccessCheck';
 import { formatDateInputValue } from '@/lib/dateInput';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface TaskRowProps {
   task: ActionItem;
@@ -341,7 +341,7 @@ export function TaskRow({
       {/* Completed date */}
       {task.completed && task.completed_at && (
         <span className="flex-shrink-0 text-xs text-text-quaternary">
-          {new Date(task.completed_at).toLocaleDateString('en-US', {
+          {new Date(task.completed_at).toLocaleDateString(formatLocale(), {
             month: 'short',
             day: 'numeric',
           })}

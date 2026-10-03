@@ -60,7 +60,7 @@ export function RecordingStage({
     transcriptEndRef.current?.scrollIntoView({ block: 'end' });
   }, [segments]);
 
-  const status = isInitializing ? 'Starting...' : isPaused ? 'Paused' : 'Listening';
+  const status = isInitializing ? t('Starting...') : isPaused ? t('Paused') : t('Listening');
 
   return (
     <motion.div

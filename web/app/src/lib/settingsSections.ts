@@ -57,8 +57,20 @@ export const CLAUDE_CONNECTOR_OAUTH = {
 
 export const SIGNED_OUT_DESTINATION = '/login';
 
+// Getters, not copies: the labels are translated, and this module loads before the
+// UI catalog does, so reading them here would freeze the English text.
 export const SECTION_INFO = Object.fromEntries(
-  SETTINGS_SECTIONS.map(({ id, title, description }) => [id, { title, description }]),
+  SETTINGS_SECTIONS.map((section) => [
+    section.id,
+    {
+      get title() {
+        return section.title;
+      },
+      get description() {
+        return section.description;
+      },
+    },
+  ]),
 ) as Record<SettingsSectionId, { title: string; description: string }>;
 
 export function isSettingsSectionId(value: string): value is SettingsSectionId {

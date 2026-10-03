@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Lightbulb, FileText, Settings, Filter, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MemoryCategory } from '@/types/conversation';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 
 interface MemoryFiltersProps {
   activeCategories: MemoryCategory[];
@@ -69,13 +69,13 @@ export function MemoryFilters({
 
   // Get label for button
   const getButtonLabel = () => {
-    if (isAllSelected) return 'All';
+    if (isAllSelected) return t('All');
     if (activeCategories.length === 1) {
       return (
-        filterOptions.find((o) => o.category === activeCategories[0])?.label || 'Filter'
+        filterOptions.find((o) => o.category === activeCategories[0])?.label || t('Filter')
       );
     }
-    return `${activeCategories.length} selected`;
+    return tn(activeCategories.length, '{count} selected', '{count} selected');
   };
 
   return (

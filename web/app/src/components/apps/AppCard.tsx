@@ -7,7 +7,7 @@ import { Star, Download, Loader2, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { enableApp, disableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
-import { t } from '@/lib/i18n';
+import { t, tc } from '@/lib/i18n';
 
 interface AppCardProps {
   app: App;
@@ -104,7 +104,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
               ) : isEnabled ? (
                 <span className="flex items-center gap-1">
                   <Check className="w-3 h-3" />
-                  {t('Installed')}
+                  {tc('app-status', 'Installed')}
                 </span>
               ) : (
                 t('Install')

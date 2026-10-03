@@ -30,23 +30,27 @@ function getQuickPrompts(contextType: string | undefined): string[] {
   switch (contextType) {
     case 'conversation':
       return [
-        'Summarize this conversation',
-        'What action items came from this?',
-        'What were the key decisions?',
+        t('Summarize this conversation'),
+        t('What action items came from this?'),
+        t('What were the key decisions?'),
       ];
     case 'task':
       return [
-        'Help me complete this task',
-        'Break this down into steps',
-        'Set a reminder for this',
+        t('Help me complete this task'),
+        t('Break this down into steps'),
+        t('Set a reminder for this'),
       ];
     case 'memory':
-      return ['Tell me more about this', 'When did I mention this?', 'Related memories'];
+      return [
+        t('Tell me more about this'),
+        t('When did I mention this?'),
+        t('Related memories'),
+      ];
     default:
       return [
-        'What did I talk about today?',
-        'Show my pending tasks',
-        'What should I remember?',
+        t('What did I talk about today?'),
+        t('Show my pending tasks'),
+        t('What should I remember?'),
       ];
   }
 }
@@ -278,7 +282,7 @@ export function ChatPanel() {
                     </h2>
                     {currentContext?.title && !selectedAppId && (
                       <p className="text-xs text-text-tertiary truncate max-w-[250px]">
-                        {t('Context:')}{' '}{currentContext.title}
+                        {t('Context: {title}', { title: currentContext.title })}
                       </p>
                     )}
                   </div>

@@ -36,8 +36,10 @@ async function mountClientRoutes(): Promise<void> {
   // nothing for English) before the first render so no screen flashes English.
   document.documentElement.lang = uiLanguage();
   installUiLanguageSync();
-  await loadUiCatalog();
-  const { createRoot } = await import('react-dom/client');
+  const [, { createRoot }] = await Promise.all([
+    loadUiCatalog(),
+    import('react-dom/client'),
+  ]);
   // The query is part of the initial location, not decoration: a deep link to
   // `/conversations?recap=…`, `/settings?section=…` or an OAuth callback opens
   // on the default view if the router starts from the pathname alone.

@@ -10,7 +10,7 @@ import {
   type ActivityDay,
   type UseInsightsDashboardReturn,
 } from '@/hooks/useInsightsDashboard';
-import { t as i18n } from '@/lib/i18n';
+import { t as i18n, tn } from '@/lib/i18n';
 
 interface InsightsDashboardProps {
   insights: UseInsightsDashboardReturn;
@@ -160,7 +160,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
           </div>
           {filteredTags.length === 0 && searchQuery && (
             <p className="text-center text-text-quaternary py-4">
-              {i18n('No tags match "')}{searchQuery}{i18n('"')}
+              {i18n('No tags match "{query}"', { query: searchQuery })}
             </p>
           )}
         </motion.div>
@@ -468,7 +468,13 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
                     'w-[10px] h-[10px] rounded-sm',
                     day ? getColor(day.count) : 'bg-transparent',
                   )}
-                  title={day ? i18n('{date}: {count} memories', { date: day.date, count: day.count }) : undefined}
+                  title={
+                    day
+                      ? tn(day.count, '{date}: {count} memory', '{date}: {count} memories', {
+                          date: day.date,
+                        })
+                      : undefined
+                  }
                 />
               );
             })}

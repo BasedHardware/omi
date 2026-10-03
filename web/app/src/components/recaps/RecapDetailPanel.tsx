@@ -34,7 +34,7 @@ import { TasksSection } from './sections/TasksSection';
 import { InsightsSection } from './sections/InsightsSection';
 import { LocationsSection } from './sections/LocationsSection';
 import { ConversationPreviewPanel } from './ConversationPreviewPanel';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface RecapDetailPanelProps {
   recapId: string;
@@ -50,7 +50,7 @@ function formatRecapDate(dateString: string): string {
   // Parse YYYY-MM-DD as local date to avoid timezone shift
   const [year, month, day] = dateString.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -87,7 +87,7 @@ function formatJourneyTime(timeString: string): string {
     }
   }
 
-  return date.toLocaleTimeString('en-US', {
+  return date.toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,

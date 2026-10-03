@@ -54,7 +54,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
     if (created) {
       close(false);
     } else {
-      setError('Could not save that goal. Try again.');
+      setError(t('Could not save that goal. Try again.'));
     }
   };
 
@@ -118,7 +118,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                 <input
                   value={unit}
                   onChange={(event) => setUnit(event.target.value)}
-                  placeholder="books"
+                  placeholder={t('books')}
                   maxLength={64}
                   className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
                 />

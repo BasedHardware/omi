@@ -25,7 +25,7 @@ export default function EditAppPage() {
         setApp(appData);
       } catch (err) {
         console.error('Failed to load app:', err);
-        setError('Failed to load app');
+        setError(t('Failed to load app'));
       } finally {
         setIsLoading(false);
       }

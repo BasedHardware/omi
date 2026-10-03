@@ -21,7 +21,7 @@ import type {
 import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface PlansSheetProps {
   open: boolean;
@@ -202,7 +202,7 @@ export function PlansSheet({
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+    return new Date(timestamp * 1000).toLocaleDateString(formatLocale(), {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
@@ -354,7 +354,10 @@ export function PlansSheet({
 
                         {isCanceling_ && subscription?.current_period_end && (
                           <p className="text-sm text-text-tertiary">
-                            {t('You can reactivate your current plan now. Plan changes are available after')}{' '}{formatDate(subscription.current_period_end)}.
+                            {t(
+                              'You can reactivate your current plan now. Plan changes are available after {date}.',
+                              { date: formatDate(subscription.current_period_end) },
+                            )}
                           </p>
                         )}
 

@@ -77,14 +77,14 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
     try {
       const success = await onSave(goal.id, updates);
       if (!success) {
-        setSaveError('Could not save this goal. Please try again.');
+        setSaveError(t('Could not save this goal. Please try again.'));
         setSaving(false);
         return;
       }
       setSaving(false);
       close();
     } catch {
-      setSaveError('Could not save this goal. Please try again.');
+      setSaveError(t('Could not save this goal. Please try again.'));
       setSaving(false);
     }
   };
@@ -128,7 +128,9 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                   {delta !== null && (
                     <p className="mt-1 text-xs text-text-quaternary">
                       {delta >= 0 ? '+' : ''}
-                      {formatMetricValue(delta)} {t('over the recorded window')}
+                      {t('{value} over the recorded window', {
+                        value: formatMetricValue(delta),
+                      })}
                     </p>
                   )}
                 </>
@@ -192,7 +194,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                     value={unit}
                     onChange={(event) => setUnit(event.target.value)}
                     aria-label={t('Unit')}
-                    placeholder="unit"
+                    placeholder={t('unit')}
                     maxLength={64}
                     className="w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
                   />

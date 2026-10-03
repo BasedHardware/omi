@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 const STAGE_META: Record<
   string,
@@ -54,7 +54,7 @@ interface CaseStatus {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('en-US', {
+    return new Date(iso).toLocaleDateString(formatLocale(), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

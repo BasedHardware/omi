@@ -63,7 +63,7 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to load goal advice:', err);
-      setAdviceError(err instanceof Error ? err.message : 'Failed to load advice');
+      setAdviceError(err instanceof Error ? err.message : t('Failed to load advice'));
     } finally {
       if (isCurrent()) setAdviceLoading(false);
     }

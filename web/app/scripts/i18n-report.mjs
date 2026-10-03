@@ -25,7 +25,13 @@ function sources(dir, out = []) {
 }
 
 // Keys passed to t() through a variable, so the scan below cannot see them.
-const RENDERED_DYNAMICALLY = [];
+const RENDERED_DYNAMICALLY = [
+  // DeveloperSection: SCOPE_RESOURCES, rendered through t(resource)
+  'Conversations',
+  'Memories',
+  'Action Items',
+  'Goals',
+];
 
 const isLiteral = (node) =>
   node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node));
@@ -49,7 +55,9 @@ for (const file of sources(root)) {
       if (key !== null && !used.has(key)) used.set(key, relative(root, file));
       // tn(count, one, other): both forms are catalog keys.
       if (fn === 'tn' && isLiteral(node.arguments[1]) && isLiteral(node.arguments[2])) {
-        for (const form of [node.arguments[1].text, node.arguments[2].text])
+        const [one, other] = [node.arguments[1].text, node.arguments[2].text];
+        // Identical English forms: the singular lives under the `one|` context key.
+        for (const form of one === other ? [`one|${one}`, other] : [one, other])
           if (!used.has(form)) used.set(form, relative(root, file));
       }
     }

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface DateFilterProps {
   selectedDate: Date | null;
@@ -54,21 +54,20 @@ const quickFilters: QuickFilter[] = [
   },
 ];
 
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Two-letter weekday headings starting on Sunday (Su Mo … / Do Lu …), in the UI language.
+function weekdayNames(): string[] {
+  return Array.from({ length: 7 }, (_, i) =>
+    capitalize(
+      new Date(2023, 0, 1 + i).toLocaleDateString(formatLocale(), { weekday: 'short' }).slice(0, 2),
+    ),
+  );
+}
+
+function monthName(month: number): string {
+  return capitalize(new Date(2023, month, 1).toLocaleDateString(formatLocale(), { month: 'long' }));
+}
 
 function isSameDay(d1: Date, d2: Date): boolean {
   return (
@@ -86,13 +85,13 @@ function formatButtonLabel(date: Date | null): string {
   if (!date) return 'All dates';
 
   const today = new Date();
-  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, today)) return t('Today');
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (isSameDay(date, yesterday)) return 'Yesterday';
+  if (isSameDay(date, yesterday)) return t('Yesterday');
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric' });
 }
 
 function getDaysInMonth(year: number, month: number): Date[] {
@@ -270,7 +269,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-medium text-text-primary">
-                {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
+                {monthName(viewDate.getMonth())} {viewDate.getFullYear()}
               </span>
               <button
                 onClick={handleNextMonth}
@@ -283,7 +282,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
 
             {/* Day names */}
             <div className="grid grid-cols-7 gap-1 mb-1">
-              {DAYS.map((day) => (
+              {weekdayNames().map((day) => (
                 <div key={day} className="text-center text-xs text-text-quaternary py-1">
                   {day}
                 </div>

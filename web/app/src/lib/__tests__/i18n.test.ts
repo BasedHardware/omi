@@ -5,6 +5,7 @@ import {
   loadUiCatalog,
   resolveUiLanguage,
   setUiLanguageForTesting,
+  formatLocale,
   t,
   tc,
   tn,
@@ -71,6 +72,41 @@ describe('tn', () => {
     expect(tn(1, '{count} task needs a date', '{count} tasks need a date')).toBe(
       '1 task needs a date',
     );
+  });
+});
+
+describe('tn edge cases', () => {
+  it('uses the one| entry when English singular and plural are the same text', () => {
+    setUiLanguageForTesting('es');
+    expect(tn(1, '{count} selected', '{count} selected')).toBe('1 seleccionada');
+    expect(tn(2, '{count} selected', '{count} selected')).toBe('2 seleccionadas');
+    setUiLanguageForTesting('en');
+    expect(tn(1, '{count} selected', '{count} selected')).toBe('1 selected');
+  });
+
+  it('never lets vars override the count that picked the form', () => {
+    expect(tn(3, '{count} memory', '{count} memories', { count: 1 })).toBe('3 memories');
+  });
+});
+
+describe('placeholders', () => {
+  it('leave a placeholder visible rather than print undefined or null', () => {
+    expect(translate('en', 'Hello {name}', { name: undefined })).toBe('Hello {name}');
+    expect(translate('en', 'Hello {name}', { name: null })).toBe('Hello {name}');
+    expect(translate('en', 'Hello {toString}', {})).toBe('Hello {toString}');
+  });
+});
+
+describe('formatLocale', () => {
+  it('keeps en-US for English and follows the UI language otherwise', () => {
+    setUiLanguageForTesting('en');
+    expect(formatLocale()).toBe('en-US');
+    setUiLanguageForTesting('es');
+    expect(formatLocale()).toBe('es');
+    expect(
+      new Date(2026, 0, 15).toLocaleDateString(formatLocale(), { month: 'long' }),
+    ).toBe('enero');
+    setUiLanguageForTesting('en');
   });
 });
 

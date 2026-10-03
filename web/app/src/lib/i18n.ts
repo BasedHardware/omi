@@ -91,9 +91,10 @@ export function translate(
 ): string {
   const translated = language === 'en' ? text : catalogs[language]?.[text] ?? text;
   if (!vars) return translated;
-  return translated.replace(/\{(\w+)\}/g, (match, name: string) =>
-    name in vars ? String(vars[name]) : match,
-  );
+  return translated.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = Object.hasOwn(vars, name) ? vars[name] : undefined;
+    return value == null ? match : String(value);
+  });
 }
 
 /** Translate English UI text. `{name}` placeholders are filled from `vars`. */
@@ -112,7 +113,8 @@ export function tn(
   other: string,
   vars?: Record<string, unknown>,
 ): string {
-  return t(count === 1 ? one : other, { count, ...vars });
+  if (count === 1 && one === other) return tc('one', one, { ...vars, count });
+  return t(count === 1 ? one : other, { ...vars, count });
 }
 
 /**
@@ -133,6 +135,14 @@ export function tc(
 /** Locale for Intl/Date formatting: the chosen UI language, or the browser default in English. */
 export function uiLocale(): string | undefined {
   return current === 'en' ? undefined : current;
+}
+
+/**
+ * Locale for screens that always formatted dates and numbers as `en-US`: unchanged in
+ * English, the UI language otherwise, so Spanish never shows English month names.
+ */
+export function formatLocale(): string {
+  return current === 'en' ? 'en-US' : current;
 }
 
 /** Save the interface language and reload so every string switches together. */

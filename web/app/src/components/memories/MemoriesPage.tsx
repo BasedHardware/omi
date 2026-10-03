@@ -779,10 +779,12 @@ export function MemoriesPage() {
                             style={{
                               height: `${Math.max((day.count / maxActivity) * 100, 4)}%`,
                             }}
-                            title={t('{date}: {count} memories', {
-                              date: day.date,
-                              count: day.count,
-                            })}
+                            title={tn(
+                              day.count,
+                              '{date}: {count} memory',
+                              '{date}: {count} memories',
+                              { date: day.date },
+                            )}
                           />
                         ))}
                       </div>

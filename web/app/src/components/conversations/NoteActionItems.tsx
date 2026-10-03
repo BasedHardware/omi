@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import type { StructuredActionItem } from '@/types/conversation';
 import { noteAvatarToneIndex, noteParticipantInitials } from '@/lib/meetingNotes';
-import { t } from '@/lib/i18n';
+import { t, uiLocale } from '@/lib/i18n';
 
 const AVATAR_TONES = [
   'bg-blue-500/15 text-blue-300',
@@ -22,7 +22,9 @@ export function ActionItemRow({ item }: { item: StructuredActionItem }) {
   const context = typeof item.context === 'string' ? item.context.trim() : '';
   const dueDate = item.due_at ? new Date(item.due_at) : null;
   const dueLabel =
-    dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString() : '';
+    dueDate && !Number.isNaN(dueDate.getTime())
+      ? dueDate.toLocaleDateString(uiLocale())
+      : '';
 
   return (
     <li
@@ -100,7 +102,7 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
           const dueDate = item.due_at ? new Date(item.due_at) : null;
           const dueLabel =
             dueDate && !Number.isNaN(dueDate.getTime())
-              ? dueDate.toLocaleDateString()
+              ? dueDate.toLocaleDateString(uiLocale())
               : '';
           return (
             <li key={index} className="flex items-start gap-3 py-2.5">

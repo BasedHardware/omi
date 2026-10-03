@@ -37,6 +37,25 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
 });
 
 // Sphere boundary radius - all nodes will be contained within this
+function nodeTypeLabel(type: KnowledgeGraphNodeType | 'user'): string {
+  switch (type) {
+    case 'user':
+      return t('You');
+    case 'person':
+      return t('person');
+    case 'place':
+      return t('place');
+    case 'organization':
+      return t('organization');
+    case 'thing':
+      return t('thing');
+    case 'concept':
+      return t('concept');
+    default:
+      return type;
+  }
+}
+
 const SPHERE_RADIUS = 200;
 const INITIAL_CAMERA_DISTANCE = 400;
 
@@ -462,7 +481,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                 style={{ backgroundColor: color }}
               />
               <span className="text-xs text-text-tertiary capitalize">
-                {type === 'user' ? t('You') : type}
+                {nodeTypeLabel(type)}
               </span>
             </div>
           ))}

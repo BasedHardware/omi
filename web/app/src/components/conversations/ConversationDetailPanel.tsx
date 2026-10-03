@@ -65,7 +65,7 @@ import {
   selectConversationSummary,
   type SummarySection,
 } from '@/lib/conversationSummarySelection';
-import { t as i18n, tn } from '@/lib/i18n';
+import { t as i18n, tn, formatLocale } from '@/lib/i18n';
 
 // Code-split the location preview out of the conversation panel bundle
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
@@ -107,7 +107,7 @@ interface Tab {
 function formatDate(dateString: string | null): string {
   if (!dateString) return '';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
