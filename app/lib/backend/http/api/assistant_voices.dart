@@ -51,36 +51,36 @@ class AssistantVoicesApi {
   final ApiSend? send;
 
   Future<ApiResult<AssistantVoiceCatalog>> getCatalog() => executeApi(
-    request: ApiRequest(url: '${Env.apiBaseUrl}v1/tts/voices', method: 'GET'),
-    send: send,
-    decode: (body) {
-      final row = jsonDecode(body);
-      if (row is! Map<String, dynamic>) throw const FormatException('invalid voice catalog');
-      return AssistantVoiceCatalog.fromGeneratedWireJson(wire.GeneratedTtsVoiceCatalog.fromJson(row));
-    },
-  );
+        request: ApiRequest(url: '${Env.apiBaseUrl}v1/tts/voices', method: 'GET'),
+        send: send,
+        decode: (body) {
+          final row = jsonDecode(body);
+          if (row is! Map<String, dynamic>) throw const FormatException('invalid voice catalog');
+          return AssistantVoiceCatalog.fromGeneratedWireJson(wire.GeneratedTtsVoiceCatalog.fromJson(row));
+        },
+      );
 
   Future<ApiResult<AssistantVoicePreference>> getPreference() => executeApi(
-    request: ApiRequest(url: '${Env.apiBaseUrl}v1/users/voice', method: 'GET'),
-    send: send,
-    decode: (body) {
-      final row = jsonDecode(body);
-      if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
-      return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
-    },
-  );
+        request: ApiRequest(url: '${Env.apiBaseUrl}v1/users/voice', method: 'GET'),
+        send: send,
+        decode: (body) {
+          final row = jsonDecode(body);
+          if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
+          return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
+        },
+      );
 
   Future<ApiResult<AssistantVoicePreference>> setPreference(String voiceId) => executeApi(
-    request: ApiRequest(
-      url: '${Env.apiBaseUrl}v1/users/voice',
-      method: 'PATCH',
-      body: jsonEncode({'voice_id': voiceId}),
-    ),
-    send: send,
-    decode: (body) {
-      final row = jsonDecode(body);
-      if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
-      return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
-    },
-  );
+        request: ApiRequest(
+          url: '${Env.apiBaseUrl}v1/users/voice',
+          method: 'PATCH',
+          body: jsonEncode({'voice_id': voiceId}),
+        ),
+        send: send,
+        decode: (body) {
+          final row = jsonDecode(body);
+          if (row is! Map<String, dynamic>) throw const FormatException('invalid voice preference');
+          return AssistantVoicePreference.fromGeneratedWireJson(wire.GeneratedAssistantVoicePreference.fromJson(row));
+        },
+      );
 }

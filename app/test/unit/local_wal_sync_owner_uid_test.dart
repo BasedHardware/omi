@@ -19,13 +19,13 @@ class _FakeListener implements IWalSyncListener {
 }
 
 Wal _wal({required int start, String? ownerUid}) => Wal(
-  timerStart: start,
-  codec: BleAudioCodec.opus,
-  seconds: 30,
-  storage: WalStorage.disk,
-  status: WalStatus.miss,
-  ownerUid: ownerUid,
-);
+      timerStart: start,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      storage: WalStorage.disk,
+      status: WalStatus.miss,
+      ownerUid: ownerUid,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -35,14 +35,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
-typedef ChatReplyStreamer =
-    Stream<ServerMessageChunk> Function(
-      String text, {
-      String? appId,
-      List<String>? filesId,
-      ChatPageContext? context,
-      String? chatSessionId,
-    });
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+  String? chatSessionId,
+});
 typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
@@ -79,12 +78,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     VoiceAudioFileSaver? voiceAudioFileSaver,
     Duration voiceReplyTimeout = const Duration(seconds: 60),
     ChatReplyReadAloud? readAloud,
-  }) : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
-       _filesUploader = filesUploader ?? uploadFilesServer,
-       _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
-       _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
-       _voiceReplyTimeout = voiceReplyTimeout,
-       _readAloud = readAloud ?? ChatReplyReadAloud.instance;
+  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+        _filesUploader = filesUploader ?? uploadFilesServer,
+        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+        _voiceReplyTimeout = voiceReplyTimeout,
+        _readAloud = readAloud ?? ChatReplyReadAloud.instance;
 
   @override
   final ChatSessionsApi chatSessionsApi;
@@ -705,8 +704,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           }
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
@@ -875,8 +873,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             notifyListeners();

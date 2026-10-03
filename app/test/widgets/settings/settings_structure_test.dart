@@ -82,9 +82,9 @@ const _pagesOfRows = {
 };
 
 String? _keyOf(Widget widget) => switch (widget.key) {
-  ValueKey<String>(:final value) => value,
-  _ => null,
-};
+      ValueKey<String>(:final value) => value,
+      _ => null,
+    };
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();

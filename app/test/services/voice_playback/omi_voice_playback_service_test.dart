@@ -86,9 +86,8 @@ void main() {
   }) async {
     assert(synthesize != null || synthesizeStream != null);
     service.debugHooks = VoicePlaybackDebugHooks(
-      synthesize: synthesize == null
-          ? null
-          : ({required String text, String? voiceId}) => synthesize(text, voiceId: voiceId),
+      synthesize:
+          synthesize == null ? null : ({required String text, String? voiceId}) => synthesize(text, voiceId: voiceId),
       synthesizeStream: synthesizeStream == null
           ? null
           : ({required String text, String? voiceId}) => synthesizeStream(text, voiceId: voiceId),

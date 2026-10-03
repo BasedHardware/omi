@@ -31,9 +31,9 @@ class _OmiVoicePlaybackSpeaker implements ChatReplySpeaker {
 
 class ChatReplyReadAloud {
   ChatReplyReadAloud({ChatReplySpeaker? speaker, bool Function()? isEnabled, String Function()? playbackId})
-    : _speaker = speaker ?? _OmiVoicePlaybackSpeaker(OmiVoicePlaybackService.instance),
-      _isEnabled = isEnabled ?? (() => SharedPreferencesUtil().readChatRepliesAloud),
-      _playbackId = playbackId ?? (() => 'chat:${const Uuid().v4()}');
+      : _speaker = speaker ?? _OmiVoicePlaybackSpeaker(OmiVoicePlaybackService.instance),
+        _isEnabled = isEnabled ?? (() => SharedPreferencesUtil().readChatRepliesAloud),
+        _playbackId = playbackId ?? (() => 'chat:${const Uuid().v4()}');
 
   static final ChatReplyReadAloud instance = ChatReplyReadAloud();
 

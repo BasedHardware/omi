@@ -74,10 +74,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   SettingsSearchScope _searchScope(BuildContext context) => SettingsSearchScope(
-    deviceConnected: context.read<DeviceProvider>().isConnected,
-    supportLinks: PlatformService.isIntercomSupported,
-    android: PlatformService.isAndroid,
-  );
+        deviceConnected: context.read<DeviceProvider>().isConnected,
+        supportLinks: PlatformService.isIntercomSupported,
+        android: PlatformService.isAndroid,
+      );
 
   // ---------------------------------------------------------------------------------------------
   // Rows
@@ -317,9 +317,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: _isSearching && _searchQuery.trim().isNotEmpty
-                ? _buildSearchResults(context)
-                : _buildSettings(context),
+            child:
+                _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
           ),
         ),
       ],

@@ -20,31 +20,29 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 
-typedef ActionItemsFetcher =
-    Future<ActionItemsResponse?> Function({
-      int limit,
-      int offset,
-      bool? completed,
-      String? conversationId,
-      DateTime? startDate,
-      DateTime? endDate,
-      DateTime? dueStartDate,
-      DateTime? dueEndDate,
-    });
+typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
+  int limit,
+  int offset,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
+});
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 typedef BulkDeleteActionItemsRequest = Future<List<String>?> Function(List<String> ids);
-typedef CreateActionItemRequest =
-    Future<ActionItemWithMetadata?> Function({
-      required String description,
-      DateTime? dueAt,
-      String? conversationId,
-      bool completed,
-    });
+typedef CreateActionItemRequest = Future<ActionItemWithMetadata?> Function({
+  required String description,
+  DateTime? dueAt,
+  String? conversationId,
+  bool completed,
+});
 typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String id, {DateTime? dueAt, bool clearDueAt});
 
-typedef UpdateActionItemRequest =
-    Future<ActionItemWithMetadata?> Function(String id, {String? description, bool? completed, DateTime? dueAt});
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(String id,
+    {String? description, bool? completed, DateTime? dueAt});
 
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
@@ -55,13 +53,13 @@ class ActionItemsProvider extends ChangeNotifier {
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
-  }) : _getActionItems = getActionItems ?? api.tryGetActionItems,
-       _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
-       _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
-       _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
-       _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
-       _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
-       _actionItemsApi = actionItemsApi {
+  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
+        _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
+        _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
+        _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
+        _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 

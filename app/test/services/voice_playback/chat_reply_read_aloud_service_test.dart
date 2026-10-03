@@ -20,10 +20,10 @@ void main() {
   Completer<VoicePlaybackOutputSnapshot>? probeGate;
 
   VoicePlaybackOutputSnapshot output({bool headphones = true, bool failed = false}) => VoicePlaybackOutputSnapshot(
-    headphonesConnected: headphones,
-    checkFailed: failed,
-    route: headphones ? VoiceReplyPlaybackOutputRoute.bluetooth : VoiceReplyPlaybackOutputRoute.speaker,
-  );
+        headphonesConnected: headphones,
+        checkFailed: failed,
+        route: headphones ? VoiceReplyPlaybackOutputRoute.bluetooth : VoiceReplyPlaybackOutputRoute.speaker,
+      );
 
   void install({VoicePlaybackOutputSnapshot? snapshot, bool gateProbe = false}) {
     service.debugHooks = VoicePlaybackDebugHooks(

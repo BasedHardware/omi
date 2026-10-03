@@ -431,16 +431,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<int?> Function()? freeDiskBytes,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
-  }) : _uploadGateOverride = uploadGate,
-       _nowOverride = now,
-       _periodicOverride = periodic,
-       _jobStatusFetcherOverride = jobStatusFetcher,
-       _persistWalsOverride = persistWals,
-       _loadWalsOverride = loadWals,
-       _coverageTelemetryOverride = coverageTelemetry,
-       _freeDiskBytesOverride = freeDiskBytes,
-       _custody = custody ?? PendantRingCustody.shared,
-       _connectionResolver = connectionResolver;
+  })  : _uploadGateOverride = uploadGate,
+        _nowOverride = now,
+        _periodicOverride = periodic,
+        _jobStatusFetcherOverride = jobStatusFetcher,
+        _persistWalsOverride = persistWals,
+        _loadWalsOverride = loadWals,
+        _coverageTelemetryOverride = coverageTelemetry,
+        _freeDiskBytesOverride = freeDiskBytes,
+        _custody = custody ?? PendantRingCustody.shared,
+        _connectionResolver = connectionResolver;
 
   @override
   int get sessionGeneration => _sessionGeneration;
@@ -490,8 +490,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       final existing = _wals[existingIndex];
-      final sameRecord =
-          existing.codec == wal.codec &&
+      final sameRecord = existing.codec == wal.codec &&
           existing.timerStart == wal.timerStart &&
           existing.seconds == wal.seconds &&
           existing.totalFrames == wal.totalFrames;
@@ -682,16 +681,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final evidenceRoot = evidenceFrames.first.captureRoot;
     final evidenceStart = evidenceFrames.first.sourceFramePosition;
     final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
-    final stableEvidence =
-        evidenceRoot != null &&
+    final stableEvidence = evidenceRoot != null &&
         evidenceStart != null &&
         evidenceEpoch != null &&
         evidenceFrames.asMap().entries.every(
-          (entry) =>
-              entry.value.captureRoot == evidenceRoot &&
-              entry.value.sourceClockEpoch == evidenceEpoch &&
-              entry.value.sourceFramePosition == evidenceStart + entry.key,
-        );
+              (entry) =>
+                  entry.value.captureRoot == evidenceRoot &&
+                  entry.value.sourceClockEpoch == evidenceEpoch &&
+                  entry.value.sourceFramePosition == evidenceStart + entry.key,
+            );
     var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
@@ -750,8 +748,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
-        final contiguousEvidence =
-            stableEvidence &&
+        final contiguousEvidence = stableEvidence &&
             wal.captureRoot == evidenceRoot &&
             wal.sourceClockEpoch == evidenceEpoch &&
             wal.sourceFrameStart != null &&
@@ -829,75 +826,74 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
-    if (!_isCurrent(generation)) return;
-    final indices = <int>[];
-    for (var i = 0; i < _frames.length; i++) {
-      if (_isPendantFrame(_frames[i])) indices.add(i);
-    }
-    if (indices.isEmpty) return;
-    final frames = indices.map((i) => _frames[i]).toList();
-    final synced = indices.map((i) => _frameSynced[i]).toList();
+        if (!_isCurrent(generation)) return;
+        final indices = <int>[];
+        for (var i = 0; i < _frames.length; i++) {
+          if (_isPendantFrame(_frames[i])) indices.add(i);
+        }
+        if (indices.isEmpty) return;
+        final frames = indices.map((i) => _frames[i]).toList();
+        final synced = indices.map((i) => _frameSynced[i]).toList();
 
-    var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-    if (!shouldStore) shouldStore = synced.any((s) => !s);
-    if (!shouldStore) {
-      _removeFrameIndices(indices);
-      return;
-    }
-    int syncedOffset = 0;
-    for (final s in synced) {
-      if (s) {
-        syncedOffset++;
-      } else {
-        break;
-      }
-    }
+        var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+        if (!shouldStore) shouldStore = synced.any((s) => !s);
+        if (!shouldStore) {
+          _removeFrameIndices(indices);
+          return;
+        }
+        int syncedOffset = 0;
+        for (final s in synced) {
+          if (s) {
+            syncedOffset++;
+          } else {
+            break;
+          }
+        }
 
-    final frameCount = frames.length;
-    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
-    var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
-    final evidenceRoot = frames.first.captureRoot;
-    final evidenceStart = frames.first.sourceFramePosition;
-    final evidenceEpoch = frames.first.sourceClockEpoch;
-    final stableEvidence =
-        evidenceRoot != null &&
-        evidenceStart != null &&
-        evidenceEpoch != null &&
-        frames.asMap().entries.every(
-          (entry) =>
-              entry.value.captureRoot == evidenceRoot &&
-              entry.value.sourceClockEpoch == evidenceEpoch &&
-              entry.value.sourceFramePosition == evidenceStart + entry.key,
+        final frameCount = frames.length;
+        var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
+        var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
+        final evidenceRoot = frames.first.captureRoot;
+        final evidenceStart = frames.first.sourceFramePosition;
+        final evidenceEpoch = frames.first.sourceClockEpoch;
+        final stableEvidence = evidenceRoot != null &&
+            evidenceStart != null &&
+            evidenceEpoch != null &&
+            frames.asMap().entries.every(
+                  (entry) =>
+                      entry.value.captureRoot == evidenceRoot &&
+                      entry.value.sourceClockEpoch == evidenceEpoch &&
+                      entry.value.sourceFramePosition == evidenceStart + entry.key,
+                );
+        final live = _liveEvidenceFor(frames);
+
+        final wal = Wal(
+          codec: _codec,
+          timerStart: timerStart,
+          data: frames.map((f) => f.payload).toList(),
+          storage: WalStorage.mem,
+          status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
+          device: _deviceId ?? "omi",
+          deviceModel: _deviceModel ?? "Omi",
+          seconds: frameCount ~/ _framesPerSecond,
+          totalFrames: frameCount,
+          syncedFrameOffset: syncedOffset,
+          ownerUid: _currentWalOwnerUid(),
+          captureRoot: stableEvidence ? evidenceRoot : null,
+          sourceFrameStart: stableEvidence ? evidenceStart : null,
+          sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
+          geolocation: _copyGeolocation(_sessionGeolocation),
+          recordingSessionId: _activeRecordingSessionId,
+          liveRingId: live.ringId,
+          liveOrdinalStart: live.start,
+          liveOrdinalEnd: live.end,
         );
-    final live = _liveEvidenceFor(frames);
-
-    final wal = Wal(
-      codec: _codec,
-      timerStart: timerStart,
-      data: frames.map((f) => f.payload).toList(),
-      storage: WalStorage.mem,
-      status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
-      device: _deviceId ?? "omi",
-      deviceModel: _deviceModel ?? "Omi",
-      seconds: frameCount ~/ _framesPerSecond,
-      totalFrames: frameCount,
-      syncedFrameOffset: syncedOffset,
-      ownerUid: _currentWalOwnerUid(),
-      captureRoot: stableEvidence ? evidenceRoot : null,
-      sourceFrameStart: stableEvidence ? evidenceStart : null,
-      sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
-      geolocation: _copyGeolocation(_sessionGeolocation),
-      recordingSessionId: _activeRecordingSessionId,
-      liveRingId: live.ringId,
-      liveOrdinalStart: live.start,
-      liveOrdinalEnd: live.end,
-    );
-    wal.liveConnectionEpoch = live.epoch;
-    _wals.add(wal);
-    _removeFrameIndices(indices);
-    _notifyUpdated(generation);
-    await _flush(generation);
-  });
+        wal.liveConnectionEpoch = live.epoch;
+        _wals.add(wal);
+        _removeFrameIndices(indices);
+        _notifyUpdated(generation);
+        await _flush(generation);
+      });
 
   int _storageFileSeq = 0;
 
@@ -1085,10 +1081,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   int get _pendingDiskWalCount => [
-    ..._retiredWals,
-    ..._foreignWals,
-    ..._wals,
-  ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
+        ..._retiredWals,
+        ..._foreignWals,
+        ..._wals,
+      ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused
@@ -1503,16 +1499,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final evidenceRoot = evidenceFrames.first.captureRoot;
     final evidenceStart = evidenceFrames.first.sourceFramePosition;
     final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
-    final stableEvidence =
-        evidenceRoot != null &&
+    final stableEvidence = evidenceRoot != null &&
         evidenceStart != null &&
         evidenceEpoch != null &&
         evidenceFrames.asMap().entries.every(
-          (entry) =>
-              entry.value.captureRoot == evidenceRoot &&
-              entry.value.sourceClockEpoch == evidenceEpoch &&
-              entry.value.sourceFramePosition == evidenceStart + entry.key,
-        );
+              (entry) =>
+                  entry.value.captureRoot == evidenceRoot &&
+                  entry.value.sourceClockEpoch == evidenceEpoch &&
+                  entry.value.sourceFramePosition == evidenceStart + entry.key,
+            );
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -1654,17 +1649,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
     if (stamped.isEmpty) return (released: 0, kept: 0);
 
-    final spans = failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty
-        ? transcriptSpans
-        : null;
+    final spans =
+        failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
     final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
     final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     final covered = <Wal>[], kept = <Wal>[];
     for (final wal in stamped) {
       // Only phone-side pending copies and transport-only synced ones (socket sends, never
       // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
-      final eligible =
-          !wal.isSyncing &&
+      final eligible = !wal.isSyncing &&
           (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
           (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
       if (!eligible) continue;
@@ -1952,8 +1945,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture =
-          !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
@@ -2060,10 +2052,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
           audioStartSeconds: batchWals.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b).toDouble(),
-          audioEndSeconds: batchWals
-              .map((wal) => wal.timerStart + wal.seconds)
-              .reduce((a, b) => a > b ? a : b)
-              .toDouble(),
+          audioEndSeconds:
+              batchWals.map((wal) => wal.timerStart + wal.seconds).reduce((a, b) => a > b ? a : b).toDouble(),
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
