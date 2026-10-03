@@ -1,4 +1,5 @@
 from __future__ import annotations
+import database.first_open_obligations as first_open_obligations_db
 
 from datetime import datetime, timedelta, timezone
 
@@ -31,25 +32,25 @@ def test_first_open_obligation_claim_completion_is_idempotent() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
 
     assert token is not None
     assert (
-        conversations_db.claim_first_open_work(
+        first_open_obligations_db.claim_first_open_work(
             "owner", "conversation", now=now + timedelta(seconds=1), firestore_client=store
         )
         is None
     )
-    for effect in conversations_db.FIRST_OPEN_EFFECTS:
-        assert conversations_db.complete_first_open_effect(
+    for effect in first_open_obligations_db.FIRST_OPEN_EFFECTS:
+        assert first_open_obligations_db.complete_first_open_effect(
             "owner", "conversation", token, effect, firestore_client=store
         )
-    assert conversations_db.finish_first_open_work(
+    assert first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", token, succeeded=True, firestore_client=store
     )
     assert (
-        conversations_db.claim_first_open_work(
+        first_open_obligations_db.claim_first_open_work(
             "owner", "conversation", now=now + timedelta(hours=1), firestore_client=store
         )
         is None
@@ -60,27 +61,27 @@ def test_first_open_obligation_claim_completion_is_idempotent() -> None:
 def test_first_open_persists_and_fences_account_and_source_generation() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
     state = store.rows[path]["jit_first_open"]
     assert (state["account_generation"], state["source_generation"]) == (3, 7)
 
     control = store.rows[("users", "owner", "memory_state", "apply_control")]
     control["source_generation"] = 8
-    assert conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store) is None
+    assert first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store) is None
 
 
 def test_account_deletion_suspends_claim_and_fences_effect_commit() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
     store.rows[("account_deletions", "owner")] = {"wipe_status": "queued"}
-    assert not conversations_db.first_open_effect_is_authorized(
+    assert not first_open_obligations_db.first_open_effect_is_authorized(
         "owner", "conversation", token, "folder_assignment", firestore_client=store
     )
-    assert not conversations_db.commit_first_open_conversation_patch(
+    assert not first_open_obligations_db.commit_first_open_conversation_patch(
         "owner",
         "conversation",
         token,
@@ -94,16 +95,16 @@ def test_account_deletion_suspends_claim_and_fences_effect_commit() -> None:
 def test_conversation_effect_output_commits_before_separate_completion_receipt() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
-    assert conversations_db.commit_first_open_conversation_patch(
+    assert first_open_obligations_db.commit_first_open_conversation_patch(
         "owner", "conversation", token, "folder_assignment", {"folder_id": "folder"}, firestore_client=store
     )
     assert store.rows[path]["folder_id"] == "folder"
     assert store.rows[path]["jit_first_open"]["effects"]["folder_assignment"]["state"] == "pending"
-    assert conversations_db.complete_first_open_effect(
+    assert first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", token, "folder_assignment", firestore_client=store
     )
 
@@ -112,11 +113,11 @@ def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
     store, path = _store()
     store.rows[("plugins_data", "app")] = {"id": "app"}
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
-    assert conversations_db.commit_first_open_app_result(
+    assert first_open_obligations_db.commit_first_open_app_result(
         "owner",
         "conversation",
         token,
@@ -124,7 +125,7 @@ def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
         {"apps_results": [{"app_id": "app", "content": "result"}]},
         firestore_client=store,
     )
-    assert conversations_db.commit_first_open_app_usage(
+    assert first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
     usage_path = ("plugins", "app", "usage_history", "conversation")
@@ -133,14 +134,14 @@ def test_app_usage_attribution_is_idempotent_and_deletion_fenced() -> None:
     assert receipt == {"result_persisted": True, "usage_persisted": True}
 
     writes_before_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
-    assert conversations_db.commit_first_open_app_usage(
+    assert first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
     writes_after_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
     assert writes_after_retry == writes_before_retry
 
     store.rows[("account_deletions", "owner")] = {"wipe_status": "running"}
-    assert not conversations_db.commit_first_open_app_usage(
+    assert not first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "other-app", "memory_created_prompt", firestore_client=store
     )
     assert ("plugins", "other-app", "usage_history", "conversation") not in store.rows
@@ -151,10 +152,10 @@ def test_plugin_deletion_after_usage_does_not_block_no_write_completion_retry() 
     plugin_path = ("plugins_data", "app")
     store.rows[plugin_path] = {"id": "app"}
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
-    assert conversations_db.commit_first_open_app_result(
+    assert first_open_obligations_db.commit_first_open_app_result(
         "owner",
         "conversation",
         token,
@@ -162,18 +163,18 @@ def test_plugin_deletion_after_usage_does_not_block_no_write_completion_retry() 
         {"apps_results": [{"app_id": "app", "content": "paid result"}]},
         firestore_client=store,
     )
-    assert conversations_db.commit_first_open_app_usage(
+    assert first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
 
     del store.rows[plugin_path]
     writes_before_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
-    assert conversations_db.commit_first_open_app_usage(
+    assert first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
     writes_after_retry = sum(len(transaction.sets) + len(transaction.updates) for transaction in store.transactions)
     assert writes_after_retry == writes_before_retry
-    assert conversations_db.complete_first_open_effect(
+    assert first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", token, "app_fanout", firestore_client=store
     )
 
@@ -182,11 +183,11 @@ def test_app_result_cannot_complete_until_usage_receipt_is_durable() -> None:
     store, path = _store()
     store.rows[("plugins_data", "app")] = {"id": "app"}
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
-    assert conversations_db.commit_first_open_app_result(
+    assert first_open_obligations_db.commit_first_open_app_result(
         "owner",
         "conversation",
         token,
@@ -194,15 +195,15 @@ def test_app_result_cannot_complete_until_usage_receipt_is_durable() -> None:
         {"apps_results": [{"app_id": "app", "content": "paid result"}]},
         firestore_client=store,
     )
-    assert not conversations_db.complete_first_open_effect(
+    assert not first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", token, "app_fanout", firestore_client=store
     )
     assert store.rows[path]["jit_first_open"]["effects"]["app_fanout"]["state"] == "pending"
 
-    assert conversations_db.commit_first_open_app_usage(
+    assert first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
-    assert conversations_db.complete_first_open_effect(
+    assert first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", token, "app_fanout", firestore_client=store
     )
 
@@ -212,10 +213,10 @@ def test_plugin_deletion_after_app_result_cannot_recreate_usage_child() -> None:
     plugin_path = ("plugins_data", "app")
     store.rows[plugin_path] = {"id": "app"}
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
-    assert conversations_db.commit_first_open_app_result(
+    assert first_open_obligations_db.commit_first_open_app_result(
         "owner",
         "conversation",
         token,
@@ -225,7 +226,7 @@ def test_plugin_deletion_after_app_result_cannot_recreate_usage_child() -> None:
     )
 
     del store.rows[plugin_path]
-    assert not conversations_db.commit_first_open_app_usage(
+    assert not first_open_obligations_db.commit_first_open_app_usage(
         "owner", "conversation", token, "app", "memory_created_prompt", firestore_client=store
     )
     assert ("plugins", "app", "usage_history", "conversation") not in store.rows
@@ -234,20 +235,20 @@ def test_plugin_deletion_after_app_result_cannot_recreate_usage_child() -> None:
 def test_account_recreation_generation_fences_old_in_flight_lease() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    token = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    assert first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    token = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert token is not None
 
     control = store.rows[("users", "owner", "memory_state", "apply_control")]
     control["account_generation"] = 4
     control["source_generation"] = 1
-    assert not conversations_db.first_open_effect_is_authorized(
+    assert not first_open_obligations_db.first_open_effect_is_authorized(
         "owner", "conversation", token, "app_fanout", firestore_client=store
     )
-    assert not conversations_db.complete_first_open_effect(
+    assert not first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", token, "app_fanout", firestore_client=store
     )
-    assert not conversations_db.finish_first_open_work(
+    assert not first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", token, succeeded=True, firestore_client=store
     )
 
@@ -278,23 +279,23 @@ def test_goal_effect_commit_uses_same_account_deletion_and_generation_fence() ->
 def test_failed_and_expired_first_open_claims_are_retryable_and_fenced() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    first = conversations_db.claim_first_open_work(
+    first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    first = first_open_obligations_db.claim_first_open_work(
         "owner", "conversation", lease_seconds=30, now=now, firestore_client=store
     )
     assert first is not None
-    assert not conversations_db.finish_first_open_work(
+    assert not first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", "wrong", succeeded=True, firestore_client=store
     )
 
-    expired_retry = conversations_db.claim_first_open_work(
+    expired_retry = first_open_obligations_db.claim_first_open_work(
         "owner", "conversation", now=now + timedelta(seconds=31), firestore_client=store
     )
     assert expired_retry is not None and expired_retry != first
-    assert not conversations_db.finish_first_open_work(
+    assert not first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", first, succeeded=True, firestore_client=store
     )
-    assert conversations_db.finish_first_open_work(
+    assert first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", expired_retry, succeeded=False, firestore_client=store
     )
     assert store.rows[path]["jit_first_open"]["state"] == "pending"
@@ -304,32 +305,32 @@ def test_failed_and_expired_first_open_claims_are_retryable_and_fenced() -> None
 def test_first_open_retry_preserves_completed_effect_receipts() -> None:
     store, path = _store()
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    conversations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
-    first = conversations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
+    first_open_obligations_db.initialize_first_open_work("owner", "conversation", firestore_client=store)
+    first = first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
     assert first is not None
-    assert conversations_db.complete_first_open_effect(
+    assert first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", first, "folder_assignment", firestore_client=store
     )
 
     # Simulate a process crash after the folder side effect and receipt.
-    assert conversations_db.finish_first_open_work(
+    assert first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", first, succeeded=False, firestore_client=store
     )
     state = store.rows[path]["jit_first_open"]
     assert state["state"] == "pending"
     assert state["effects"]["folder_assignment"]["state"] == "complete"
 
-    retry = conversations_db.claim_first_open_work(
+    retry = first_open_obligations_db.claim_first_open_work(
         "owner", "conversation", now=now + timedelta(minutes=1), firestore_client=store
     )
     assert retry is not None
-    assert not conversations_db.complete_first_open_effect(
+    assert not first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", first, "app_fanout", firestore_client=store
     )
-    assert conversations_db.complete_first_open_effect(
+    assert first_open_obligations_db.complete_first_open_effect(
         "owner", "conversation", retry, "app_fanout", firestore_client=store
     )
-    assert conversations_db.finish_first_open_work(
+    assert first_open_obligations_db.finish_first_open_work(
         "owner", "conversation", retry, succeeded=True, firestore_client=store
     )
     assert store.rows[path]["jit_first_open"]["state"] == "complete"

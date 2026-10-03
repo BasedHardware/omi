@@ -6,7 +6,7 @@ from routers import conversations
 def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
     calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(
-        conversations.conversations_db, "claim_authorized_first_open_work", lambda _uid, _cid, _source: "lease"
+        conversations.first_open_obligations_db, "claim_authorized_first_open_work", lambda _uid, _cid, _source: "lease"
     )
     monkeypatch.setattr(
         conversations.conversations_db,
@@ -14,7 +14,7 @@ def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
         lambda _uid, _cid: {"id": "conversation", "jit_first_open": {"state": "in_flight"}},
     )
     monkeypatch.setattr(
-        conversations.conversations_db,
+        conversations.first_open_obligations_db,
         "finish_first_open_work",
         lambda _uid, _cid, token, *, succeeded: calls.append((token, succeeded)),
     )
@@ -38,7 +38,7 @@ def test_detail_dispatch_runs_claimed_work_and_completes(monkeypatch) -> None:
 
 def test_detail_dispatch_does_not_run_without_claim(monkeypatch) -> None:
     monkeypatch.setattr(
-        conversations.conversations_db, "claim_authorized_first_open_work", lambda _uid, _cid, _source: None
+        conversations.first_open_obligations_db, "claim_authorized_first_open_work", lambda _uid, _cid, _source: None
     )
     monkeypatch.setattr(
         conversations,
@@ -53,7 +53,7 @@ def test_kill_or_unknown_suspends_outstanding_obligation_without_claim(monkeypat
     observed: list[dict[str, object]] = []
 
     monkeypatch.setattr(
-        conversations.conversations_db,
+        conversations.first_open_obligations_db,
         "claim_authorized_first_open_work",
         lambda uid, cid, source: observed.append({"uid": uid, "conversation_id": cid, "source": source}) or None,
     )

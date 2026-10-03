@@ -14,6 +14,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     # Import lazily to preserve the large processing module's existing test
     # seams without creating an import cycle at router startup.
     from utils.conversations import process_conversation as processing
+    import database.first_open_obligations as first_open_obligations_db
 
     conversation = processing.deserialize_conversation(conversation_data)
     obligation = conversation_data.get('jit_first_open') or {}
@@ -27,7 +28,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
 
     def authorize(effect: str) -> None:
         plan = processing.resolve_authorized_first_open_plan(uid=uid, source=str(source or ''), force_refresh=True)
-        if not plan.defer_derived_work or not processing.conversations_db.first_open_effect_is_authorized(
+        if not plan.defer_derived_work or not first_open_obligations_db.first_open_effect_is_authorized(
             uid, conversation.id, token, effect
         ):
             raise RuntimeError(f'first-open authority suspended before {effect}')
@@ -35,7 +36,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     def complete(effect: str) -> None:
         try:
             authorize(effect)
-            if not processing.conversations_db.complete_first_open_effect(uid, conversation.id, token, effect):
+            if not first_open_obligations_db.complete_first_open_effect(uid, conversation.id, token, effect):
                 raise RuntimeError(f'first-open lease lost while completing {effect}')
             states[effect] = {'state': 'complete'}
             try:
@@ -82,13 +83,13 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
                     folder_patch = {'folder_id': folder_id}
         if folder_patch:
             authorize('folder_assignment')
-            if not processing.conversations_db.commit_first_open_conversation_patch(
+            if not first_open_obligations_db.commit_first_open_conversation_patch(
                 uid, conversation.id, token, 'folder_assignment', folder_patch
             ):
                 raise RuntimeError('first-open authority lost while persisting folder assignment')
         if conversation.folder_id:
             authorize('folder_assignment')
-            if not processing.conversations_db.commit_first_open_folder_count(
+            if not first_open_obligations_db.commit_first_open_folder_count(
                 uid, conversation.id, token, conversation.folder_id
             ):
                 raise RuntimeError('first-open authority lost while refreshing folder count')
@@ -100,11 +101,11 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
 
     def commit_result(app_id: str, patch: Mapping[str, Any]) -> bool:
         authorize('app_fanout')
-        return processing.conversations_db.commit_first_open_app_result(uid, conversation.id, token, app_id, patch)
+        return first_open_obligations_db.commit_first_open_app_result(uid, conversation.id, token, app_id, patch)
 
     def commit_usage(app_id: str, usage_type: UsageHistoryType) -> bool:
         authorize('app_fanout')
-        return processing.conversations_db.commit_first_open_app_usage(
+        return first_open_obligations_db.commit_first_open_app_usage(
             uid, conversation.id, token, app_id, usage_type.value
         )
 
@@ -148,7 +149,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     )
     if patch and not conversation.apps_results:
         authorize('app_fanout')
-        if not processing.conversations_db.commit_first_open_conversation_patch(
+        if not first_open_obligations_db.commit_first_open_conversation_patch(
             uid, conversation.id, token, 'app_fanout', patch
         ):
             raise RuntimeError('first-open authority lost while persisting app selection')
