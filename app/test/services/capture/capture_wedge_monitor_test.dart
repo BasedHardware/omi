@@ -57,13 +57,13 @@ void main() {
     addTearDown(monitor.dispose);
     monitor.setNativeIngressOwner('dev-a', true);
     CaptureIngressHealth health(String phase) => CaptureIngressHealth(
-          phase: phase,
-          generation: 'epoch-1',
-          reason: phase,
-          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
-          subscriptionConfirmed: phase == 'quiet',
-          unverifiedSinceMs: 1234,
-        );
+      phase: phase,
+      generation: 'epoch-1',
+      reason: phase,
+      validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+      subscriptionConfirmed: phase == 'quiet',
+      unverifiedSinceMs: 1234,
+    );
     for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
       monitor.observeIngressHealth('dev-a', health(phase));
       zeroSession(monitor);
@@ -81,23 +81,30 @@ void main() {
     expect(retriedDevices, isEmpty, reason: 'banner must not bypass native persistent budget');
     monitor.observeIngressHealth('dev-a', health('flowing'));
     expect(monitor.visiblePrompt, isNull);
-    expect(forEvent('Capture Ingress Health').map((e) => e['phase']),
-        ['unverified', 'repairing', 'reconnecting', 'quiet', 'actionRequired', 'flowing']);
+    expect(forEvent('Capture Ingress Health').map((e) => e['phase']), [
+      'unverified',
+      'repairing',
+      'reconnecting',
+      'quiet',
+      'actionRequired',
+      'flowing',
+    ]);
   });
 
   test('Android CCCD recovery suppresses legacy retries until acknowledgement clears it', () async {
     final monitor = makeMonitor(withRetry: true);
     addTearDown(monitor.dispose);
     monitor.observeIngressHealth(
-        'dev-a',
-        const CaptureIngressHealth(
-          phase: 'recovering',
-          generation: 'android',
-          reason: CaptureIngressHealth.cccdRecoveryReason,
-          validUntilMs: 0,
-          subscriptionConfirmed: false,
-          unverifiedSinceMs: 1,
-        ));
+      'dev-a',
+      const CaptureIngressHealth(
+        phase: 'recovering',
+        generation: 'android',
+        reason: CaptureIngressHealth.cccdRecoveryReason,
+        validUntilMs: 0,
+        subscriptionConfirmed: false,
+        unverifiedSinceMs: 1,
+      ),
+    );
     for (var i = 0; i < 6; i++) {
       zeroSession(monitor);
       monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
@@ -461,16 +468,22 @@ void main() {
       monitor.onTranscriptObserved('dev-a');
       await pumpEventQueue();
 
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed,
-          reason: 'the ingress failure stays owned by native recovery');
+      expect(
+        monitor.visiblePrompt?.trigger,
+        CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+        reason: 'the ingress failure stays owned by native recovery',
+      );
       // The telemetry episode is gone; three more no-transcript sessions can
       // declare a fresh one instead of being blocked by the stale slot.
       noTranscriptSession(monitor);
       noTranscriptSession(monitor);
       noTranscriptSession(monitor);
       await pumpEventQueue();
-      expect(forEvent('Capture Wedge Detected').where((e) => e['trigger'] == 'bytes_sent_no_transcript'), isNotEmpty,
-          reason: 'a stale telemetry slot must not block later declarations');
+      expect(
+        forEvent('Capture Wedge Detected').where((e) => e['trigger'] == 'bytes_sent_no_transcript'),
+        isNotEmpty,
+        reason: 'a stale telemetry slot must not block later declarations',
+      );
     });
 
     test('two minutes of byte-producing silence tracks and retries without a prompt', () async {
@@ -511,10 +524,7 @@ void main() {
       positiveSession(monitor);
       expect(
         forEvent('Capture Recovery Resolved').map((event) => event['trigger']),
-        containsAll([
-          CaptureWedgeMonitor.triggerBytesSentNoTranscript,
-          CaptureWedgeMonitor.triggerZeroByteStreak,
-        ]),
+        containsAll([CaptureWedgeMonitor.triggerBytesSentNoTranscript, CaptureWedgeMonitor.triggerZeroByteStreak]),
       );
       expect(forEvent('Capture Recovery Resolved'), hasLength(2));
       monitor.dispose();
@@ -609,21 +619,21 @@ void main() {
   });
 
   group('storage retention risk', () {
-    test('cap engagement is surfaced once with eviction telemetry', () async {
+    test('cap engagement is surfaced once with admission-block telemetry', () async {
       var transferRetries = 0;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
       final engagedAt = now;
 
-      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
-      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
       await pumpEventQueue();
 
       expect(transferRetries, 1);
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
       final detected = forEvent('Capture Wedge Detected').single;
-      expect(detected['evicted_wal_count'], 3);
+      expect(detected['blocked_wal_count'], 3);
       expect(detected['retained_wal_count'], 720);
-      expect(detected['retention_policy'], 'oldest_first_count_cap');
+      expect(detected['retention_policy'], 'admission_count_cap');
       monitor.dispose();
     });
 
@@ -633,7 +643,7 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
 
-      monitor.observeStorageAtRisk(engagedAt: now, evictedCount: 1, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'count_cap');
       await pumpEventQueue();
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
       expect(forEvent('Capture Wedge Detected'), hasLength(2));

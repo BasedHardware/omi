@@ -161,6 +161,12 @@ void main() {
       final record = [0, 0, 0, 0, ...List.filled(440, 0)];
       expect(RingProtocol.readRecordTimestamp(record), 0);
     });
+
+    test('uptime-flagged timestamp (bit 31) is not epoch time', () {
+      // Custody firmware: 0x80000000 | 1234 s since boot while the RTC is unset.
+      final record = [0x80, 0x00, 0x04, 0xD2, ...List.filled(440, 0)];
+      expect(RingProtocol.readRecordTimestamp(record), 0);
+    });
   });
 
   group('RingProtocol.parseAudioPayload', () {
@@ -315,8 +321,8 @@ void main() {
 
   group('end-to-end: NOTIFY_DATA reassembly + record decode', () {
     test('reconstructs a record split across two NOTIFY_DATA chunks and decodes audio', () {
-      // Construct one record: ts=0xDEADBEEF, then two 80B opus-like frames.
-      const ts = 0xDEADBEEF;
+      // Construct one record: ts=0x6824B5C0 (epoch seconds), then two 80B opus-like frames.
+      const ts = 0x6824B5C0;
       final f1 = List<int>.generate(80, (i) => 0xA0 + (i & 0x0F));
       final f2 = List<int>.generate(80, (i) => 0x50 + (i & 0x0F));
       final audio = <int>[80, ...f1, 80, ...f2];

@@ -67,7 +67,10 @@ class WalFileManager {
             'last_retry_at',
             'uploaded_at',
             'source_frame_start',
-            'source_clock_epoch'
+            'source_clock_epoch',
+            'live_ring_id',
+            'live_ordinal_start',
+            'live_ordinal_end',
           ]) {
             if (entry[key] != null && entry[key] is! int) throw const FormatException();
           }
@@ -79,7 +82,7 @@ class WalFileManager {
             'recording_session_id',
             'owner_uid',
             'capture_root',
-            'job_id'
+            'job_id',
           ]) {
             if (entry[key] != null && entry[key] is! String) throw const FormatException();
           }

@@ -250,6 +250,87 @@ describe('createDeepgramTranscriber', () => {
 });
 
 describe('createWhisperTranscriber', () => {
+  test('delivers an accepted full batch after stop through the shared factory', async () => {
+    const transcripts: string[] = [];
+    const batches: Uint8Array[] = [];
+    let finish!: (text: string) => void;
+    const pending = new Promise<string>((resolve) => { finish = resolve; });
+    const transcriber = createTranscriber('whisper', {
+      whisperRunner: (pcm) => { batches.push(pcm); return pending; },
+      onTranscript: (text) => transcripts.push(text),
+    });
+    const pcm = new Uint8Array(160000).fill(1);
+    transcriber.appendPcm(pcm);
+    transcriber.stop();
+    transcriber.stop();
+    transcriber.appendPcm(new Uint8Array(160000).fill(2));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(batches).toEqual([pcm]);
+    finish('full batch');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(transcripts).toEqual(['full batch']);
+  });
+
+  test('delivers a pending full batch before the final tail', async () => {
+    const transcripts: string[] = [];
+    const batches: Uint8Array[] = [];
+    let finish!: (text: string) => void;
+    const pending = new Promise<string>((resolve) => { finish = resolve; });
+    const transcriber = createWhisperTranscriber({
+      runner: (pcm) => {
+        batches.push(pcm);
+        return batches.length === 1 ? pending : 'tail';
+      },
+      onTranscript: (text) => transcripts.push(text),
+      batchSeconds: 1,
+    });
+    const full = new Uint8Array(32000).fill(1);
+    const tail = new Uint8Array([2, 0]);
+    transcriber.appendPcm(full);
+    transcriber.appendPcm(tail);
+    transcriber.stop();
+    transcriber.stop();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(transcripts).toEqual([]);
+
+    finish('first');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(batches).toEqual([full, tail]);
+    expect(transcripts).toEqual(['first', 'tail']);
+  });
+
+  test.each(['empty', 'throw', 'reject'] as const)(
+    'continues accepted batches after a runner returns %s',
+    async (outcome) => {
+      const transcripts: string[] = [];
+      let calls = 0;
+      const transcriber = createWhisperTranscriber({
+        runner: () => {
+          calls += 1;
+          if (calls === 1) {
+            if (outcome === 'throw') throw new Error('synthetic runner failure');
+            if (outcome === 'reject') return Promise.reject(new Error('synthetic runner failure'));
+            return '';
+          }
+          return calls === 2 ? 'second' : 'tail';
+        },
+        onTranscript: (text) => transcripts.push(text),
+        batchSeconds: 1,
+      });
+      transcriber.appendPcm(new Uint8Array(32000));
+      transcriber.appendPcm(new Uint8Array(32000));
+      transcriber.appendPcm(new Uint8Array([1, 0]));
+      transcriber.stop();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(calls).toBe(3);
+      expect(transcripts).toEqual(['second', 'tail']);
+    },
+  );
+
   test('delivers buffered audio transcript when stopped before a batch fills', async () => {
     const transcripts: string[] = [];
     const transcriber = createWhisperTranscriber({
@@ -264,6 +345,29 @@ describe('createWhisperTranscriber', () => {
     await Promise.resolve();
 
     expect(transcripts).toEqual(['final transcript']);
+  });
+
+  test('contains first and final callback errors while delivering the next batch', async () => {
+    const attempted: string[] = [];
+    const transcripts: string[] = [];
+    let calls = 0;
+    const transcriber = createWhisperTranscriber({
+      runner: () => ['first', 'second', 'tail'][calls++]!,
+      onTranscript: (text) => {
+        attempted.push(text);
+        if (text !== 'second') throw new Error('synthetic callback failure');
+        transcripts.push(text);
+      },
+      batchSeconds: 1,
+    });
+    transcriber.appendPcm(new Uint8Array(32000));
+    transcriber.appendPcm(new Uint8Array(32000));
+    transcriber.appendPcm(new Uint8Array([1, 0]));
+    transcriber.stop();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(attempted).toEqual(['first', 'second', 'tail']);
+    expect(transcripts).toEqual(['second']);
   });
 });
 

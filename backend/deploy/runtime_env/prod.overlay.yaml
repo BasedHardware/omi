@@ -45,6 +45,9 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         SONIOX_MONTHLY_CEILING_USD:

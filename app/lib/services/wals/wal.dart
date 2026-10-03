@@ -5,7 +5,8 @@ import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 180;
+
+const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -102,17 +103,17 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
-      WalSyncDisplayState.failed => 4,
-      WalSyncDisplayState.corrupted => 4,
-      WalSyncDisplayState.outsideRecoveryWindow => 4,
-      WalSyncDisplayState.unsupportedAudio => 4,
-      WalSyncDisplayState.uploadRejected => 4,
-      WalSyncDisplayState.retrying => 3,
-      WalSyncDisplayState.syncing => 2,
-      WalSyncDisplayState.uploaded => 1,
-      WalSyncDisplayState.synced => 1,
-      WalSyncDisplayState.waiting => 1,
-    };
+  WalSyncDisplayState.failed => 4,
+  WalSyncDisplayState.corrupted => 4,
+  WalSyncDisplayState.outsideRecoveryWindow => 4,
+  WalSyncDisplayState.unsupportedAudio => 4,
+  WalSyncDisplayState.uploadRejected => 4,
+  WalSyncDisplayState.retrying => 3,
+  WalSyncDisplayState.syncing => 2,
+  WalSyncDisplayState.uploaded => 1,
+  WalSyncDisplayState.synced => 1,
+  WalSyncDisplayState.waiting => 1,
+};
 
 /// Max automatic sync attempts before a recording is considered
 /// [WalSyncDisplayState.failed]. This is the budget itself, not a display
@@ -210,6 +211,12 @@ class Wal {
   String? captureRoot;
   int? sourceFrameStart;
   int? sourceClockEpoch;
+
+  int? liveRingId;
+  int? liveOrdinalStart;
+  int? liveOrdinalEnd;
+
+  int? liveConnectionEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -342,6 +349,9 @@ class Wal {
     this.captureRoot,
     this.sourceFrameStart,
     this.sourceClockEpoch,
+    this.liveRingId,
+    this.liveOrdinalStart,
+    this.liveOrdinalEnd,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -370,14 +380,18 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
       conversationId: json['conversation_id'],
       recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
       captureRoot: json['capture_root'],
       sourceFrameStart: json['source_frame_start'],
       sourceClockEpoch: json['source_clock_epoch'],
+      liveRingId: json['live_ring_id'],
+      liveOrdinalStart: json['live_ordinal_start'],
+      liveOrdinalEnd: json['live_ordinal_end'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -414,6 +428,9 @@ class Wal {
       if (captureRoot != null) 'capture_root': captureRoot,
       if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
       if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
+      if (liveRingId != null) 'live_ring_id': liveRingId,
+      if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
+      if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,

@@ -2,7 +2,14 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from utils.stt.resilient_stream import socket_is_finishing
+
+
+@pytest.fixture(autouse=True)
+def _recovery_on(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 def _managed(owner_closing: bool, raw_finishing: bool):
@@ -22,11 +29,11 @@ def test_owner_teardown_still_blocks_recovery():
     assert socket_is_finishing(_managed(owner_closing=True, raw_finishing=True)) is True
 
 
-def test_unmanaged_socket_keeps_its_finishing_latch():
-    assert socket_is_finishing(SimpleNamespace(_finishing=True)) is True
+def test_unmanaged_transport_cleanup_is_not_owner_departure():
+    assert socket_is_finishing(SimpleNamespace(_finishing=True)) is False
     assert socket_is_finishing(SimpleNamespace(_finishing=False)) is False
     wrapper = SimpleNamespace(_conn=SimpleNamespace(_finishing=True))
-    assert socket_is_finishing(wrapper) is True
+    assert socket_is_finishing(wrapper) is False
 
 
 def test_none_is_not_finishing():
