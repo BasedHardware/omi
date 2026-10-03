@@ -15,10 +15,14 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
 from config.translation import resolve_ondemand_config
-from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.capture_evidence import (
+    capture_evidence_dark_write_enabled,
+    listen_committed_capture_coverage_enabled,
+)
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
 
@@ -225,6 +229,11 @@ def _get_lc3() -> Any:
     return lc3
 
 
+def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
+    for segment in segments:
+        segment.pop(CAPTURE_WORD_RANGES_KEY, None)
+
+
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
@@ -312,7 +321,9 @@ class ListenReceiver(ReplayFilterMixin):
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
             if capture_evidence_dark_write_enabled():
-                host.state.source_position_map = SourcePositionMap()
+                host.state.source_position_map = SourcePositionMap(
+                    committed=listen_committed_capture_coverage_enabled()
+                )
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -429,6 +440,10 @@ class ListenReceiver(ReplayFilterMixin):
         assigning its audio window to one conversation would guess. Its text
         is retained as explicitly unplaced under its provider SEND owner.
         """
+        source_map = getattr(self.host.state, 'source_position_map', None)
+        if source_map is not None and capture_evidence_dark_write_enabled():
+            source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
         kept: List[Dict[str, Any]] = []
         for segment in segments:
@@ -496,6 +511,10 @@ class ListenReceiver(ReplayFilterMixin):
         Transcript times stay provider-native; the window survives failover.
         LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
+        source_map = getattr(self.host.state, 'source_position_map', None)
+        if source_map is not None and capture_evidence_dark_write_enabled():
+            source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
         if not live_speaker_capture_clock_enabled():
             for segment in segments:
@@ -2082,6 +2101,7 @@ class ListenReceiver(ReplayFilterMixin):
                                 sample_count=end_sample - start_sample,
                                 rate_hz=request.sample_rate,
                                 payload=bytes(data),
+                                receipt_wall_time=now,
                             )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)
