@@ -274,7 +274,7 @@ void main() {
   /// Replays the fully covered session once — 202 s streamed, [fullSpans] delivered end+2s each —
   /// and returns the covered copies once every stamped WAL is judged synced. [serverSkew] offsets
   /// the conversation's own clock and [hasStart] drops `startedAt`, both ignored by the live anchor.
-  Future<(DateTime, List<Wal>)> fullyCoveredReplay({
+  Future<(DateTime, List<Wal>, List<Wal>)> fullyCoveredReplay({
     Duration serverSkew = Duration.zero,
     bool hasStart = true,
     List<int>? anchorEstimates,
@@ -289,13 +289,10 @@ void main() {
       hasStart: hasStart,
       createdAt: hasStart ? null : origin.subtract(const Duration(minutes: 10)),
     ));
-    final covered = await walsReach(
-      'every stamped copy covered and retained-synced',
-      (wals) =>
-          wals.isNotEmpty &&
-          wals.every((wal) => wal.status == WalStatus.synced && wal.syncedAt > 0 && !wal.keptForTranscriptRecovery),
-    );
-    return (origin, covered);
+    final (covered, hole) = await judgedWals();
+    expect(offsetsOf(hole, origin), [70, 150],
+        reason: 'silence-only 10s chunks inside tolerated pauses stay miss on every anchor');
+    return (origin, covered, hole);
   }
 
   /// Streams [seconds] of pendant audio while [spans] arrive live (end+2s each), closes with the
@@ -342,30 +339,47 @@ void main() {
     return expectAllKeptThenUploaded('c1', failClosedReason: failClosedReason);
   }
 
-  test('pendant: a conversation with natural pauses retains every copy and uploads nothing', () async {
+  test('pendant: a conversation with natural pauses retains every covered copy and repairs silent gaps', () async {
     final anchorEstimates = <int>[];
-    final (origin, covered) = await fullyCoveredReplay(anchorEstimates: anchorEstimates);
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamWithLiveSegments(link, 202, 'c1', fullSpans, anchorEstimates: anchorEstimates);
+    await serverCloses(conversation('c1', origin, fullSpans));
+    final (covered, hole) = await judgedWals();
     final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
     // The fixture delivers each saved segment exactly end+2s after it ends, so every anchor estimate
     // is origin+2 and the median anchor lands there; the utterance pauses then fall inside the 30s
-    // pause tolerance and every WAL is covered.
+    // pause tolerance and every WAL touching text is covered.
     expect(anchorEstimates.toSet(), {originSeconds + 2},
         reason: 'each live segment arrives exactly 2s after it ends, so the median anchor is origin+2');
-    expect(offsetsOf(covered, origin), [0, 60, 135]);
-    expect(world.uploads.attempts, isEmpty,
-        reason: 'coverage the saved transcript proves suppresses the repair upload entirely');
+    // Pendant drains on the 10s custody cadence: chunks at 60 and 140/150 lie
+    // wholly inside the 60..78 and 139..164 silences — no span overlap, so they
+    // fail closed and repair-upload rather than inferring silence.
+    expect(offsetsOf(hole, origin), [70, 150],
+        reason: 'chunks with zero transcript overlap stay miss — no overlap is not proven silence');
+    expect(offsetsOf(covered, origin), [
+      for (var t = 0; t <= 200; t += 10)
+        if (t != 70 && t != 150) t
+    ]);
     final retainedNames = audioFilesOnDisk();
-    expect(retainedNames, unorderedEquals([for (final wal in covered) wal.getFileName()]),
+    expect(
+        retainedNames,
+        unorderedEquals([
+          for (final wal in [...covered, ...hole]) wal.getFileName()
+        ]),
         reason: 'every covered copy is retained in synced retention under its own name, not deleted');
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty, reason: 'even a forced recovery pass finds nothing to repair');
+    await expectRecoveryUploads('c1', hole);
     expect(audioFilesOnDisk(), retainedNames);
-    expect(await persistedStatuses(), {for (final wal in covered) wal.id: WalStatus.synced},
-        reason: 'the durable index agrees every covered copy is synced');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced
+        },
+        reason: 'the durable index agrees every judged copy is synced');
     await telemetryReaches(() => world.coverageEvents.any((event) => event['phase'] == 'confirmation'));
     final confirmation = world.coverageEvents.lastWhere((event) => event['phase'] == 'confirmation');
     expect(confirmation['retained_covered_count'], covered.length);
-    expect(confirmation['kept_count'], 0);
+    expect(confirmation['kept_count'], hole.length);
     expect(confirmation['fail_closed_reason'], isNull);
   });
 
@@ -374,8 +388,14 @@ void main() {
     // the pause tolerance — so the WAL covering that hole stays miss-marked and recovers.
     final (origin, covered, hole) =
         await judgedReplay(202, fullSpans.where((span) => span.$2 <= 86 || span.$1 >= 131).toList());
-    expect(offsetsOf(hole, origin), [60], reason: 'only the WAL crossing the 86..131 hole remains miss');
-    expect(offsetsOf(covered, origin), [0, 135]);
+    // The 86..131 hole keeps chunks 90–120 miss; chunks fully inside the 60..78
+    // and 139..164 silences also stay miss (no overlap), tolerated only at edges.
+    expect(offsetsOf(hole, origin), [70, 90, 100, 110, 120, 150],
+        reason: 'the 10s chunks with no transcript overlap stay miss');
+    expect(offsetsOf(covered, origin), [
+      for (var t = 0; t <= 200; t += 10)
+        if (t != 70 && (t < 90 || t > 120) && t != 150) t
+    ]);
     expect(audioFilesOnDisk(), hasLength(covered.length + hole.length),
         reason: 'covered copies are retained, not deleted; hole copies stay for repair');
     await expectRecoveryUploads('c1', hole);
@@ -390,17 +410,24 @@ void main() {
   test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
     // The saved transcript never mentions the opening; its first anchored utterance lands 36 s in — past the pause tolerance.
     final (origin, covered, hole) = await judgedReplay(202, fullSpans.where((span) => span.$1 >= 34).toList());
-    expect(offsetsOf(hole, origin), [0],
-        reason: 'the opening the transcript reaches only after 36s is kept for repair');
-    expect(offsetsOf(covered, origin), [60, 135]);
+    expect(offsetsOf(hole, origin), [0, 10, 20, 70, 150],
+        reason: 'the missing opening and every silence-only chunk are kept for repair');
+    expect(offsetsOf(covered, origin), [
+      for (var t = 30; t <= 200; t += 10)
+        if (t != 70 && t != 150) t
+    ]);
     await expectRecoveryUploads('c1', hole);
   });
 
   test('pendant: a transcript that loses the tail keeps the tail and uploads it', () async {
     // The saved transcript stops after the last utterance at second 86 while 90 s of audio keep streaming.
     final (origin, covered, hole) = await judgedReplay(176, fullSpans.where((span) => span.$2 <= 86).toList());
-    expect(offsetsOf(hole, origin), [60, 135], reason: 'only the WALs crossing the lost tail remain miss');
-    expect(offsetsOf(covered, origin), [0]);
+    expect(offsetsOf(hole, origin), [70, 90, 100, 110, 120, 130, 140, 150, 160, 170],
+        reason: 'the tail chunks and the silence-only chunk at 60 stay miss');
+    expect(offsetsOf(covered, origin), [
+      for (var t = 0; t <= 80; t += 10)
+        if (t != 70) t
+    ]);
     await expectRecoveryUploads('c1', hole);
   });
 
@@ -417,8 +444,11 @@ void main() {
     await serverCloses(conversation('c1', origin, fullSpans));
 
     final (covered, hole) = await judgedWals();
-    expect(hole, hasLength(1), reason: 'only the backdated first copy is uncovered');
-    expect(hole.single.timerStart, lessThan(origin.millisecondsSinceEpoch ~/ 1000));
+    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
+    // The backdated copies land before the window; silence-only chunks inside
+    // the tolerated transcript pauses fail closed alongside them.
+    expect(hole.where((wal) => wal.timerStart < originSeconds), hasLength(1),
+        reason: 'the backdated copy before the window stays uncovered');
     expect(covered, isNotEmpty);
     await expectRecoveryUploads('c1', hole);
   });
@@ -444,10 +474,16 @@ void main() {
     await expectRecoveryUploads('c1', hole);
   });
 
-  test('pendant: a transcript that stops early keeps ALL the audio for repair', () async {
-    // The server saved text for the first 20 s only; nothing else is covered.
-    final kept = await plainTranscriptKeepsAll(200, const [(1, 20)]);
-    expect(kept.length, greaterThanOrEqualTo(3), reason: 'every stamped copy fails closed');
+  test('pendant: a transcript that stops early keeps the uncovered audio for repair', () async {
+    // The server saved text for the first 20 s only. On the 10s custody
+    // cadence the chunks overlapping that text are proven covered; every
+    // later chunk fails closed and uploads for repair.
+    final (origin, covered, hole) = await judgedReplay(200, const [(1, 20)]);
+    expect(offsetsOf(covered, origin), [0, 10, 20],
+        reason: 'the chunks overlapping the saved 20s (anchored via server start) are covered');
+    expect(offsetsOf(hole, origin), [for (var t = 30; t <= 190; t += 10) t],
+        reason: 'everything after the saved text fails closed');
+    await expectRecoveryUploads('c1', hole);
   });
 
   test('pendant: a gapped timestamp transcript retains every copy and uploads nothing', () async {
@@ -460,21 +496,21 @@ void main() {
   });
 
   test('pendant: a server clock ahead of the phone still covers via the live anchor', () async {
-    final (_, covered) = await fullyCoveredReplay(serverSkew: const Duration(minutes: 5));
+    final (_, covered, hole) = await fullyCoveredReplay(serverSkew: const Duration(minutes: 5));
     expect(world.uploads.attempts, isEmpty);
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
   });
 
   test('pendant: a server clock behind the phone still covers via the live anchor', () async {
-    final (_, covered) = await fullyCoveredReplay(serverSkew: const Duration(minutes: -5));
+    final (_, covered, hole) = await fullyCoveredReplay(serverSkew: const Duration(minutes: -5));
     expect(world.uploads.attempts, isEmpty);
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
   });
 
   test('pendant: no started_at uses the live anchor and ignores a stale created_at', () async {
-    final (_, covered) = await fullyCoveredReplay(hasStart: false);
+    final (_, covered, hole) = await fullyCoveredReplay(hasStart: false);
     expect(world.uploads.attempts, isEmpty);
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
   });
 
   test('pendant: a conversation with no live arrivals and no start time still covers via the session start', () async {
@@ -559,34 +595,37 @@ void main() {
 
   test('pendant: retained-covered copies age out under auto-remove', () async {
     SharedPreferencesUtil().autoRemoveSyncedCopies = true;
-    final (_, covered) = await fullyCoveredReplay();
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    final (_, covered, hole) = await fullyCoveredReplay();
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
 
     // Nothing is old yet, then jump straight past the 30-day retention window — no timers needed.
     expect(await world.wal.syncs.phone.applySyncedCopyRetention(), 0);
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
     world.clock.advanceTo(world.clock.now().add(const Duration(days: 31)));
     final removed = await world.wal.syncs.phone.applySyncedCopyRetention();
     await settleFiles();
 
     expect(removed, covered.length);
-    expect(audioFilesOnDisk(), isEmpty);
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
-    expect(await WalFileManager.loadWals(), isEmpty, reason: 'the durable index is swept too');
+    // The fail-closed silence copies were never synced, so auto-remove leaves
+    // them pending on disk and in the index.
+    expect(audioFilesOnDisk(), hasLength(hole.length));
+    expect(await world.wal.syncs.phone.getAllWals(), hasLength(hole.length));
+    expect(await WalFileManager.loadWals(), hasLength(hole.length),
+        reason: 'the durable index keeps the unrepaired copies');
   });
 
   test('pendant: retained-covered copies stay when auto-remove is off', () async {
     SharedPreferencesUtil().autoRemoveSyncedCopies = false;
-    final (_, covered) = await fullyCoveredReplay();
-    expect(audioFilesOnDisk(), hasLength(covered.length));
+    final (_, covered, hole) = await fullyCoveredReplay();
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
 
     world.clock.advanceTo(world.clock.now().add(const Duration(days: 31)));
     final removed = await world.wal.syncs.phone.applySyncedCopyRetention();
     await settleFiles();
 
     expect(removed, 0);
-    expect(audioFilesOnDisk(), hasLength(covered.length));
-    expect(await WalFileManager.loadWals(), hasLength(covered.length),
+    expect(audioFilesOnDisk(), hasLength(covered.length + hole.length));
+    expect(await WalFileManager.loadWals(), hasLength(covered.length + hole.length),
         reason: 'the durable index keeps the retained copies too');
   });
 }
