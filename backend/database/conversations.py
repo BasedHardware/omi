@@ -25,7 +25,7 @@ from utils.conversations.transcript_hash import (
 )
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
-from database.speaker_assignment_effects import persist_assignment_effects
+from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
 from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
@@ -2612,8 +2612,7 @@ def assign_conversation_speaker(
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
 
-    @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, bookkeeping):
         if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
         source_segments = None
@@ -2684,6 +2683,7 @@ def assign_conversation_speaker(
             evidence_source=evidence_source,
             rejection=rejection,
             donor_ids=(current_id, *seen),
+            bookkeeping=bookkeeping,
             owner_segment_ids=owner_segment_ids,
         )
         extract_learning_receipt_markers(receipt, current)
@@ -2696,7 +2696,7 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_transactional(client, assign)
+    result = run_assignment_transaction(client, assign)
     current, _, _, before = result
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))

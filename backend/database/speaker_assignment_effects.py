@@ -6,13 +6,45 @@ speaker-learning ledger commit in one transaction without growing that module.
 All document reads complete before the first staged write.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
+from google.api_core.exceptions import Aborted
+from google.cloud import firestore
+
+from database._client import run_transactional
 from database import speaker_learning_jobs as learning_jobs
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
+
+
+@dataclass
+class AssignmentBookkeeping:
+    enabled: bool = True
+    involved: bool = False
+
+
+def run_assignment_transaction(client: Any, assign: Any) -> Any:
+    bookkeeping = AssignmentBookkeeping()
+
+    @firestore.transactional
+    def apply(transaction):
+        bookkeeping.involved = False
+        return assign(transaction, bookkeeping)
+
+    try:
+        return run_transactional(client, apply)
+    except (Aborted, ValueError) as error:
+        aborted = (isinstance(error, Aborted) and error.__context__ is None) or (
+            isinstance(error, ValueError) and isinstance(error.__cause__, Aborted)
+        )
+        if not bookkeeping.involved or not aborted:
+            raise
+    bookkeeping.enabled = False
+    record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+    return run_transactional(client, apply, attempts=1)
 
 
 def persist_assignment_effects(
@@ -32,6 +64,7 @@ def persist_assignment_effects(
     evidence_source: str,
     rejection: Optional[dict],
     donor_ids: Sequence[str],
+    bookkeeping: AssignmentBookkeeping,
     owner_segment_ids: Optional[list] = None,
 ) -> tuple[list[str], list[Mapping[str, Any]]]:
     """Return the removed sample paths and the relabeled previous segments."""
@@ -53,42 +86,41 @@ def persist_assignment_effects(
         *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
-    projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}
-    job_updates = {pid: dict(update) for pid, update in updates.items()}
-    try:
-        jobs_ref_, payload, events = learning_jobs.prepare_assignment_jobs(
-            transaction,
-            user_ref,
-            conversation_id,
-            {
-                'transcript_segments': segments,
-                'manual_speaker_assignments': receipt,
-                'discarded': bool((source or {}).get('discarded')),
-            },
-            resolved,
-            person_id=person_id,
-            is_user=is_user,
-            use_for_speech_training=use_for_speech_training,
-            evidence_source=evidence_source,
-            user_doc={**user_doc, **owner_update},
-            people=projected_docs,
-            updates=job_updates,
-            now=now,
-            owner_segment_ids=owner_segment_ids,
-        )
-    except Exception:
-        jobs_ref_ = None
-        payload = None
-        events = []
-        record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
-    else:
-        updates = job_updates
-    if events:
-        receipt[learning_jobs.JOB_EVENTS_KEY] = events
+    if bookkeeping.enabled:
+        bookkeeping.involved = True
+        projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}
+        job_updates = {pid: dict(update) for pid, update in updates.items()}
+        try:
+            jobs_ref_, payload, events = learning_jobs.prepare_assignment_jobs(
+                transaction,
+                user_ref,
+                conversation_id,
+                {
+                    'transcript_segments': segments,
+                    'manual_speaker_assignments': receipt,
+                    'discarded': bool((source or {}).get('discarded')),
+                },
+                resolved,
+                person_id=person_id,
+                is_user=is_user,
+                use_for_speech_training=use_for_speech_training,
+                evidence_source=evidence_source,
+                user_doc={**user_doc, **owner_update},
+                people=projected_docs,
+                updates=job_updates,
+                now=now,
+                owner_segment_ids=owner_segment_ids,
+            )
+            if payload is not None:
+                transaction.set(jobs_ref_, payload)
+        except Exception:
+            record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+        else:
+            updates = job_updates
+            if events:
+                receipt[learning_jobs.JOB_EVENTS_KEY] = events
     if owner_update:
         transaction.update(user_ref, owner_update)
     for pid, update in updates.items():
         transaction.update(people[pid][0], update)
-    if payload is not None:
-        transaction.set(jobs_ref_, payload)
     return removed, relabeled

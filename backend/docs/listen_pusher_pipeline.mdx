@@ -1413,13 +1413,13 @@ can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Manual assignments commit bounded person/owner teaching jobs beside the receipt. The ledger (`database/speaker_learning_jobs.py`) caps 32 jobs,
-200 segment ids, 256 KiB of serialized document, five attempts, two-minute leases and seven-day eligibility; a label commits even when bookkeeping
-must be skipped. Person-list reads reconcile each distinct ledger once per request, live labels persist the connection's real sample rate, and a
-missing ledger lazily admits receipted legacy work exactly once. A manual attempt claims only its own newest matching job; audio publish, finalization,
-sync and reprocessing opportunistically run ≤5 jobs per 45 s pass with 30/120/600/3600 s backoff — no timers or scheduler. Quality gates and authority
-fences are unchanged; `omi_speaker_learning_jobs_total` reports queued/retried/stored/terminal. Only durable authorized work projects to `pending`,
-other quality failures stay `unknown`; expired jobs reconcile on later access, not a sweep, and clients still collapse `unknown`/timeout into more-speech.
+Manual assignments normally commit bounded person/owner teaching jobs beside the receipt. The ledger (`database/speaker_learning_jobs.py`) caps 32 jobs,
+200 segment ids, 256 KiB of serialized document, five attempts, two-minute leases and seven-day eligibility. Preparation/staging failures omit bookkeeping;
+confirmed aborts involving bookkeeping get one fresh label-only transaction that recomputes current authority, evidence and owner retraction. Ambiguous commit
+failures propagate. Immediate teaching remains fail-open. Person reads reconcile each ledger once per request; live sample rates persist; missing ledgers lazily
+admit receipted legacy work once. Manual attempts claim their newest matching job; audio publish/finalization/sync/reprocess run ≤5 jobs per 45 s pass with
+30/120/600/3600 s backoff, no timers/scheduler. Authority/quality fences stay unchanged; `omi_speaker_learning_jobs_total` reports queued/retried/stored/terminal.
+Only runnable authorized work is `pending`; other failures stay `unknown`. Expiry needs later access; clients still collapse unknown/timeout into more-speech.
 
 Legacy person teaching, owner confirmations and speaker-tag preview clips use `utils/speaker_audio.py` through one shared pure gate in `utils/conversations/audio_placement.py`:
 strict `locate` requires a real `started_at` and trusts only a fully validating v2 manifest or a `sync:`-scoped contributor union covering the window; other clocks answer
