@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Hãy bật thiết bị và giữ gần điện thoại của bạn.",
     "startupFailedDetails": "Chi tiết",
     "couldNotLoadApiKeys": "Không thể tải khóa API.",
-    "speakerTagPromptNoAction": "Không…"
+    "speakerTagPromptNoAction": "Không…",
+    "diagnosticsRightNow": "Hiện tại",
+    "diagnosticsLast7Days": "7 ngày qua",
+    "diagnosticsConnectedFor": "Đã kết nối",
+    "diagnosticsVerdictReconnects": "Tự kết nối lại",
+    "diagnosticsVerdictReconnectsDetail": "Ngắt quãng ngắn, mỗi lần kết nối lại sau khoảng {duration}",
+    "diagnosticsVerdictNoDrops": "Không bị ngắt tuần này",
+    "diagnosticsVerdictTrouble": "Gặp sự cố khi kết nối",
+    "diagnosticsVerdictTroubleDetail": "Kết nối thất bại trong 24 giờ qua: {count}",
+    "diagnosticsDrops": "Lần ngắt",
+    "diagnosticsDropsPerHour": "khoảng {count} lần mỗi giờ",
+    "diagnosticsLongestGap": "Lần gián đoạn lâu nhất",
+    "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần ngắt, {failed} kết nối thất bại.",
+    "diagnosticsLastDuration": "{duration} gần nhất"
 }

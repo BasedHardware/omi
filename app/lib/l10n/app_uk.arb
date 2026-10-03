@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Увімкніть його й тримайте поруч із телефоном.",
     "startupFailedDetails": "Подробиці",
     "couldNotLoadApiKeys": "Не вдалося завантажити ключі API.",
-    "speakerTagPromptNoAction": "Ні…"
+    "speakerTagPromptNoAction": "Ні…",
+    "diagnosticsRightNow": "Зараз",
+    "diagnosticsLast7Days": "Останні 7 днів",
+    "diagnosticsConnectedFor": "Підключено",
+    "diagnosticsVerdictReconnects": "Перепідключається самостійно",
+    "diagnosticsVerdictReconnectsDetail": "Короткі обриви, щоразу повертається приблизно за {duration}",
+    "diagnosticsVerdictNoDrops": "Цього тижня обривів не було",
+    "diagnosticsVerdictTrouble": "Проблеми з підключенням",
+    "diagnosticsVerdictTroubleDetail": "Невдалі підключення за останні 24 години: {count}",
+    "diagnosticsDrops": "Обриви",
+    "diagnosticsDropsPerHour": "приблизно {count} на годину",
+    "diagnosticsLongestGap": "Найдовша перерва",
+    "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
+    "diagnosticsLastDuration": "Останні {duration}"
 }

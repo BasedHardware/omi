@@ -3822,5 +3822,18 @@
     "findDeviceNoneMessage": "Nyalakan dan dekatkan ke ponsel Anda.",
     "startupFailedDetails": "Detail",
     "couldNotLoadApiKeys": "Tidak dapat memuat kunci API.",
-    "speakerTagPromptNoAction": "Tidak…"
+    "speakerTagPromptNoAction": "Tidak…",
+    "diagnosticsRightNow": "Saat Ini",
+    "diagnosticsLast7Days": "7 Hari Terakhir",
+    "diagnosticsConnectedFor": "Terhubung selama",
+    "diagnosticsVerdictReconnects": "Tersambung ulang sendiri",
+    "diagnosticsVerdictReconnectsDetail": "Terputus sebentar, kembali dalam sekitar {duration} setiap kali",
+    "diagnosticsVerdictNoDrops": "Tidak ada pemutusan minggu ini",
+    "diagnosticsVerdictTrouble": "Mengalami masalah koneksi",
+    "diagnosticsVerdictTroubleDetail": "Koneksi gagal dalam 24 jam terakhir: {count}",
+    "diagnosticsDrops": "Pemutusan",
+    "diagnosticsDropsPerHour": "sekitar {count} per jam",
+    "diagnosticsLongestGap": "Jeda terlama",
+    "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
+    "diagnosticsLastDuration": "{duration} terakhir"
 }

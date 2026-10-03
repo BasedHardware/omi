@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "Uključite ga i držite blizu telefona.",
     "startupFailedDetails": "Детаљи",
     "couldNotLoadApiKeys": "Учитавање API кључева није успело.",
-    "speakerTagPromptNoAction": "Не…"
+    "speakerTagPromptNoAction": "Не…",
+    "diagnosticsRightNow": "Тренутно",
+    "diagnosticsLast7Days": "Последњих 7 дана",
+    "diagnosticsConnectedFor": "Повезано",
+    "diagnosticsVerdictReconnects": "Само се поново повезује",
+    "diagnosticsVerdictReconnectsDetail": "Кратки прекиди, сваки пут се врати за отприлике {duration}",
+    "diagnosticsVerdictNoDrops": "Без прекида ове недеље",
+    "diagnosticsVerdictTrouble": "Проблеми са повезивањем",
+    "diagnosticsVerdictTroubleDetail": "Неуспеле везе у последња 24 сата: {count}",
+    "diagnosticsDrops": "Прекиди",
+    "diagnosticsDropsPerHour": "отприлике {count} на сат",
+    "diagnosticsLongestGap": "Најдужи прекид",
+    "diagnosticsSincePairingSummary": "Од упаривања: прекида {drops}, неуспелих веза {failed}.",
+    "diagnosticsLastDuration": "Последњих {duration}"
 }

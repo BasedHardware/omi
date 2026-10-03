@@ -12278,4 +12278,53 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'No…';
+
+  @override
+  String get diagnosticsRightNow => 'Ahora mismo';
+
+  @override
+  String get diagnosticsLast7Days => 'Últimos 7 días';
+
+  @override
+  String get diagnosticsConnectedFor => 'Conectado durante';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Se reconecta solo';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Cortes breves, vuelve en unos $duration cada vez';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Sin cortes esta semana';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Tiene problemas para conectarse';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Conexiones fallidas en las últimas 24 horas: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Cortes';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'unos $count por hora';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Interrupción más larga';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Desde el emparejamiento: $drops cortes, $failed conexiones fallidas.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Últimos $duration';
+  }
 }

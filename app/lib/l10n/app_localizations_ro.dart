@@ -12297,4 +12297,53 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Nu…';
+
+  @override
+  String get diagnosticsRightNow => 'Acum';
+
+  @override
+  String get diagnosticsLast7Days => 'Ultimele 7 zile';
+
+  @override
+  String get diagnosticsConnectedFor => 'Conectat de';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Se reconectează singur';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Întreruperi scurte, revine în aproximativ $duration de fiecare dată';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Nicio întrerupere săptămâna aceasta';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Probleme de conectare';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Conexiuni eșuate în ultimele 24 de ore: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Întreruperi';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'aproximativ $count pe oră';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Cea mai lungă întrerupere';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'De la asociere: $drops întreruperi, $failed conexiuni eșuate.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Ultimele $duration';
+  }
 }

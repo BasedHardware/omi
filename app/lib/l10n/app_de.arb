@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Schalte es ein und halte es nah an dein Telefon.",
     "startupFailedDetails": "Details",
     "couldNotLoadApiKeys": "API-Schlüssel konnten nicht geladen werden.",
-    "speakerTagPromptNoAction": "Nein…"
+    "speakerTagPromptNoAction": "Nein…",
+    "diagnosticsRightNow": "Aktuell",
+    "diagnosticsLast7Days": "Letzte 7 Tage",
+    "diagnosticsConnectedFor": "Verbunden seit",
+    "diagnosticsVerdictReconnects": "Verbindet sich selbst wieder",
+    "diagnosticsVerdictReconnectsDetail": "Kurze Abbrüche, jedes Mal nach etwa {duration} wieder da",
+    "diagnosticsVerdictNoDrops": "Diese Woche keine Abbrüche",
+    "diagnosticsVerdictTrouble": "Probleme beim Verbinden",
+    "diagnosticsVerdictTroubleDetail": "Fehlgeschlagene Verbindungen in den letzten 24 Stunden: {count}",
+    "diagnosticsDrops": "Abbrüche",
+    "diagnosticsDropsPerHour": "etwa {count} pro Stunde",
+    "diagnosticsLongestGap": "Längste Lücke",
+    "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
+    "diagnosticsLastDuration": "Letzte {duration}"
 }

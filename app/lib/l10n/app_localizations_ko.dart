@@ -12057,4 +12057,53 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => '아니요…';
+
+  @override
+  String get diagnosticsRightNow => '현재';
+
+  @override
+  String get diagnosticsLast7Days => '최근 7일';
+
+  @override
+  String get diagnosticsConnectedFor => '연결 시간';
+
+  @override
+  String get diagnosticsVerdictReconnects => '자동으로 다시 연결됨';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return '짧은 끊김, 매번 약 $duration 만에 복구됨';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => '이번 주 끊김 없음';
+
+  @override
+  String get diagnosticsVerdictTrouble => '연결에 문제가 있음';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return '최근 24시간 동안 실패한 연결: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => '끊김';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return '시간당 약 $count회';
+  }
+
+  @override
+  String get diagnosticsLongestGap => '가장 긴 끊김';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return '페어링 이후: 끊김 $drops회, 실패한 연결 $failed회.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '최근 $duration';
+  }
 }

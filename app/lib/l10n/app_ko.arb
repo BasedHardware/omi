@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "전원을 켜고 휴대폰 가까이에 두세요.",
     "startupFailedDetails": "세부 정보",
     "couldNotLoadApiKeys": "API 키를 불러올 수 없습니다.",
-    "speakerTagPromptNoAction": "아니요…"
+    "speakerTagPromptNoAction": "아니요…",
+    "diagnosticsRightNow": "현재",
+    "diagnosticsLast7Days": "최근 7일",
+    "diagnosticsConnectedFor": "연결 시간",
+    "diagnosticsVerdictReconnects": "자동으로 다시 연결됨",
+    "diagnosticsVerdictReconnectsDetail": "짧은 끊김, 매번 약 {duration} 만에 복구됨",
+    "diagnosticsVerdictNoDrops": "이번 주 끊김 없음",
+    "diagnosticsVerdictTrouble": "연결에 문제가 있음",
+    "diagnosticsVerdictTroubleDetail": "최근 24시간 동안 실패한 연결: {count}",
+    "diagnosticsDrops": "끊김",
+    "diagnosticsDropsPerHour": "시간당 약 {count}회",
+    "diagnosticsLongestGap": "가장 긴 끊김",
+    "diagnosticsSincePairingSummary": "페어링 이후: 끊김 {drops}회, 실패한 연결 {failed}회.",
+    "diagnosticsLastDuration": "최근 {duration}"
 }

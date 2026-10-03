@@ -12254,4 +12254,53 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Hayır…';
+
+  @override
+  String get diagnosticsRightNow => 'Şu Anda';
+
+  @override
+  String get diagnosticsLast7Days => 'Son 7 Gün';
+
+  @override
+  String get diagnosticsConnectedFor => 'Bağlantı süresi';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Kendiliğinden yeniden bağlanıyor';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Kısa kopmalar, her seferinde yaklaşık $duration içinde geri geliyor';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Bu hafta kopma yok';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Bağlanmada sorun var';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Son 24 saatteki başarısız bağlantılar: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Kopmalar';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'saatte yaklaşık $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'En uzun kesinti';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Eşleştirmeden beri: $drops kopma, $failed başarısız bağlantı.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Son $duration';
+  }
 }

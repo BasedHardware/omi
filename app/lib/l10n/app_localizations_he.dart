@@ -12151,4 +12151,53 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'לא…';
+
+  @override
+  String get diagnosticsRightNow => 'כרגע';
+
+  @override
+  String get diagnosticsLast7Days => '7 הימים האחרונים';
+
+  @override
+  String get diagnosticsConnectedFor => 'מחובר במשך';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'מתחבר מחדש מעצמו';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'ניתוקים קצרים, חוזר תוך כ־$duration בכל פעם';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'אין ניתוקים השבוע';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'יש בעיה בהתחברות';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'חיבורים שנכשלו ב־24 השעות האחרונות: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'ניתוקים';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'בערך $count בשעה';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'הפער הארוך ביותר';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'מאז ההתאמה: $drops ניתוקים, $failed חיבורים שנכשלו.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '$duration אחרונות';
+  }
 }

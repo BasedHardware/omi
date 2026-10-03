@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "এটি চালু করুন এবং আপনার ফোনের কাছে ধরে রাখুন।",
     "startupFailedDetails": "বিস্তারিত",
     "couldNotLoadApiKeys": "API কী লোড করা যায়নি।",
-    "speakerTagPromptNoAction": "না…"
+    "speakerTagPromptNoAction": "না…",
+    "diagnosticsRightNow": "এখন",
+    "diagnosticsLast7Days": "শেষ ৭ দিন",
+    "diagnosticsConnectedFor": "সংযুক্ত সময়",
+    "diagnosticsVerdictReconnects": "নিজে থেকেই আবার সংযুক্ত হয়",
+    "diagnosticsVerdictReconnectsDetail": "স্বল্প বিচ্ছিন্নতা, প্রতিবার প্রায় {duration}-এ ফিরে আসে",
+    "diagnosticsVerdictNoDrops": "এই সপ্তাহে কোনো বিচ্ছিন্নতা নেই",
+    "diagnosticsVerdictTrouble": "সংযোগে সমস্যা হচ্ছে",
+    "diagnosticsVerdictTroubleDetail": "গত ২৪ ঘণ্টায় ব্যর্থ সংযোগ: {count}",
+    "diagnosticsDrops": "বিচ্ছিন্নতা",
+    "diagnosticsDropsPerHour": "ঘণ্টায় প্রায় {count}",
+    "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
+    "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
+    "diagnosticsLastDuration": "শেষ {duration}"
 }

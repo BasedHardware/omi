@@ -3822,5 +3822,18 @@
     "findDeviceNoneMessage": "Включите его и держите рядом с телефоном.",
     "startupFailedDetails": "Подробности",
     "couldNotLoadApiKeys": "Не удалось загрузить ключи API.",
-    "speakerTagPromptNoAction": "Нет…"
+    "speakerTagPromptNoAction": "Нет…",
+    "diagnosticsRightNow": "Сейчас",
+    "diagnosticsLast7Days": "Последние 7 дней",
+    "diagnosticsConnectedFor": "Подключено",
+    "diagnosticsVerdictReconnects": "Переподключается само",
+    "diagnosticsVerdictReconnectsDetail": "Короткие обрывы, каждый раз возвращается примерно за {duration}",
+    "diagnosticsVerdictNoDrops": "На этой неделе обрывов не было",
+    "diagnosticsVerdictTrouble": "Проблемы с подключением",
+    "diagnosticsVerdictTroubleDetail": "Неудачные подключения за последние 24 часа: {count}",
+    "diagnosticsDrops": "Обрывы",
+    "diagnosticsDropsPerHour": "примерно {count} в час",
+    "diagnosticsLongestGap": "Самый долгий перерыв",
+    "diagnosticsSincePairingSummary": "С момента сопряжения: обрывов — {drops}, неудачных подключений — {failed}.",
+    "diagnosticsLastDuration": "Последние {duration}"
 }

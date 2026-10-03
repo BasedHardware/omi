@@ -12271,4 +12271,53 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Ne…';
+
+  @override
+  String get diagnosticsRightNow => 'Trenutno';
+
+  @override
+  String get diagnosticsLast7Days => 'Posljednjih 7 dana';
+
+  @override
+  String get diagnosticsConnectedFor => 'Povezano';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Sam se ponovo povezuje';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Kratki prekidi, svaki put se vrati za otprilike $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Bez prekida ove sedmice';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Problemi s povezivanjem';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Neuspjele veze u posljednja 24 sata: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Prekidi';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'otprilike $count na sat';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Najduži prekid';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Od uparivanja: prekida $drops, neuspjelih veza $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Posljednjih $duration';
+  }
 }

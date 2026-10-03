@@ -3822,5 +3822,18 @@
     "findDeviceNoneMessage": "Ligue-o e mantenha-o perto do seu telefone.",
     "startupFailedDetails": "Detalhes",
     "couldNotLoadApiKeys": "Não foi possível carregar as chaves de API.",
-    "speakerTagPromptNoAction": "Não…"
+    "speakerTagPromptNoAction": "Não…",
+    "diagnosticsRightNow": "Agora",
+    "diagnosticsLast7Days": "Últimos 7 dias",
+    "diagnosticsConnectedFor": "Conectado há",
+    "diagnosticsVerdictReconnects": "Reconecta sozinho",
+    "diagnosticsVerdictReconnectsDetail": "Quedas breves, volta em cerca de {duration} a cada vez",
+    "diagnosticsVerdictNoDrops": "Nenhuma queda esta semana",
+    "diagnosticsVerdictTrouble": "Com problemas de conexão",
+    "diagnosticsVerdictTroubleDetail": "Falhas de conexão nas últimas 24 horas: {count}",
+    "diagnosticsDrops": "Quedas",
+    "diagnosticsDropsPerHour": "cerca de {count} por hora",
+    "diagnosticsLongestGap": "Maior intervalo",
+    "diagnosticsSincePairingSummary": "Desde o emparelhamento: {drops} quedas, {failed} falhas de conexão.",
+    "diagnosticsLastDuration": "Últimos {duration}"
 }

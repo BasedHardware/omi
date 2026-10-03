@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Engega'l i mantén-lo a prop del telèfon.",
     "startupFailedDetails": "Detalls",
     "couldNotLoadApiKeys": "No s'han pogut carregar les claus d'API.",
-    "speakerTagPromptNoAction": "No…"
+    "speakerTagPromptNoAction": "No…",
+    "diagnosticsRightNow": "Ara mateix",
+    "diagnosticsLast7Days": "Últims 7 dies",
+    "diagnosticsConnectedFor": "Connectat durant",
+    "diagnosticsVerdictReconnects": "Es reconnecta sol",
+    "diagnosticsVerdictReconnectsDetail": "Talls breus, torna en uns {duration} cada vegada",
+    "diagnosticsVerdictNoDrops": "Cap tall aquesta setmana",
+    "diagnosticsVerdictTrouble": "Té problemes per connectar-se",
+    "diagnosticsVerdictTroubleDetail": "Connexions fallides en les últimes 24 hores: {count}",
+    "diagnosticsDrops": "Talls",
+    "diagnosticsDropsPerHour": "uns {count} per hora",
+    "diagnosticsLongestGap": "Interrupció més llarga",
+    "diagnosticsSincePairingSummary": "Des de l'aparellament: {drops} talls, {failed} connexions fallides.",
+    "diagnosticsLastDuration": "Últims {duration}"
 }

@@ -12230,4 +12230,53 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Nej…';
+
+  @override
+  String get diagnosticsRightNow => 'Lige nu';
+
+  @override
+  String get diagnosticsLast7Days => 'Seneste 7 dage';
+
+  @override
+  String get diagnosticsConnectedFor => 'Forbundet i';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Genforbinder af sig selv';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Korte afbrydelser, tilbage efter ca. $duration hver gang';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Ingen afbrydelser denne uge';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Har problemer med at forbinde';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mislykkede forbindelser de seneste 24 timer: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Afbrydelser';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ca. $count i timen';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Længste pause';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Siden parring: $drops afbrydelser, $failed mislykkede forbindelser.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Seneste $duration';
+  }
 }

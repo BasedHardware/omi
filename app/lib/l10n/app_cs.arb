@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Zapněte ho a podržte ho u telefonu.",
     "startupFailedDetails": "Podrobnosti",
     "couldNotLoadApiKeys": "Klíče API se nepodařilo načíst.",
-    "speakerTagPromptNoAction": "Ne…"
+    "speakerTagPromptNoAction": "Ne…",
+    "diagnosticsRightNow": "Právě teď",
+    "diagnosticsLast7Days": "Posledních 7 dní",
+    "diagnosticsConnectedFor": "Připojeno",
+    "diagnosticsVerdictReconnects": "Znovu se připojuje samo",
+    "diagnosticsVerdictReconnectsDetail": "Krátké výpadky, pokaždé zpět asi za {duration}",
+    "diagnosticsVerdictNoDrops": "Tento týden žádné výpadky",
+    "diagnosticsVerdictTrouble": "Potíže s připojením",
+    "diagnosticsVerdictTroubleDetail": "Neúspěšná připojení za posledních 24 hodin: {count}",
+    "diagnosticsDrops": "Výpadky",
+    "diagnosticsDropsPerHour": "asi {count} za hodinu",
+    "diagnosticsLongestGap": "Nejdelší výpadek",
+    "diagnosticsSincePairingSummary": "Od spárování: výpadků {drops}, neúspěšných připojení {failed}.",
+    "diagnosticsLastDuration": "Posledních {duration}"
 }

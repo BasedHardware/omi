@@ -12053,4 +12053,53 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'いいえ…';
+
+  @override
+  String get diagnosticsRightNow => '現在';
+
+  @override
+  String get diagnosticsLast7Days => '過去7日間';
+
+  @override
+  String get diagnosticsConnectedFor => '接続時間';
+
+  @override
+  String get diagnosticsVerdictReconnects => '自動で再接続しています';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return '短い切断のみで、毎回約$durationで復帰しています';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => '今週は切断なし';
+
+  @override
+  String get diagnosticsVerdictTrouble => '接続に問題があります';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return '過去24時間の接続の失敗: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => '切断';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return '1時間に約$count回';
+  }
+
+  @override
+  String get diagnosticsLongestGap => '最長の途切れ';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'ペアリング以降: 切断 $drops 回、接続の失敗 $failed 回。';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '直近$duration';
+  }
 }

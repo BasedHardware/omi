@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "इसे चालू करें और अपने फ़ोन के पास रखें।",
     "startupFailedDetails": "विवरण",
     "couldNotLoadApiKeys": "API कुंजियाँ लोड नहीं हो सकीं।",
-    "speakerTagPromptNoAction": "नहीं…"
+    "speakerTagPromptNoAction": "नहीं…",
+    "diagnosticsRightNow": "अभी",
+    "diagnosticsLast7Days": "पिछले 7 दिन",
+    "diagnosticsConnectedFor": "कनेक्टेड समय",
+    "diagnosticsVerdictReconnects": "अपने आप फिर से जुड़ जाता है",
+    "diagnosticsVerdictReconnectsDetail": "छोटी रुकावटें, हर बार लगभग {duration} में वापस",
+    "diagnosticsVerdictNoDrops": "इस सप्ताह कोई रुकावट नहीं",
+    "diagnosticsVerdictTrouble": "कनेक्ट होने में समस्या",
+    "diagnosticsVerdictTroubleDetail": "पिछले 24 घंटों में विफल कनेक्शन: {count}",
+    "diagnosticsDrops": "रुकावटें",
+    "diagnosticsDropsPerHour": "लगभग {count} प्रति घंटा",
+    "diagnosticsLongestGap": "सबसे लंबा अंतराल",
+    "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
+    "diagnosticsLastDuration": "पिछले {duration}"
 }

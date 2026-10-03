@@ -3829,5 +3829,18 @@
     "findDeviceNoneMessage": "Tænd den, og hold den tæt på din telefon.",
     "startupFailedDetails": "Detaljer",
     "couldNotLoadApiKeys": "API-nøglerne kunne ikke indlæses.",
-    "speakerTagPromptNoAction": "Nej…"
+    "speakerTagPromptNoAction": "Nej…",
+    "diagnosticsRightNow": "Lige nu",
+    "diagnosticsLast7Days": "Seneste 7 dage",
+    "diagnosticsConnectedFor": "Forbundet i",
+    "diagnosticsVerdictReconnects": "Genforbinder af sig selv",
+    "diagnosticsVerdictReconnectsDetail": "Korte afbrydelser, tilbage efter ca. {duration} hver gang",
+    "diagnosticsVerdictNoDrops": "Ingen afbrydelser denne uge",
+    "diagnosticsVerdictTrouble": "Har problemer med at forbinde",
+    "diagnosticsVerdictTroubleDetail": "Mislykkede forbindelser de seneste 24 timer: {count}",
+    "diagnosticsDrops": "Afbrydelser",
+    "diagnosticsDropsPerHour": "ca. {count} i timen",
+    "diagnosticsLongestGap": "Længste pause",
+    "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
+    "diagnosticsLastDuration": "Seneste {duration}"
 }

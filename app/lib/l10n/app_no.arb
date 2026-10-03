@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Slå den på og hold den nær telefonen.",
     "startupFailedDetails": "Detaljer",
     "couldNotLoadApiKeys": "Kunne ikke laste inn API-nøkler.",
-    "speakerTagPromptNoAction": "Nei…"
+    "speakerTagPromptNoAction": "Nei…",
+    "diagnosticsRightNow": "Akkurat nå",
+    "diagnosticsLast7Days": "Siste 7 dager",
+    "diagnosticsConnectedFor": "Tilkoblet i",
+    "diagnosticsVerdictReconnects": "Kobler seg til igjen selv",
+    "diagnosticsVerdictReconnectsDetail": "Korte brudd, tilbake etter omtrent {duration} hver gang",
+    "diagnosticsVerdictNoDrops": "Ingen brudd denne uken",
+    "diagnosticsVerdictTrouble": "Har problemer med å koble til",
+    "diagnosticsVerdictTroubleDetail": "Mislykkede tilkoblinger siste 24 timer: {count}",
+    "diagnosticsDrops": "Brudd",
+    "diagnosticsDropsPerHour": "omtrent {count} i timen",
+    "diagnosticsLongestGap": "Lengste opphold",
+    "diagnosticsSincePairingSummary": "Siden kobling: {drops} brudd, {failed} mislykkede tilkoblinger.",
+    "diagnosticsLastDuration": "Siste {duration}"
 }

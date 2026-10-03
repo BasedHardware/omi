@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "اسے آن کریں اور اپنے فون کے قریب رکھیں۔",
     "startupFailedDetails": "تفصیلات",
     "couldNotLoadApiKeys": "API کلیدیں لوڈ نہیں ہو سکیں۔",
-    "speakerTagPromptNoAction": "نہیں…"
+    "speakerTagPromptNoAction": "نہیں…",
+    "diagnosticsRightNow": "ابھی",
+    "diagnosticsLast7Days": "پچھلے 7 دن",
+    "diagnosticsConnectedFor": "منسلک رہنے کا وقت",
+    "diagnosticsVerdictReconnects": "خود بخود دوبارہ جڑ جاتا ہے",
+    "diagnosticsVerdictReconnectsDetail": "مختصر رکاوٹیں، ہر بار تقریباً {duration} میں واپس",
+    "diagnosticsVerdictNoDrops": "اس ہفتے کوئی رکاوٹ نہیں",
+    "diagnosticsVerdictTrouble": "جڑنے میں مسئلہ",
+    "diagnosticsVerdictTroubleDetail": "پچھلے 24 گھنٹوں میں ناکام کنکشن: {count}",
+    "diagnosticsDrops": "رکاوٹیں",
+    "diagnosticsDropsPerHour": "تقریباً {count} فی گھنٹہ",
+    "diagnosticsLongestGap": "طویل ترین وقفہ",
+    "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
+    "diagnosticsLastDuration": "پچھلے {duration}"
 }

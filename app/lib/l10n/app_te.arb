@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "దాన్ని ఆన్ చేసి, మీ ఫోన్ దగ్గర పట్టుకోండి.",
     "startupFailedDetails": "వివరాలు",
     "couldNotLoadApiKeys": "API కీలను లోడ్ చేయడం సాధ్యం కాలేదు.",
-    "speakerTagPromptNoAction": "లేదు…"
+    "speakerTagPromptNoAction": "లేదు…",
+    "diagnosticsRightNow": "ప్రస్తుతం",
+    "diagnosticsLast7Days": "గత 7 రోజులు",
+    "diagnosticsConnectedFor": "కనెక్ట్ అయిన సమయం",
+    "diagnosticsVerdictReconnects": "తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
+    "diagnosticsVerdictReconnectsDetail": "చిన్న అంతరాయాలు, ప్రతిసారీ సుమారు {duration}లో తిరిగి వస్తుంది",
+    "diagnosticsVerdictNoDrops": "ఈ వారం అంతరాయాలు లేవు",
+    "diagnosticsVerdictTrouble": "కనెక్ట్ అవ్వడంలో సమస్య",
+    "diagnosticsVerdictTroubleDetail": "గత 24 గంటల్లో విఫలమైన కనెక్షన్లు: {count}",
+    "diagnosticsDrops": "అంతరాయాలు",
+    "diagnosticsDropsPerHour": "గంటకు సుమారు {count}",
+    "diagnosticsLongestGap": "అతి పొడవైన విరామం",
+    "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
+    "diagnosticsLastDuration": "గత {duration}"
 }

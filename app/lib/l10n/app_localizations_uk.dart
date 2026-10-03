@@ -12270,4 +12270,53 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Ні…';
+
+  @override
+  String get diagnosticsRightNow => 'Зараз';
+
+  @override
+  String get diagnosticsLast7Days => 'Останні 7 днів';
+
+  @override
+  String get diagnosticsConnectedFor => 'Підключено';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Перепідключається самостійно';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Короткі обриви, щоразу повертається приблизно за $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Цього тижня обривів не було';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Проблеми з підключенням';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Невдалі підключення за останні 24 години: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Обриви';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'приблизно $count на годину';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Найдовша перерва';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'З моменту спарування: обривів — $drops, невдалих підключень — $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Останні $duration';
+  }
 }

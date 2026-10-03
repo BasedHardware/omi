@@ -12326,4 +12326,53 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'இல்லை…';
+
+  @override
+  String get diagnosticsRightNow => 'இப்போது';
+
+  @override
+  String get diagnosticsLast7Days => 'கடந்த 7 நாட்கள்';
+
+  @override
+  String get diagnosticsConnectedFor => 'இணைந்திருக்கும் நேரம்';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'தானாகவே மீண்டும் இணைகிறது';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'சிறிய துண்டிப்புகள், ஒவ்வொரு முறையும் சுமார் $duration இல் மீண்டும் இணைகிறது';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'இந்த வாரம் துண்டிப்புகள் இல்லை';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'இணைப்பதில் சிக்கல்';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'கடந்த 24 மணிநேரத்தில் தோல்வியுற்ற இணைப்புகள்: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'துண்டிப்புகள்';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'மணிக்கு சுமார் $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'நீண்ட இடைவெளி';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'இணைத்ததிலிருந்து: $drops துண்டிப்புகள், $failed தோல்வியுற்ற இணைப்புகள்.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'கடந்த $duration';
+  }
 }

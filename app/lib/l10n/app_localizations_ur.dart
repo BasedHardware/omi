@@ -12255,4 +12255,53 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'نہیں…';
+
+  @override
+  String get diagnosticsRightNow => 'ابھی';
+
+  @override
+  String get diagnosticsLast7Days => 'پچھلے 7 دن';
+
+  @override
+  String get diagnosticsConnectedFor => 'منسلک رہنے کا وقت';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'خود بخود دوبارہ جڑ جاتا ہے';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'مختصر رکاوٹیں، ہر بار تقریباً $duration میں واپس';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'اس ہفتے کوئی رکاوٹ نہیں';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'جڑنے میں مسئلہ';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'پچھلے 24 گھنٹوں میں ناکام کنکشن: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'رکاوٹیں';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'تقریباً $count فی گھنٹہ';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'طویل ترین وقفہ';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'جوڑنے کے بعد سے: $drops رکاوٹیں، $failed ناکام کنکشن۔';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'پچھلے $duration';
+  }
 }

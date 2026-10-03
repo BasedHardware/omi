@@ -3822,5 +3822,18 @@
     "findDeviceNoneMessage": "Włącz go i trzymaj blisko telefonu.",
     "startupFailedDetails": "Szczegóły",
     "couldNotLoadApiKeys": "Nie udało się wczytać kluczy API.",
-    "speakerTagPromptNoAction": "Nie…"
+    "speakerTagPromptNoAction": "Nie…",
+    "diagnosticsRightNow": "Teraz",
+    "diagnosticsLast7Days": "Ostatnie 7 dni",
+    "diagnosticsConnectedFor": "Połączono od",
+    "diagnosticsVerdictReconnects": "Łączy się ponownie samodzielnie",
+    "diagnosticsVerdictReconnectsDetail": "Krótkie zerwania, za każdym razem powrót po ok. {duration}",
+    "diagnosticsVerdictNoDrops": "Brak zerwań w tym tygodniu",
+    "diagnosticsVerdictTrouble": "Problemy z połączeniem",
+    "diagnosticsVerdictTroubleDetail": "Nieudane połączenia w ciągu ostatnich 24 godzin: {count}",
+    "diagnosticsDrops": "Zerwania",
+    "diagnosticsDropsPerHour": "ok. {count} na godzinę",
+    "diagnosticsLongestGap": "Najdłuższa przerwa",
+    "diagnosticsSincePairingSummary": "Od sparowania: zerwania: {drops}, nieudane połączenia: {failed}.",
+    "diagnosticsLastDuration": "Ostatnie {duration}"
 }

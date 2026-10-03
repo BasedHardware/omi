@@ -12249,4 +12249,53 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'नाही…';
+
+  @override
+  String get diagnosticsRightNow => 'आत्ता';
+
+  @override
+  String get diagnosticsLast7Days => 'गेले 7 दिवस';
+
+  @override
+  String get diagnosticsConnectedFor => 'कनेक्ट असलेला वेळ';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'आपोआप पुन्हा जोडले जाते';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'थोडक्यात खंड, प्रत्येक वेळी सुमारे $duration मध्ये परत';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'या आठवड्यात कोणताही खंड नाही';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'कनेक्ट होण्यात अडचण';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'गेल्या 24 तासांतील अयशस्वी कनेक्शन: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'खंड';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'तासाला सुमारे $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'सर्वात मोठा खंड';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'जोडणीनंतर: $drops खंड, $failed अयशस्वी कनेक्शन.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'गेले $duration';
+  }
 }

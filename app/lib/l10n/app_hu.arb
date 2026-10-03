@@ -3883,5 +3883,18 @@
     "findDeviceNoneMessage": "Kapcsold be, és tartsd a telefonod közelében.",
     "startupFailedDetails": "Részletek",
     "couldNotLoadApiKeys": "Nem sikerült betölteni az API-kulcsokat.",
-    "speakerTagPromptNoAction": "Nem…"
+    "speakerTagPromptNoAction": "Nem…",
+    "diagnosticsRightNow": "Jelenleg",
+    "diagnosticsLast7Days": "Elmúlt 7 nap",
+    "diagnosticsConnectedFor": "Csatlakozva",
+    "diagnosticsVerdictReconnects": "Magától újracsatlakozik",
+    "diagnosticsVerdictReconnectsDetail": "Rövid kiesések, minden alkalommal kb. {duration} alatt visszaáll",
+    "diagnosticsVerdictNoDrops": "Ezen a héten nem volt kiesés",
+    "diagnosticsVerdictTrouble": "Csatlakozási problémák",
+    "diagnosticsVerdictTroubleDetail": "Sikertelen kapcsolatok az elmúlt 24 órában: {count}",
+    "diagnosticsDrops": "Kiesések",
+    "diagnosticsDropsPerHour": "kb. {count} óránként",
+    "diagnosticsLongestGap": "Leghosszabb kiesés",
+    "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
+    "diagnosticsLastDuration": "Utolsó {duration}"
 }

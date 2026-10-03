@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "شغّله وأمسكه بالقرب من هاتفك.",
     "startupFailedDetails": "التفاصيل",
     "couldNotLoadApiKeys": "تعذّر تحميل مفاتيح API.",
-    "speakerTagPromptNoAction": "لا…"
+    "speakerTagPromptNoAction": "لا…",
+    "diagnosticsRightNow": "الآن",
+    "diagnosticsLast7Days": "آخر 7 أيام",
+    "diagnosticsConnectedFor": "متصل منذ",
+    "diagnosticsVerdictReconnects": "يعيد الاتصال تلقائيًا",
+    "diagnosticsVerdictReconnectsDetail": "انقطاعات قصيرة، يعود خلال {duration} تقريبًا في كل مرة",
+    "diagnosticsVerdictNoDrops": "لا انقطاعات هذا الأسبوع",
+    "diagnosticsVerdictTrouble": "يواجه مشكلة في الاتصال",
+    "diagnosticsVerdictTroubleDetail": "اتصالات فاشلة خلال آخر 24 ساعة: {count}",
+    "diagnosticsDrops": "الانقطاعات",
+    "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
+    "diagnosticsLongestGap": "أطول انقطاع",
+    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
+    "diagnosticsLastDuration": "آخر {duration}"
 }

@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Įjunkite jį ir laikykite šalia telefono.",
     "startupFailedDetails": "Išsami informacija",
     "couldNotLoadApiKeys": "Nepavyko įkelti API raktų.",
-    "speakerTagPromptNoAction": "Ne…"
+    "speakerTagPromptNoAction": "Ne…",
+    "diagnosticsRightNow": "Dabar",
+    "diagnosticsLast7Days": "Paskutinės 7 dienos",
+    "diagnosticsConnectedFor": "Prijungta",
+    "diagnosticsVerdictReconnects": "Prisijungia iš naujo savaime",
+    "diagnosticsVerdictReconnectsDetail": "Trumpi nutrūkimai, kaskart grįžta maždaug per {duration}",
+    "diagnosticsVerdictNoDrops": "Šią savaitę nutrūkimų nebuvo",
+    "diagnosticsVerdictTrouble": "Kyla prisijungimo problemų",
+    "diagnosticsVerdictTroubleDetail": "Nepavykę ryšiai per paskutines 24 valandas: {count}",
+    "diagnosticsDrops": "Nutrūkimai",
+    "diagnosticsDropsPerHour": "maždaug {count} per valandą",
+    "diagnosticsLongestGap": "Ilgiausia pertrauka",
+    "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
+    "diagnosticsLastDuration": "Paskutinės {duration}"
 }

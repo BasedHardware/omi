@@ -12293,4 +12293,53 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'లేదు…';
+
+  @override
+  String get diagnosticsRightNow => 'ప్రస్తుతం';
+
+  @override
+  String get diagnosticsLast7Days => 'గత 7 రోజులు';
+
+  @override
+  String get diagnosticsConnectedFor => 'కనెక్ట్ అయిన సమయం';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'చిన్న అంతరాయాలు, ప్రతిసారీ సుమారు $durationలో తిరిగి వస్తుంది';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'ఈ వారం అంతరాయాలు లేవు';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'కనెక్ట్ అవ్వడంలో సమస్య';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'గత 24 గంటల్లో విఫలమైన కనెక్షన్లు: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'అంతరాయాలు';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'గంటకు సుమారు $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'అతి పొడవైన విరామం';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'జతచేసినప్పటినుండి: $drops అంతరాయాలు, $failed విఫలమైన కనెక్షన్లు.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'గత $duration';
+  }
 }

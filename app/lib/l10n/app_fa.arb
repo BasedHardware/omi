@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "آن را روشن کنید و نزدیک تلفن خود نگه دارید.",
     "startupFailedDetails": "جزئیات",
     "couldNotLoadApiKeys": "بارگیری کلیدهای API ممکن نشد.",
-    "speakerTagPromptNoAction": "نه…"
+    "speakerTagPromptNoAction": "نه…",
+    "diagnosticsRightNow": "هم‌اکنون",
+    "diagnosticsLast7Days": "۷ روز گذشته",
+    "diagnosticsConnectedFor": "مدت اتصال",
+    "diagnosticsVerdictReconnects": "خودکار دوباره وصل می‌شود",
+    "diagnosticsVerdictReconnectsDetail": "قطعی‌های کوتاه، هر بار در حدود {duration} برمی‌گردد",
+    "diagnosticsVerdictNoDrops": "این هفته قطعی نداشته",
+    "diagnosticsVerdictTrouble": "در اتصال مشکل دارد",
+    "diagnosticsVerdictTroubleDetail": "اتصالات ناموفق در ۲۴ ساعت گذشته: {count}",
+    "diagnosticsDrops": "قطعی‌ها",
+    "diagnosticsDropsPerHour": "حدود {count} در ساعت",
+    "diagnosticsLongestGap": "طولانی‌ترین وقفه",
+    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
+    "diagnosticsLastDuration": "{duration} گذشته"
 }

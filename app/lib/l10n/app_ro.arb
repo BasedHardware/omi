@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Pornește-l și ține-l aproape de telefon.",
     "startupFailedDetails": "Detalii",
     "couldNotLoadApiKeys": "Cheile API nu au putut fi încărcate.",
-    "speakerTagPromptNoAction": "Nu…"
+    "speakerTagPromptNoAction": "Nu…",
+    "diagnosticsRightNow": "Acum",
+    "diagnosticsLast7Days": "Ultimele 7 zile",
+    "diagnosticsConnectedFor": "Conectat de",
+    "diagnosticsVerdictReconnects": "Se reconectează singur",
+    "diagnosticsVerdictReconnectsDetail": "Întreruperi scurte, revine în aproximativ {duration} de fiecare dată",
+    "diagnosticsVerdictNoDrops": "Nicio întrerupere săptămâna aceasta",
+    "diagnosticsVerdictTrouble": "Probleme de conectare",
+    "diagnosticsVerdictTroubleDetail": "Conexiuni eșuate în ultimele 24 de ore: {count}",
+    "diagnosticsDrops": "Întreruperi",
+    "diagnosticsDropsPerHour": "aproximativ {count} pe oră",
+    "diagnosticsLongestGap": "Cea mai lungă întrerupere",
+    "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
+    "diagnosticsLastDuration": "Ultimele {duration}"
 }

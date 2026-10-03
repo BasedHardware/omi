@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "请将其开机并靠近手机。",
     "startupFailedDetails": "详细信息",
     "couldNotLoadApiKeys": "无法加载 API 密钥。",
-    "speakerTagPromptNoAction": "否…"
+    "speakerTagPromptNoAction": "否…",
+    "diagnosticsRightNow": "当前",
+    "diagnosticsLast7Days": "过去 7 天",
+    "diagnosticsConnectedFor": "已连接",
+    "diagnosticsVerdictReconnects": "可自动重新连接",
+    "diagnosticsVerdictReconnectsDetail": "短暂断开，每次约 {duration} 后恢复",
+    "diagnosticsVerdictNoDrops": "本周没有断开",
+    "diagnosticsVerdictTrouble": "连接出现问题",
+    "diagnosticsVerdictTroubleDetail": "过去 24 小时内连接失败：{count}",
+    "diagnosticsDrops": "断开次数",
+    "diagnosticsDropsPerHour": "约每小时 {count} 次",
+    "diagnosticsLongestGap": "最长中断",
+    "diagnosticsSincePairingSummary": "配对以来：断开 {drops} 次，连接失败 {failed} 次。",
+    "diagnosticsLastDuration": "最近 {duration}"
 }

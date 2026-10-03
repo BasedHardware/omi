@@ -12230,4 +12230,53 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'No…';
+
+  @override
+  String get diagnosticsRightNow => 'Right Now';
+
+  @override
+  String get diagnosticsLast7Days => 'Last 7 Days';
+
+  @override
+  String get diagnosticsConnectedFor => 'Connected for';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Reconnects on its own';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Brief drops, back in about $duration each time';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'No drops this week';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Having trouble connecting';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Failed connections in the last 24 hours: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Drops';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'about $count an hour';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Longest gap';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Since pairing: $drops drops, $failed failed connections.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Last $duration';
+  }
 }

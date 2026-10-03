@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Zapnite ho a podržte ho pri telefóne.",
     "startupFailedDetails": "Podrobnosti",
     "couldNotLoadApiKeys": "Kľúče API sa nepodarilo načítať.",
-    "speakerTagPromptNoAction": "Nie…"
+    "speakerTagPromptNoAction": "Nie…",
+    "diagnosticsRightNow": "Práve teraz",
+    "diagnosticsLast7Days": "Posledných 7 dní",
+    "diagnosticsConnectedFor": "Pripojené",
+    "diagnosticsVerdictReconnects": "Znovu sa pripája samo",
+    "diagnosticsVerdictReconnectsDetail": "Krátke výpadky, zakaždým späť asi za {duration}",
+    "diagnosticsVerdictNoDrops": "Tento týždeň žiadne výpadky",
+    "diagnosticsVerdictTrouble": "Problémy s pripojením",
+    "diagnosticsVerdictTroubleDetail": "Neúspešné pripojenia za posledných 24 hodín: {count}",
+    "diagnosticsDrops": "Výpadky",
+    "diagnosticsDropsPerHour": "asi {count} za hodinu",
+    "diagnosticsLongestGap": "Najdlhší výpadok",
+    "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
+    "diagnosticsLastDuration": "Posledných {duration}"
 }

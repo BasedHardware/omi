@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Slå på den och håll den nära telefonen.",
     "startupFailedDetails": "Detaljer",
     "couldNotLoadApiKeys": "Det gick inte att läsa in API-nycklar.",
-    "speakerTagPromptNoAction": "Nej…"
+    "speakerTagPromptNoAction": "Nej…",
+    "diagnosticsRightNow": "Just nu",
+    "diagnosticsLast7Days": "Senaste 7 dagarna",
+    "diagnosticsConnectedFor": "Ansluten i",
+    "diagnosticsVerdictReconnects": "Återansluter av sig själv",
+    "diagnosticsVerdictReconnectsDetail": "Korta avbrott, tillbaka efter cirka {duration} varje gång",
+    "diagnosticsVerdictNoDrops": "Inga avbrott den här veckan",
+    "diagnosticsVerdictTrouble": "Har problem att ansluta",
+    "diagnosticsVerdictTroubleDetail": "Misslyckade anslutningar de senaste 24 timmarna: {count}",
+    "diagnosticsDrops": "Avbrott",
+    "diagnosticsDropsPerHour": "cirka {count} i timmen",
+    "diagnosticsLongestGap": "Längsta uppehåll",
+    "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
+    "diagnosticsLastDuration": "Senaste {duration}"
 }

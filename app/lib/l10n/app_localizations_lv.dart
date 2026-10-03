@@ -12270,4 +12270,53 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Nē…';
+
+  @override
+  String get diagnosticsRightNow => 'Pašlaik';
+
+  @override
+  String get diagnosticsLast7Days => 'Pēdējās 7 dienas';
+
+  @override
+  String get diagnosticsConnectedFor => 'Savienots';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Atkārtoti savienojas pats';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Īsi pārrāvumi, katru reizi atjaunojas aptuveni $duration laikā';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Šonedēļ pārrāvumu nav';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Ir savienojuma problēmas';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Neveiksmīgi savienojumi pēdējās 24 stundās: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Pārrāvumi';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'aptuveni $count stundā';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Garākais pārtraukums';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Kopš savienošanas pārī: pārrāvumi $drops, neveiksmīgi savienojumi $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Pēdējās $duration';
+  }
 }

@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Kytke se päälle ja pidä sitä puhelimesi lähellä.",
     "startupFailedDetails": "Tiedot",
     "couldNotLoadApiKeys": "API-avaimia ei voitu ladata.",
-    "speakerTagPromptNoAction": "Ei…"
+    "speakerTagPromptNoAction": "Ei…",
+    "diagnosticsRightNow": "Juuri nyt",
+    "diagnosticsLast7Days": "Viimeiset 7 päivää",
+    "diagnosticsConnectedFor": "Yhdistettynä",
+    "diagnosticsVerdictReconnects": "Yhdistää itse uudelleen",
+    "diagnosticsVerdictReconnectsDetail": "Lyhyitä katkoksia, palaa joka kerta noin {duration} kuluttua",
+    "diagnosticsVerdictNoDrops": "Ei katkoksia tällä viikolla",
+    "diagnosticsVerdictTrouble": "Yhdistämisessä on ongelmia",
+    "diagnosticsVerdictTroubleDetail": "Epäonnistuneet yhteydet viimeisten 24 tunnin aikana: {count}",
+    "diagnosticsDrops": "Katkokset",
+    "diagnosticsDropsPerHour": "noin {count} tunnissa",
+    "diagnosticsLongestGap": "Pisin katko",
+    "diagnosticsSincePairingSummary": "Parituksen jälkeen: katkoksia {drops}, epäonnistuneita yhteyksiä {failed}.",
+    "diagnosticsLastDuration": "Viimeiset {duration}"
 }

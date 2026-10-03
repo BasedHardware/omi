@@ -12273,4 +12273,53 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Tidak…';
+
+  @override
+  String get diagnosticsRightNow => 'Sekarang';
+
+  @override
+  String get diagnosticsLast7Days => '7 Hari Lepas';
+
+  @override
+  String get diagnosticsConnectedFor => 'Disambungkan selama';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Bersambung semula sendiri';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Terputus seketika, kembali dalam kira-kira $duration setiap kali';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Tiada pemutusan minggu ini';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Menghadapi masalah sambungan';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Sambungan gagal dalam 24 jam lepas: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Pemutusan';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'kira-kira $count sejam';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Jurang terpanjang';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Sejak pemasangan: $drops pemutusan, $failed sambungan gagal.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '$duration lepas';
+  }
 }

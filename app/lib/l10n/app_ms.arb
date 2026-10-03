@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Hidupkannya dan pegang berhampiran telefon anda.",
     "startupFailedDetails": "Butiran",
     "couldNotLoadApiKeys": "Tidak dapat memuatkan kunci API.",
-    "speakerTagPromptNoAction": "Tidak…"
+    "speakerTagPromptNoAction": "Tidak…",
+    "diagnosticsRightNow": "Sekarang",
+    "diagnosticsLast7Days": "7 Hari Lepas",
+    "diagnosticsConnectedFor": "Disambungkan selama",
+    "diagnosticsVerdictReconnects": "Bersambung semula sendiri",
+    "diagnosticsVerdictReconnectsDetail": "Terputus seketika, kembali dalam kira-kira {duration} setiap kali",
+    "diagnosticsVerdictNoDrops": "Tiada pemutusan minggu ini",
+    "diagnosticsVerdictTrouble": "Menghadapi masalah sambungan",
+    "diagnosticsVerdictTroubleDetail": "Sambungan gagal dalam 24 jam lepas: {count}",
+    "diagnosticsDrops": "Pemutusan",
+    "diagnosticsDropsPerHour": "kira-kira {count} sejam",
+    "diagnosticsLongestGap": "Jurang terpanjang",
+    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
+    "diagnosticsLastDuration": "{duration} lepas"
 }

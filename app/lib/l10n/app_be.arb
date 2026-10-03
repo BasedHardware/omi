@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "Уключыце яго і трымайце побач з тэлефонам.",
     "startupFailedDetails": "Падрабязнасці",
     "couldNotLoadApiKeys": "Не ўдалося загрузіць ключы API.",
-    "speakerTagPromptNoAction": "Не…"
+    "speakerTagPromptNoAction": "Не…",
+    "diagnosticsRightNow": "Зараз",
+    "diagnosticsLast7Days": "Апошнія 7 дзён",
+    "diagnosticsConnectedFor": "Падключана",
+    "diagnosticsVerdictReconnects": "Перападключаецца сама",
+    "diagnosticsVerdictReconnectsDetail": "Кароткія разрывы, кожны раз вяртаецца прыкладна за {duration}",
+    "diagnosticsVerdictNoDrops": "На гэтым тыдні разрываў не было",
+    "diagnosticsVerdictTrouble": "Праблемы з падключэннем",
+    "diagnosticsVerdictTroubleDetail": "Няўдалыя злучэнні за апошнія 24 гадзіны: {count}",
+    "diagnosticsDrops": "Разрывы",
+    "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
+    "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
+    "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
+    "diagnosticsLastDuration": "Апошнія {duration}"
 }

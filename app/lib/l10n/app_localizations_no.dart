@@ -12242,4 +12242,53 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Nei…';
+
+  @override
+  String get diagnosticsRightNow => 'Akkurat nå';
+
+  @override
+  String get diagnosticsLast7Days => 'Siste 7 dager';
+
+  @override
+  String get diagnosticsConnectedFor => 'Tilkoblet i';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Kobler seg til igjen selv';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Korte brudd, tilbake etter omtrent $duration hver gang';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Ingen brudd denne uken';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Har problemer med å koble til';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mislykkede tilkoblinger siste 24 timer: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Brudd';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'omtrent $count i timen';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Lengste opphold';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Siden kobling: $drops brudd, $failed mislykkede tilkoblinger.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Siste $duration';
+  }
 }

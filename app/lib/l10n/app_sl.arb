@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "Vklopite ga in ga držite blizu telefona.",
     "startupFailedDetails": "Podrobnosti",
     "couldNotLoadApiKeys": "Ključev API ni bilo mogoče naložiti.",
-    "speakerTagPromptNoAction": "Ne…"
+    "speakerTagPromptNoAction": "Ne…",
+    "diagnosticsRightNow": "Trenutno",
+    "diagnosticsLast7Days": "Zadnjih 7 dni",
+    "diagnosticsConnectedFor": "Povezano",
+    "diagnosticsVerdictReconnects": "Samodejno se ponovno poveže",
+    "diagnosticsVerdictReconnectsDetail": "Kratki izpadi, vsakič nazaj v približno {duration}",
+    "diagnosticsVerdictNoDrops": "Ta teden brez izpadov",
+    "diagnosticsVerdictTrouble": "Težave s povezovanjem",
+    "diagnosticsVerdictTroubleDetail": "Neuspešne povezave v zadnjih 24 urah: {count}",
+    "diagnosticsDrops": "Izpadi",
+    "diagnosticsDropsPerHour": "približno {count} na uro",
+    "diagnosticsLongestGap": "Najdaljši premor",
+    "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
+    "diagnosticsLastDuration": "Zadnjih {duration}"
 }

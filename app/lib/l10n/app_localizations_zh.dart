@@ -12032,4 +12032,53 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => '否…';
+
+  @override
+  String get diagnosticsRightNow => '当前';
+
+  @override
+  String get diagnosticsLast7Days => '过去 7 天';
+
+  @override
+  String get diagnosticsConnectedFor => '已连接';
+
+  @override
+  String get diagnosticsVerdictReconnects => '可自动重新连接';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return '短暂断开，每次约 $duration 后恢复';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => '本周没有断开';
+
+  @override
+  String get diagnosticsVerdictTrouble => '连接出现问题';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return '过去 24 小时内连接失败：$count';
+  }
+
+  @override
+  String get diagnosticsDrops => '断开次数';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return '约每小时 $count 次';
+  }
+
+  @override
+  String get diagnosticsLongestGap => '最长中断';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '最近 $duration';
+  }
 }

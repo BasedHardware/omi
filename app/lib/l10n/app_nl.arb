@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Zet hem aan en houd hem bij je telefoon.",
     "startupFailedDetails": "Details",
     "couldNotLoadApiKeys": "API-sleutels konden niet worden geladen.",
-    "speakerTagPromptNoAction": "Nee…"
+    "speakerTagPromptNoAction": "Nee…",
+    "diagnosticsRightNow": "Op dit moment",
+    "diagnosticsLast7Days": "Laatste 7 dagen",
+    "diagnosticsConnectedFor": "Verbonden sinds",
+    "diagnosticsVerdictReconnects": "Maakt zelf opnieuw verbinding",
+    "diagnosticsVerdictReconnectsDetail": "Korte onderbrekingen, elke keer na ongeveer {duration} terug",
+    "diagnosticsVerdictNoDrops": "Geen onderbrekingen deze week",
+    "diagnosticsVerdictTrouble": "Problemen met verbinden",
+    "diagnosticsVerdictTroubleDetail": "Mislukte verbindingen in de afgelopen 24 uur: {count}",
+    "diagnosticsDrops": "Onderbrekingen",
+    "diagnosticsDropsPerHour": "ongeveer {count} per uur",
+    "diagnosticsLongestGap": "Langste onderbreking",
+    "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
+    "diagnosticsLastDuration": "Laatste {duration}"
 }

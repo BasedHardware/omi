@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -92,24 +93,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
-  /// Recovered disconnects since [_countersSinceMs], bounded by the native
-  /// history's 7-day retention. Mirrors `reconnection_count_window` in
-  /// [_buildBundle]. Null when the window anchor is unavailable.
-  int? get _reconnectionCountWindow {
-    final since = _countersSinceMs;
-    final history = _diagnostics?.disconnectHistory;
-    if (since == null || history == null) return null;
-    return history.where((e) => e.timestamp >= since && e.timeToReconnectMs > 0).length;
-  }
-
-  /// Connect attempts that never established, since [_countersSinceMs]. Mirrors
-  /// `fail_to_connect_count_window` in [_buildBundle].
-  int? get _failToConnectCountWindow {
-    final since = _countersSinceMs;
-    final history = _diagnostics?.disconnectHistory;
-    if (since == null || history == null) return null;
-    return history.where((e) => e.timestamp >= since && e.eventType == 'fail_to_connect').length;
-  }
+  /// The connection summary the page shows, over the window since [_countersSinceMs] (bounded by
+  /// the native history's 7-day retention). Its window counts mirror `reconnection_count_window`
+  /// and `fail_to_connect_count_window` in [_buildBundle].
+  DiagnosticsSummary get _summary => summarizeDiagnostics(
+        _diagnostics?.disconnectHistory ?? const [],
+        nowMs: clock.now().millisecondsSinceEpoch,
+        sinceMs: _countersSinceMs,
+      );
 
   Future<void> _loadBatteryHistory() async {
     try {
@@ -356,7 +347,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   void _onRssiUpdate(int rssi) {
     if (!mounted) return;
     setState(() {
-      _rssiPoints.add(_RssiPoint(DateTime.now(), rssi));
+      _rssiPoints.add(_RssiPoint(clock.now(), rssi));
       if (_rssiPoints.length > _maxRssiPoints) {
         _rssiPoints.removeAt(0);
       }
@@ -369,17 +360,16 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return OmiDuration.compact(DateTime.now().difference(connected).inSeconds, context.l10n);
   }
 
-  Color _rssiColor(int rssi) {
-    if (rssi >= -60) return OmiColors.success;
-    if (rssi >= -75) return OmiColors.warning;
-    return OmiColors.danger;
-  }
+  Color _rssiColor(int rssi) => diagnosticsSignalColor(rssi);
 
   String _rssiQuality(int rssi) {
-    if (rssi >= -60) return context.l10n.excellent;
-    if (rssi >= -75) return context.l10n.good;
-    if (rssi >= -85) return context.l10n.fair;
-    return context.l10n.weak;
+    final l10n = context.l10n;
+    return switch (diagnosticsSignalFor(rssi)) {
+      DiagnosticsSignal.excellent => l10n.excellent,
+      DiagnosticsSignal.good => l10n.good,
+      DiagnosticsSignal.fair => l10n.fair,
+      DiagnosticsSignal.weak => l10n.weak,
+    };
   }
 
   @override
@@ -409,7 +399,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatusCards(),
+                  _buildRightNow(),
+                  const SizedBox(height: OmiSpacing.xl),
+                  _buildWeek(),
                   const SizedBox(height: OmiSpacing.xl),
                   _buildRssiChart(),
                   const SizedBox(height: OmiSpacing.xl),
@@ -423,181 +415,190 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     );
   }
 
-  Widget _buildStatusCards() {
-    final deviceProvider = context.watch<DeviceProvider>();
-    final battery = deviceProvider.batteryLevel;
-    final connectedAt = _diagnostics?.connectedAt ?? 0;
-    final reconnections = _diagnostics?.reconnectionCount ?? 0;
-    final failToConnect = _diagnostics?.failToConnectCount ?? 0;
-    // Lifetime counters read catastrophic after months of pairing (10k+
-    // reconnections); the 7-day window reflects the behavior users actually
-    // experience, so it leads and the lifetime number stays as context.
-    final reconnectsWindow = _reconnectionCountWindow;
-    final failsWindow = _failToConnectCountWindow;
+  Widget _buildRightNow() {
+    final l10n = context.l10n;
+    final battery = context.watch<DeviceProvider>().batteryLevel;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
-
-    return Column(
+    return OmiSettingsGroup(
+      header: l10n.diagnosticsRightNow,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _statusCard(
-                icon: FontAwesomeIcons.clock,
-                label: context.l10n.connectionUptime,
-                value: _formatUptime(connectedAt),
-              ),
-            ),
-            const SizedBox(width: OmiSpacing.sm),
-            Expanded(
-              child: _statusCard(
-                icon: FontAwesomeIcons.arrowsRotate,
-                label: reconnectsWindow != null ? context.l10n.reconnectionsRecent : context.l10n.reconnections,
-                value: '${reconnectsWindow ?? reconnections}',
-                valueColor: (reconnectsWindow ?? reconnections) > 5 ? OmiColors.danger : null,
-                subtitle: reconnectsWindow != null ? context.l10n.diagnosticsCountSincePairing(reconnections) : null,
-              ),
-            ),
-          ],
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.clock),
+          title: l10n.diagnosticsConnectedFor,
+          value: _formatUptime(_diagnostics?.connectedAt ?? 0),
         ),
-        const SizedBox(height: OmiSpacing.sm),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _statusCard(
-                  icon: FontAwesomeIcons.batteryThreeQuarters,
-                  label: context.l10n.battery,
-                  value: battery >= 0 ? '$battery%' : '--',
-                ),
-              ),
-              const SizedBox(width: OmiSpacing.sm),
-              Expanded(
-                child: _statusCard(
-                  icon: FontAwesomeIcons.signal,
-                  label: context.l10n.signal,
-                  value: latestRssi != null ? '$latestRssi dBm' : '--',
-                  valueColor: latestRssi != null ? _rssiColor(latestRssi) : null,
-                  subtitle: latestRssi != null ? _rssiQuality(latestRssi) : null,
-                ),
-              ),
-            ],
-          ),
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.batteryThreeQuarters),
+          title: l10n.battery,
+          value: battery >= 0 ? '$battery%' : '--',
         ),
-        const SizedBox(height: OmiSpacing.sm),
-        _statusCard(
-          icon: FontAwesomeIcons.plugCircleXmark,
-          label: failsWindow != null ? context.l10n.failedConnectionsRecent : context.l10n.failedConnections,
-          value: '${failsWindow ?? failToConnect}',
-          valueColor: (failsWindow ?? failToConnect) > 0 ? OmiColors.warning : null,
-          subtitle: failsWindow != null ? context.l10n.diagnosticsCountSincePairing(failToConnect) : null,
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.signal),
+          title: l10n.signal,
+          value: latestRssi == null ? '--' : null,
+          trailing: latestRssi == null
+              ? null
+              : _valueStack(
+                  _rssiQuality(latestRssi),
+                  detail: '$latestRssi dBm',
+                  dot: _rssiColor(latestRssi),
+                ),
         ),
       ],
     );
   }
 
-  Widget _statusCard({
-    required FaIconData icon,
-    required String label,
-    required String value,
-    Color? valueColor,
-    String? subtitle,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              FaIcon(icon, color: OmiColors.textTertiary, size: 14),
-              const SizedBox(width: OmiSpacing.xs),
-              Flexible(
-                child: Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-              ),
-            ],
+  /// The week verdict, then neutral counts. Lifetime counters read catastrophic after months of
+  /// pairing (10k+ reconnections), so the 7-day window leads and the lifetime numbers sit in the
+  /// footnote. Without a window anchor the rows fall back to the lifetime counts, labelled so.
+  Widget _buildWeek() {
+    final l10n = context.l10n;
+    final summary = _summary;
+    final windowed = _countersSinceMs != null;
+    final lifetimeDrops = _diagnostics?.reconnectionCount ?? 0;
+    final lifetimeFails = _diagnostics?.failToConnectCount ?? 0;
+    final median = summary.medianReconnectMs;
+    final longest = summary.longestGapMs;
+    final rate = windowed ? summary.dropsPerHour : null;
+
+    return OmiSettingsGroup(
+      header: l10n.diagnosticsLast7Days,
+      footer: windowed ? l10n.diagnosticsSincePairingSummary(lifetimeDrops, lifetimeFails) : null,
+      children: [
+        if (summary.hasTrouble)
+          OmiSettingsRow(
+            key: const Key('diagnostics_verdict_trouble'),
+            leading: FaIcon(FontAwesomeIcons.plugCircleXmark, color: OmiColors.danger),
+            title: l10n.diagnosticsVerdictTrouble,
+            subtitle: l10n.diagnosticsVerdictTroubleDetail(summary.failedLast24h),
+          )
+        else
+          OmiSettingsRow(
+            key: const Key('diagnostics_verdict_ok'),
+            leading: FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success),
+            title: l10n.diagnosticsVerdictReconnects,
+            subtitle: median == null
+                ? l10n.diagnosticsVerdictNoDrops
+                : l10n.diagnosticsVerdictReconnectsDetail(_formatDurationMs(median)),
           ),
-          const SizedBox(height: OmiSpacing.xs),
-          Text(value, style: OmiType.title3.copyWith(color: valueColor ?? OmiColors.textPrimary)),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(subtitle, style: OmiType.footnote.copyWith(color: valueColor ?? OmiColors.textSecondary)),
-          ],
-        ],
-      ),
+        OmiSettingsRow(
+          title: l10n.diagnosticsDrops,
+          value:
+              rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
+          trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
+        ),
+        OmiSettingsRow(
+          title: l10n.diagnosticsLongestGap,
+          value: longest == null ? '--' : _formatDurationMs(longest),
+        ),
+        OmiSettingsRow(
+          title: l10n.failedConnections,
+          value: windowed ? '${summary.failed}' : l10n.diagnosticsCountSincePairing(lifetimeFails),
+        ),
+      ],
     );
   }
 
+  /// A row's trailing value with an optional second line and leading status dot. The value is
+  /// always neutral text; colour only ever appears on the dot.
+  Widget _valueStack(String value, {String? detail, Color? dot}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dot != null) ...[
+              Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: dot)),
+              const SizedBox(width: 6),
+            ],
+            Text(value, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          ],
+        ),
+        if (detail != null) Text(detail, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+      ],
+    );
+  }
+
+  static const int _rssiWindowSecs = 60;
+  static const double _rssiMin = -100;
+  static const double _rssiMax = -40;
+
   Widget _buildRssiChart() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        OmiSectionHeader(context.l10n.signalStrength),
+        OmiSectionHeader(
+          l10n.signalStrength,
+          trailing: Text(
+            l10n.diagnosticsLastDuration(l10n.timeCompactSecs(_rssiWindowSecs)),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+          ),
+        ),
         Container(
-          height: 200,
-          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
+          height: 140,
+          padding: const EdgeInsets.all(OmiSpacing.md),
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: _rssiPoints.length < 2
               ? Center(
                   child: Text(
-                    _rssiPoints.isEmpty ? context.l10n.noRssiDataYet : context.l10n.collectingData,
+                    _rssiPoints.isEmpty ? l10n.noRssiDataYet : l10n.collectingData,
                     style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                   ),
                 )
-              : LineChart(_buildLineChartData()),
+              : LineChart(_buildLineChartData(), duration: Duration.zero),
         ),
       ],
     );
   }
 
+  /// Fixed −100…−40 dBm over the last [_rssiWindowSecs], newest sample at the right edge. The axis
+  /// labels sit on their grid lines inside the plot, so none float outside it.
   LineChartData _buildLineChartData() {
-    final baseTime = _rssiPoints.first.time;
-    final spots = _rssiPoints.asMap().entries.map((e) {
-      final seconds = e.value.time.difference(baseTime).inMilliseconds / 1000.0;
-      return FlSpot(seconds, e.value.rssi.toDouble());
-    }).toList();
+    final latest = _rssiPoints.last.time;
+    final spots = [
+      for (final p in _rssiPoints)
+        if (latest.difference(p.time).inMilliseconds <= _rssiWindowSecs * 1000)
+          FlSpot(
+            -latest.difference(p.time).inMilliseconds / 1000.0,
+            p.rssi.toDouble().clamp(_rssiMin, _rssiMax),
+          ),
+    ];
+    final color = _rssiColor(_rssiPoints.last.rssi);
 
-    final maxX = spots.last.x;
-    final minX = spots.first.x;
+    HorizontalLine gridLine(double y, Alignment labelAlignment) => HorizontalLine(
+          y: y,
+          color: OmiColors.textPrimary.withValues(alpha: 0.06),
+          strokeWidth: 1,
+          label: HorizontalLineLabel(
+            show: true,
+            alignment: labelAlignment,
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            style: _axisStyle,
+            labelResolver: (line) => '${line.y.toInt()}',
+          ),
+        );
 
     return LineChartData(
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: false,
-        horizontalInterval: 25,
-        getDrawingHorizontalLine: (value) =>
-            FlLine(color: OmiColors.textPrimary.withValues(alpha: 0.06), strokeWidth: 1),
-      ),
-      titlesData: FlTitlesData(
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 28,
-            interval: _xInterval(maxX - minX),
-            getTitlesWidget: (value, meta) {
-              return Text(context.l10n.timeCompactSecs(value.toInt()), style: _axisStyle);
-            },
-          ),
-        ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 44,
-            interval: 25,
-            getTitlesWidget: (value, meta) {
-              return Text('${value.toInt()}', style: _axisStyle);
-            },
-          ),
-        ),
-      ),
+      gridData: const FlGridData(show: false),
+      titlesData: const FlTitlesData(show: false),
       borderData: FlBorderData(show: false),
-      minY: -100,
-      maxY: -25,
-      minX: minX,
-      maxX: maxX,
+      clipData: const FlClipData.all(),
+      extraLinesData: ExtraLinesData(
+        extraLinesOnTop: false,
+        horizontalLines: [
+          gridLine(_rssiMax, Alignment.bottomLeft),
+          gridLine(-60, Alignment.topLeft),
+          gridLine(-80, Alignment.topLeft),
+          gridLine(_rssiMin, Alignment.topLeft),
+        ],
+      ),
+      minY: _rssiMin,
+      maxY: _rssiMax,
+      minX: -_rssiWindowSecs.toDouble(),
+      maxX: 0,
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           getTooltipColor: (_) => OmiColors.surface2,
@@ -616,7 +617,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           spots: spots,
           isCurved: true,
           curveSmoothness: 0.2,
-          color: _rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent,
+          color: color,
           barWidth: 2.5,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
@@ -625,10 +626,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent).withValues(alpha: 0.3),
-                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent).withValues(alpha: 0.0),
-              ],
+              colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.0)],
             ),
           ),
         ),
@@ -636,20 +634,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     );
   }
 
-  double _xInterval(double range) {
-    if (range <= 15) return 5;
-    if (range <= 30) return 10;
-    if (range <= 60) return 15;
-    return 30;
-  }
-
   static final TextStyle _axisStyle = OmiType.caption.copyWith(color: OmiColors.textTertiary);
 
-  Color _batteryColor(int level) {
-    if (level > 50) return OmiColors.success;
-    if (level > 20) return OmiColors.warning;
-    return OmiColors.danger;
-  }
+  Color _batteryColor(int level) => diagnosticsBatteryColor(level);
 
   Widget _buildBatteryChart() {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -674,8 +661,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           ),
         ),
         Container(
-          height: 200,
-          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
+          height: 104,
+          padding: const EdgeInsets.only(top: OmiSpacing.sm, right: OmiSpacing.md, bottom: OmiSpacing.xxs),
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: points.length < 2
               ? Center(
@@ -734,7 +721,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: 25,
+        horizontalInterval: 50,
         getDrawingHorizontalLine: (value) =>
             FlLine(color: OmiColors.textPrimary.withValues(alpha: 0.06), strokeWidth: 1),
       ),
@@ -744,7 +731,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 28,
+            reservedSize: 22,
             interval: _batteryDayView ? 4 : 24,
             getTitlesWidget: (value, meta) {
               final h = value.abs();
@@ -760,7 +747,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 36,
-            interval: 25,
+            interval: 100,
             getTitlesWidget: (value, meta) {
               return Text('${value.toInt()}', style: _axisStyle);
             },
@@ -860,7 +847,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final isFail = event.eventType == 'fail_to_connect';
     final reason = _formatReason(event.reason);
 
-    final Color dot = isManual ? OmiColors.textTertiary : (isFail ? OmiColors.warning : OmiColors.danger);
+    // A drop that reconnected on its own is routine (the pendant buffers audio through the gap),
+    // so only failed connects and unrecovered drops keep a status colour.
+    final recovered = event.timeToReconnectMs > 0;
+    final Color dot = isFail ? OmiColors.warning : (isManual || recovered ? OmiColors.textTertiary : OmiColors.danger);
 
     final metaParts = <String>[];
     if (event.rssiTrend.isNotEmpty) metaParts.add(event.rssiTrend);
@@ -966,4 +956,101 @@ class _SendFailure implements Exception {
 
   @override
   String toString() => '_SendFailure($stage, statusCode: $statusCode)';
+}
+
+/// Signal quality bands. The quality word, the Right Now dot and the chart colour all come from
+/// these, so the word and the colour can never disagree.
+enum DiagnosticsSignal { excellent, good, fair, weak }
+
+@visibleForTesting
+DiagnosticsSignal diagnosticsSignalFor(int rssi) {
+  if (rssi >= -60) return DiagnosticsSignal.excellent;
+  if (rssi >= -75) return DiagnosticsSignal.good;
+  if (rssi >= -85) return DiagnosticsSignal.fair;
+  return DiagnosticsSignal.weak;
+}
+
+/// Excellent and Good are success, Fair is warning, Weak is danger.
+@visibleForTesting
+Color diagnosticsSignalColor(int rssi) => switch (diagnosticsSignalFor(rssi)) {
+      DiagnosticsSignal.excellent || DiagnosticsSignal.good => OmiColors.success,
+      DiagnosticsSignal.fair => OmiColors.warning,
+      DiagnosticsSignal.weak => OmiColors.danger,
+    };
+
+/// Success above 20%, warning at 11–20%, danger at 10% and below.
+@visibleForTesting
+Color diagnosticsBatteryColor(int level) {
+  if (level > 20) return OmiColors.success;
+  if (level > 10) return OmiColors.warning;
+  return OmiColors.danger;
+}
+
+/// The Last 7 Days numbers and verdict, computed from the native disconnect history.
+@visibleForTesting
+class DiagnosticsSummary {
+  const DiagnosticsSummary({
+    required this.drops,
+    required this.failed,
+    required this.failedLast24h,
+    this.medianReconnectMs,
+    this.longestGapMs,
+    this.dropsPerHour,
+  });
+
+  /// Disconnects that reconnected on their own, in the window.
+  final int drops;
+
+  /// Connect attempts that never established, in the window.
+  final int failed;
+
+  /// Connect attempts that never established in the last 24 hours, whatever the window.
+  final int failedLast24h;
+
+  /// Median and longest `timeToReconnectMs` over [drops]; null without drops.
+  final int? medianReconnectMs;
+  final int? longestGapMs;
+
+  /// Average drops an hour, rounded; null when the window is unknown or under an hour, or the
+  /// rate rounds to zero.
+  final int? dropsPerHour;
+
+  /// The verdict. Long gaps are informational (the pendant buffers audio and syncs it later), so
+  /// only a recent failed connection turns it.
+  bool get hasTrouble => failedLast24h > 0;
+}
+
+/// Summarises [history] since [sinceMs] (the whole history, which native keeps for 7 days, when
+/// null).
+@visibleForTesting
+DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {required int nowMs, int? sinceMs}) {
+  const hourMs = 3600 * 1000;
+  const weekMs = 7 * 24 * hourMs;
+  final window = sinceMs == null ? history : history.where((e) => e.timestamp >= sinceMs).toList();
+  final gaps = [
+    for (final e in window)
+      if (e.timeToReconnectMs > 0) e.timeToReconnectMs
+  ]..sort();
+  int? median;
+  if (gaps.isNotEmpty) {
+    final mid = gaps.length ~/ 2;
+    median = gaps.length.isOdd ? gaps[mid] : ((gaps[mid - 1] + gaps[mid]) / 2).round();
+  }
+  int? perHour;
+  if (sinceMs != null && gaps.isNotEmpty) {
+    final start = sinceMs > nowMs - weekMs ? sinceMs : nowMs - weekMs;
+    final hours = (nowMs - start) / hourMs;
+    if (hours >= 1) {
+      final rate = (gaps.length / hours).round();
+      if (rate >= 1) perHour = rate;
+    }
+  }
+  return DiagnosticsSummary(
+    drops: gaps.length,
+    failed: window.where((e) => e.eventType == 'fail_to_connect').length,
+    failedLast24h: history.where((e) => e.eventType == 'fail_to_connect' && e.timestamp >= nowMs - 24 * hourMs).length,
+    medianReconnectMs: median,
+    longestGapMs: gaps.isEmpty ? null : gaps.last,
+    dropsPerHour: perHour,
+  );
 }

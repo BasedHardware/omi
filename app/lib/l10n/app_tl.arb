@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "I-on ito at hawakan malapit sa iyong telepono.",
     "startupFailedDetails": "Mga Detalye",
     "couldNotLoadApiKeys": "Hindi ma-load ang mga API key.",
-    "speakerTagPromptNoAction": "Hindi…"
+    "speakerTagPromptNoAction": "Hindi…",
+    "diagnosticsRightNow": "Ngayon",
+    "diagnosticsLast7Days": "Nakaraang 7 Araw",
+    "diagnosticsConnectedFor": "Nakakonekta nang",
+    "diagnosticsVerdictReconnects": "Kusang muling kumokonekta",
+    "diagnosticsVerdictReconnectsDetail": "Maiikling pagputol, bumabalik sa loob ng mga {duration} bawat beses",
+    "diagnosticsVerdictNoDrops": "Walang pagputol ngayong linggo",
+    "diagnosticsVerdictTrouble": "Nahihirapang kumonekta",
+    "diagnosticsVerdictTroubleDetail": "Mga bigong koneksyon sa nakaraang 24 na oras: {count}",
+    "diagnosticsDrops": "Mga pagputol",
+    "diagnosticsDropsPerHour": "mga {count} kada oras",
+    "diagnosticsLongestGap": "Pinakamahabang puwang",
+    "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
+    "diagnosticsLastDuration": "Nakaraang {duration}"
 }

@@ -12322,4 +12322,53 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Όχι…';
+
+  @override
+  String get diagnosticsRightNow => 'Αυτή τη στιγμή';
+
+  @override
+  String get diagnosticsLast7Days => 'Τελευταίες 7 ημέρες';
+
+  @override
+  String get diagnosticsConnectedFor => 'Συνδεδεμένο για';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Επανασυνδέεται αυτόματα';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Σύντομες διακοπές, επιστρέφει σε περίπου $duration κάθε φορά';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Καμία διακοπή αυτή την εβδομάδα';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Πρόβλημα σύνδεσης';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Αποτυχημένες συνδέσεις τις τελευταίες 24 ώρες: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Διακοπές';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'περίπου $count την ώρα';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Μεγαλύτερο κενό';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Από τη σύζευξη: $drops διακοπές, $failed αποτυχημένες συνδέσεις.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Τελευταία $duration';
+  }
 }

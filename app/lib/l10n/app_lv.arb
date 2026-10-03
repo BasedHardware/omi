@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Ieslēdziet to un turiet tālruņa tuvumā.",
     "startupFailedDetails": "Detalizēti",
     "couldNotLoadApiKeys": "Neizdevās ielādēt API atslēgas.",
-    "speakerTagPromptNoAction": "Nē…"
+    "speakerTagPromptNoAction": "Nē…",
+    "diagnosticsRightNow": "Pašlaik",
+    "diagnosticsLast7Days": "Pēdējās 7 dienas",
+    "diagnosticsConnectedFor": "Savienots",
+    "diagnosticsVerdictReconnects": "Atkārtoti savienojas pats",
+    "diagnosticsVerdictReconnectsDetail": "Īsi pārrāvumi, katru reizi atjaunojas aptuveni {duration} laikā",
+    "diagnosticsVerdictNoDrops": "Šonedēļ pārrāvumu nav",
+    "diagnosticsVerdictTrouble": "Ir savienojuma problēmas",
+    "diagnosticsVerdictTroubleDetail": "Neveiksmīgi savienojumi pēdējās 24 stundās: {count}",
+    "diagnosticsDrops": "Pārrāvumi",
+    "diagnosticsDropsPerHour": "aptuveni {count} stundā",
+    "diagnosticsLongestGap": "Garākais pārtraukums",
+    "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
+    "diagnosticsLastDuration": "Pēdējās {duration}"
 }

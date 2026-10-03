@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "เปิดเครื่องแล้วถือไว้ใกล้โทรศัพท์ของคุณ",
     "startupFailedDetails": "รายละเอียด",
     "couldNotLoadApiKeys": "โหลดคีย์ API ไม่ได้",
-    "speakerTagPromptNoAction": "ไม่…"
+    "speakerTagPromptNoAction": "ไม่…",
+    "diagnosticsRightNow": "ขณะนี้",
+    "diagnosticsLast7Days": "7 วันที่ผ่านมา",
+    "diagnosticsConnectedFor": "เชื่อมต่อมาแล้ว",
+    "diagnosticsVerdictReconnects": "เชื่อมต่อใหม่ได้เอง",
+    "diagnosticsVerdictReconnectsDetail": "หลุดสั้น ๆ กลับมาภายในประมาณ {duration} ทุกครั้ง",
+    "diagnosticsVerdictNoDrops": "ไม่มีการหลุดในสัปดาห์นี้",
+    "diagnosticsVerdictTrouble": "มีปัญหาในการเชื่อมต่อ",
+    "diagnosticsVerdictTroubleDetail": "การเชื่อมต่อที่ล้มเหลวใน 24 ชั่วโมงที่ผ่านมา: {count}",
+    "diagnosticsDrops": "การหลุด",
+    "diagnosticsDropsPerHour": "ประมาณ {count} ครั้งต่อชั่วโมง",
+    "diagnosticsLongestGap": "ช่วงหลุดนานที่สุด",
+    "diagnosticsSincePairingSummary": "ตั้งแต่จับคู่: หลุด {drops} ครั้ง เชื่อมต่อล้มเหลว {failed} ครั้ง",
+    "diagnosticsLastDuration": "{duration} ล่าสุด"
 }

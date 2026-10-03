@@ -3822,5 +3822,18 @@
     "findDeviceNoneMessage": "Açın ve telefonunuzun yakınında tutun.",
     "startupFailedDetails": "Ayrıntılar",
     "couldNotLoadApiKeys": "API anahtarları yüklenemedi.",
-    "speakerTagPromptNoAction": "Hayır…"
+    "speakerTagPromptNoAction": "Hayır…",
+    "diagnosticsRightNow": "Şu Anda",
+    "diagnosticsLast7Days": "Son 7 Gün",
+    "diagnosticsConnectedFor": "Bağlantı süresi",
+    "diagnosticsVerdictReconnects": "Kendiliğinden yeniden bağlanıyor",
+    "diagnosticsVerdictReconnectsDetail": "Kısa kopmalar, her seferinde yaklaşık {duration} içinde geri geliyor",
+    "diagnosticsVerdictNoDrops": "Bu hafta kopma yok",
+    "diagnosticsVerdictTrouble": "Bağlanmada sorun var",
+    "diagnosticsVerdictTroubleDetail": "Son 24 saatteki başarısız bağlantılar: {count}",
+    "diagnosticsDrops": "Kopmalar",
+    "diagnosticsDropsPerHour": "saatte yaklaşık {count}",
+    "diagnosticsLongestGap": "En uzun kesinti",
+    "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
+    "diagnosticsLastDuration": "Son {duration}"
 }

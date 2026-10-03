@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "הפעילו אותו והחזיקו אותו ליד הטלפון.",
     "startupFailedDetails": "פרטים",
     "couldNotLoadApiKeys": "לא ניתן לטעון את מפתחות ה-API.",
-    "speakerTagPromptNoAction": "לא…"
+    "speakerTagPromptNoAction": "לא…",
+    "diagnosticsRightNow": "כרגע",
+    "diagnosticsLast7Days": "7 הימים האחרונים",
+    "diagnosticsConnectedFor": "מחובר במשך",
+    "diagnosticsVerdictReconnects": "מתחבר מחדש מעצמו",
+    "diagnosticsVerdictReconnectsDetail": "ניתוקים קצרים, חוזר תוך כ־{duration} בכל פעם",
+    "diagnosticsVerdictNoDrops": "אין ניתוקים השבוע",
+    "diagnosticsVerdictTrouble": "יש בעיה בהתחברות",
+    "diagnosticsVerdictTroubleDetail": "חיבורים שנכשלו ב־24 השעות האחרונות: {count}",
+    "diagnosticsDrops": "ניתוקים",
+    "diagnosticsDropsPerHour": "בערך {count} בשעה",
+    "diagnosticsLongestGap": "הפער הארוך ביותר",
+    "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
+    "diagnosticsLastDuration": "{duration} אחרונות"
 }

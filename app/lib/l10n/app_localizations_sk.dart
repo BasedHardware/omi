@@ -12238,4 +12238,53 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get speakerTagPromptNoAction => 'Nie…';
+
+  @override
+  String get diagnosticsRightNow => 'Práve teraz';
+
+  @override
+  String get diagnosticsLast7Days => 'Posledných 7 dní';
+
+  @override
+  String get diagnosticsConnectedFor => 'Pripojené';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Znovu sa pripája samo';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Krátke výpadky, zakaždým späť asi za $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Tento týždeň žiadne výpadky';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Problémy s pripojením';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Neúspešné pripojenia za posledných 24 hodín: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Výpadky';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'asi $count za hodinu';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Najdlhší výpadok';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Od spárovania: výpadkov $drops, neúspešných pripojení $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Posledných $duration';
+  }
 }

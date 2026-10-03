@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "ते चालू करा आणि तुमच्या फोनजवळ धरा.",
     "startupFailedDetails": "तपशील",
     "couldNotLoadApiKeys": "API की लोड करता आल्या नाहीत.",
-    "speakerTagPromptNoAction": "नाही…"
+    "speakerTagPromptNoAction": "नाही…",
+    "diagnosticsRightNow": "आत्ता",
+    "diagnosticsLast7Days": "गेले 7 दिवस",
+    "diagnosticsConnectedFor": "कनेक्ट असलेला वेळ",
+    "diagnosticsVerdictReconnects": "आपोआप पुन्हा जोडले जाते",
+    "diagnosticsVerdictReconnectsDetail": "थोडक्यात खंड, प्रत्येक वेळी सुमारे {duration} मध्ये परत",
+    "diagnosticsVerdictNoDrops": "या आठवड्यात कोणताही खंड नाही",
+    "diagnosticsVerdictTrouble": "कनेक्ट होण्यात अडचण",
+    "diagnosticsVerdictTroubleDetail": "गेल्या 24 तासांतील अयशस्वी कनेक्शन: {count}",
+    "diagnosticsDrops": "खंड",
+    "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
+    "diagnosticsLongestGap": "सर्वात मोठा खंड",
+    "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
+    "diagnosticsLastDuration": "गेले {duration}"
 }

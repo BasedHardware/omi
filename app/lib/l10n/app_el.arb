@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Ενεργοποιήστε το και κρατήστε το κοντά στο τηλέφωνό σας.",
     "startupFailedDetails": "Λεπτομέρειες",
     "couldNotLoadApiKeys": "Δεν ήταν δυνατή η φόρτωση των κλειδιών API.",
-    "speakerTagPromptNoAction": "Όχι…"
+    "speakerTagPromptNoAction": "Όχι…",
+    "diagnosticsRightNow": "Αυτή τη στιγμή",
+    "diagnosticsLast7Days": "Τελευταίες 7 ημέρες",
+    "diagnosticsConnectedFor": "Συνδεδεμένο για",
+    "diagnosticsVerdictReconnects": "Επανασυνδέεται αυτόματα",
+    "diagnosticsVerdictReconnectsDetail": "Σύντομες διακοπές, επιστρέφει σε περίπου {duration} κάθε φορά",
+    "diagnosticsVerdictNoDrops": "Καμία διακοπή αυτή την εβδομάδα",
+    "diagnosticsVerdictTrouble": "Πρόβλημα σύνδεσης",
+    "diagnosticsVerdictTroubleDetail": "Αποτυχημένες συνδέσεις τις τελευταίες 24 ώρες: {count}",
+    "diagnosticsDrops": "Διακοπές",
+    "diagnosticsDropsPerHour": "περίπου {count} την ώρα",
+    "diagnosticsLongestGap": "Μεγαλύτερο κενό",
+    "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
+    "diagnosticsLastDuration": "Τελευταία {duration}"
 }

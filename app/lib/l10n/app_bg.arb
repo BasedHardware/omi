@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "Включете го и го дръжте близо до телефона си.",
     "startupFailedDetails": "Подробности",
     "couldNotLoadApiKeys": "API ключовете не можаха да се заредят.",
-    "speakerTagPromptNoAction": "Не…"
+    "speakerTagPromptNoAction": "Не…",
+    "diagnosticsRightNow": "В момента",
+    "diagnosticsLast7Days": "Последните 7 дни",
+    "diagnosticsConnectedFor": "Свързано от",
+    "diagnosticsVerdictReconnects": "Свързва се отново самостоятелно",
+    "diagnosticsVerdictReconnectsDetail": "Кратки прекъсвания, всеки път се връща след около {duration}",
+    "diagnosticsVerdictNoDrops": "Без прекъсвания тази седмица",
+    "diagnosticsVerdictTrouble": "Има проблем със свързването",
+    "diagnosticsVerdictTroubleDetail": "Неуспешни връзки през последните 24 часа: {count}",
+    "diagnosticsDrops": "Прекъсвания",
+    "diagnosticsDropsPerHour": "около {count} на час",
+    "diagnosticsLongestGap": "Най-дълго прекъсване",
+    "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
+    "diagnosticsLastDuration": "Последните {duration}"
 }

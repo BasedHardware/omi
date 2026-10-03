@@ -3787,5 +3787,18 @@
     "findDeviceNoneMessage": "電源を入れて、スマートフォンの近くに置いてください。",
     "startupFailedDetails": "詳細",
     "couldNotLoadApiKeys": "APIキーを読み込めませんでした。",
-    "speakerTagPromptNoAction": "いいえ…"
+    "speakerTagPromptNoAction": "いいえ…",
+    "diagnosticsRightNow": "現在",
+    "diagnosticsLast7Days": "過去7日間",
+    "diagnosticsConnectedFor": "接続時間",
+    "diagnosticsVerdictReconnects": "自動で再接続しています",
+    "diagnosticsVerdictReconnectsDetail": "短い切断のみで、毎回約{duration}で復帰しています",
+    "diagnosticsVerdictNoDrops": "今週は切断なし",
+    "diagnosticsVerdictTrouble": "接続に問題があります",
+    "diagnosticsVerdictTroubleDetail": "過去24時間の接続の失敗: {count}",
+    "diagnosticsDrops": "切断",
+    "diagnosticsDropsPerHour": "1時間に約{count}回",
+    "diagnosticsLongestGap": "最長の途切れ",
+    "diagnosticsSincePairingSummary": "ペアリング以降: 切断 {drops} 回、接続の失敗 {failed} 回。",
+    "diagnosticsLastDuration": "直近{duration}"
 }

@@ -11344,5 +11344,18 @@
     "findDeviceNoneMessage": "அதை இயக்கி, உங்கள் ஃபோனுக்கு அருகில் வைத்திருங்கள்.",
     "startupFailedDetails": "விவரங்கள்",
     "couldNotLoadApiKeys": "API விசைகளை ஏற்ற முடியவில்லை.",
-    "speakerTagPromptNoAction": "இல்லை…"
+    "speakerTagPromptNoAction": "இல்லை…",
+    "diagnosticsRightNow": "இப்போது",
+    "diagnosticsLast7Days": "கடந்த 7 நாட்கள்",
+    "diagnosticsConnectedFor": "இணைந்திருக்கும் நேரம்",
+    "diagnosticsVerdictReconnects": "தானாகவே மீண்டும் இணைகிறது",
+    "diagnosticsVerdictReconnectsDetail": "சிறிய துண்டிப்புகள், ஒவ்வொரு முறையும் சுமார் {duration} இல் மீண்டும் இணைகிறது",
+    "diagnosticsVerdictNoDrops": "இந்த வாரம் துண்டிப்புகள் இல்லை",
+    "diagnosticsVerdictTrouble": "இணைப்பதில் சிக்கல்",
+    "diagnosticsVerdictTroubleDetail": "கடந்த 24 மணிநேரத்தில் தோல்வியுற்ற இணைப்புகள்: {count}",
+    "diagnosticsDrops": "துண்டிப்புகள்",
+    "diagnosticsDropsPerHour": "மணிக்கு சுமார் {count}",
+    "diagnosticsLongestGap": "நீண்ட இடைவெளி",
+    "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
+    "diagnosticsLastDuration": "கடந்த {duration}"
 }
