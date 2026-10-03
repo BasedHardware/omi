@@ -64,14 +64,12 @@ class ConversationAudioUrlInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map(
-            (s) => ConversationAudioSpan(
-              fileId: s.fileId,
-              wallOffset: s.wallOffset,
-              artifactOffset: s.artifactOffset,
-              len: s.len,
-            ),
-          )
+          .map((s) => ConversationAudioSpan(
+                fileId: s.fileId,
+                wallOffset: s.wallOffset,
+                artifactOffset: s.artifactOffset,
+                len: s.len,
+              ))
           .toList(),
     );
   }
@@ -154,7 +152,10 @@ Future<ApiResult<AudioUrlsResponse>> getConversationAudioSignedUrls(
   ApiExecutionSeams? execution,
 }) {
   return executeApi<AudioUrlsResponse>(
-    request: ApiRequest(url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/urls', method: 'GET'),
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/urls',
+      method: 'GET',
+    ),
     send: send,
     execution: execution,
     decode: (body) {

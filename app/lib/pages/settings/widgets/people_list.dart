@@ -17,12 +17,12 @@ enum PeopleFilter { all, lowConfidence, pinned, needsVoice, notHeard }
 bool personNeedsVoice(Person p) => p.voiceReadiness != 'ready' && p.voiceReadiness != 'saved_sample_awaiting_embedding';
 
 bool matchesPeopleFilter(Person p, PeopleFilter filter) => switch (filter) {
-  PeopleFilter.all => true,
-  PeopleFilter.lowConfidence => p.confidence == 'unverified' && !p.pinned,
-  PeopleFilter.pinned => p.pinned,
-  PeopleFilter.needsVoice => personNeedsVoice(p),
-  PeopleFilter.notHeard => p.conversationCount != null && p.lastHeardAt == null,
-};
+      PeopleFilter.all => true,
+      PeopleFilter.lowConfidence => p.confidence == 'unverified' && !p.pinned,
+      PeopleFilter.pinned => p.pinned,
+      PeopleFilter.needsVoice => personNeedsVoice(p),
+      PeopleFilter.notHeard => p.conversationCount != null && p.lastHeardAt == null,
+    };
 
 /// The rows shown for a query and filter, shared by the list and its selection toolbar.
 List<Person> visiblePeople(Iterable<Person> people, String query, PeopleFilter filter) {
@@ -47,13 +47,13 @@ Future<bool> confirmAndDeletePeople(BuildContext context, PeopleProvider provide
     title: single == null
         ? l10n.deletePeopleTitle(targets.length)
         : single.pinned
-        ? l10n.deletePersonNamedTitle(single.name)
-        : l10n.deletePersonTitle,
+            ? l10n.deletePersonNamedTitle(single.name)
+            : l10n.deletePersonTitle,
     message: single == null
         ? '${l10n.deletePeopleMessage}\n\n${targets.map((p) => p.name).join('\n')}'
         : single.pinned
-        ? l10n.deletePinnedPersonMessage(single.name)
-        : l10n.deletePersonConfirmation(single.name),
+            ? l10n.deletePinnedPersonMessage(single.name)
+            : l10n.deletePersonConfirmation(single.name),
     confirmLabel: single != null && single.pinned ? l10n.deleteNamedPerson(single.name) : l10n.delete,
     destructive: true,
   );
@@ -208,18 +208,13 @@ class _PeopleListState extends State<PeopleList> {
       }
       return ListView(
         padding: EdgeInsets.fromLTRB(
-          OmiSpacing.md,
-          OmiSpacing.xs,
-          OmiSpacing.md,
-          MediaQuery.paddingOf(context).bottom + OmiSpacing.xl,
-        ),
+            OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
         children: [...widget.leading, state, ...widget.trailing],
       );
     }
     final people = _visible(provider);
     final unsure = provider.cleanUpCandidates.length;
-    final showBanner =
-        widget.onCleanUp != null &&
+    final showBanner = widget.onCleanUp != null &&
         unsure >= kCleanUpBannerMinimum &&
         !provider.selecting &&
         _filter == PeopleFilter.all &&
@@ -228,11 +223,7 @@ class _PeopleListState extends State<PeopleList> {
       onRefresh: provider.refresh,
       child: ListView(
         padding: EdgeInsets.fromLTRB(
-          OmiSpacing.md,
-          OmiSpacing.xs,
-          OmiSpacing.md,
-          MediaQuery.paddingOf(context).bottom + OmiSpacing.xl,
-        ),
+            OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
         children: [
           ...widget.leading,
           _filters(provider),
@@ -315,11 +306,11 @@ class _PeopleListState extends State<PeopleList> {
     final rest = people.where((p) => !p.pinned).toList()..sort(_byRecency);
     final recent = [
       for (final p in rest)
-        if (!hasStats || p.lastHeardAt != null) p,
+        if (!hasStats || p.lastHeardAt != null) p
     ];
     final notHeard = [
       for (final p in rest)
-        if (hasStats && p.lastHeardAt == null) p,
+        if (hasStats && p.lastHeardAt == null) p
     ];
     final groups = <(String, String?, List<Person>, String?)>[
       if (pinned.isNotEmpty)
@@ -339,9 +330,8 @@ class _PeopleListState extends State<PeopleList> {
           const SizedBox(height: OmiSpacing.xs),
           OmiSectionHeader(
             title,
-            trailing: meta == null
-                ? null
-                : Text(meta, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            trailing:
+                meta == null ? null : Text(meta, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
         ],
         _card([
@@ -473,12 +463,12 @@ class PersonRow extends StatelessWidget {
     final lead = !selecting
         ? null
         : person.pinned
-        ? Icon(Icons.push_pin, size: 20, color: OmiColors.textTertiary)
-        : Icon(
-            selected ? Icons.check_circle : Icons.radio_button_unchecked,
-            key: ValueKey(selected),
-            color: selected ? OmiColors.accent : OmiColors.textTertiary,
-          );
+            ? Icon(Icons.push_pin, size: 20, color: OmiColors.textTertiary)
+            : Icon(
+                selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                key: ValueKey(selected),
+                color: selected ? OmiColors.accent : OmiColors.textTertiary,
+              );
     final row = Semantics(
       button: true,
       selected: selecting && !person.pinned ? selected : null,

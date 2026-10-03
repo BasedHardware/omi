@@ -198,7 +198,11 @@ void main() {
   test('removes the id 0 placeholder when processing returns null', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
-    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: finalize,
+      process: () async => null,
+    );
     addTearDown(provider.dispose);
 
     final pending = provider.forceProcessingCurrentConversation();
@@ -257,7 +261,11 @@ void main() {
     final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
     final finalize = Completer<void>();
     late Completer<CreateConversationResponse?> processGate;
-    final provider = _provider(actions: _RecordingActions(), finalizeGate: finalize, process: () => processGate.future);
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      process: () => processGate.future,
+    );
 
     final outcome = await _runInGuardedZone(() async {
       processGate = Completer<CreateConversationResponse?>();
@@ -330,7 +338,11 @@ void main() {
     crashlytics.recordErrorFailure = PlatformException(code: 'unavailable', message: 'transport down');
     final finalize = Completer<void>();
     late Completer<CreateConversationResponse?> processGate;
-    final provider = _provider(actions: _RecordingActions(), finalizeGate: finalize, process: () => processGate.future);
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      process: () => processGate.future,
+    );
 
     final outcome = await _runInGuardedZone(() async {
       processGate = Completer<CreateConversationResponse?>();

@@ -31,17 +31,18 @@ TranscriptSegment _seg(
   bool isUser = false,
   String? personId,
   String text = 'speech',
-}) => TranscriptSegment(
-  id: id,
-  text: text,
-  speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-  speakerId: speakerId,
-  isUser: isUser,
-  personId: personId,
-  start: start,
-  end: start + 5,
-  translations: const [],
-);
+}) =>
+    TranscriptSegment(
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: start,
+      end: start + 5,
+      translations: const [],
+    );
 
 Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
@@ -102,7 +103,10 @@ void main() {
   group('transcript heading speaker count', () {
     testWidgets('an unavailable resolution shows no speaker count even with many raw ids', (tester) async {
       final segments = [for (var i = 0; i < 11; i++) _seg('s$i', i, i * 5.0)];
-      await pumpDetail(tester, _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')));
+      await pumpDetail(
+        tester,
+        _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')),
+      );
 
       expect(headingLabel(tester), 'Transcript');
     });
@@ -172,7 +176,11 @@ void main() {
     });
 
     testWidgets('Omi is not counted as a speaker', (tester) async {
-      final segments = [_seg('own', 0, 0, isUser: true), _seg('p1', 1, 10), _seg('omi', omiSpeakerId, 20)];
+      final segments = [
+        _seg('own', 0, 0, isUser: true),
+        _seg('p1', 1, 10),
+        _seg('omi', omiSpeakerId, 20),
+      ];
       await pumpDetail(
         tester,
         _conversation(
@@ -202,7 +210,10 @@ void main() {
     testWidgets('shows once when an unnamed voice remains, taps open About Speaker Labels', (tester) async {
       final semantics = tester.ensureSemantics();
       final segments = [_seg('own', 0, 0, isUser: true), _seg('anon', 1, 10)];
-      await pumpDetail(tester, _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')));
+      await pumpDetail(
+        tester,
+        _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')),
+      );
 
       final explanation = find.text(_explanation);
       expect(explanation, findsOneWidget);
@@ -221,7 +232,9 @@ void main() {
       expect(find.text('Try Again'), findsNothing);
       expect(find.text('Retry'), findsNothing);
 
-      await tester.tap(find.descendant(of: find.byType(OmiSheetScaffold), matching: find.byType(OmiCloseButton)));
+      await tester.tap(
+        find.descendant(of: find.byType(OmiSheetScaffold), matching: find.byType(OmiCloseButton)),
+      );
       await tester.pumpAndSettle();
       expect(find.text(_sheetTitle), findsNothing);
       semantics.dispose();
@@ -256,7 +269,10 @@ void main() {
     });
 
     testWidgets('a missing or blank-named person still counts as unnamed', (tester) async {
-      final segments = [_seg('missing', 1, 0, personId: 'gone'), _seg('blank', 2, 10, personId: 'p-blank')];
+      final segments = [
+        _seg('missing', 1, 0, personId: 'gone'),
+        _seg('blank', 2, 10, personId: 'p-blank'),
+      ];
       await pumpDetail(
         tester,
         _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')),

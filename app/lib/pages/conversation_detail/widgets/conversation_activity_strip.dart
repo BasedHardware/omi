@@ -17,7 +17,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// [pollInterval] (at most [maxPolls] times) so the result replaces the strip without the reader
 /// leaving and coming back.
 class ConversationActivityStrip extends StatefulWidget {
-  const ConversationActivityStrip({super.key, this.pollInterval = const Duration(seconds: 5), this.maxPolls = 36});
+  const ConversationActivityStrip({
+    super.key,
+    this.pollInterval = const Duration(seconds: 5),
+    this.maxPolls = 36,
+  });
 
   final Duration pollInterval;
   final int maxPolls;
@@ -39,9 +43,8 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
   }
 
   void _syncPolling(ConversationDetailProvider provider, ServerConversation? conversation) {
-    final processingId = conversation != null && conversation.status == ConversationStatus.processing
-        ? conversation.id
-        : null;
+    final processingId =
+        conversation != null && conversation.status == ConversationStatus.processing ? conversation.id : null;
     if (processingId == _pollingId) return;
     _poll?.cancel();
     _poll = null;

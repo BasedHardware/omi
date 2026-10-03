@@ -13,16 +13,17 @@ Map<String, dynamic> _personJson(
   String? lastHeardAt,
   double? talkSeconds,
   int? autoConversationCount,
-}) => {
-  'id': id,
-  'name': name,
-  'created_at': '2026-01-01T00:00:00Z',
-  'updated_at': '2026-01-01T00:00:00Z',
-  if (conversationCount != null) 'conversation_count': conversationCount,
-  if (lastHeardAt != null) 'last_heard_at': lastHeardAt,
-  if (talkSeconds != null) 'talk_seconds': talkSeconds,
-  if (autoConversationCount != null) 'auto_conversation_count': autoConversationCount,
-};
+}) =>
+    {
+      'id': id,
+      'name': name,
+      'created_at': '2026-01-01T00:00:00Z',
+      'updated_at': '2026-01-01T00:00:00Z',
+      if (conversationCount != null) 'conversation_count': conversationCount,
+      if (lastHeardAt != null) 'last_heard_at': lastHeardAt,
+      if (talkSeconds != null) 'talk_seconds': talkSeconds,
+      if (autoConversationCount != null) 'auto_conversation_count': autoConversationCount,
+    };
 
 http.Response _response(Object body, {int statusCode = 200, Map<String, String> headers = const {}}) =>
     http.Response(body is String ? body : jsonEncode(body), statusCode, headers: headers);
@@ -38,8 +39,7 @@ void main() {
 
   test('the literal true value under a mixed-case header name marks the stats truncated', () {
     final result = PeopleListResponse.fromResponse(
-      _response([_personJson('p-1', 'Alice')], headers: {'X-OMI-List-Truncated': 'true'}),
-    );
+        _response([_personJson('p-1', 'Alice')], headers: {'X-OMI-List-Truncated': 'true'}));
 
     expect(result!.statsTruncated, isTrue);
   });
@@ -47,8 +47,7 @@ void main() {
   test('other header values are not treated as truncated', () {
     for (final value in ['false', 'TRUE', 'yes', '']) {
       final result = PeopleListResponse.fromResponse(
-        _response([_personJson('p-1', 'Alice')], headers: {'x-omi-list-truncated': value}),
-      );
+          _response([_personJson('p-1', 'Alice')], headers: {'x-omi-list-truncated': value}));
       expect(result!.statsTruncated, isFalse, reason: 'value: $value');
     }
   });
@@ -60,19 +59,11 @@ void main() {
   });
 
   test('people are sorted by name with their stats and color indices intact', () {
-    final result = PeopleListResponse.fromResponse(
-      _response([
-        _personJson(
-          'p-b',
-          'Zed',
-          conversationCount: 7,
-          lastHeardAt: '2026-02-01T10:00:00Z',
-          talkSeconds: 300.0,
-          autoConversationCount: 3,
-        ),
-        _personJson('p-a', 'Alice', conversationCount: 1),
-      ]),
-    );
+    final result = PeopleListResponse.fromResponse(_response([
+      _personJson('p-b', 'Zed',
+          conversationCount: 7, lastHeardAt: '2026-02-01T10:00:00Z', talkSeconds: 300.0, autoConversationCount: 3),
+      _personJson('p-a', 'Alice', conversationCount: 1),
+    ]));
 
     expect(result!.people.map((p) => p.id), ['p-a', 'p-b']);
     final zed = result.people.last;

@@ -124,10 +124,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         message: l10n.noTranscriptMessage,
       );
     }
-    return Padding(
-      padding: const EdgeInsets.only(top: OmiSpacing.xxl),
-      child: state,
-    );
+    return Padding(padding: const EdgeInsets.only(top: OmiSpacing.xxl), child: state);
   }
 
   void _editSegmentText(ConversationDetailProvider provider, int segmentIndex) {
@@ -158,7 +155,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     );
   }
 
-  void _nameSpeaker(ConversationDetailProvider provider, String segmentId, int speakerId) {
+  void _nameSpeaker(
+    ConversationDetailProvider provider,
+    String segmentId,
+    int speakerId,
+  ) {
     if (!_readyForTranscriptEdit(provider)) return;
     showNameSpeakerSheet(
       context,
@@ -218,12 +219,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 speakerId: match.speakerId,
               )
             : await rejectConversationSpeaker(
-                    match.conversationId,
-                    match.speakerId,
-                    SpeakerRejection.notPerson,
-                    personId: outcome.personId,
-                  )
-                  is ApiSuccess<ServerConversation>;
+                match.conversationId,
+                match.speakerId,
+                SpeakerRejection.notPerson,
+                personId: outcome.personId,
+              ) is ApiSuccess<ServerConversation>;
         if (saved) _outcome.removeMatch(match);
         return saved;
       },
@@ -244,7 +244,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     final temporaryId = newPerson ? 'optimistic-person:${DateTime.now().microsecondsSinceEpoch}' : null;
     if (temporaryId != null) {
       peopleProvider.addOptimisticPerson(
-        Person(id: temporaryId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Person(
+          id: temporaryId,
+          name: personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
       );
     }
     var resolvedId = personId;
@@ -288,7 +293,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       pending.then((saved) {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
         if (saved) {
-          PlatformManager.instance.analytics.taggedSegment(resolvedId == 'user' ? 'User' : 'User Person');
+          PlatformManager.instance.analytics.taggedSegment(
+            resolvedId == 'user' ? 'User' : 'User Person',
+          );
           if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {
             _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
           }
@@ -322,7 +329,10 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   text: (conversation.externalIntegration?.text ?? '').decodeString,
                   maxLines: 1000,
                   linkColor: OmiColors.textSecondary,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
+                  style: OmiType.subhead.copyWith(
+                    color: OmiColors.textSecondary,
+                    height: 1.3,
+                  ),
                   toggleExpand: provider.toggleIsTranscriptExpanded,
                   isExpanded: provider.isTranscriptExpanded,
                 ),
@@ -421,7 +431,7 @@ class _TranscriptHeading extends StatelessWidget {
     final segments = conversation.transcriptSegments;
     final ownerIds = {
       for (final segment in segments)
-        if (segment.isUser) segment.speakerId,
+        if (segment.isUser) segment.speakerId
     };
     final personIdsBySpeaker = <int, Set<String>>{};
     for (final segment in segments) {
@@ -458,7 +468,10 @@ class _TranscriptHeading extends StatelessWidget {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final count = _speakerCount(conversation);
-    final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
+    final label = [
+      l10n.transcript,
+      if (count != null) l10n.transcriptSpeakerCount(count),
+    ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),
       child: Column(

@@ -343,7 +343,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return (
         wallEnd: wallEnd,
         total: Duration(milliseconds: (stamp.capturedDuration * 1000).toInt()),
-        offsets: offsets,
+        offsets: offsets
       );
     }
     double totalSeconds = 0;
@@ -413,12 +413,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
       // play() resolves only once playback ends or is paused; don't await it.
-      unawaited(
-        _audioPlayer!.play().catchError((Object e) {
-          Logger.debug('Audio playback failed to start: $e');
-          _setFailure(_AudioFailure.loadFailed);
-        }),
-      );
+      unawaited(_audioPlayer!.play().catchError((Object e) {
+        Logger.debug('Audio playback failed to start: $e');
+        _setFailure(_AudioFailure.loadFailed);
+      }));
       if (mounted) setState(() {});
     }
   }
@@ -518,14 +516,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           outcome.completeError(const _UrlsRequestFailed(ApiProblem(ApiProblemKind.transport)));
         }
       });
-      fetch(conversation.id).then<void>(
-        (result) {
-          if (!outcome.isCompleted) outcome.complete(result);
-        },
-        onError: (Object e, StackTrace s) {
-          if (!outcome.isCompleted) outcome.completeError(e, s);
-        },
-      );
+      fetch(conversation.id).then<void>((result) {
+        if (!outcome.isCompleted) outcome.complete(result);
+      }, onError: (Object e, StackTrace s) {
+        if (!outcome.isCompleted) outcome.completeError(e, s);
+      });
       cancel.then<void>((_) {
         if (!outcome.isCompleted) outcome.complete(null);
       });
@@ -549,10 +544,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       if (remaining.isNegative) break;
       final cancel = _loadCancel!.future;
       final waited = Completer<void>();
-      final timer = Timer(
-        Duration(milliseconds: math.min(urls.pollAfterMs ?? 3000, remaining.inMilliseconds)),
-        waited.complete,
-      );
+      final timer =
+          Timer(Duration(milliseconds: math.min(urls.pollAfterMs ?? 3000, remaining.inMilliseconds)), waited.complete);
       cancel.then<void>((_) {
         if (!waited.isCompleted) waited.complete();
       });
@@ -647,11 +640,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     _updateMissingRanges(urls, conversation);
     _attachPlayerListeners(player);
     widget.playbackController?.reportPlayback(
-      wallSeconds: widget.playbackController!.wallPosition.value,
-      playing: false,
-      loaded: true,
-      mapped: _timelineMapper != null,
-    );
+        wallSeconds: widget.playbackController!.wallPosition.value,
+        playing: false,
+        loaded: true,
+        mapped: _timelineMapper != null);
     return true;
   }
 
@@ -689,9 +681,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final controller = widget.playbackController;
     if (controller == null) return;
     final mapper = _timelineMapper;
-    final wall = mapper != null
-        ? mapper.artifactToWall(combined.inMilliseconds / 1000)
-        : combined.inMilliseconds / 1000;
+    final wall =
+        mapper != null ? mapper.artifactToWall(combined.inMilliseconds / 1000) : combined.inMilliseconds / 1000;
     controller.reportPlayback(
       wallSeconds: wall,
       playing: playing ?? _effectivePlaying,
@@ -792,9 +783,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       }
       // At the end of the track the paused point is the tail: restart takes a
       // fresh reader intent if one exists, otherwise the beginning.
-      final resumeWall = completed
-          ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null)
-          : controller?.resumeWall;
+      final resumeWall =
+          completed ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null) : controller?.resumeWall;
       if (resumeWall != null) {
         final generation = ++_seekGeneration;
         final intent = controller!.intentGeneration;
@@ -809,8 +799,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         }
         if (artifact != null) {
           if (!await _seekToCombinedPosition(
-            Duration(milliseconds: (artifact * 1000).clamp(0, double.infinity).toInt()),
-          )) {
+              Duration(milliseconds: (artifact * 1000).clamp(0, double.infinity).toInt()))) {
             return;
           }
           if (!mounted || _audioPlayer == null || generation != _seekGeneration) return;
@@ -828,12 +817,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       controller?.backToCurrent();
 
       // play() resolves only once playback ends or is paused; don't await it.
-      unawaited(
-        _audioPlayer!.play().catchError((Object e) {
-          Logger.debug('Audio playback failed to start: $e');
-          _setFailure(_AudioFailure.loadFailed);
-        }),
-      );
+      unawaited(_audioPlayer!.play().catchError((Object e) {
+        Logger.debug('Audio playback failed to start: $e');
+        _setFailure(_AudioFailure.loadFailed);
+      }));
     }
     if (mounted) setState(() {});
   }
@@ -910,9 +897,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       child: showPlayer
           ? Row(
               children: [
-                Expanded(
-                  child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer()),
-                ),
+                Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
                 const SizedBox(width: 10),
                 _buildAskButton(context),
               ],
@@ -922,10 +907,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   static BoxDecoration get _barDecoration => BoxDecoration(
-    color: OmiColors.surface1,
-    borderRadius: OmiRadius.pillAll,
-    border: Border.all(color: OmiColors.border, width: 1),
-  );
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.pillAll,
+        border: Border.all(color: OmiColors.border, width: 1),
+      );
 
   void _askOmi() {
     HapticFeedback.mediumImpact();
@@ -1006,8 +991,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         ListenableBuilder(
           listenable: controller ?? _artifactPosition,
           builder: (context, _) {
-            final showBackToCurrent =
-                controller != null &&
+            final showBackToCurrent = controller != null &&
                 !controller.isFollowing &&
                 controller.followTargetSegmentId != null &&
                 _isAudioInitialized;
@@ -1046,17 +1030,15 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// Play/pause: a 40 pt circle in the primary ink, labelled for screen readers.
   Widget _buildPlayPauseButton() {
     Widget button(bool isPlaying) => OmiIconButton.filled(
-      icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
-      label: isPlaying ? context.l10n.pause : context.l10n.play,
-      diameter: 40,
-      fillColor: OmiColors.accent,
-      color: OmiColors.onAccent,
-      onPressed: _togglePlayPause,
-    );
-    const loading = SizedBox.square(
-      dimension: kOmiMinTapTarget,
-      child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
-    );
+          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
+          label: isPlaying ? context.l10n.pause : context.l10n.play,
+          diameter: 40,
+          fillColor: OmiColors.accent,
+          color: OmiColors.onAccent,
+          onPressed: _togglePlayPause,
+        );
+    const loading =
+        SizedBox.square(dimension: kOmiMinTapTarget, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)));
 
     if (_isAudioLoading) return loading;
     if (_audioPlayer == null) return button(false);
@@ -1094,10 +1076,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       (_AudioFailure.transport, _) => l10n.playbackAudioNetworkFailed,
       (_AudioFailure.unavailable, _) || (_AudioFailure.unmappable, _) => l10n.playbackAudioUnavailable,
       (_AudioFailure.loadFailed, _) => l10n.playbackAudioLoadFailed,
-      (null, true) =>
-        _readyParts < _totalParts
-            ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
-            : l10n.playbackPreparingAudio,
+      (null, true) => _readyParts < _totalParts
+          ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
+          : l10n.playbackPreparingAudio,
       // Audio with no timestamps cannot be placed on the wall at all: say so
       // where the reader can see it rather than only flagging it for tests.
       _ when _hasUnplaceableMissing => l10n.playbackAudioUnavailable,
@@ -1290,8 +1271,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 onTap();
               },
               child: Center(
-                child: FaIcon(icon, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, size: 22),
-              ),
+                  child: FaIcon(icon, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, size: 22)),
             ),
           ),
         ),
@@ -1382,14 +1362,12 @@ final class ConversationPlaybackPlan {
       parts.add((url: info.signedUrl!, seconds: seconds));
       final startedAt = file.startedAt;
       if (placeable && startedAt != null && seconds > 0) {
-        spans.add(
-          ConversationAudioSpan(
-            fileId: file.id,
-            wallOffset: startedAt.difference(conversationStart!).inMilliseconds / 1000,
-            artifactOffset: offset,
-            len: seconds,
-          ),
-        );
+        spans.add(ConversationAudioSpan(
+          fileId: file.id,
+          wallOffset: startedAt.difference(conversationStart!).inMilliseconds / 1000,
+          artifactOffset: offset,
+          len: seconds,
+        ));
       } else {
         placeable = false;
       }

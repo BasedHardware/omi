@@ -130,8 +130,7 @@ class WalListItem extends StatelessWidget {
         final timeStr = OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = OmiDuration.compact(wal.seconds, context.l10n);
         final source = _sourceLabel(context);
-        final showBar =
-            displayState == WalSyncDisplayState.syncing &&
+        final showBar = displayState == WalSyncDisplayState.syncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -141,9 +140,8 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction: displayState == WalSyncDisplayState.syncing
-                ? DismissDirection.none
-                : DismissDirection.endToStart,
+            direction:
+                displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return showOmiConfirm(
@@ -181,11 +179,8 @@ class WalListItem extends StatelessWidget {
                             children: [
                               Text(
                                 source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
-                                style: TextStyle(
-                                  color: OmiColors.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                style:
+                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -526,8 +521,7 @@ class _SyncPageState extends State<SyncPage> {
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
       final counts = syncProvider.offlineServerProcessingCounts;
-      subtitle =
-          SyncCardProgressLine.serverProcessingSubtitle(
+      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (p, t) => l.processingProgress(p, t),
@@ -552,7 +546,10 @@ class _SyncPageState extends State<SyncPage> {
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
-          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
+          if (showSpinner) ...[
+            const OmiSpinner(size: OmiSpinnerSize.small),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -643,14 +640,14 @@ class _SyncPageState extends State<SyncPage> {
         isPending
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
-            ? FontAwesomeIcons.triangleExclamation
-            : FontAwesomeIcons.clockRotateLeft,
+                ? FontAwesomeIcons.triangleExclamation
+                : FontAwesomeIcons.clockRotateLeft,
       ),
       title: isPending
           ? context.l10n.noPendingRecordings
           : isCorrupted
-          ? context.l10n.syncStatusFileUnavailable
-          : context.l10n.noProcessedRecordings,
+              ? context.l10n.syncStatusFileUnavailable
+              : context.l10n.noProcessedRecordings,
       message: isPending ? context.l10n.allCaughtUp : null,
     );
   }
@@ -923,7 +920,14 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count)
+      : isHeader = true,
+        wal = null;
 
-  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
+  _PendingListItem.wal(this.wal)
+      : isHeader = false,
+        label = null,
+        icon = null,
+        color = null,
+        count = null;
 }
