@@ -1,6 +1,6 @@
 """
 Protocol contract for extensible cloud backup providers in Omi.
-Enables pluggable destinations (pCloud, Dropbox, S3, WebDAV) under a unified interface.
+Enables pluggable destinations (pCloud, Dropbox, S3, WebDAV).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class CloudBackupProvider(Protocol):
         folder_ref: str | int,
         filename: str,
         content: bytes,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> Tuple[Optional[BackupUploadResult], Optional[str]]:
         """Uploads binary file content to the destination folder.
 
