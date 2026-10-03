@@ -3165,12 +3165,15 @@ class CaptureController extends ChangeNotifier
       _autoSyncFallbackTimer?.cancel();
       _autoSyncFallbackTimer = _scheduling.once(const Duration(seconds: 30), () {
         if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
+          final sessionStart = _pendingAutoSyncSessionStart;
           final convId = _pendingAutoSyncConversationId!;
+          final needsRepair = _pendingAutoSyncNeedsRepair;
           _pendingAutoSyncSessionStart = 0;
           _pendingAutoSyncConversationId = null;
           _pendingAutoSyncNeedsRepair = false;
-          Logger.debug('Auto-sync fallback timer fired — syncing WALs to conversation $convId');
-          _autoSyncSessionWals();
+          Logger.debug(
+              'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)');
+          unawaited(_confirmSessionWalsRetained(sessionStart, convId));
         }
       });
       return;
@@ -3189,11 +3192,8 @@ class CaptureController extends ChangeNotifier
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
         _pendingAutoSyncNeedsRepair = false;
-        if (event.memory.transcriptSegments.isNotEmpty && !needsRepair) {
-          unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals));
-        } else {
-          _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
-        }
+        Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
+        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals));
       }
       return;
     }
@@ -3321,12 +3321,15 @@ class CaptureController extends ChangeNotifier
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
     // Capture before the flush. A device update can roll the session while
-    // finalize awaits disk, and the rolled session must not cancel this stamp.
+    // finalize awaits disk, and the rolled session must not cancel this stamp —
+    // only an account/generation roll on the WAL store itself does.
     final recordingSessionId = activeRecordingId;
     try {
       final phoneSync = _wal.getSyncs().phone;
+      final walGeneration = phoneSync is LocalWalSync ? phoneSync.sessionGeneration : null;
       await phoneSync.finalizeCurrentSession();
-      if (sessionStartSeconds > 0) {
+      if (sessionStartSeconds > 0 &&
+          (walGeneration == null || (phoneSync is LocalWalSync && phoneSync.sessionGeneration == walGeneration))) {
         if (phoneSync is LocalWalSyncImpl) {
           phoneSync.prepareConversationStamp(recordingSessionId);
         }
@@ -3341,37 +3344,50 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  /// Releases the safety copy of the audio [conversation]'s saved transcript covers, and uploads the
-  /// rest so the server can transcribe what it lost.
+  /// Keeps every stamped safety copy of [conversation] and uploads it so the
+  /// server can repair what its transcript lost.
   Future<void> _confirmSessionTranscript(
     int sessionStartSeconds,
     ServerConversation conversation,
     Map<String, int> segmentArrivals,
-  ) async {
-    if (_pendingFinalizeAndStamp != null) {
-      await _pendingFinalizeAndStamp;
-      _pendingFinalizeAndStamp = null;
-    }
+  ) {
     // Live segment times are seconds from the conversation's start on the server's clock, while the
-    // copies carry the phone's. Anchor that start to the phone through the moments the live segments
-    // arrived; without any, use the server's start, or this session's when the row has none.
-    final startedAt = conversation.startedAt;
-    final origin = transcriptStartOnDevice(
-          [for (final segment in conversation.transcriptSegments) (segment.id, segment.end)],
-          segmentArrivals,
-        ) ??
-        (startedAt == null ? sessionStartSeconds : startedAt.millisecondsSinceEpoch ~/ 1000);
-    final spans = [
-      for (final segment in conversation.transcriptSegments)
-        (origin + segment.start.floor(), origin + segment.end.ceil()),
-    ];
-    final outcome = await _wal.getSyncs().phone.confirmSessionTranscription(
-          sessionStartSeconds,
-          conversation.id,
-          transcriptSpans: spans,
-          conversationStartSeconds: origin,
-        );
-    if (outcome.kept > 0) _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
+    // copies carry the phone's, and saved-segment arrivals carry unbounded STT/network/replay delay —
+    // so no timestamp estimate can prove which audio the transcript covers. Confirmation therefore
+    // passes no spans: uncertain coverage fails closed and every stamped copy is kept for repair.
+    return _confirmSessionWalsRetained(sessionStartSeconds, conversation.id);
+  }
+
+  Future<void> _confirmSessionWalsRetained(int sessionStartSeconds, String conversationId) async {
+    final token = _sessionOwner?.token;
+    final phone = _wal.getSyncs().phone;
+    final walGeneration = phone is LocalWalSync ? phone.sessionGeneration : null;
+    final pending = _pendingFinalizeAndStamp;
+    if (pending != null) {
+      await pending;
+      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
+    }
+    if (!_captureSessionIsCurrent(token)) return;
+    if (walGeneration != null && phone is LocalWalSync && phone.sessionGeneration != walGeneration) {
+      return;
+    }
+    var kept = 0;
+    if (phone is LocalWalSyncImpl) {
+      try {
+        final outcome = await phone.confirmSessionTranscription(sessionStartSeconds, conversationId);
+        kept = outcome.kept;
+      } catch (e) {
+        Logger.debug('_confirmSessionWalsRetained error: $e');
+        kept = 1;
+      }
+    }
+    if (!_captureSessionIsCurrent(token)) return;
+    if (walGeneration != null && phone is LocalWalSync && phone.sessionGeneration != walGeneration) {
+      return;
+    }
+    if (kept > 0 || phone is! LocalWalSyncImpl) {
+      _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
+    }
   }
 
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {

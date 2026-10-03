@@ -1,6 +1,8 @@
 // The phone keeps a local copy of live pendant audio (the WAL) until the server's saved transcript
 // confirms it (#20364). These scenarios drive the real CaptureController and LocalWalSyncImpl over the
-// replay world and check that the copy is released only for audio the saved transcript covers.
+// replay world and check the conservative rule: segment arrival times and server clock estimates can
+// never prove which audio the transcript covers, so every stamped copy is kept, marked for recovery,
+// and uploaded — nothing is released on timestamp evidence alone.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -162,79 +164,125 @@ void main() {
     return '${rows.join('; ')} | uploads=${world.uploads.attempts.length}';
   }
 
-  test('pendant: a transcript that stops early keeps the audio after it for repair', () async {
+  double walAudioSeconds(Wal wal) {
+    if (wal.totalFrames > 0) {
+      final fps = wal.codec.getFramesPerSecond();
+      if (fps > 0) return wal.totalFrames / fps;
+    }
+    return wal.seconds < 0 ? 0 : wal.seconds.toDouble();
+  }
+
+  Future<void> telemetryReaches(bool Function() done) async {
+    for (var i = 0; i < 200 && !done(); i++) {
+      await world.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    expect(done(), isTrue);
+  }
+
+  Future<List<Wal>> expectKeptMarkedThenUploaded(String convId) async {
+    final kept = await walsReach(
+      'every stamped copy kept and marked for recovery',
+      (wals) => wals.isNotEmpty && wals.every((wal) => wal.keptForTranscriptRecovery),
+    );
+    final keptSeconds = kept.fold<double>(0, (sum, wal) => sum + walAudioSeconds(wal));
+    await telemetryReaches(
+      () => world.coverageEvents.any((event) => event['phase'] == 'confirmation'),
+    );
+    final confirmation = world.coverageEvents.lastWhere((event) => event['phase'] == 'confirmation');
+    expect(confirmation['policy'], 'retain_uncertain_coverage');
+    expect(confirmation['released_count'], 0);
+    expect(confirmation['released_seconds'], 0.0);
+    expect(confirmation['kept_count'], kept.length);
+    expect(confirmation['kept_seconds'], keptSeconds);
+    expect(confirmation['kept_uploaded_seconds'], 0);
+
+    final pendingIds = {for (final wal in kept.where((wal) => wal.status == WalStatus.miss)) wal.id};
+    final pendingSeconds =
+        kept.where((wal) => pendingIds.contains(wal.id)).fold<double>(0, (sum, wal) => sum + walAudioSeconds(wal));
+    await recoveryPass();
+    if (pendingIds.isNotEmpty) {
+      expect(world.uploads.attempts, isNotEmpty, reason: 'the kept audio goes to the server for repair');
+      expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {convId},
+          reason: 'the recovery upload keeps the conversation linkage of the stamped copies');
+      await walsReach(
+        'kept pending copies uploaded and markers cleared in the saved index',
+        (wals) => wals
+            .where((wal) => pendingIds.contains(wal.id))
+            .every((wal) => wal.status != WalStatus.miss && !wal.keptForTranscriptRecovery),
+      );
+      await telemetryReaches(
+        () => world.coverageEvents.any((event) => event['phase'] == 'upload'),
+      );
+      final uploadedSeconds = world.coverageEvents
+          .where((event) => event['phase'] == 'upload')
+          .fold<double>(0, (sum, event) => sum + (event['kept_uploaded_seconds'] as double));
+      expect(uploadedSeconds, pendingSeconds,
+          reason: 'accepted redundant seconds equal the marked pending subset duration');
+    }
+    return kept;
+  }
+
+  test('pendant: a transcript that stops early keeps ALL the audio for repair', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 200);
 
-    // The server saved text for the first 20 s only; the rest of the speech never reached Firestore.
+    // The server saved text for the first 20 s only; arrival estimates can no more
+    // prove the first minute than the rest, so nothing is released.
     await serverCloses(conversation('c1', origin, [(1, 20)]));
     final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
-    await walsReach('only audio after the first minute kept',
-        (wals) => wals.isNotEmpty && wals.every((wal) => wal.timerStart - originSeconds >= 60));
+    final kept = await expectKeptMarkedThenUploaded('c1');
 
-    final kept = await recoverableSecondsAfter(origin, 60);
     printOnFailure(await describeWals(origin));
-    expect(kept, greaterThanOrEqualTo(120), reason: 'audio the transcript does not cover must not be deleted');
-    expect(await recoverableSecondsAfter(origin, 0) - kept, lessThan(60),
-        reason: 'the first minute, which the transcript covers, is released');
-
-    await recoveryPass();
-    expect(world.uploads.attempts, isNotEmpty, reason: 'the kept audio goes to the server for repair');
-    expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {'c1'});
+    expect(kept.any((wal) => wal.timerStart - originSeconds < 60), isTrue,
+        reason: 'the first-minute WAL is retained too — timestamps cannot prove coverage');
+    expect(await recoverableSecondsAfter(origin, 0), greaterThanOrEqualTo(180));
   });
 
-  test('pendant: a gap in the middle of the transcript keeps that audio for repair', () async {
+  test('pendant: a gap in the middle of the transcript keeps every copy for repair', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 200);
 
     // Text saved for the opening and the end; the server lost the middle.
     await serverCloses(conversation('c1', origin, [(1, 20), (180, 195)]));
-    final wals = await walsReach('one copy kept', (wals) => wals.length == 1);
+    final kept = await expectKeptMarkedThenUploaded('c1');
 
     printOnFailure(await describeWals(origin));
     final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
-    expect(wals.map((wal) => wal.timerStart - originSeconds), [60], reason: 'only the uncovered middle minute stays');
-
-    await recoveryPass();
-    expect(world.uploads.attempts, hasLength(1));
+    expect(kept.map((wal) => wal.timerStart - originSeconds), contains(60),
+        reason: 'the uncovered middle minute is among the retained copies');
   });
 
-  test('pendant: a transcript that covers the recording still releases every copy', () async {
+  test('pendant: even a complete timestamp transcript keeps every copy and uploads it', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 200);
     expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
+    // The saved text appears to cover the whole session — but coverage was only ever
+    // estimated from timestamps, so the audio still cannot be deleted.
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 190; t += 20) (t, t + 15)]));
-    await walsReach('every copy released', (wals) => wals.isEmpty);
+    await expectKeptMarkedThenUploaded('c1');
     printOnFailure(await describeWals(origin));
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
-
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 
-  test('pendant: audio from before the conversation started is released, not uploaded', () async {
+  test('pendant: audio from before the conversation started is kept, not released', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
-    // Five quiet minutes, then a conversation that the transcript fully covers.
+    // Five quiet minutes, then a conversation that the transcript appears to cover.
     await streamPendant(link, 300);
     final talkStart = origin.add(const Duration(seconds: 300));
     await streamPendant(link, 140);
     expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     await serverCloses(conversation('c1', talkStart, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
-    await walsReach('every copy released', (wals) => wals.isEmpty);
+    await expectKeptMarkedThenUploaded('c1');
     printOnFailure(await describeWals(origin));
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
-
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty);
   });
 
-  test('pendant: a chunk backdated before the session start is judged by the transcript too', () async {
+  test('pendant: a chunk backdated before the session start is kept and uploaded', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     // The pendant flushes 30 s of buffered audio the moment it connects, so the first chunk's start is
@@ -246,15 +294,11 @@ void main() {
     expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
-    await walsReach('every copy released', (wals) => wals.isEmpty);
+    await expectKeptMarkedThenUploaded('c1');
     printOnFailure(await describeWals(origin));
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
-
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 
-  test('pendant: a conversation with no start time is judged from the session start', () async {
+  test('pendant: a conversation with no start time keeps every copy', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     await streamPendant(link, 140);
@@ -264,41 +308,152 @@ void main() {
     final memory = conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)],
         createdAt: origin.subtract(const Duration(minutes: 10)), hasStart: false);
     await serverCloses(memory);
-    await walsReach('every copy released', (wals) => wals.isEmpty);
+    await expectKeptMarkedThenUploaded('c1');
     printOnFailure(await describeWals(origin));
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
-
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 
-  test('pendant: a server clock ahead of the phone does not release audio the transcript missed', () async {
+  test('pendant: a server clock ahead of the phone keeps every copy', () async {
     final origin = world.clock.now();
-    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
     final link = await connectPendant();
-    await streamWithLiveSegments(link, 200, 'c1', const [(1, 20)]);
+    await streamPendant(link, 200);
 
-    // The server's clock runs five minutes ahead, so its start lands 300 s after the phone's.
+    // The server's clock runs five minutes ahead; no estimate is trustworthy enough
+    // to release audio, so everything is retained and repaired.
     await serverCloses(conversation('c1', origin.add(const Duration(minutes: 5)), const [(1, 20)]));
-    await walsReach('only audio after the first minute kept',
-        (wals) => wals.isNotEmpty && wals.every((wal) => wal.timerStart - originSeconds >= 60));
-
-    expect(await recoverableSecondsAfter(origin, 60), greaterThanOrEqualTo(120),
-        reason: 'the live segments anchor the transcript to the phone, so its end still bounds the release');
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
   });
 
-  test('pendant: a server clock behind the phone still releases what the transcript covers', () async {
+  test('pendant: a server clock behind the phone keeps every copy', () async {
     final origin = world.clock.now();
     final link = await connectPendant();
     final spans = [for (var t = 1.0; t < 190; t += 20) (t, t + 15)];
-    await streamWithLiveSegments(link, 200, 'c1', spans);
+    await streamPendant(link, 200);
     expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
 
     // The server's clock runs five minutes behind.
     await serverCloses(conversation('c1', origin.subtract(const Duration(minutes: 5)), spans));
-    await walsReach('every copy released', (wals) => wals.isEmpty);
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
+  });
 
-    await recoveryPass();
-    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
+  test('pendant: live arrivals a minute or more late still keep everything', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    final spans = [for (var t = 1.0; t < 190; t += 20) (t, t + 15)];
+    await streamPendant(link, 200);
+    await world.elapse(const Duration(seconds: 90));
+
+    world.controller.onSegmentReceived([for (final (i, span) in spans.indexed) segment('c1', i, span)]);
+
+    await serverCloses(conversation('c1', origin, spans));
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
+  });
+
+  test('pendant: a continuous saved span over the whole session still keeps everything', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamWithLiveSegments(link, 200, 'c1', const [(0, 200)]);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
+
+    await serverCloses(conversation('c1', origin, const [(0, 200)]));
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
+  });
+
+  test('pendant: an account roll mid-close never stamps or mutates the successor inventory', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    final phone = world.wal.syncs.phone;
+    expect(phone.testWals, isNotEmpty, reason: 'there are copies to judge');
+    final successorWals = <Wal>[
+      Wal(
+        timerStart: origin.millisecondsSinceEpoch ~/ 1000 + 10000,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+      ),
+    ];
+
+    final memory = conversation('c1', origin, [(1, 100)]);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: memory));
+    world.wal.syncs.phone.clearUserData();
+    phone.testWals = successorWals;
+    await settleFiles();
+    world.controller.onMessageEventReceived(ConversationEvent(memory: memory, messages: []));
+    await settleFiles();
+
+    expect(
+      phone.testWals.map((wal) => wal.conversationId),
+      everyElement(isNull),
+      reason: 'a stale finalize must not stamp the successor account data',
+    );
+    expect(
+      phone.testWals.every((wal) => identical(wal, successorWals.single)),
+      isTrue,
+      reason: 'a stale confirmation must not mutate the successor inventory',
+    );
+    expect(
+      world.coverageEvents.any((event) => event['phase'] == 'confirmation' && event['kept_count'] != 0),
+      isFalse,
+    );
+    printOnFailure(await describeWals(origin));
+  });
+
+  test('pendant: an empty transcript keeps every copy and uploads it for repair', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+
+    await serverCloses(conversation('c1', origin, const []));
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
+  });
+
+  test('pendant: a socket interruption mid-session keeps every copy and uploads it', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+
+    world.sockets.last.transport.emitClose();
+    await world.settle();
+
+    await serverCloses(conversation('c1', origin, [(1, 100)]));
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
+  });
+
+  test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 200);
+
+    await serverCloses(conversation('c1', origin.add(const Duration(seconds: 60)), [(1, 100)]));
+    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
+    final kept = await expectKeptMarkedThenUploaded('c1');
+
+    printOnFailure(await describeWals(origin));
+    expect(kept.any((wal) => wal.timerStart - originSeconds < 60), isTrue,
+        reason: 'the pre-start opening the transcript never mentions is retained');
+  });
+
+  test('pendant: a missing ConversationEvent marks and recovers through the fallback', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty, reason: 'there are copies to judge');
+
+    final memory = conversation('c1', origin, [(1, 100)]);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: memory));
+    await settleFiles();
+
+    await world.elapse(const Duration(seconds: 31));
+    await settleFiles();
+
+    await expectKeptMarkedThenUploaded('c1');
+    printOnFailure(await describeWals(origin));
   });
 }
