@@ -34,6 +34,7 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
   Timer? _poll;
   String? _pollingId;
   int _polls = 0;
+  bool _polling = false;
 
   @override
   void dispose() {
@@ -50,13 +51,20 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
     _pollingId = processingId;
     _polls = 0;
     if (processingId == null) return;
-    _poll = Timer.periodic(widget.pollInterval, (timer) {
+    _poll = Timer.periodic(widget.pollInterval, (timer) async {
       if (!mounted || _polls >= widget.maxPolls || provider.conversationOrNull?.id != processingId) {
         timer.cancel();
         return;
       }
+      // One read at a time: a slow read is not overtaken by the next tick.
+      if (_polling) return;
+      _polling = true;
       _polls++;
-      provider.refreshConversation();
+      try {
+        await provider.refreshConversation();
+      } finally {
+        _polling = false;
+      }
     });
   }
 

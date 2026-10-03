@@ -233,4 +233,79 @@ void main() {
     gate.complete(null);
     await tester.pump();
   });
+
+  group('Stale reads and other conversations', () {
+    testWidgets('a slower, older read never replaces a newer one', (tester) async {
+      final reads = <Completer<ServerConversation?>>[];
+      final detail = _detail(_conversation(status: ConversationStatus.processing), fetch: (_) {
+        final read = Completer<ServerConversation?>();
+        reads.add(read);
+        return read.future;
+      });
+      addTearDown(detail.dispose);
+
+      final older = detail.refreshConversation();
+      final newer = detail.refreshConversation();
+      reads[1].complete(_conversation(segments: [_segment('Done')], overview: 'Final summary'));
+      await newer;
+      reads[0].complete(_conversation(status: ConversationStatus.processing));
+      await older;
+
+      expect(detail.conversation.status, ConversationStatus.completed);
+      expect(detail.conversation.structured.overview, 'Final summary');
+    });
+
+    testWidgets("the previous conversation's late failure does not mark this one failed", (tester) async {
+      final reads = <String, Completer<ServerConversation?>>{};
+      final detail = _detail(_conversation(), fetch: (id) {
+        final read = Completer<ServerConversation?>();
+        reads[id] = read;
+        return read.future;
+      });
+      addTearDown(detail.dispose);
+
+      final first = detail.refreshConversation(trackLoad: true);
+      final other = ServerConversation(
+        id: 'other',
+        createdAt: DateTime(2026, 10, 3, 12),
+        structured: Structured('Other', ''),
+        transcriptSegments: [],
+      );
+      detail.setCachedConversation(other);
+      final second = detail.refreshConversation(trackLoad: true);
+      expect(detail.detailLoad, ConversationDetailLoad.loading);
+
+      reads['detail-status']!.complete(null);
+      await first;
+      expect(detail.detailLoad, ConversationDetailLoad.loading,
+          reason: "the first conversation's failure belongs to the first conversation");
+
+      reads['other']!.complete(other);
+      await second;
+      expect(detail.detailLoad, ConversationDetailLoad.idle);
+    });
+
+    testWidgets('a failed reprocess remembers which conversation failed', (tester) async {
+      final gate = Completer<ServerConversation?>();
+      final detail = _detail(
+        _conversation(segments: [_segment('Hi')]),
+        reprocess: (id, {appId, requireSpeakerReceipt = false}) => gate.future,
+      );
+      addTearDown(detail.dispose);
+
+      final run = detail.reprocessConversation();
+      detail.setCachedConversation(ServerConversation(
+        id: 'opened-later',
+        createdAt: DateTime(2026, 10, 3, 12),
+        structured: Structured('Other', ''),
+        transcriptSegments: [],
+      ));
+      gate.complete(null);
+      await run;
+
+      expect(detail.lastFailedReprocessConversationId, 'detail-status');
+      expect(detail.lastFailedReprocessConversationId, isNot(detail.conversation.id),
+          reason: 'the page compares this to the open conversation before offering Try Again');
+    });
+  });
 }

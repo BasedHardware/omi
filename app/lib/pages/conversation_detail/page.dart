@@ -1037,12 +1037,20 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       showError: (error) {
         switch (error) {
           case 'REPROCESS_FAILED':
+            // The provider is shared: a reprocess started on another conversation can fail after
+            // the reader opened this one. Report only this page's own failure, and retry only it.
+            final failedId = detailProvider.lastFailedReprocessConversationId;
+            if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
             final appId = detailProvider.lastFailedReprocessAppId;
             OmiFeedback.error(
               context,
               context.l10n.errorProcessingConversation,
               actionLabel: context.l10n.tryAgain,
-              onAction: () => detailProvider.reprocessConversation(appId: appId),
+              onAction: () {
+                if (detailProvider.conversationOrNull?.id == failedId) {
+                  detailProvider.reprocessConversation(appId: appId);
+                }
+              },
             );
           case 'SEGMENT_EDIT_FAILED':
           case 'SUMMARY_EDIT_FAILED':
@@ -1054,7 +1062,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           case 'REPROCESS_STARTED':
             OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
           case 'REPROCESS_SUCCESS':
-            OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
+            if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
+              OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
+            }
         }
       },
       child: Scaffold(

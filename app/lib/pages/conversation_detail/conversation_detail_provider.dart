@@ -468,8 +468,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       reprocessConversationId.isNotEmpty &&
       reprocessConversationId == conversationOrNull?.id;
 
-  /// The app of the last reprocess that failed, so "Try Again" repeats the same request.
+  /// The last reprocess that failed — which conversation, and with which app — so its error and
+  /// "Try Again" apply to that conversation only, even if the reader has opened another since.
+  String? lastFailedReprocessConversationId;
   String? lastFailedReprocessAppId;
+
+  /// The conversation the last successful reprocess replaced.
+  String? reprocessedConversationId;
+
+  /// Bumped by every detail read, by opening another conversation and by a reprocess landing. A
+  /// read applies only while it is still the latest, so a slow earlier response (an older poll, the
+  /// previous conversation's fetch) can never replace newer data or another conversation's state.
+  int _refreshGeneration = 0;
   App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -841,6 +851,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final generation = _speakerEditGeneration;
     final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
+    lastFailedReprocessConversationId = null;
     lastFailedReprocessAppId = null;
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
@@ -852,6 +863,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
+        lastFailedReprocessConversationId = target.id;
         lastFailedReprocessAppId = appId;
         notifyError('REPROCESS_FAILED');
         notifyListeners();
@@ -862,8 +874,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       conversationProvider?.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
-      // Update the cached conversation to ensure we have the latest data
-      if (conversationOrNull?.id == target.id) _cachedConversation = updatedConversation;
+      // Update the cached conversation to ensure we have the latest data. Reads already in
+      // flight predate this result; drop them.
+      if (conversationOrNull?.id == target.id) {
+        _cachedConversation = updatedConversation;
+        _refreshGeneration++;
+      }
       if (generation == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
         _speakerSummaryConversationId = null;
       }
@@ -878,6 +894,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           if (_isDisposed) return false;
         }
       }
+      reprocessedConversationId = target.id;
       notifyInfo('REPROCESS_SUCCESS');
       notifyListeners();
       return true;
@@ -892,6 +909,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
         },
       );
+      lastFailedReprocessConversationId = target.id;
       lastFailedReprocessAppId = appId;
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
@@ -1065,7 +1083,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (_cachedConversation?.id != conversation.id) {
       _finishSpeakerLabelingSession();
     }
-    if (_cachedConversationId != conversation.id) detailLoad = ConversationDetailLoad.idle;
+    if (_cachedConversationId != conversation.id) {
+      detailLoad = ConversationDetailLoad.idle;
+      _refreshGeneration++;
+    }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
     _endedSpeakerLabelingSessionIds.remove(conversation.id);
@@ -1078,42 +1099,41 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<void> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
     if (openedId == null) return;
+    final generation = ++_refreshGeneration;
     if (trackLoad) {
       detailLoad = ConversationDetailLoad.loading;
       notifyListeners();
     }
-    var loaded = false;
+    ServerConversation? updatedConversation;
     try {
-      final updatedConversation = await _fetchConversation(openedId);
-      if (_isDisposed) return;
-      loaded = updatedConversation != null;
-      if (updatedConversation != null && conversationOrNull?.id == openedId) {
-        if (updatedConversation.id != openedId) {
-          if (!_syncConversationId.hasMatch(openedId)) return;
-          _cachedConversationId = updatedConversation.id;
-          selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
-          if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
-          if (_automaticSpeakerSummaryRefreshIds.remove(openedId)) {
-            _automaticSpeakerSummaryRefreshIds.add(updatedConversation.id);
-          }
-          conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
-        } else {
-          conversationProvider?.updateConversation(updatedConversation);
-        }
-        _cachedConversation = updatedConversation;
-        notifyListeners();
-      }
+      updatedConversation = await _fetchConversation(openedId);
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
     }
-    if (_isDisposed) return;
-    if (trackLoad && conversationOrNull?.id != null) {
-      detailLoad = loaded ? ConversationDetailLoad.idle : ConversationDetailLoad.failed;
-      notifyListeners();
-    } else if (loaded && detailLoad == ConversationDetailLoad.failed) {
-      detailLoad = ConversationDetailLoad.idle;
-      notifyListeners();
+    // A newer read, another conversation or a reprocess result superseded this one: it owns the
+    // page now, including [detailLoad].
+    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return;
+    if (updatedConversation != null) {
+      if (updatedConversation.id != openedId) {
+        if (!_syncConversationId.hasMatch(openedId)) return;
+        _cachedConversationId = updatedConversation.id;
+        selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
+        if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
+        if (_automaticSpeakerSummaryRefreshIds.remove(openedId)) {
+          _automaticSpeakerSummaryRefreshIds.add(updatedConversation.id);
+        }
+        conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
+      } else {
+        conversationProvider?.updateConversation(updatedConversation);
+      }
+      _cachedConversation = updatedConversation;
     }
+    if (detailLoad == ConversationDetailLoad.loading) {
+      detailLoad = updatedConversation != null ? ConversationDetailLoad.idle : ConversationDetailLoad.failed;
+    } else if (updatedConversation != null && detailLoad == ConversationDetailLoad.failed) {
+      detailLoad = ConversationDetailLoad.idle;
+    }
+    notifyListeners();
   }
 
   void updateFolderIdLocally(String? newFolderId) {
