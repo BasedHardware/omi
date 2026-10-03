@@ -1,0 +1,26 @@
+# Android foreground-service cancellation probe
+
+Reproduces the October 2026 startup incident with the actual
+`SyncTransferForegroundService` and its two production dependencies. The probe
+has no Flutter, Firebase, network permission, credentials, or user accounts.
+Its package is `com.omi.fgsprobe`; it does not install over Omi.
+
+With Java 21, SDK 36, Gradle 8.14.2, and an isolated Android 16 emulator:
+
+```sh
+python3 app/scripts/android_fgs_probe.py --serial emulator-5554 --rounds 5 \
+  --output /tmp/omi-fgs-evidence --gradle /path/to/gradle
+```
+
+The app's generated `app/android/gradlew` is the default Gradle executable.
+The runner compiles fresh production sources, then exercises immediate stop,
+100 start/stop pairs, stop followed by restart, stop with no active service, and cancellation after moving the task to the background.
+Each case starts a fresh process and must survive while releasing its service,
+notification, and partial wake lock. Logcat and a JSON result receipt go to the
+output directory. The runner refuses physical devices and older Android images.
+
+At source `147f77d86a2d`, immediate stop kills the probe with
+`RemoteServiceException$ForegroundServiceDidNotStartInTimeException`. An
+`onCreate` promotion alone does not repair an already cancelled pending start.
+The companion hermetic tests run with `:app:testDevDebugUnitTest`; the emulator
+probe is explicit integration verification outside the hermetic Flutter suite.

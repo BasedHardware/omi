@@ -32,6 +32,7 @@ class SyncTransferForegroundService : Service() {
     companion object {
         private const val TAG = "SyncTransfer.FgService"
         private const val EXTRA_TEXT = "notification_text"
+        private const val ACTION_STOP = "com.friend.ios.sync.STOP"
 
         /**
          * Promote the service to the foreground and hold a partial wake lock.
@@ -54,7 +55,13 @@ class SyncTransferForegroundService : Service() {
 
         fun stop(context: Context) {
             try {
-                context.stopService(Intent(context, SyncTransferForegroundService::class.java))
+                // stopService can cancel an accepted foreground start before
+                // its callbacks run. Android 16 then crashes the process even
+                // if onCreate subsequently calls startForeground. Deliver stop
+                // in the same command queue so promotion always precedes it.
+                context.startService(
+                    Intent(context, SyncTransferForegroundService::class.java).setAction(ACTION_STOP)
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to stop sync-transfer foreground service: ${e.message}")
             }
@@ -93,12 +100,21 @@ class SyncTransferForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Each accepted start has a foreground obligation, including a start
+        // delivered to an existing instance or immediately followed by stop.
+        promoteColdStart()
+        if (intent?.action == ACTION_STOP) {
+            // A newer queued start owns the service; an older cancellation
+            // must not tear down its notification or wake lock.
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         // Replace the immediate shortService notification with dataSync for
         // the transfer lifetime. A rejected type retries shortService before
         // stopping, including when the early promotion could not complete.
         val notification = buildNotification(intent?.getStringExtra(EXTRA_TEXT))
         if (!promoteToForeground(notification)) {
-            stopSelf()
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
         acquireWakeLock()
@@ -135,7 +151,7 @@ class SyncTransferForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Flutter dies with the task; do not leave a sync notification behind.
-        stopSelf()
+        stop(this)
         super.onTaskRemoved(rootIntent)
     }
 
