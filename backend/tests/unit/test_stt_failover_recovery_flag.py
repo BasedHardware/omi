@@ -43,7 +43,7 @@ from utils.stt.live_health import FleetHealth
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
-from utils.stt.recovery_state import LiveRecoveryController
+from utils.stt.recovery_state import LiveRecoveryController, current_recovery
 from utils.stt.resilient_stream import (
     MAX_RECONNECTS,
     MAX_RECONNECTS_PER_MINUTE,
@@ -790,3 +790,48 @@ def test_terminal_after_text_gated_by_pin(monkeypatch):
     runtime_on.stt_service = STTService.soniox
     ListenSessionRuntime._record_session_transcript_outcome(runtime_on)
     assert counter._value.get() == before + 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_create_stt_socket_pins_missing_mode_once(monkeypatch, enabled):
+    receiver = object.__new__(ListenReceiver)
+    receiver.host = _listen_host()
+    seen: list[bool | None] = []
+
+    async def fake_connect(self, callback, sample_rate, **kwargs):
+        seen.append(current_recovery_enabled.get())
+        assert current_recovery.get() is None
+        return _FlagFakeSocket()
+
+    monkeypatch.setattr(ListenReceiver, '_connect_stt_socket', fake_connect)
+    monkeypatch.setenv(ENV, 'true' if enabled else 'false')
+    first = await receiver._create_stt_socket(None, 16000)
+    assert receiver.recovery_enabled is enabled
+    monkeypatch.setenv(ENV, 'false' if enabled else 'true')
+    second = await receiver._create_stt_socket(None, 16000)
+    assert receiver.recovery_enabled is enabled
+    assert seen == [enabled, enabled]
+    assert isinstance(first, _FlagFakeSocket) and isinstance(second, _FlagFakeSocket)
+    assert current_recovery_enabled.get() is None
+    assert current_recovery.get() is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('pinned', [False, True])
+async def test_run_pins_missing_mode_from_receiver_and_resets(monkeypatch, pinned):
+    monkeypatch.setenv(ENV, 'false' if pinned else 'true')
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.receiver = SimpleNamespace(recovery_enabled=pinned)
+    seen: list[bool | None] = []
+
+    async def stub(self):
+        seen.append(current_recovery_enabled.get())
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(ListenSessionRuntime, '_run', stub)
+    with pytest.raises(asyncio.CancelledError):
+        await runtime.run()
+    assert runtime.recovery_enabled is pinned
+    assert seen == [pinned]
+    assert current_recovery_enabled.get() is None

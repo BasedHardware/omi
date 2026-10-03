@@ -918,6 +918,8 @@ class ListenSessionRuntime:
         )
 
     async def run(self) -> None:
+        if not isinstance(getattr(self, 'recovery_enabled', None), bool):
+            self.recovery_enabled = session_recovery_enabled(self)
         token = current_recovery_enabled.set(self.recovery_enabled)
         try:
             await self._run()

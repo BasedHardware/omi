@@ -864,8 +864,10 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
+        if not isinstance(getattr(self, 'recovery_enabled', None), bool):
+            self.recovery_enabled = session_recovery_enabled(self)
         enabled_token = current_recovery_enabled.set(self.recovery_enabled)
-        token = current_recovery.set(self.recovery)
+        token = current_recovery.set(getattr(self, 'recovery', None) if self.recovery_enabled else None)
         try:
             return await ListenReceiver._connect_stt_socket(
                 self,
