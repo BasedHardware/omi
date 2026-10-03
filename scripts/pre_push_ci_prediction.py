@@ -292,6 +292,7 @@ def _is_app_compile_smoke_input(path: str) -> bool:
             "app/setup/scripts/",
             "app/config/",
             "app/assets/",
+            "app/integration_test/android_fgs_probe/",
         )
     ) or path in {
         "app/pubspec.yaml",
@@ -300,24 +301,52 @@ def _is_app_compile_smoke_input(path: str) -> bool:
         "app/analysis_options.yaml",
         "app/l10n.yaml",
         "app/flavorizr.yaml",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
     }
 
 
 def _is_app_android_pr_input(path: str) -> bool:
     """Inputs that can change Android's build graph or native interface on a PR."""
-    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
-        "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
-        "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
+    return path.startswith(
+        (
+            "app/android/",
+            "app/setup/prebuilt/",
+            "app/setup/scripts/",
+            "app/integration_test/android_fgs_probe/",
+            "app/lib/startup/",
+            "app/lib/services/wals/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
+        "app/lib/pigeon_interfaces.dart",
+        "app/lib/phone_mic_interface.dart",
+        "app/lib/main.dart",
+        "app/lib/startup_auth.dart",
+        "app/lib/startup_firebase.dart",
+        "app/lib/startup_routing.dart",
+        "app/lib/flavors.dart",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
+        "app/pubspec.yaml",
+        "app/pubspec.lock",
+        "app/build.yaml",
         ".github/workflows/mobile-app-checks.yml",
     }
 
 
 def _is_app_journeys_pr_input(path: str) -> bool:
     """Journey definitions, their harness, and direct capture/dev-control inputs."""
-    return path.startswith((
-        "app/integration_test/journeys/", "app/test/support/capture/",
-        "app/lib/services/dev_controls/", "app/lib/services/capture/",
-    )) or path in {
+    return path.startswith(
+        (
+            "app/integration_test/journeys/",
+            "app/test/support/capture/",
+            "app/lib/services/dev_controls/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
         "contracts/session/session-evidence-v1.schema.json",
         "scripts/dev-harness/mobile-verify.sh",
         "scripts/dev-harness/dev_harness/mobile_verify.py",
@@ -343,7 +372,8 @@ def _is_app_ios_compile_input(path: str) -> bool:
         path.startswith("app/ios/")
         or path.startswith(".github/actions/detect-changes/")
         or path in IOS_PIGEON_DEFINITIONS
-        or path in {
+        or path
+        in {
             "app/pubspec.yaml",
             "app/pubspec.lock",
             ".github/workflows/mobile-app-checks.yml",
@@ -501,9 +531,7 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             # The full main/health lane compiles the complete release test
             # target. PRs reserve that build for release-specific inputs.
-            if _is_desktop_release_test_input(path) and (
-                event != "pull_request" or _is_desktop_release_pr_input(path)
-            ):
+            if _is_desktop_release_test_input(path) and (event != "pull_request" or _is_desktop_release_pr_input(path)):
                 selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
@@ -515,10 +543,7 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    if any(
-        _defines_flutter_generation(path, read_text(path), read_base_text(path))
-        for path in normalized_paths
-    ):
+    if any(_defines_flutter_generation(path, read_text(path), read_base_text(path)) for path in normalized_paths):
         selected.update({"flutter-codegen", "flutter-l10n"})
 
     if selector_changed:
