@@ -286,7 +286,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get reportMessage => 'Nachricht melden';
 
   @override
-  String get reportMessageConfirm => 'Sind Sie sicher, dass Sie diese Nachricht melden möchten?';
+  String get reportMessageConfirm => 'Diese Nachricht melden?';
 
   @override
   String get messageReported => 'Nachricht erfolgreich gemeldet.';
@@ -299,7 +299,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get clearChatConfirm =>
-      'Sind Sie sicher, dass Sie den Chat löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+      'Alle Nachrichten in diesem Chat werden gelöscht. Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get maxFilesLimit => 'Sie können nur 4 Dateien gleichzeitig hochladen';
@@ -363,10 +363,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get cannotBeUndone => 'Dies kann nicht rückgängig gemacht werden.';
 
   @override
-  String get allDataErased => 'Alle Ihre Erinnerungen und Unterhaltungen werden dauerhaft gelöscht.';
+  String get allDataErased => 'Deine Erinnerungen und Gespräche werden gelöscht.';
 
   @override
-  String get appsDisconnected => 'Ihre Apps und Integrationen werden sofort getrennt.';
+  String get appsDisconnected => 'Deine Apps und Integrationen werden getrennt.';
 
   @override
   String get exportBeforeDelete =>
@@ -1046,7 +1046,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Sind Sie sicher, dass Sie die Verbindung zu $appName trennen möchten? Sie können sich jederzeit wieder verbinden.';
+    return 'Sie können $appName jederzeit erneut verbinden.';
   }
 
   @override
@@ -1998,14 +1998,14 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteActionItemTitle => 'Aufgabe löschen';
 
   @override
-  String get deleteActionItemMessage => 'Möchten Sie diese Aufgabe wirklich löschen?';
+  String get deleteActionItemMessage => 'Diese Aufgabe löschen?';
 
   @override
   String get deleteSelectedItemsTitle => 'Ausgewählte Elemente löschen';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Sind Sie sicher, dass Sie $count ausgewählte Aufgaben$s löschen möchten?';
+    return '$count ausgewählte Aufgaben$s löschen?';
   }
 
   @override
@@ -2074,7 +2074,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get undo => 'Rückgängig';
 
   @override
-  String get noMemoriesYet => '🧠 Noch keine Erinnerungen';
+  String get noMemoriesYet => 'Noch keine Erinnerungen';
 
   @override
   String get noAutoMemories => 'Noch keine automatischen Erinnerungen';
@@ -2086,7 +2086,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noMemoriesInCategories => 'Keine Erinnerungen in diesen Kategorien';
 
   @override
-  String get noMemoriesFound => '🔍 Keine Erinnerungen gefunden';
+  String get noMemoriesFound => 'Keine Erinnerungen gefunden';
 
   @override
   String get addFirstMemory => 'Fügen Sie Ihre erste Erinnerung hinzu';
@@ -2095,8 +2095,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get clearMemoryTitle => 'Omis Gedächtnis löschen';
 
   @override
-  String get clearMemoryMessage =>
-      'Sind Sie sicher, dass Sie Omis Gedächtnis löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get clearMemoryMessage => 'Alle Ihre Erinnerungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get clearMemoryButton => 'Erinnerung löschen';
@@ -2242,20 +2241,20 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Aufgabe löschen';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?';
+  String get deleteActionItemConfirmMessage => 'Diese Aufgabe löschen?';
 
   @override
   String get appLanguage => 'App-Sprache';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-OBERFLÄCHE';
+  String get appInterfaceSectionTitle => 'App-Oberfläche';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPRACHE UND TRANSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Sprache und Transkription';
 
   @override
   String get languageSettingsHelperText =>
-      'Die App-Sprache ändert Menüs und Schaltflächen. Die Sprachsprache beeinflusst, wie Ihre Aufnahmen transkribiert werden.';
+      'Die App-Sprache ändert Menüs und Schaltflächen. Die Hauptsprache beeinflusst, wie Ihre Aufnahmen transkribiert werden.';
 
   @override
   String get translationNotice => 'Übersetzungshinweis';
@@ -2347,7 +2346,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteMemory => 'Erinnerung löschen';
 
   @override
-  String get thisActionCannotBeUndone => 'Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get thisActionCannotBeUndone => 'Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String memoriesCount(int count) {
@@ -2782,8 +2781,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteActionItem => 'Aufgabe löschen';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Möchten Sie diese Aufgabe wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get deleteActionItemConfirmation => 'Diese Aufgabe löschen? Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get enterActionItemDescription => 'Aufgabenbeschreibung eingeben';
@@ -3126,7 +3124,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Nachricht erfolgreich gemeldet';
 
   @override
-  String get confirmReportMessage => 'Möchten Sie diese Nachricht wirklich melden?';
+  String get confirmReportMessage => 'Diese Nachricht melden?';
 
   @override
   String get selectChatAssistant => 'Chat-Assistenten auswählen';
@@ -3141,8 +3139,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get clearChatTitle => 'Chat löschen?';
 
   @override
-  String get confirmClearChat =>
-      'Möchten Sie den Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get confirmClearChat => 'Diesen Chat leeren? Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get copy => 'Kopieren';
@@ -3314,8 +3311,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get createMemory => 'Erinnerung erstellen';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get deleteMemoryConfirmation => 'Diese Erinnerung löschen? Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get makePrivate => 'Privat machen';
@@ -3352,7 +3348,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Möchten Sie Omis Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden und wird alle $count Erinnerungen dauerhaft löschen.';
+    return 'Alle $count Erinnerungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.';
   }
 
   @override
@@ -3647,8 +3643,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lassen Sie Omi automatisch die beste App auswählen';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Möchten Sie dieses Gespräch wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.';
+  String get deleteConversationConfirmation => 'Dieses Gespräch löschen? Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get conversationDeleted => 'Gespräch gelöscht';
@@ -3976,8 +3971,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get updateAppQuestion => 'App aktualisieren?';
 
   @override
-  String get updateAppConfirmation =>
-      'Sind Sie sicher, dass Sie Ihre App aktualisieren möchten? Die Änderungen werden nach Überprüfung durch unser Team übernommen.';
+  String get updateAppConfirmation => 'Die Änderungen werden nach Überprüfung durch unser Team übernommen.';
 
   @override
   String get updateApp => 'App aktualisieren';
@@ -4042,7 +4036,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sind Sie sicher, dass Sie Ihr Abonnement kündigen möchten? Sie haben weiterhin Zugang bis zum Ende Ihres aktuellen Abrechnungszeitraums.';
+      'Sie haben weiterhin Zugang bis zum Ende Ihres aktuellen Abrechnungszeitraums.';
 
   @override
   String get cancelSubscriptionButton => 'Abonnement kündigen';
@@ -4230,7 +4224,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Diese Aktion kann nicht rückgängig gemacht werden. Alle Anwendungen, die diesen Schlüssel verwenden, können nicht mehr auf die API zugreifen.';
+      'Apps, die diesen Schlüssel verwenden, verlieren den API-Zugriff. Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get revoke => 'Widerrufen';
@@ -4287,7 +4281,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Sind Sie sicher, dass Sie $item löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+    return '$item wird gelöscht. Dies kann nicht rückgängig gemacht werden.';
   }
 
   @override
@@ -4295,7 +4289,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Sind Sie sicher, dass Sie den Schlüssel \"$keyName\" widerrufen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+    return 'Alles, was \"$keyName\" verwendet, verliert den Zugriff. Dies kann nicht rückgängig gemacht werden.';
   }
 
   @override
@@ -4474,7 +4468,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ihr Plan bleibt bis $date aktiv. Danach verlieren Sie den Zugang zu Ihren unbegrenzten Funktionen. Sind Sie sicher?';
+    return 'Ihr Plan bleibt bis $date aktiv. Danach verlieren Sie den Zugang zu Ihren unbegrenzten Funktionen.';
   }
 
   @override
@@ -4567,7 +4561,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get askOmiAnything => 'Fragen Sie Omi alles über Ihr Leben';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Schalten Sie Omis unendlichen Speicher frei';
+  String get unlockOmiInfiniteMemory => 'Unbegrenzte Erinnerungen';
 
   @override
   String get youreOnAnnualPlan => 'Sie haben den Jahresplan';
@@ -4579,7 +4573,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get unableToLoadPlans => 'Pläne konnten nicht geladen werden';
 
   @override
-  String get checkConnectionTryAgain => 'Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut';
+  String get checkConnectionTryAgain => 'Überprüfe deine Verbindung und versuche es erneut.';
 
   @override
   String get useFreePlan => 'Kostenlosen Plan nutzen';
@@ -4762,7 +4756,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Dies löscht dauerhaft alle von Limitless importierten Gespräche. Diese Aktion kann nicht rückgängig gemacht werden.';
+      'Alle aus Limitless importierten Gespräche werden gelöscht. Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4803,7 +4797,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sind Sie sicher, dass Sie die Probe von $name löschen möchten?';
+    return 'Die Stimmprobe von $name wird entfernt. Dies kann nicht rückgängig gemacht werden.';
   }
 
   @override
@@ -4811,7 +4805,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sind Sie sicher, dass Sie $name löschen möchten? Dies entfernt auch alle zugehörigen Sprachproben.';
+    return 'Dadurch werden die Stimmproben von $name entfernt. Das lässt sich nicht rückgängig machen. Die Beiträge in früheren Gesprächen werden zu unbenannten Sprechern.';
   }
 
   @override
@@ -5169,8 +5163,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get finishedConversation => 'Gespräch beendet?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Möchtest du die Aufnahme wirklich beenden und das Gespräch jetzt zusammenfassen?';
+  String get stopRecordingConfirmation => 'Aufnahme beenden und das Gespräch jetzt zusammenfassen?';
 
   @override
   String get conversationEndsManually => 'Das Gespräch endet nur manuell.';
@@ -6017,7 +6010,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
+      '300 Premium-Minuten pro Monat. Wähle „Auf dem Gerät“ für unbegrenzte kostenlose Transkription.';
 
   @override
   String get viewUsage => 'Nutzung anzeigen';
@@ -6100,7 +6093,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
+      '300 Premium-Minuten pro Monat. Wähle „Auf dem Gerät“ für unbegrenzte kostenlose Transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6155,7 +6148,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis integrierte Live-Transkription ist für Echtzeitgespräche mit automatischer Sprechererkennung und Diarisierung optimiert.';
+      'Die Live-Transkription von Omi ist für Echtzeitgespräche gemacht und zeigt, wer was gesagt hat.';
 
   @override
   String get reset => 'Zurücksetzen';
@@ -6690,7 +6683,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get shareRecording => 'Aufnahme teilen';
 
   @override
-  String get deleteRecordingConfirmation => 'Bist du sicher, dass du diese Aufnahme löschen möchtest?';
+  String get deleteRecordingConfirmation => 'Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get recordingIdLabel => 'Aufnahme-ID';
@@ -8545,7 +8538,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tipAutoSync => 'Aufnahmen werden automatisch synchronisiert';
 
   @override
-  String get storageSection => 'SPEICHER';
+  String get storageSection => 'Speicher';
 
   @override
   String get permissions => 'Berechtigungen';
@@ -8975,10 +8968,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Optional — deine Gedanken helfen uns, ein besseres Produkt zu bauen.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Das ist endgültig';
+  String get deleteFlowConfirmTitle => 'Konto löschen?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Sobald du dein Konto löschst, kann es nicht wiederhergestellt werden.';
+  String get deleteFlowConfirmSubtitle => 'Das kann nicht rückgängig gemacht werden, auch nicht vom Support.';
 
   @override
   String get deleteConsequenceSubscription => 'Alle aktiven Abonnements werden gekündigt.';
@@ -9423,7 +9416,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nimm Audio jetzt auf und transkribiere es bei Bedarf statt in Echtzeit. Die Aufnahmen werden auf deinem Smartphone gespeichert; lade sie anschließend hoch, um Gespräche zu erstellen.';
+      'Jetzt aufnehmen, später transkribieren. Bis dahin bleibt das Audio auf deinem Telefon.';
 
   @override
   String get transcribeLaterNote =>
@@ -9707,7 +9700,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deleteOnDeviceModel => 'Modell löschen';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Möchten Sie dieses Modell wirklich löschen?';
+  String get deleteOnDeviceModelConfirm => 'Dieses Modell löschen?';
 
   @override
   String get onDeviceModelDownloaded => 'Heruntergeladen';
@@ -9865,7 +9858,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncStatusTooOld => 'Zu alt für die Synchronisierung — Omi kann sie nicht annehmen';
 
   @override
-  String get planSheetChooseYourPlan => 'Wähle deinen Tarif, um Omi unbegrenzt freizuschalten.';
+  String get planSheetChooseYourPlan => 'Wähle den Plan, der zu dir passt.';
 
   @override
   String get availableOnMacMobileWeb => 'Verfügbar auf Mac, Mobilgerät und im Web';
@@ -10114,24 +10107,23 @@ class AppLocalizationsDe extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10144,13 +10136,13 @@ class AppLocalizationsDe extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10533,8 +10525,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Gerät vergessen?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi verbindet sich nicht mehr mit diesem Gerät. Um es wieder zu verwenden, musst du es erneut koppeln.';
+  String get forgetDeviceConfirmMessage => 'Omi verbindet sich nicht mehr mit diesem Gerät.';
 
   @override
   String get deviceForgottenMessage => 'Gerät vergessen';
@@ -11918,19 +11909,19 @@ class AppLocalizationsDe extends AppLocalizations {
   String get evidenceNothing => 'Du hast sie noch nicht zugeordnet oder bestätigt';
 
   @override
-  String get effectCountsALot => 'Zählt stark';
+  String get effectCountsALot => 'Hilft viel';
 
   @override
-  String get effectCounts => 'Zählt';
+  String get effectCounts => 'Hilft';
 
   @override
-  String get effectCountsALittle => 'Zählt wenig';
+  String get effectCountsALittle => 'Hilft etwas';
 
   @override
-  String get effectBarelyCounts => 'Zählt kaum';
+  String get effectBarelyCounts => 'Hilft kaum';
 
   @override
-  String get effectCountsAgainst => 'Spricht dagegen';
+  String get effectCountsAgainst => 'Schadet';
 
   @override
   String get effectNeeded => 'Nötig für „Bestätigt“';
@@ -11950,7 +11941,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Nur deine Antworten verändern die Sicherheit deutlich. Automatische Treffer allein zählen kaum.';
+      'Nur deine Antworten verändern die Sicherheit deutlich. Automatische Treffer allein helfen kaum.';
 
   @override
   String get personWhyConfidence => 'Warum?';
@@ -11966,7 +11957,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi fragt dich bei ähnlichen Treffern nach einer Bestätigung, statt zu raten.';
+  String get pinPersonHonestLine => 'Omi fragt nach, bevor ähnliche Stimmen zugeordnet werden.';
 
   @override
   String get pinAction => 'Anheften';
@@ -12261,7 +12252,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Zugeordnete Zeilen: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Zeilen zugeordnet',
+      one: '1 Zeile zugeordnet',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12294,7 +12291,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Frühere Gespräche mit dieser Stimme: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'In $count früheren Gesprächen gefunden',
+      one: 'In 1 früheren Gespräch gefunden',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12319,5 +12322,69 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Kein Omi gefunden';
+
+  @override
+  String get findDeviceNoneMessage => 'Schalte es ein und halte es nah an dein Telefon.';
+
+  @override
+  String get startupFailedDetails => 'Details';
+
+  @override
+  String get couldNotLoadApiKeys => 'API-Schlüssel konnten nicht geladen werden.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nein…';
+
+  @override
+  String get diagnosticsRightNow => 'Aktuell';
+
+  @override
+  String get diagnosticsLast7Days => 'Letzte 7 Tage';
+
+  @override
+  String get diagnosticsConnectedFor => 'Verbunden seit';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Verbindet sich selbst wieder';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Kurze Abbrüche, jedes Mal nach etwa $duration wieder da';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Diese Woche keine Abbrüche';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Probleme beim Verbinden';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Fehlgeschlagene Verbindungen in den letzten 24 Stunden: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Abbrüche';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'etwa $count pro Stunde';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Längste Lücke';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Seit der Kopplung: $drops Abbrüche, $failed fehlgeschlagene Verbindungen.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Letzte $duration';
   }
 }

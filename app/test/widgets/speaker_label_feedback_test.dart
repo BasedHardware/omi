@@ -20,6 +20,7 @@ import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_shee
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 
 Person _person(String id, String name, {String voice = 'unknown'}) =>
@@ -101,7 +102,10 @@ void main() {
     testWidgets('the question names the person on both answers', (tester) async {
       var yes = 0, not = 0;
       await tester.pumpWidget(_app(SpeakerLikelyConfirm(name: 'Jordan Lee', onYes: () => yes++, onNot: () => not++)));
-      expect(find.text('Sounds like Jordan Lee'), findsOneWidget);
+      // Two light chips, no boxed question: the "Likely" badge asks, and screen readers hear it.
+      expect(find.text('Sounds like Jordan Lee'), findsNothing);
+      expect(find.bySemanticsLabel('Sounds like Jordan Lee'), findsOneWidget);
+      expect(find.byType(OmiFilterChip), findsNWidgets(2));
       await tester.tap(find.text('Yes'));
       await tester.tap(find.text('Not Jordan Lee'));
       expect((yes, not), (1, 1));
@@ -383,7 +387,7 @@ void main() {
 
       await pump(const SpeakerTagOutcome(personId: 'maya', personName: 'Maya', linesLabeled: 12));
       expect(find.text('Labeled as Maya'), findsOneWidget);
-      expect(find.text('Lines labeled: 12'), findsOneWidget);
+      expect(find.text('Labeled 12 lines'), findsOneWidget);
       expect(find.text('Learning voice…'), findsOneWidget);
       expect(find.byKey(const Key('speaker_tag_outcome_review')), findsNothing);
 
@@ -391,7 +395,7 @@ void main() {
           personId: 'maya', personName: 'Maya', linesLabeled: 12, voiceState: 'learned', matches: [_match('c1')]));
       expect(find.text('Voice learned'), findsOneWidget);
       expect(find.text('Omi will recognize Maya next time.'), findsOneWidget);
-      expect(find.text('Earlier conversations with this voice: 1'), findsOneWidget);
+      expect(find.text('Found in 1 earlier conversation'), findsOneWidget);
       await tester.tap(find.byKey(const Key('speaker_tag_outcome_review')));
       expect(reviewed, 1);
 

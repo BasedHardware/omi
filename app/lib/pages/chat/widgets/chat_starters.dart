@@ -51,11 +51,14 @@ class ChatGreeting extends StatelessWidget {
                     '$hello.',
                     style: heading,
                   ))),
-          ChatRise(
-            key: const Key('chat_count_rise'),
-            interval: ChatIntro.countLine,
-            child: _ConversationCount(count: count, style: heading),
-          ),
+          // "No conversations today." is a status line, not a greeting, and reads wrong early in
+          // the day; the count line appears only once there is something to count.
+          if (count > 0)
+            ChatRise(
+              key: const Key('chat_count_rise'),
+              interval: ChatIntro.countLine,
+              child: _ConversationCount(count: count, style: heading),
+            ),
           const SizedBox(height: 10),
           ChatRise(
               key: const Key('chat_question_rise'),
