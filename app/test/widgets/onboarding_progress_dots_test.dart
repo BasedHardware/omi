@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 
 void main() {
@@ -26,7 +27,8 @@ void main() {
     expect(OnboardingProgressStepsForTest.steps, hasLength(6));
   });
 
-  testWidgets('the chrome reserves its row, so a step SafeArea starts below the dots and back button', (tester) async {
+  testWidgets('floating navigation reserves its row, so a step SafeArea starts below the dots and back button',
+      (tester) async {
     Future<double> top({int? progress, VoidCallback? onBack}) async {
       await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -34,9 +36,9 @@ void main() {
         home: MediaQuery(
           data: const MediaQueryData(size: Size(390, 844), padding: EdgeInsets.only(top: 47)),
           child: Scaffold(
-            body: OnboardingChrome(
-              progress: progress,
-              total: 6,
+            body: OnboardingStepLayout(
+              reserveHeader: false,
+              progress: progress == null ? null : OnboardingProgressDots(current: progress, total: 6),
               onBack: onBack,
               child: const SafeArea(child: Text('step title', key: Key('title'))),
             ),

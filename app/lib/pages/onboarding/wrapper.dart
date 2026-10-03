@@ -19,6 +19,7 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -434,11 +435,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           body: Stack(
             children: [
               if (index == kAuthPage || showBackground) _background(),
-              // Page component (no transition for content), under the dots and back button.
-              OnboardingChrome(
-                progress: kProgressSteps.contains(index) ? kProgressSteps.indexOf(index) : null,
-                total: kProgressSteps.length,
+              OnboardingStepLayout(
+                reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,
+                progress: kProgressSteps.contains(index)
+                    ? OnboardingProgressDots(
+                        current: kProgressSteps.indexOf(index),
+                        total: kProgressSteps.length,
+                      )
+                    : null,
                 child: pages[index],
               ),
             ],
@@ -453,65 +458,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 @visibleForTesting
 abstract final class OnboardingProgressStepsForTest {
   static List<int> get steps => _OnboardingWrapperState.kProgressSteps;
-}
-
-/// Height of the row [OnboardingChrome] draws over the top of a step, below the status bar: the
-/// dots' top gap plus one tap target. The circled back button sits inside the same row.
-const double kOnboardingChromeHeight = OmiSpacing.md + kOmiMinTapTarget;
-
-/// A first-run step with the progress dots and the circled back button drawn over its top.
-///
-/// The step never sits under them: when either is shown, [child] gets a [MediaQuery] whose top
-/// padding includes [kOnboardingChromeHeight], so the step's own [SafeArea] (or anything that reads
-/// `MediaQuery.paddingOf(context).top`) clears the chrome. Backgrounds the step paints still bleed
-/// to the top edge; only padding changes.
-class OnboardingChrome extends StatelessWidget {
-  const OnboardingChrome({super.key, required this.child, this.progress, this.total = 0, this.onBack});
-
-  final Widget child;
-
-  /// Zero-based position for [OnboardingProgressDots]; null hides the dots.
-  final int? progress;
-  final int total;
-
-  /// Shows the circled back button when set.
-  final VoidCallback? onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = this.progress;
-    final onBack = this.onBack;
-    final reserves = progress != null || onBack != null;
-    final media = MediaQuery.of(context);
-    return Stack(
-      children: [
-        if (reserves)
-          MediaQuery(
-            data: media.copyWith(padding: media.padding.copyWith(top: media.padding.top + kOnboardingChromeHeight)),
-            child: child,
-          )
-        else
-          child,
-        if (progress != null)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: OmiSpacing.md),
-              child: OnboardingProgressDots(current: progress, total: total),
-            ),
-          ),
-        if (onBack != null)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(left: OmiSpacing.xs, top: OmiSpacing.xxs),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: OmiBackButton.circled(key: const Key('onboarding_back'), onPressed: onBack),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 /// The first-run progress: one dot per real step, the current one larger, with a spoken
