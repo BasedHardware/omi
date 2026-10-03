@@ -35,7 +35,7 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
 ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-    buildStorageClearActions({
+buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
   required Future<void> Function() clearAll,
@@ -222,7 +222,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
       final counts = p.offlineServerProcessingCounts;
-      progressText = SyncCardProgressLine.serverProcessingSubtitle(
+      progressText =
+          SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (processed, total) => l.processingProgress(processed, total),
@@ -254,10 +255,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (showSpinner) ...[
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(width: 12),
-          ],
+          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,33 +373,24 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(
-            context.l10n.storageSection,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
+        OmiSettingsGroup(
+          header: context.l10n.storageSection,
+          children: [
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.mobile),
+              title: context.l10n.storeAudioOnPhone,
+              value: isPhoneOn ? context.l10n.on : context.l10n.off,
+              onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
+            ),
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.cloud),
+              title: context.l10n.storeAudioOnCloud,
+              value: isCloudOn ? context.l10n.on : context.l10n.off,
+              onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
+            ),
+          ],
         ),
-        Container(
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
-          child: Column(
-            children: [
-              _settingRow(
-                icon: FontAwesomeIcons.mobile,
-                label: context.l10n.storeAudioOnPhone,
-                isOn: isPhoneOn,
-                onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
-              ),
-              Divider(height: 1, color: OmiColors.border, indent: 52),
-              _settingRow(
-                icon: FontAwesomeIcons.cloud,
-                label: context.l10n.storeAudioOnCloud,
-                isOn: isCloudOn,
-                onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
-              ),
-            ],
-          ),
-        ),
+        const SizedBox(height: OmiSpacing.xxl),
         OmiSettingsGroup(
           header: context.l10n.localCopiesSection,
           children: [
@@ -426,61 +415,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  Widget _settingRow({
-    required FaIconData icon,
-    required String label,
-    required bool isOn,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400),
-              ),
-            ),
-            Text(
-              isOn ? context.l10n.on : context.l10n.off,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w400),
-            ),
-            const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ─────────────────────────────────────────
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
   Widget _buildRecordingsHeader(int total) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 2),
-      child: Row(
-        children: [
-          Text(
-            context.l10n.recordings,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: 8),
-          Text('$total', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-          const Spacer(),
-          Text(
-            context.l10n.newestFirst,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.w400),
-          ),
-        ],
-      ),
+    return OmiSectionHeader(
+      context.l10n.recordings,
+      trailing: Text(context.l10n.newestFirst, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
     );
   }
 
@@ -955,10 +897,7 @@ class _ManageStorageSheet extends StatelessWidget {
             clearLabel: context.l10n.clear,
           ),
           const SizedBox(height: 12),
-          _AutoRemoveRow(
-            initialValue: autoRemoveOn,
-            onChanged: onToggleAutoRemove,
-          ),
+          _AutoRemoveRow(initialValue: autoRemoveOn, onChanged: onToggleAutoRemove),
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
@@ -1039,10 +978,7 @@ class _StorageRow extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: OmiRadius.mdAll,
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
             child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
@@ -1059,14 +995,8 @@ class _StorageRow extends StatelessWidget {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface3,
-                        borderRadius: OmiRadius.smAll,
-                      ),
-                      child: Text(
-                        '$count',
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                      ),
+                      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                      child: Text('$count', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ),
                   ],
                 ),
@@ -1080,10 +1010,7 @@ class _StorageRow extends StatelessWidget {
               onTap: onClear,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: OmiColors.dangerSurface,
-                  borderRadius: OmiRadius.pillAll,
-                ),
+                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.pillAll),
                 child: Text(
                   clearLabel,
                   style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),

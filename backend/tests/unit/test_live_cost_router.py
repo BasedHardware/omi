@@ -11,8 +11,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
-from utils.stt import live_chain, live_health, live_session, live_router, streaming as st
+from utils.stt import live_failure, live_chain, live_health, live_session, live_router, streaming as st
 from utils.stt.live_gate import GateState, begin_trial, transition
+from utils.stt.live_signal import PROVIDER_FAILURE_REASONS, provider_observation
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.live_router import select, connecting_target
 from utils.stt.live_rollout import window_allocation
@@ -138,6 +139,7 @@ class MemoryRedis:
     def __init__(self, clock=None):
         self.data = {}
         self.leases = []
+        self.ttls = {}
         self.clock = clock or (lambda: 1000)
 
     async def time(self):
@@ -156,10 +158,11 @@ class MemoryRedis:
         self.leases.append(key)
         return True
 
-    async def eval(self, _script, _numkeys, key, expected, new):
+    async def eval(self, _script, _numkeys, key, expected, new, ttl):
         if self.data.get(key, '') != expected:
             return 0
         self.data[key] = new
+        self.ttls[key] = ttl
         return 1
 
 
@@ -201,7 +204,7 @@ async def test_redis_down_local_health_and_no_independent_trials(monkeypatch):
     pod = live_health.FleetHealth(redis_client=DownRedis(), clock=lambda: 1000)
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     for i in range(8):
-        pod.record_session('parakeet-window', 'en', 'failover', uid=str(i))
+        pod.record_session('parakeet-window', 'en', 'failover', reason='connection_lost', uid=str(i))
     states = pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
     assert select(DEFAULT_TARGETS, states, 'u', 'en')[0].id == 'modulate-velma-2'
@@ -230,7 +233,7 @@ async def test_modes_static_shadow_and_on_percent(monkeypatch, mode, percent, ex
     )
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     fallbacks = []
-    monkeypatch.setattr(live_chain, 'record_fallback', lambda **event: fallbacks.append(event))
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **event: fallbacks.append(event))
     sock = SimpleNamespace(is_connection_dead=False)
     result, actual = await live_chain.connect_configured_chain(
         primary_service=st.STTService.soniox,
@@ -370,7 +373,7 @@ async def test_two_modulate_targets_failover_and_independent_identity(monkeypatc
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     seen = []
     fallbacks = []
-    monkeypatch.setattr(live_chain, 'record_fallback', lambda **event: fallbacks.append(event))
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **event: fallbacks.append(event))
 
     async def connect():
         target = connecting_target.get()
@@ -527,6 +530,7 @@ def test_health_session_is_once_and_late_failure_after_text_counts(monkeypatch):
     failed.note_selection_transcript([{'text': 'synthetic'}])
     failed._dead = True
     assert failed.is_connection_dead
+    live_failure.settle_terminal_socket(failed, 'modulate', 'connection_lost')
     failed.finish()
     assert [args[2] for args in seen] == ['text', 'failover']
     no_text = _leg()
@@ -538,7 +542,49 @@ def test_health_session_is_once_and_late_failure_after_text_counts(monkeypatch):
     silent = _leg(SpeechGate(is_speech=False))
     silent.send(b'\x00\x00' * 16000)
     silent.finish()
-    assert len(seen) == 3
+    assert [args[2] for args in seen] == ['text', 'failover', 'no_text', 'no_text']
+
+
+def test_send_exception_is_provider_failure_but_vad_exception_stays_censored(monkeypatch):
+    from tests.unit.test_live_routing_health import SpeechGate, _leg
+
+    seen = []
+    monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *args: seen.append(args))
+
+    send_failed = _leg()
+
+    def raise_connection_error(_audio):
+        raise ConnectionError('provider transport unavailable')
+
+    send_failed.raw.send = raise_connection_error
+    assert send_failed.send(b'\x01\x00' * 16000) is False
+    live_failure.settle_terminal_socket(send_failed, 'modulate', 'send_failed')
+    assert len(seen) == 1
+    assert seen[0][2] == 'failover'
+    assert seen[0][5] in PROVIDER_FAILURE_REASONS
+    assert provider_observation(seen[0][2], seen[0][5]) is True
+
+    class FailingGate(SpeechGate):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        def process_audio(self, audio, wall, score_pcm=None, *, start_sample=None):
+            self.calls += 1
+            if self.calls > 1:
+                raise RuntimeError('VAD failed')
+            return super().process_audio(audio, wall, score_pcm, start_sample=start_sample)
+
+    vad_failed = _leg(FailingGate())
+    vad_failed.window = True
+    assert vad_failed.send(b'\x01\x00' * 16000)
+    assert vad_failed.send(b'\x01\x00' * 16000) is False
+    live_failure.settle_terminal_socket(vad_failed, 'parakeet', 'connection_lost')
+    assert len(seen) == 2
+    assert seen[1][2] == 'failover'
+    assert seen[1][5] == 'vad_failed'
+    assert provider_observation(seen[1][2], seen[1][5]) is None
 
 
 @pytest.mark.asyncio
@@ -669,7 +715,7 @@ def test_early_client_abort_cannot_poison_cost_health_or_serving_circuit(monkeyp
         leg.send(b'\x01\x00' * 16000)
         leg.finish()
         leg.finish()
-    assert seen == []
+    assert len(seen) == 12 and all(args[2] == 'no_text' for args in seen)
     assert st._modulate_circuit.state == 'closed'
 
 
@@ -692,7 +738,7 @@ async def test_client_drain_censors_missing_text_but_counts_real_text(monkeypatc
     monkeypatch.setattr(st, 'drain_stt_socket', drain)
     await leg.drain_and_close()
     leg.finish()
-    assert [args[2] for args in seen] == (['text'] if text_during_drain else [])
+    assert [args[2] for args in seen] == (['text'] if text_during_drain else ['no_text'])
 
 
 @pytest.mark.asyncio
@@ -713,8 +759,12 @@ async def test_one_uid_cannot_bench_and_small_cohort_can_promote():
         await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None, f'{i:016x}')
     await pods[0].refresh_cost_once()
     state = pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window']
+    assert state.stage == 100  # Repeated caller votes were capped, not banked.
+    for i in range(8):
+        await pods[0]._write_cost_result('parakeet-window', 'en', True, None, f'{i + 100:016x}')
+    await pods[0].refresh_cost_once()
+    state = pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window']
     assert state.stage == 0
-    assert pods[0]._cost_cached[('parakeet-window', 'all')].stage == 100
     state = begin_trial(state, state.until)
     for _ in range(60):
         state = transition(state, False, 0, witness='0' * 16)
@@ -770,12 +820,12 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     pod._redis_retry_at = 1010
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     for i in range(8):
-        pod.record_session('parakeet-window', 'en', 'failover', uid=str(i))
+        pod.record_session('parakeet-window', 'en', 'failover', reason='connection_lost', uid=str(i))
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
     now[0] = 1010
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
-    stored = json.loads(redis.data['omi:live-stt:cost-v3:parakeet-window:all'])
+    stored = json.loads(redis.data['omi:live-stt:cost-v7:parakeet-window:all'])
     assert stored['stage'] == 0 and stored['until'] == 1300
     now[0] = 1300
     pod.prefer_recovery('parakeet-window', 'en')
@@ -789,7 +839,7 @@ async def test_healthy_fleet_is_not_benched_by_an_isolated_pod_local_rate():
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     for lang in ('all', 'en'):
         healthy = GateState(n=200)
-        redis.data[f'omi:live-stt:cost-v3:parakeet-window:{lang}'] = json.dumps(healthy.encode())
+        redis.data[f'omi:live-stt:cost-v7:parakeet-window:{lang}'] = json.dumps(healthy.encode())
         pod._cost_local[('parakeet-window', lang)] = GateState(stage=0, generation=1, until=1300)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -820,8 +870,35 @@ def test_generation_capture_uses_the_same_backoff_view_as_selection():
 
 def test_unregistered_targets_do_not_create_cost_health_state():
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    pod.record_session('deepgram', 'en', 'failover', uid='synthetic')
+    pod.record_session('deepgram', 'en', 'failover', reason='connection_lost', uid='synthetic')
     assert pod._cost_local == {}
+
+
+@pytest.mark.asyncio
+async def test_withdrawn_registered_endpoint_cannot_return_as_configured_tail(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [
+                {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055, 'ramp_percent': 0},
+                {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754},
+            ]
+        ),
+    )
+    modulate = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
+    with pytest.raises(RuntimeError, match='chain exhausted'):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=modulate,
+            callbacks={st.STTService.soniox: AsyncMock(side_effect=ConnectionError('synthetic'))},
+            failed=set(),
+            models=['modulate-velma-2', 'soniox'],
+            routing_uid='synthetic',
+            routing_language='en',
+        )
+    modulate.assert_not_awaited()
 
 
 @pytest.mark.parametrize('accessor_raises', [False, True])
@@ -853,7 +930,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
     redis = MemoryRedis()
     state = GateState(stage=stage, generation=1)
     for lang in ('all', 'en'):
-        redis.data[f'omi:live-stt:cost-v3:parakeet-window:{lang}'] = json.dumps(state.encode())
+        redis.data[f'omi:live-stt:cost-v7:parakeet-window:{lang}'] = json.dumps(state.encode())
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -1065,11 +1142,13 @@ async def test_connect_engine_mismatch_restores_configured_order_and_counts(monk
 
 @pytest.mark.asyncio
 async def test_three_user_language_outage_does_not_bench_other_languages():
-    redis = MemoryRedis()
+    now = [1000]
+    redis = MemoryRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'fr')
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
-    for i in range(16):
+    for i in range(18):
+        now[0] = 1000 if i < 9 else 1300
         await pod._write_cost_result('modulate-velma-2', 'fr', True, None, f'{i % 3:016x}')
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'fr')['modulate-velma-2'].stage == 0
@@ -1086,7 +1165,7 @@ async def test_server_clock_controls_deadlines_despite_sixty_second_pod_skew():
         pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     for i in range(8):
         await pods[i % 2]._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
-    assert json.loads(redis.data['omi:live-stt:cost-v3:modulate-velma-2:all'])['until'] == 1300
+    assert json.loads(redis.data['omi:live-stt:cost-v7:modulate-velma-2:all'])['until'] == 1300
     now[0] = 1299
     for pod in pods:
         pod.prefer_recovery('modulate-velma-2', 'en')
@@ -1115,7 +1194,7 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
     monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
     for i in range(8):
-        pod.record_session('modulate-velma-2', 'en', 'failover', uid=str(i))
+        pod.record_session('modulate-velma-2', 'en', 'failover', reason='connection_lost', uid=str(i))
         await pod._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
@@ -1143,7 +1222,7 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
     now[0] = 1600
     redis.down = False
     await pod.refresh_cost_once()
-    state = json.loads(redis.data['omi:live-stt:cost-v3:modulate-velma-2:all'])
+    state = json.loads(redis.data['omi:live-stt:cost-v7:modulate-velma-2:all'])
     assert state['stage'] == 0 and state['failures'] == 8
     assert not pod._cost_unreconciled
     assert (
@@ -1469,9 +1548,9 @@ def test_shadow_pairs_are_bounded_and_global_stage_does_not_follow_language():
     for event, old, new in (
         ('bench', GateState(), GateState(stage=0)),
         ('stage', GateState(stage=0), GateState(stage=5)),
-        ('unbench', GateState(stage=25), GateState()),
+        ('unbench', GateState(stage=25), GateState(generation=1)),
     ):
-        metric = COST_EVENTS.labels(target=target.id, event=event)
+        metric = COST_EVENTS.labels(target=target.id, event=event, scope='global')
         before = metric._value.get()
         pod._cost_event(target.id, 'fr', old, new)
         assert metric._value.get() == before
@@ -1482,3 +1561,18 @@ def test_shadow_pairs_are_bounded_and_global_stage_does_not_follow_language():
     before = COST_SHADOW.labels(**labels)._value.get()
     live_router.propose(pod, ['deepgram'], 'synthetic', 'en', 'arbitrary-unregistered-model')
     assert COST_SHADOW.labels(**labels)._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_v7_starts_fresh_without_reinterpreting_teardown_contaminated_v6():
+    redis = MemoryRedis()
+    old_key = 'omi:live-stt:cost-v6:modulate-velma-2:all'
+    old_evidence = json.dumps(GateState(stage=0, n=20, failures=20, generation=3, until=9999).encode())
+    redis.data[old_key] = old_evidence
+    pod = live_health.FleetHealth(redis_client=redis)
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
+    await pod._write_cost_result('modulate-velma-2', 'en', True, None, '0123456789abcdef')
+    assert redis.data[old_key] == old_evidence
+    fresh = GateState.decode(json.loads(redis.data['omi:live-stt:cost-v7:modulate-velma-2:all']))
+    assert fresh.n == fresh.failures == 1 and fresh.stage == 100

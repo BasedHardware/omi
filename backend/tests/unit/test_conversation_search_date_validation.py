@@ -41,7 +41,8 @@ def _real_package_path(dotted_name):
     not every open pull request.
     """
     candidate = _BACKEND_ROOT.joinpath(*dotted_name.split('.'))
-    if (candidate / '__init__.py').is_file():
+    # Include namespace packages such as utils.other, which have no __init__.py.
+    if candidate.is_dir():
         return [str(candidate)]
     return []
 
@@ -68,6 +69,7 @@ _stubs = [
     'pinecone',
     'typesense',
     'database._client',
+    'database.conversation_scan',
     'database.conversations',
     'database.action_items',
     'database.memories',
@@ -1034,15 +1036,15 @@ def test_speaker_browse_without_a_query_walks_firestore_past_the_latest_page():
     from utils.conversations.search import browse_conversations_by_speaker as real_browse
     from utils.conversations.search import conversation_matches_speaker as real_matcher
 
-    def fetch(uid, limit, offset, **kwargs):
-        return stream[offset : offset + limit]
-
+    budget = MagicMock()
+    budget.truncated = False
     with (
         patch.object(conv, 'browse_conversations_by_speaker', real_browse),
         patch('utils.conversations.search.conversation_matches_speaker', real_matcher),
         patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
         patch.object(conv, 'search_conversations') as mock_search,
-        patch.object(conv.conversations_db, 'get_conversations_without_photos', side_effect=fetch),
+        patch.object(conv.conversation_scan_db, 'conversation_scan_budget', return_value=budget),
+        patch.object(conv.conversation_scan_db, 'speaker_browse_scan', side_effect=lambda uid, **kwargs: iter(stream)),
     ):
         client = _client()
         resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1', 'per_page': 20})

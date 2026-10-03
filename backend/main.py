@@ -67,6 +67,7 @@ from routers import (
     x_connector,
     other,
     developer,
+    developer_key,
     updates,
     calendar_meetings,
     google_calendar,
@@ -95,6 +96,7 @@ from routers import (
     desktop_core,
     desktop_prompts,
     desktop_proxy,
+    desktop_task_gate,
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
@@ -270,6 +272,7 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
+app.include_router(developer_key.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
@@ -300,6 +303,7 @@ app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)

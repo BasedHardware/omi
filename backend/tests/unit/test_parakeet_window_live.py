@@ -1307,7 +1307,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
         assert base.emitted == []
         _fire_first_text_deadline_at_budget(previous.raw, clock)
         assert previous.raw.death_reason == 'first_text_deadline'
-        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == 12
+        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == pytest.approx(12, abs=1e-9)
         assert await actual._failover_stt_socket()
         assert len(callbacks) == 1
     await actual._drain_stt_sockets()
@@ -2531,9 +2531,9 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
     client.data = {'text': 'hello'}
     client.status = 503 if dies_before_transcript else 200
     assert leg.send(pcm)
-    await leg.drain_and_close()
+    await actual._drain_stt_sockets()
     if dies_before_transcript:
-        assert not await actual._failover_stt_socket()
+        assert actual._pending_live_failover is None
         assert not any(e['outcome'] == 'recovered' for e in events)
         exhausted = [e for e in events if e['outcome'] == 'exhausted']
         assert {'stt_selection', 'stt_live_session'} <= {e['component'] for e in exhausted}

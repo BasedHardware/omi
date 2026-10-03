@@ -179,10 +179,7 @@ class Person(BaseModel):
                 if learning_state != 'disabled':
                     data = {**data, 'voice_learning_state': 'learned'}
             elif learning_state in (None, 'learned'):
-                data = {
-                    **data,
-                    'voice_learning_state': 'pending' if data.get('voice_learning_outcome') else 'unknown',
-                }
+                data = {**data, 'voice_learning_state': 'unknown'}
         return data
 
     def refresh_confidence(self) -> None:

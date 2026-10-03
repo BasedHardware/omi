@@ -23,21 +23,14 @@ from config.desktop_gemini_attribution_generated import (
     GEMINI_LANES,
     GEMINI_WORKLOADS,
 )
+from config.vertex_reservations import State
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 
 ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
-ALLOWED_MODELS = frozenset(
-    {
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-3.1-flash-lite',
-        'gemini-embedding-001',
-    }
-)
+ALLOWED_MODELS = frozenset(ptr.DESKTOP_TEXT_LANES) | {ptr.DESKTOP_EMBEDDING_MODEL}
 _ALLOWED_WORKLOADS = GEMINI_WORKLOADS
 _ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
 # Provider routes this proxy calls itself. Company-paid traffic that hops the
@@ -243,7 +236,7 @@ class ProxyTelemetry:
         sys.stdout.flush()
         self.record_attempt(*_canonical_outcome(outcome))
 
-    def note_dispatch(self, route: UpstreamRoute) -> None:
+    def note_dispatch(self, route: UpstreamRoute, *, reservation_state=None, reservation_states=None) -> None:
         """A provider request is about to leave for `route`. Only these become ledger rows.
 
         Anything that fails before a dispatch (validation, credentials, routing)
@@ -251,6 +244,12 @@ class ProxyTelemetry:
         """
         if route.provider not in _DIRECT_LEDGER_ROUTES:
             return
+        if route.provider == 'vertex_ai' and reservation_state is not None:
+            reservation_state.note_request(
+                self.model,
+                route.headers.get(ptr.REQUEST_TYPE_HEADER, ''),
+                (reservation_states or {}).get(self.model, State.UNKNOWN),
+            )
         self.attempts += 1
         self._pending_attempt = route.provider
         self.provider_metadata = None

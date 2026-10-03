@@ -14,11 +14,14 @@ if TYPE_CHECKING:
     from utils.stt.streaming import STTService
 
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
-from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
+from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
-from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
-from utils.stt.live_health import health, mode as routing_mode
+from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
+from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
+from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_signal import provider_observation
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
+from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
     propose,
@@ -32,8 +35,14 @@ from utils.stt.live_router import (
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
-from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
+from utils.stt.provider_resilience import (
+    EXPECTED_REJECTIONS,
+    ProviderCircuitBreaker,
+    close_rejected_socket,
+    fallback_socket_is_serving,
+)
 from utils.stt.socket import STTSocket
+from utils.stt import parakeet_window as window
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMITED
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
@@ -84,6 +93,18 @@ class ProviderChainUnavailable(RuntimeError):
         super().__init__('Configured STT chain exhausted: providers unavailable')
 
 
+async def _allow_rescue_probe(circuit: ProviderCircuitBreaker, probes: int, deadline: float) -> bool:
+    """Wait for another bounded recovery handshake instead of exhausting a burst."""
+    while True:
+        if circuit.allow_request(max_probes=probes, force=True):
+            return True
+        if circuit.state != 'half_open' or not circuit.account_cooldown_elapsed():
+            return False
+        if asyncio.get_running_loop().time() >= deadline:
+            return False
+        await asyncio.sleep(0.01)
+
+
 async def connect_configured_chain(
     *,
     primary_service: STTService,
@@ -118,6 +139,13 @@ async def connect_configured_chain(
     routes = [(service, None) for service in candidates]
     canary = False
     capacity_targets = {}
+    try:
+        capacity_targets = {target.id: target for target in registry() if engine_matches(target, routing_models)}
+        for target in list(capacity_targets.values()):
+            if target.endpoint is None:
+                capacity_targets.setdefault(DEFAULT_IDS[target.family], target)
+    except ValueError:
+        pass  # Invalid registry still uses the configured provider admission gates.
     if mode != 'off' and routing_uid:
         try:
             canary = routing_on(routing_uid)
@@ -135,10 +163,6 @@ async def connect_configured_chain(
                 routing_models,
                 last_resorts,
             )
-            capacity_targets = {target.id: target for target in registry() if engine_matches(target, routing_models)}
-            for target in list(capacity_targets.values()):
-                if target.endpoint is None:
-                    capacity_targets.setdefault(DEFAULT_IDS[target.family], target)
             active = canary and bool(proposed)
             if canary and not proposed:
                 COST_FAIL_OPEN.labels(reason='empty_proposal').inc()
@@ -152,7 +176,14 @@ async def connect_configured_chain(
             if active:
                 # An override endpoint does not replace the configured family
                 # endpoint unless that endpoint is itself in the target chain.
-                represented = {target.family for target in (*proposed, *last_resorts) if target.endpoint is None}
+                # Registry withdrawal/capability/ramp exclusions also own the
+                # default endpoint. Re-appending it as a "legacy" tail would
+                # bypass the very exclusion the policy just decided.
+                represented = {
+                    target.family
+                    for target in registry()
+                    if target.endpoint is None and engine_matches(target, routing_models)
+                }
                 tail = [(service, None) for service in configured_candidates if service.value not in represented]
                 tail = [
                     (service, target)
@@ -165,7 +196,6 @@ async def connect_configured_chain(
         except CostHealthUnavailable:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             active = False
-            capacity_targets = {}
             logger.debug('live_stt_cost_router cache unavailable; using configured order')
             if canary:
                 record_fallback(
@@ -178,7 +208,6 @@ async def connect_configured_chain(
         except Exception:
             COST_FAIL_OPEN.labels(reason='router_error').inc()
             active = False
-            capacity_targets = {}
             routes = [(service, None) for service in configured_candidates]
             logger.exception('live_stt_cost_router using configured order')
             record_fallback(
@@ -192,7 +221,11 @@ async def connect_configured_chain(
     # Mid-session deaths can open every pod-local circuit without proving that
     # new connects fail. Require repeated real connect failures before shedding.
     # A cooled circuit still reaches the normal half-open recovery probe.
-    eligible = [service for service in configured_candidates if callbacks.get(service) is not None]
+    eligible = [
+        service
+        for service in configured_candidates
+        if callbacks.get(service) is not None and provider_for_service(service) not in failed
+    ]
     all_benched = False
     if eligible and not active:
         circuits = [_circuit_for_primary(service) for service in eligible]
@@ -234,6 +267,7 @@ async def connect_configured_chain(
 
     prior_reason = 'circuit_open'
     prior_capacity_subtype: str | None = None
+    prior_outcome: LiveLegOutcome | None = None
     attempted = False
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
@@ -241,7 +275,7 @@ async def connect_configured_chain(
     capacity_resorts = []
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, prior_capacity_subtype, attempted
+        nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
         attempted = True
         if active and backup(service, target):
             target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
@@ -272,22 +306,44 @@ async def connect_configured_chain(
                 # provider_auth_rejected) reaches the connect counter so a 402
                 # labels error_class=budget, not auth; 'auth' stays reserved
                 # for actual authentication refusals.
-                death_reason = getattr(socket, 'typed_death_reason', None)
+                death_reason = normalize_live_stt_reason(
+                    getattr(socket, 'typed_death_reason', None), getattr(socket, 'death_reason', None)
+                )
                 if death_reason in ACCOUNT_REJECTION_REASONS:
                     raise RejectedStream(death_reason)
                 if death_reason == PROVIDER_RATE_LIMITED:
                     raise RejectedStream('provider_429')
-                raise RejectedStream('provider_5xx')
+                raise RejectedStream(death_reason)
         except BaseException as error:
-            if socket is not None:
-                close_rejected_socket(socket)
             if isinstance(error, asyncio.CancelledError):
+                if prior_outcome is not None:
+                    PendingLiveFailover(
+                        component='stt_selection',
+                        from_mode=origin,
+                        to_mode='unavailable',
+                        reason=prior_reason,
+                        source_outcome=prior_outcome,
+                    ).note_failure(None)
+                if socket is not None:
+                    close_rejected_socket(socket)
                 on_close()
                 raise
             if not isinstance(error, Exception):
+                if socket is not None:
+                    close_rejected_socket(socket)
                 on_close()
                 raise
             if isinstance(error, TargetEngineMismatch):
+                if prior_outcome is not None:
+                    PendingLiveFailover(
+                        component='stt_selection',
+                        from_mode=origin,
+                        to_mode=service.value,
+                        reason=prior_reason,
+                        source_outcome=prior_outcome,
+                    ).note_failure(None, continuing=True)
+                if socket is not None:
+                    close_rejected_socket(socket)
                 on_close()
                 COST_FAIL_OPEN.labels(reason='engine_mismatch').inc()
                 record_fallback(
@@ -306,13 +362,42 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     routing_models=routing_models,
                 )
-            reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
-            if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
-                _note_connect_result(failed_provider=service.value)
+            reason = normalize_live_stt_reason(
+                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
+            )
+            if prior_outcome is not None:
+                PendingLiveFailover(
+                    component='stt_selection',
+                    from_mode=origin,
+                    to_mode=service.value,
+                    reason=prior_reason,
+                    source_outcome=prior_outcome,
+                ).note_failure(reason, continuing=True)
+            rejected_outcome = getattr(socket, 'leg_outcome', None) or LiveLegOutcome(
+                (
+                    target.id
+                    if target is not None
+                    else (
+                        (routing_models or {}).get('parakeet') or 'parakeet'
+                        if service.value == 'parakeet'
+                        else DEFAULT_IDS.get(service.value, service.value)
+                    )
+                ),
+                bounded_language(routing_language),
+                routing_uid,
+                None,
+                health.record_session,
+            )
+            rejected_outcome.claim(reason, connect=True)
+            if socket is not None:
+                close_rejected_socket(socket)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
-            # omi_fallback_total keeps its bounded vocabulary: the typed account
-            # deaths fold onto quota/auth exactly like the socket path does.
-            fallback_reason = fallback_reason_for_typed_death(reason) if account_rejection else reason
+            provider_failure = provider_observation('connect_failure', reason) is True
+            if provider_failure or account_rejection or reason == 'auth':
+                _note_connect_result(failed_provider=service.value)
+            # Preserve legacy omi_fallback_total quota/auth labels while the
+            # health observation and connect counter retain precise tokens.
+            fallback_reason = fallback_metric_reason(reason)
             capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             if active and target is not None and not (reason == 'auth' or account_rejection):
                 failed_targets.add(target.id)
@@ -326,9 +411,9 @@ async def connect_configured_chain(
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
-            elif reason in EXPECTED_REJECTIONS:
+            elif not provider_failure:
                 on_close()
-                if canary and reason == 'capacity_full':
+                if reason == 'capacity_full':
                     identity = (
                         target.id
                         if target is not None
@@ -347,15 +432,7 @@ async def connect_configured_chain(
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
-            if backup(service, target):
-                record_fallback(
-                    component='stt_selection',
-                    from_mode=origin,
-                    to_mode=service.value,
-                    reason=fallback_reason,
-                    outcome='degraded',
-                    **capacity_fallback_kwargs(capacity_subtype),
-                )
+            prior_outcome = rejected_outcome
             origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
@@ -366,26 +443,21 @@ async def connect_configured_chain(
             attach_health(on_success, on_close)
         else:
             on_success()
-        if backup(service, target) or primary_open:
+        if backup(service, target) or primary_open or prior_outcome is not None:
             pending = PendingLiveFailover(
                 component='stt_selection',
                 from_mode=origin,
                 to_mode=service.value,
                 reason=prior_reason,
                 capacity_subtype=prior_capacity_subtype,
+                source_outcome=prior_outcome,
             )
             attach_outcome = getattr(socket, 'set_selection_outcome', None)
             if callable(attach_outcome):
                 attach_outcome(pending)
             else:
-                record_fallback(
-                    component='stt_selection',
-                    from_mode=origin,
-                    to_mode=service.value,
-                    reason=prior_reason,
-                    outcome='recovered',
-                    **capacity_fallback_kwargs(prior_capacity_subtype),
-                )
+                pending.note_transcript()
+        record_managed_leg_handoff(socket)
         return socket, service
 
     for service, target in routes:
@@ -402,7 +474,21 @@ async def connect_configured_chain(
         if connect is None or provider_for_service(service) in failed or identity in failed_targets:
             continue
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
-        if canary and capacity_target is not None and not capacity_available(capacity_target):
+        if (routing_models or {}).get(service.value) == 'parakeet-window':
+            if not window.admission.available():
+                WINDOW_ADMISSION.labels(outcome='overflow').inc()
+                capacity_blocked.add(service)
+                prior_reason, prior_capacity_subtype = 'capacity_full', 'admission'
+                record_fallback(
+                    component='stt_selection',
+                    from_mode=origin,
+                    to_mode=service.value,
+                    reason='capacity_full',
+                    outcome='degraded',
+                    capacity_subtype='admission',
+                )
+                continue
+        if capacity_target is not None and not capacity_available(capacity_target):
             capacity_blocked.add(service)
             capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
@@ -425,7 +511,7 @@ async def connect_configured_chain(
 
     # Capacity is advisory when it would suppress every usable route. Dial only
     # one least-recently-refused candidate; retain account/local circuit gates.
-    if canary and not attempted and capacity_resorts:
+    if not attempted and capacity_resorts:
         for service, target, capacity_target in sorted(
             capacity_resorts, key=lambda route: capacity_refused_at(route[2])
         ):
@@ -450,26 +536,12 @@ async def connect_configured_chain(
                 return result
             break  # one real escape dial, even if it is still full
 
-    # Last-resort may force a non-account bench on a non-TDT primary only.
-    # Windowed TDT shedding (capacity/5xx) must hold; account cooldown never yields.
-    if (
-        not active
-        and primary_open
-        and not attempted
-        and primary_service != STTService.parakeet
-        and primary_service not in capacity_blocked
-        and provider_for_service(primary_service) not in failed
-    ):
-        circuit = _circuit_for_primary(primary_service)
-        if circuit.allow_request(max_probes=1, force=True):
-            prior_reason = 'last_resort'
-            prior_capacity_subtype = None
-            result = await attempt(primary_service, connect_primary)
-            if result is not None:
-                return result
-    if not active and all_benched and not attempted:
-        # A spent primary must not strand a still-serving fallback whose local
-        # selection circuit opened on a mid-session death.
+    # A refusal/open window cannot consume the rescue path. Try each remaining
+    # non-TDT provider once, even if the rejected primary was windowed TDT or
+    # an earlier leg already attempted admission. Failed/account/cooled legs
+    # stay excluded; force only relaxes a non-account selection bench.
+    if not active:
+        rescue_deadline = asyncio.get_running_loop().time() + 12.0
         for service in configured_candidates:
             connect = callbacks.get(service)
             if (
@@ -482,20 +554,20 @@ async def connect_configured_chain(
             state = fleet_states.get(service.value)
             if state is not None and state.bench == 'account' and state.excluded:
                 continue
-            if _circuit_for_primary(service).allow_request(max_probes=1, force=True):
+            if await _allow_rescue_probe(_circuit_for_primary(service), probes, rescue_deadline):
                 prior_reason = 'last_resort'
                 prior_capacity_subtype = None
                 result = await attempt(service, connect)
                 if result is not None:
                     return result
-                break
     CHAIN_EXHAUSTED.inc()
-    record_fallback(
+    pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,
         to_mode='unavailable',
         reason=prior_reason,
-        outcome='exhausted',
-        **capacity_fallback_kwargs(prior_capacity_subtype),
+        capacity_subtype=prior_capacity_subtype,
+        source_outcome=prior_outcome,
     )
+    pending.note_failure(None)
     raise RuntimeError('Configured STT chain exhausted')

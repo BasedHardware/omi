@@ -25,7 +25,6 @@ from utils.conversations.transcript_hash import (
 )
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
-from utils.person_evidence import person_updates_for_assignment
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
@@ -50,6 +49,12 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .read_boundary import parse_payload_strict
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.portability_read import (
+    check_portability_read,
+    current_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -127,6 +132,16 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         _reveal_manual_speaker_assignments_for_read(data, uid)
         return data
 
+    if current_portability_read() is not None:
+        data['transcript_segments'] = _decode_transcript_segments_strict(
+            uid,
+            data['transcript_segments'],
+            bool(data.get('transcript_segments_compressed')),
+            require_decryption=True,
+        )
+        _reveal_manual_speaker_assignments_for_read(data, uid)
+        return data
+
     if isinstance(data['transcript_segments'], str):
         try:
             decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
@@ -167,7 +182,7 @@ def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
     if isinstance(raw, (dict, list)):
         return raw
     if isinstance(raw, str):
-        payload = encryption.decrypt(raw, uid)
+        payload = verified_encrypted_read(raw, encryption.decrypt(raw, uid))
         if compressed:
             return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         return json.loads(payload)
@@ -180,7 +195,11 @@ def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> d
     if raw is None:
         return {}
     parsed = _reveal_json_value(raw, uid, compressed)
-    return parsed if isinstance(parsed, dict) else {}
+    if not isinstance(parsed, dict):
+        if current_portability_read() is not None:
+            raise ValueError(f'undecodable manual_speaker_assignments: parsed {type(parsed).__name__}')
+        return {}
+    return parsed
 
 
 def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) -> None:
@@ -191,6 +210,8 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
             uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
         )
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
+        if current_portability_read() is not None:
+            raise
         logger.error(f"{error} {uid}")
         data['manual_speaker_assignments'] = {}
     if data['manual_speaker_assignments'] and isinstance(segments := data.get('transcript_segments'), list):
@@ -446,7 +467,7 @@ def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     return data
 
 
-def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not photo_data:
         return None
     data = copy.deepcopy(photo_data)
@@ -458,10 +479,11 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
             # If decryption fails, it might be already decrypted or not encrypted.
             # We can log this, but for now, we'll just pass.
             pass
+        data['base64'] = verified_encrypted_read(photo_data['base64'], data['base64'])
     return data
 
 
-@prepare_for_read(decrypt_func=_prepare_photo_for_read)
+@prepare_for_read(decrypt_func=prepare_photo_for_read)
 def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -478,12 +500,13 @@ def iter_all_conversation_photos(uid: str):
         .where(filter=FieldFilter('__name__', '>=', start_key))
         .where(filter=FieldFilter('__name__', '<=', end_key))
     )
-    for doc in query.stream():
+    for doc in iter_portability_guarded(query.stream()):
+        check_portability_read()
         # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
         parts = doc.reference.path.split('/')
         if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
             conversation_id = parts[-3]
-            yield conversation_id, doc.to_dict()
+            yield conversation_id, prepare_photo_for_read(doc.to_dict(), uid) or doc.to_dict()
 
 
 def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
@@ -1343,8 +1366,9 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             conv = doc.to_dict()
             conv = prepare_conversation_for_read(conv, uid) or conv
             if not is_visible_conversation(conv, include_discarded=include_discarded):
@@ -1889,7 +1913,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 continue
 
             # Decrypt first to get a clean state
-            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+            plain_photo_data = prepare_photo_for_read(photo_data, uid)
 
             # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}
@@ -2578,15 +2602,18 @@ def assign_conversation_speaker(
     evidence_source=SOURCE_MANUAL,
     firestore_client=None,
     rejection=None,
+    owner_segment_ids=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
+    from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
+    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+
     rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
 
-    @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, bookkeeping):
         if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
         source_segments = None
@@ -2608,9 +2635,7 @@ def assign_conversation_speaker(
         ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
-        # A donor's numeric speaker IDs may have been reassigned on bridge.
-        # Carry its stable segment identities across instead of applying the
-        # number to a different voice in the surviving conversation.
+        # Bridge donors use stable segment IDs, never reassigned speaker numbers.
         if source_segments is not None:
             selected_segment_ids = donor_selected_ids(
                 source_segments,
@@ -2643,30 +2668,28 @@ def assign_conversation_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
         )
-        # Read every person before any write; corrections fence in-flight profiles and
-        # record label evidence in the same transaction as the label, not in a later task.
-        relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
-        rejected_person_id = (rejection or {}).get('person_id')
-        user_doc = user_ref.get(transaction=transaction).to_dict() or {}
-        save_other = bool(user_doc.get('save_other_voice_profiles', True))
-        people = {
-            pid: (pref := user_ref.collection('people').document(pid), pref.get(transaction=transaction).to_dict())
-            for pid in previous | {p for p in (person_id, rejected_person_id) if p}
-        }
-        if any(not people[pid][1] for pid in (person_id, rejected_person_id) if pid):
-            raise LookupError('Person not found')
-        docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
-        evidence = (docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now)
-        updates, removed = person_updates_for_assignment(
-            *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
-        )
-        for pid, update in updates.items():
-            transaction.update(people[pid][0], update)
-        payload = _prepare_conversation_for_write(
-            {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
+        removed, relabeled = persist_assignment_effects(
+            transaction,
+            user_ref,
             uid,
-            raw.get('data_protection_level', 'standard'),
+            current_id,
+            before,
+            segments,
+            receipt,
+            resolved,
+            previous,
+            person_id=person_id,
+            is_user=is_user,
+            use_for_speech_training=use_for_speech_training,
+            evidence_source=evidence_source,
+            rejection=rejection,
+            donor_ids=(current_id, *seen),
+            bookkeeping=bookkeeping,
+            owner_segment_ids=owner_segment_ids,
         )
+        extract_learning_receipt_markers(receipt, current)
+        written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+        payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         _invalidate_client_processing(payload)
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
@@ -2674,9 +2697,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_transactional(client, assign)
+    result = run_assignment_transaction(client, assign)
     current, _, _, before = result
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
+    record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
     return result
 
 
@@ -3334,7 +3358,7 @@ def store_conversation_photos(
 @set_data_protection_level(data_arg_name='incoming')
 def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
     """Atomically choose, create or append a sync conversation across workers."""
-    from utils.sync.assignment import assign_in_transaction
+    from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -3353,12 +3377,14 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             result.pop('manual_speaker_assignments', None)
         return result
 
+    attempted: dict[str, str] = {}
+
     @firestore.transactional
-    def assign(transaction):
+    def assign(transaction, full_ids=frozenset()):
         def encode(payload):
             return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
-        return assign_in_transaction(
+        planned = assign_in_transaction(
             transaction,
             user_ref,
             incoming,
@@ -3367,9 +3393,15 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
+            full_ids=full_ids,
         )
+        # The commit runs after this returns; remember which row it would grow.
+        attempted['canonical'] = planned[0]['id']
+        return planned
 
-    result = run_transactional(client, assign)
+    result = run_with_size_limit_backstop(
+        lambda full_ids: run_transactional(client, assign, full_ids=full_ids), lambda: attempted.get('canonical')
+    )
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
         _delete_conversation_search_index(uid, str(donor_id))

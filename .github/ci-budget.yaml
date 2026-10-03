@@ -2332,7 +2332,7 @@
       "runs_on": "windows-latest"
     },
     "release-eligibility.yml/release-eligibility": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "Release Eligibility",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2341,7 +2341,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2386,7 +2386,7 @@
       "runs_on": "ubuntu-latest"
     },
     "repo-checks.yml/hygiene": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 5,
       "display_name": "Hygiene",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 210,
@@ -2395,7 +2395,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

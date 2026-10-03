@@ -282,7 +282,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reportMessage => 'پیغام کی اطلاع دیں';
 
   @override
-  String get reportMessageConfirm => 'کیا آپ واقعی اس پیغام کی اطلاع دینا چاہتے ہیں؟';
+  String get reportMessageConfirm => 'اس پیغام کی اطلاع دیں؟';
 
   @override
   String get messageReported => 'پیغام کی کامیابی سے اطلاع دی گئی۔';
@@ -294,7 +294,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get clearChat => 'بات چیت صاف کریں';
 
   @override
-  String get clearChatConfirm => 'کیا آپ واقعی بات چیت صاف کرنا چاہتے ہیں؟ یہ عمل واپس نہیں کیا جا سکتا۔';
+  String get clearChatConfirm => 'اس چیٹ کے تمام پیغامات حذف ہو جائیں گے۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get maxFilesLimit => 'آپ ایک وقت میں صرف 4 فائلیں اپ لوڈ کر سکتے ہیں';
@@ -357,10 +357,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get cannotBeUndone => 'یہ واپس نہیں کیا جا سکتا۔';
 
   @override
-  String get allDataErased => 'آپ کی تمام یادیں اور بات چیتیں مستقل طور پر حذف ہو جائیں گی۔';
+  String get allDataErased => 'آپ کی یادیں اور گفتگوئیں مٹا دی جائیں گی۔';
 
   @override
-  String get appsDisconnected => 'آپ کی ایپلیکیشنز اور انضمام فوری طور پر منقطع ہو جائیں گے۔';
+  String get appsDisconnected => 'آپ کی ایپس اور انٹیگریشنز منقطع ہو جائیں گی۔';
 
   @override
   String get exportBeforeDelete =>
@@ -1038,7 +1038,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'کیا آپ واقعی $appName سے منقطع کرنا چاہتے ہیں؟ آپ کسی بھی وقت دوبارہ جڑ سکتے ہیں۔';
+    return 'آپ کسی بھی وقت $appName کو دوبارہ جوڑ سکتے ہیں۔';
   }
 
   @override
@@ -1977,14 +1977,14 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteActionItemTitle => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemMessage => 'کیا آپ یقینی ہیں کہ یہ کام حذف کرنا چاہتے ہیں؟';
+  String get deleteActionItemMessage => 'یہ کام حذف کریں؟';
 
   @override
   String get deleteSelectedItemsTitle => 'منتخب شدہ چیزیں حذف کریں';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'کیا آپ یقینی ہیں کہ آپ $count منتخب کام$s حذف کرنا چاہتے ہیں؟';
+    return '$count منتخب کام$s حذف کریں؟';
   }
 
   @override
@@ -2053,7 +2053,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get undo => 'واپس لیں';
 
   @override
-  String get noMemoriesYet => '🧠 ابھی کوئی یادیں نہیں';
+  String get noMemoriesYet => 'ابھی کوئی یادیں نہیں';
 
   @override
   String get noAutoMemories => 'ابھی کوئی خودکار نکالی گئی یادیں نہیں';
@@ -2065,7 +2065,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get noMemoriesInCategories => 'ان اقسام میں کوئی یادیں نہیں';
 
   @override
-  String get noMemoriesFound => '🔍 کوئی یادیں نہیں ملیں';
+  String get noMemoriesFound => 'کوئی یادیں نہیں ملیں';
 
   @override
   String get addFirstMemory => 'اپنی پہلی یاد شامل کریں';
@@ -2074,7 +2074,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get clearMemoryTitle => 'Omi کی میموری صاف کریں';
 
   @override
-  String get clearMemoryMessage => 'کیا آپ یقینی ہیں کہ Omi کی میموری صاف کرنا چاہتے ہیں؟ یہ عمل الٹایا نہیں جا سکتا۔';
+  String get clearMemoryMessage => 'آپ کی تمام یادیں حذف ہو جائیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get clearMemoryButton => 'میموری صاف کریں';
@@ -2220,7 +2220,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemConfirmMessage => 'کیا آپ یقینی ہیں کہ یہ کام حذف کرنا چاہتے ہیں؟';
+  String get deleteActionItemConfirmMessage => 'یہ کام حذف کریں؟';
 
   @override
   String get appLanguage => 'ایپ کی زبان';
@@ -2233,7 +2233,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get languageSettingsHelperText =>
-      'ایپ کی زبان مینوز اور بٹن بدلتی ہے۔ تقریر کی زبان آپ کی ریکارڈنگز کی ٹرانسکرپشن کو متاثر کرتی ہے۔';
+      'ایپ کی زبان مینوز اور بٹن بدلتی ہے۔ بنیادی زبان آپ کی ریکارڈنگز کی ٹرانسکرپشن کو متاثر کرتی ہے۔';
 
   @override
   String get translationNotice => 'ترجمے کا نوٹس';
@@ -2323,7 +2323,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteMemory => 'یادوں کو حذف کریں';
 
   @override
-  String get thisActionCannotBeUndone => 'یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get thisActionCannotBeUndone => 'یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String memoriesCount(int count) {
@@ -2764,7 +2764,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteActionItem => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemConfirmation => 'کیا آپ اس کام کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get deleteActionItemConfirmation => 'یہ کام حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get enterActionItemDescription => 'کام کی تفصیل درج کریں';
@@ -3105,7 +3105,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ پیغام کامیابی سے رپورٹ ہوا';
 
   @override
-  String get confirmReportMessage => 'کیا آپ اس پیغام کی رپورٹ کرنا چاہتے ہیں؟';
+  String get confirmReportMessage => 'اس پیغام کی اطلاع دیں؟';
 
   @override
   String get selectChatAssistant => 'چیٹ معاون منتخب کریں';
@@ -3120,7 +3120,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get clearChatTitle => 'چیٹ صاف کریں؟';
 
   @override
-  String get confirmClearChat => 'کیا آپ چیٹ صاف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get confirmClearChat => 'یہ چیٹ صاف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get copy => 'کاپی کریں';
@@ -3292,7 +3292,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get createMemory => 'یاد بنائیں';
 
   @override
-  String get deleteMemoryConfirmation => 'کیا آپ اس یاد کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get deleteMemoryConfirmation => 'یہ یاد حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get makePrivate => 'نجی بنائیں';
@@ -3329,7 +3329,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'کیا آپ Omi کی یاد صاف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی اور تمام $count یادوں کو ہٹا دے گی۔';
+    return 'تمام $count یادیں حذف ہو جائیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -3621,8 +3621,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Omi کو بہترین ایپ خودکار طور پر منتخب کرنے دیں';
 
   @override
-  String get deleteConversationConfirmation =>
-      'کیا آپ واقعی یہ بات چیت حذف کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+  String get deleteConversationConfirmation => 'یہ گفتگو حذف کریں؟ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get conversationDeleted => 'بات چیت حذف ہو گئی';
@@ -3948,8 +3947,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get updateAppQuestion => 'ایپ اپ ڈیٹ کریں؟';
 
   @override
-  String get updateAppConfirmation =>
-      'کیا آپ واقعی اپنی ایپ اپ ڈیٹ کرنا چاہتے ہیں؟ ہماری ٹیم کے نقطہ نظر سے تبدیلیاں نظر آئیں گی۔';
+  String get updateAppConfirmation => 'ہماری ٹیم کے جائزے کے بعد تبدیلیاں نافذ ہو جائیں گی۔';
 
   @override
   String get updateApp => 'ایپ اپ ڈیٹ کریں';
@@ -4013,8 +4011,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'رکنیت منسوخ کریں؟';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'کیا آپ واقعی اپنی رکنیت منسوخ کرنا چاہتے ہیں؟ آپ اپنی موجودہ بلنگ مدت کے اختتام تک رسائی میں رہیں گے۔';
+  String get cancelSubscriptionConfirmation => 'آپ اپنی موجودہ بلنگ مدت کے اختتام تک رسائی میں رہیں گے۔';
 
   @override
   String get cancelSubscriptionButton => 'رکنیت منسوخ کریں';
@@ -4201,7 +4198,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'یہ کارنامہ واپس نہیں ہو سکتا۔ اس کلید کو استعمال کرنے والی کوئی بھی ایپلیکیشنز اب API تک رسائی نہیں کر سکیں گی۔';
+      'اس کلید کو استعمال کرنے والی ایپس API تک رسائی کھو دیں گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get revoke => 'منسوخ کریں';
@@ -4258,7 +4255,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'کیا آپ واقعی یہ $item حذف کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+    return 'اس $item کو حذف کرنا واپس نہیں ہو سکتا۔';
   }
 
   @override
@@ -4266,7 +4263,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'کیا آپ واقعی کلید \"$keyName\" منسوخ کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔';
+    return '\"$keyName\" استعمال کرنے والی ہر چیز رسائی کھو دے گی۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -4441,7 +4438,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'آپ کا منصوبہ $date تک فعال رہے گا۔ اس کے بعد آپ اپنی لامحدود خصوصیات تک رسائی سے محروم ہو جائیں گے۔ کیا آپ یقینی ہیں؟';
+    return 'آپ کا منصوبہ $date تک فعال رہے گا۔ اس کے بعد آپ اپنی لامحدود خصوصیات تک رسائی سے محروم ہو جائیں گے۔';
   }
 
   @override
@@ -4534,7 +4531,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get askOmiAnything => 'اپنی زندگی کے بارے میں Omi سے کچھ بھی پوچھیں';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omi کی لامحدود یادوں کو کھولیں';
+  String get unlockOmiInfiniteMemory => 'لامحدود یادیں';
 
   @override
   String get youreOnAnnualPlan => 'آپ سالانہ منصوبے پر ہیں';
@@ -4546,7 +4543,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get unableToLoadPlans => 'پلان لوڈ نہیں ہو سکے';
 
   @override
-  String get checkConnectionTryAgain => 'کنکشن چیک کریں اور دوبارہ کوشش کریں';
+  String get checkConnectionTryAgain => 'اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔';
 
   @override
   String get useFreePlan => 'مفت منصوبہ استعمال کریں';
@@ -4728,7 +4725,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'اس سے Limitless سے درآمد شدہ تمام گفتگو مستقل طور پر حذف ہوں گی۔ یہ عمل واپس نہیں کیا جا سکتا۔';
+      'Limitless سے درآمد کی گئی تمام گفتگو حذف ہو جائے گی۔ یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4769,7 +4766,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'کیا آپ واقی $name کا نمونہ حذف کرنا چاہتے ہیں؟';
+    return '$name کا آواز کا نمونہ ہٹا دیا جائے گا۔ یہ کالعدم نہیں ہو سکتا۔';
   }
 
   @override
@@ -4777,7 +4774,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'کیا آپ واقی $name کو حذف کرنا چاہتے ہیں؟ اس سے تمام متعلقہ صوتی نمونے بھی ہٹائے جائیں گے۔';
+    return 'یہ $name کے آواز کے نمونے ہٹا دیتا ہے اور اسے واپس نہیں کیا جا سکتا۔ ماضی کی گفتگوؤں میں ان کے جملے بے نام مقررین بن جاتے ہیں۔';
   }
 
   @override
@@ -5133,7 +5130,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get finishedConversation => 'گفتگو مختتم کر دی؟';
 
   @override
-  String get stopRecordingConfirmation => 'کیا آپ یقینی ہیں کہ آپ ریکارڈنگ روک کر گفتگو کو اب خلاصہ کرنا چاہتے ہیں؟';
+  String get stopRecordingConfirmation => 'ریکارڈنگ روک کر ابھی گفتگو کا خلاصہ بنائیں؟';
 
   @override
   String get conversationEndsManually => 'گفتگو صرف دستی طور پر ختم ہوگی۔';
@@ -5976,7 +5973,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get cloudProvider => 'کلاؤڈ فراہم کنندہ';
 
   @override
-  String get premiumMinutesInfo => 'ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔';
+  String get premiumMinutesInfo => 'ہر مہینے 300 پریمیم منٹ۔ لامحدود مفت ٹرانسکرپشن کے لیے \"آلے پر\" منتخب کریں۔';
 
   @override
   String get viewUsage => 'استعمال دیکھیں';
@@ -6057,7 +6054,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get batteryDrainSignificantly => 'بیٹری کی ڈرین میں نمایاں اضافہ ہوگا۔';
 
   @override
-  String get premiumMinutesMonth => 'ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ';
+  String get premiumMinutesMonth => 'ہر مہینے 300 پریمیم منٹ۔ لامحدود مفت ٹرانسکرپشن کے لیے \"آلے پر\" منتخب کریں۔ ';
 
   @override
   String get audioProcessedLocally =>
@@ -6112,7 +6109,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi کا built-in لائیو ٹرانسکریپشن خودکار speaker detection اور diarization کے ساتھ real-time بات چیت کے لیے بہتر بنایا گیا ہے۔';
+      'Omi کی لائیو ٹرانسکرپشن ریئل ٹائم گفتگو کے لیے بنائی گئی ہے اور بتاتی ہے کہ کس نے کیا کہا۔';
 
   @override
   String get reset => 'دوبارہ سیٹ کریں';
@@ -6647,8 +6644,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get shareRecording => 'ریکارڈنگ شیئر کریں';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'کیا آپ یقینی ہیں کہ آپ یہ ریکارڈنگ مستقل طور پر ڈیلیٹ کرنا چاہتے ہیں؟ یہ واپس نہیں کیا جا سکتا۔';
+  String get deleteRecordingConfirmation => 'یہ کالعدم نہیں ہو سکتا۔';
 
   @override
   String get recordingIdLabel => 'ریکارڈنگ ID';
@@ -7022,7 +7018,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'آپ اپنی Unlimited منصوبہ کو $title میں تبدیل کر رہے ہیں۔ کیا آپ آگے بڑھنا چاہتے ہیں؟';
+    return 'آپ اپنا Unlimited منصوبہ $title میں تبدیل کر رہے ہیں۔';
   }
 
   @override
@@ -8912,10 +8908,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'اختیاری — آپ کے خیالات ہمیں بہتر پروڈکٹ بنانے میں مدد دیتے ہیں۔';
 
   @override
-  String get deleteFlowConfirmTitle => 'یہ مستقل ہے';
+  String get deleteFlowConfirmTitle => 'اپنا اکاؤنٹ حذف کریں؟';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'ایک بار اکاؤنٹ حذف ہونے کے بعد اسے بحال نہیں کیا جا سکتا۔';
+  String get deleteFlowConfirmSubtitle => 'اسے واپس نہیں کیا جا سکتا، سپورٹ کے ذریعے بھی نہیں۔';
 
   @override
   String get deleteConsequenceSubscription => 'کوئی بھی فعال سبسکرپشن منسوخ کر دی جائے گی۔';
@@ -9357,7 +9353,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔';
+      'ابھی ریکارڈ کریں، جب چاہیں ٹرانسکرائب کریں۔ تب تک آڈیو آپ کے فون پر رہتا ہے۔';
 
   @override
   String get transcribeLaterNote =>
@@ -9637,7 +9633,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteOnDeviceModel => 'ماڈل حذف کریں';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'کیا آپ واقعی یہ ماڈل حذف کرنا چاہتے ہیں؟';
+  String get deleteOnDeviceModelConfirm => 'یہ ماڈل حذف کریں؟';
 
   @override
   String get onDeviceModelDownloaded => 'ڈاؤن لوڈ شدہ';
@@ -9794,7 +9790,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
 
   @override
-  String get planSheetChooseYourPlan => 'لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔';
+  String get planSheetChooseYourPlan => 'اپنے لیے موزوں پلان منتخب کریں۔';
 
   @override
   String get availableOnMacMobileWeb => 'Mac، موبائل اور ویب پر دستیاب';
@@ -10040,24 +10036,23 @@ class AppLocalizationsUr extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10070,13 +10065,13 @@ class AppLocalizationsUr extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10456,8 +10451,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'ڈیوائس بھول جائیں؟';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi اس ڈیوائس سے جڑنا بند کر دے گا۔ اسے دوبارہ استعمال کرنے کے لیے آپ کو اسے دوبارہ پیئر کرنا ہوگا۔';
+  String get forgetDeviceConfirmMessage => 'Omi اس ڈیوائس سے جڑنا بند کر دے گا۔';
 
   @override
   String get deviceForgottenMessage => 'ڈیوائس بھلا دی گئی';
@@ -11834,19 +11828,19 @@ class AppLocalizationsUr extends AppLocalizations {
   String get evidenceNothing => 'آپ نے ابھی تک انہیں لیبل یا تصدیق نہیں کیا';
 
   @override
-  String get effectCountsALot => 'بہت اہم';
+  String get effectCountsALot => 'بہت مدد کرتا ہے';
 
   @override
-  String get effectCounts => 'اہم';
+  String get effectCounts => 'مدد کرتا ہے';
 
   @override
-  String get effectCountsALittle => 'تھوڑا اہم';
+  String get effectCountsALittle => 'تھوڑی مدد کرتا ہے';
 
   @override
-  String get effectBarelyCounts => 'بمشکل شمار ہوتا ہے';
+  String get effectBarelyCounts => 'بمشکل مدد کرتا ہے';
 
   @override
-  String get effectCountsAgainst => 'خلاف شمار ہوتا ہے';
+  String get effectCountsAgainst => 'نقصان کرتا ہے';
 
   @override
   String get effectNeeded => '«تصدیق شدہ» کے لیے ضروری';
@@ -11866,7 +11860,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'اعتماد میں زیادہ تبدیلی صرف آپ کے جوابات سے آتی ہے۔ خودکار میچز اکیلے بمشکل شمار ہوتے ہیں۔';
+      'اعتماد میں زیادہ تبدیلی صرف آپ کے جوابات سے آتی ہے۔ خودکار میچز اکیلے بمشکل مدد کرتے ہیں۔';
 
   @override
   String get personWhyConfidence => 'کیوں؟';
@@ -11882,7 +11876,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi اندازہ لگانے کے بجائے قریبی میچز کی تصدیق آپ سے پوچھے گا۔';
+  String get pinPersonHonestLine => 'ملتی جلتی آوازوں کو ملانے سے پہلے Omi پوچھتا ہے۔';
 
   @override
   String get pinAction => 'پن کریں';
@@ -12120,17 +12114,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مقررین',
-      one: '1 مقرر',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'شارٹ کٹس ← Siri میں Omi آن کریں۔ “$askPhrase” یا “$questionPhrase” کہیں، پھر اپنا سوال پوچھیں۔';
   }
@@ -12154,6 +12137,21 @@ class AppLocalizationsUr extends AppLocalizations {
       'Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔';
 
   @override
+  String get exportingAllData =>
+      'آپ کا ڈیٹا ایکسپورٹ ہو رہا ہے… Omi کو کھلا رکھیں؛ بڑے اکاؤنٹس میں کئی منٹ لگ سکتے ہیں۔';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مقررین',
+      one: '1 مقرر',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'سنک کی گئی کاپیاں خودکار طور پر ہٹائیں';
 
   @override
@@ -12171,7 +12169,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'لیبل شدہ لائنیں: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count لائنوں پر لیبل لگا دیا گیا',
+      one: '1 لائن پر لیبل لگا دیا گیا',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12204,7 +12208,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'اس آواز کے ساتھ پچھلی گفتگوئیں: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count پچھلی گفتگوؤں میں ملا',
+      one: '1 پچھلی گفتگو میں ملا',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12229,5 +12239,69 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'کوئی Omi نہیں ملا';
+
+  @override
+  String get findDeviceNoneMessage => 'اسے آن کریں اور اپنے فون کے قریب رکھیں۔';
+
+  @override
+  String get startupFailedDetails => 'تفصیلات';
+
+  @override
+  String get couldNotLoadApiKeys => 'API کلیدیں لوڈ نہیں ہو سکیں۔';
+
+  @override
+  String get speakerTagPromptNoAction => 'نہیں…';
+
+  @override
+  String get diagnosticsRightNow => 'ابھی';
+
+  @override
+  String get diagnosticsLast7Days => 'پچھلے 7 دن';
+
+  @override
+  String get diagnosticsConnectedFor => 'منسلک رہنے کا وقت';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'خود بخود دوبارہ جڑ جاتا ہے';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'مختصر رکاوٹیں، ہر بار تقریباً $duration میں واپس';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'اس ہفتے کوئی رکاوٹ نہیں';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'جڑنے میں مسئلہ';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'پچھلے 24 گھنٹوں میں ناکام کنکشن: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'رکاوٹیں';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'تقریباً $count فی گھنٹہ';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'طویل ترین وقفہ';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'جوڑنے کے بعد سے: $drops رکاوٹیں، $failed ناکام کنکشن۔';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'پچھلے $duration';
   }
 }

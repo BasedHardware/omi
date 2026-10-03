@@ -20,6 +20,7 @@ from database.legal_holds import (
     LegalHoldAuthorityUnavailable,
 )
 from database.sync_bridges import mark_sync_bridge_cleaned
+from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
@@ -89,6 +90,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 _record_bridge_retraction('attempted')
                 logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
                 try:
+                    transfer_donor(uid, source_id, conversation_id)
                     retract_sync_bridge_source(uid, source_id)
                 except Exception as error:
                     reason = _deferred_retraction_reason(error)

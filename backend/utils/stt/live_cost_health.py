@@ -10,9 +10,26 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
 import os
 
-from config.live_stt_registry import DEFAULT_IDS, Target, registry, assigned
+from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
 from utils.stt.live_gate import GateState, begin_trial, transition
-from utils.stt.live_metrics import COST_BENCH, COST_EVENTS, COST_STAGE, FLEET_HEALTH_WRITE_DROPPED
+from utils.stt.live_metrics import (
+    COST_BENCH,
+    COST_EVENTS,
+    COST_STAGE,
+    COST_SNAPSHOT_AT,
+    COST_STATE_KNOWN,
+    COST_OBSERVATIONS,
+    COST_IGNORED_DEATHS,
+    COST_SETTLEMENTS,
+    COST_VOTES,
+    COST_ALL_DEGRADED,
+    FLEET_HEALTH_WRITE_DROPPED,
+    MANAGED_LEGS_OPENED,
+    MANAGED_LEGS_SETTLED,
+    MANAGED_LEGS_OPEN,
+)
+from utils.stt.live_signal import provider_observation
+from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +38,12 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v3'
+PREFIX = 'omi:live-stt:cost-v7'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
+if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end
 return 1
 """
 
@@ -55,6 +73,7 @@ class CostHealthMixin(ABC):
         raise NotImplementedError
 
     def init_cost_health(self) -> None:
+        self._cost_metrics_targets: set[str] = set()
         self._cost_local = {}
         self._cost_cached = {}
         self._cost_interests = {}
@@ -62,6 +81,42 @@ class CostHealthMixin(ABC):
         self._cost_fresh_at = None
         self._cost_unreconciled = set()
         self._cost_server_offset = 0.0
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            targets = DEFAULT_TARGETS
+        self._init_cost_metrics(targets)
+
+    def _init_cost_metrics(self, targets) -> None:
+        for target in targets:
+            if target.id in self._cost_metrics_targets:
+                continue
+            self._cost_metrics_targets.add(target.id)
+            MANAGED_LEGS_OPENED.labels(target=target.id)
+            MANAGED_LEGS_SETTLED.labels(target=target.id)
+            MANAGED_LEGS_OPEN.labels(target=target.id)
+            COST_ALL_DEGRADED.labels(target=target.id)
+            for scope in ('global', 'language'):
+                for result in ('applied', 'user_cap', 'window_full', 'generation', 'stage'):
+                    COST_VOTES.labels(target=target.id, scope=scope, result=result)
+            for event in ('bench', 'stage', 'unbench'):
+                for scope in ('global', 'language'):
+                    COST_EVENTS.labels(target=target.id, event=event, scope=scope)
+            for reason in LIVE_STT_REASONS:
+                failed = provider_observation('text' if reason == 'text' else 'failover', reason)
+                outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
+                COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
+                for boundary in ('client_gone', 'owner_teardown'):
+                    COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
+                for path in ('close', 'failover', 'connect'):
+                    COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
+
+    @staticmethod
+    def _publish_cost_state(target: str, state: GateState) -> None:
+        known = state.n > 0 or state.generation > 0 or state.stage < 100
+        COST_STATE_KNOWN.labels(target=target).set(int(known))
+        COST_BENCH.labels(target=target).set(int(state.stage == 0) if known else float('nan'))
+        COST_STAGE.labels(target=target).set(state.stage if known else float('nan'))
 
     def _fleet_now(self) -> float:
         return self._clock() + self._cost_server_offset
@@ -81,9 +136,6 @@ class CostHealthMixin(ABC):
             self._cost_server_offset = offset
         return now
 
-    def _target_id(self, provider: str) -> str:
-        return DEFAULT_IDS.get(provider, provider)
-
     def _cost_is_fresh(self, now: float) -> bool:
         return self._cost_fresh_at is not None and now - self._cost_fresh_at <= 15 and now >= self._redis_retry_at
 
@@ -98,6 +150,7 @@ class CostHealthMixin(ABC):
         return state
 
     def cost_snapshot(self, targets: list[Target] | tuple[Target, ...], language: str) -> dict[str, GateState]:
+        self._init_cost_metrics(targets)
         now = self._clock()
         result: dict[str, GateState] = {}
         with self._lock:
@@ -123,8 +176,7 @@ class CostHealthMixin(ABC):
                 else:
                     state = global_state
                 result[target.id] = state
-                COST_BENCH.labels(target=target.id).set(int(global_state.stage == 0))
-                COST_STAGE.labels(target=target.id).set(global_state.stage)
+                self._publish_cost_state(target.id, global_state)
         return result
 
     def prefer_recovery(self, target: str, language: str) -> None:
@@ -139,14 +191,29 @@ class CostHealthMixin(ABC):
         outcome: str,
         generations: dict[str, int] | None = None,
         uid: str | None = None,
-    ) -> None:
-        if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off' or outcome not in {'text', 'no_text', 'failover'}:
-            return
+        reason: str | None = None,
+    ) -> bool:
+        if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+            return False
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]
-        target = self._target_id(target)
         entry = next((entry for entry in registry() if entry.id == target), None)
         if entry is None:
-            return
+            return False
+        self._init_cost_metrics([entry])
+        reason = normalize_live_stt_reason(
+            reason,
+            default=(
+                outcome if outcome in {'text', 'no_text'} else 'connection_lost' if outcome == 'failover' else 'other'
+            ),
+        )
+        failed = provider_observation(outcome, reason)
+        COST_OBSERVATIONS.labels(
+            target=target,
+            outcome='censored' if failed is None else 'provider_failure' if failed else 'success',
+            reason=reason,
+        ).inc()
+        if failed is None:
+            return True
         minimum_share = (
             5
             if assigned(uid, 'stt-reentry:' + target, 5)
@@ -154,7 +221,6 @@ class CostHealthMixin(ABC):
         )
         if not assigned(uid, target, entry.ramp()):
             minimum_share = 100
-        failed = outcome != 'text'
         now = self._clock()
         with self._lock:
             for lang in ('all', language):
@@ -178,11 +244,18 @@ class CostHealthMixin(ABC):
                     if not self._cost_is_fresh(now):
                         self._cost_event(target, lang, state, updated, failed, local=True)
         self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share))
+        return True
 
     def quarantine_target(self, target: str, seconds: float) -> None:
         def update(state: GateState) -> GateState:
             return replace(
-                state, stage=0, until=max(state.until, self._fleet_now() + seconds), generation=state.generation + 1
+                state,
+                stage=0,
+                until=max(state.until, self._fleet_now() + seconds),
+                generation=state.generation + 1,
+                healthy_users=(),
+                healthy_window=-1,
+                overflow_failures=(),
             )
 
         with self._lock:
@@ -222,10 +295,9 @@ class CostHealthMixin(ABC):
             return
         event = 'bench' if new.stage == 0 else 'unbench' if new.stage == 100 else 'stage'
         if language == 'all':
-            COST_BENCH.labels(target=target).set(int(new.stage == 0))
-            COST_STAGE.labels(target=target).set(new.stage)
-        if not local and language == 'all':
-            COST_EVENTS.labels(target=target, event=event).inc()
+            self._publish_cost_state(target, new)
+        if not local:
+            COST_EVENTS.labels(target=target, event=event, scope='global' if language == 'all' else 'language').inc()
         n, failures = (
             (new.n, new.failures) if new.n else (old.n + int(failed is not None), old.failures + int(bool(failed)))
         )
@@ -254,7 +326,10 @@ class CostHealthMixin(ABC):
             if new == old:
                 return old
             encoded = json.dumps(new.encode(), separators=(',', ':'))
-            if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded):
+            # Healthy fairness data expires after three idle windows. Benches
+            # and recovery trials have no healthy_users and must not expire
+            # into a fresh stage-100 state (especially unprobed expensive legs).
+            if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0):
                 self._cost_event(key[0], key[1], old, new, failed)
                 with self._lock:
                     self._cost_cached[key] = new
@@ -273,16 +348,29 @@ class CostHealthMixin(ABC):
         async def write():
             now = await self._server_now()
             for lang in ('all', language):
+                result = 'applied'
 
                 def update(state: GateState, lang: str = lang) -> GateState:
+                    nonlocal result
+                    result = 'applied'
                     if 0 < state.stage < minimum_share:
+                        result = 'stage'
                         return state
                     if generations is not None and state.generation != generations.get(lang, state.generation):
+                        result = 'generation'
                         return state
-                    return transition(state, failed, now, witness=witness, language_only=lang != 'all')
+                    updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
+                    if updated.stage == state.stage and updated.n == state.n and updated.failures == state.failures:
+                        result = (
+                            'stage'
+                            if state.stage == 0
+                            else 'user_cap' if dict(state.healthy_users).get(witness, 0) >= 3 else 'window_full'
+                        )
+                    return updated
 
                 key = (target, lang)
                 written = await self._cost_update(key, update, failed)
+                COST_VOTES.labels(target=target, scope='global' if lang == 'all' else 'language', result=result).inc()
                 with self._lock:
                     local = self._cost_local.get(key, GateState())
                     if key not in self._cost_unreconciled and (
@@ -313,8 +401,21 @@ class CostHealthMixin(ABC):
 
     async def refresh_cost_once(self) -> None:
         now = self._clock()
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            logger.debug('Cost gate registry invalid; retaining cached state')
+            return
+        self._init_cost_metrics(targets)
         with self._lock:
             self._cost_interests = {key: seen for key, seen in self._cost_interests.items() if now - seen < 900}
+            # All pods observe global targets, including idle/ineligible pods.
+            # Language interests still follow actual session traffic.
+            self._cost_interests.update({(target.id, 'all'): now for target in targets})
+            while len(self._cost_interests) > 256:
+                current = {(target.id, 'all') for target in targets}
+                expendable = [key for key in self._cost_interests if key not in current]
+                self._cost_interests.pop(min(expendable, key=lambda key: self._cost_interests[key]))
             self._cost_preferred = {key: seen for key, seen in self._cost_preferred.items() if now - seen < 15}
             keys = sorted(self._cost_interests)
             preferred = dict(self._cost_preferred)
@@ -355,6 +456,9 @@ class CostHealthMixin(ABC):
             with self._lock:
                 self._cost_cached = states
                 self._cost_fresh_at = self._clock()
+                COST_SNAPSHOT_AT.set(fleet_now)
+                for target in targets:
+                    self._publish_cost_state(target.id, states[(target.id, 'all')])
 
         try:
             await self._bounded(refresh())

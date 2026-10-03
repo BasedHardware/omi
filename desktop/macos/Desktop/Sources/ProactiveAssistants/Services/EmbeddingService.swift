@@ -63,7 +63,33 @@ actor EmbeddingService {
     return try await authService.getAuthHeader()
   }
 
-  private init() {}
+  private let acquireAuth: @Sendable (RuntimeOwnerAuthorizationSnapshot?) async throws -> String
+  private let dispatch: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+  private let ownerIsCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+
+  init(
+    acquireAuth: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot?) async throws -> String = { authorization in
+      let auth = await MainActor.run { AuthService.shared }
+      if let authorization { return try await auth.getAuthHeader(expectedUserId: authorization.ownerID) }
+      return try await auth.getAuthHeader()
+    },
+    dispatch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = {
+      try await URLSession.shared.data(for: $0)
+    },
+    ownerIsCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    }
+  ) {
+    self.acquireAuth = acquireAuth
+    self.dispatch = dispatch
+    self.ownerIsCurrent = ownerIsCurrent
+  }
+
+  private func requireAuthority(_ authorization: RuntimeOwnerAuthorizationSnapshot?) throws {
+    try Task.checkCancellation()
+    try ScreenTaskWorkAuthority.require()
+    if let authorization, !ownerIsCurrent(authorization) { throw ScreenTaskFailure.ownerRevoked }
+  }
 
   // MARK: - Embedding API
 
@@ -71,7 +97,10 @@ actor EmbeddingService {
   /// - Parameters:
   ///   - text: Text to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-  func embed(text: String, taskType: String? = nil) async throws -> [Float] {
+  func embed(text: String, taskType: String? = nil, authorization: RuntimeOwnerAuthorizationSnapshot? = nil)
+    async throws -> [Float]
+  {
+    try requireAuthority(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -93,12 +122,15 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.applyGeminiProxyHeaders(
-      lane: .embedding, workload: .maintenance, authorization: try await authHeader())
+    let header = try await acquireAuth(authorization)
+    try requireAuthority(authorization)
+    request.applyGeminiProxyHeaders(lane: .embedding, workload: .maintenance, authorization: header)
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    try requireAuthority(authorization)
+    let (data, response) = try await dispatch(request)
+    try requireAuthority(authorization)
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.

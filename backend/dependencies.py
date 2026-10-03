@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
@@ -160,6 +160,31 @@ async def get_mcp_api_key_auth(
     )
 
 
+def require_mcp_scope(required_scope: str) -> Callable[..., Awaitable[str]]:
+    """Build a UID dependency using the hosted registry's scope requirement.
+
+    Validate the verified credential context without normalizing its scopes here.
+    Raw-key full-access normalization remains the authentication layer's policy.
+    Keep the existing aggregate MCP read budget on reads and writes; route-level
+    write budgets still compose after this dependency succeeds.
+    """
+
+    async def dependency(auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth)) -> str:
+        if not has_scope(auth.scopes, required_scope):
+            raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {required_scope}")
+        await _check_api_key_rate_limit_async(
+            prefix="mcp",
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            policy_name="mcp:read",
+        )
+        return auth.uid
+
+    dependency.__name__ = f"get_uid_with_mcp_{required_scope.replace('.', '_')}"
+    return dependency
+
+
 async def get_mcp_memory_default_memory_read_context(
     auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
 ) -> ProductAuthorizationContext:
@@ -261,12 +286,6 @@ async def get_api_key_auth(
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
     )
-
-
-async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
-    """Legacy function for backward compatibility. Use scope-specific dependencies instead."""
-    auth_data = await get_api_key_auth(api_key)
-    return auth_data.uid
 
 
 # Scope-specific dependencies

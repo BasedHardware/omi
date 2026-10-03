@@ -57,15 +57,15 @@ from utils.stt.live_failure import (
     live_stt_socket_is_dead,
     live_stt_terminal_reason,
     live_stt_upstream_failure,
-    note_typed_provider_death,
     send_live_stt_audio,
+    settle_terminal_socket,
     terminate_live_stt_session,
     terminate_live_stt_backoff,
 )
 from utils.stt.live_chain import ProviderChainUnavailable
+from utils.stt.live_recovery import select_live_replacement
 from config.stt_provider_policy import provider_for_service
-from utils.stt.live_router import note_failed_route
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import (
@@ -212,6 +212,10 @@ class ListenReceiver(ReplayFilterMixin):
         # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
         self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self._stt_recovery_exhausted = False
+        self._stt_rebuild_attempts = 0
+        self._stt_failed_reasons: dict[str, str] = {}
+        self._stt_rescue_retries: set[str] = set()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
         self._resilient_audio: ResilientAudio | None = None
         self._window_replay_audio: ResilientAudio | None = None
@@ -1017,6 +1021,7 @@ class ListenReceiver(ReplayFilterMixin):
                 release_live_stt_socket(socket)
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
+        self._settle_pending_live_failover_failure()
 
     def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
         """Keep send accounting when VAD is disabled or fails to initialize."""
@@ -1152,6 +1157,8 @@ class ListenReceiver(ReplayFilterMixin):
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
+            if self._stt_recovery_exhausted:
+                return False
             # Soniox drain_and_close() sets this before its final flush.  Treat a
             # finishing socket as receiver teardown even if its dead latch was
             # already set; opening a replacement here races the zero-audio close.
@@ -1161,7 +1168,9 @@ class ListenReceiver(ReplayFilterMixin):
                 return True
             if await self._reconnect_stt_socket_locked():
                 return True
-            return await self._rebuild_stt_socket_locked()
+            recovered = await self._rebuild_stt_socket_locked()
+            self._stt_recovery_exhausted = not recovered
+            return recovered
 
     async def _reconnect_stt_socket_locked(self) -> bool:
         return await reconnect_live_stt_socket(self)
@@ -1174,20 +1183,10 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
         dead_provider = provider_for_service(self.host.stt_service)
-        failures = note_failed_route(self, dead_provider)
-        if failures > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
-            self._settle_pending_live_failover_failure()
-            return False
-        note_typed_provider_death(self.stt_socket, dead_provider)
-        service, language, model = get_stt_service_for_language(
-            self.host.language,
-            multi_lang_enabled=self.host.multi_lang_enabled,
-            language_profile=self.host.language_profile,
-            exclude=frozenset(self._stt_failed_providers),
-            **window_selection_kwargs(self.host, self.host.request.uid),
+        service, language, model = select_live_replacement(
+            self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
         )
-        if service is None or provider_for_service(service) in self._stt_failed_providers:
-            self._settle_pending_live_failover_failure()
+        if service is None:
             return False
         # A failed hop is degraded while the chain continues; exhausted means no replacement path.
         self._settle_pending_live_failover_failure(continuing=True)
@@ -1206,8 +1205,7 @@ class ListenReceiver(ReplayFilterMixin):
         if replay and epoch is not None:
             epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
-        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
-        hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
+        hop = PendingLiveFailover.from_socket(previous, dead_provider or 'unknown', service.value)
         hop.capture_window_failure_details(previous)
         try:
             raw = await self._create_stt_socket(
@@ -1216,6 +1214,9 @@ class ListenReceiver(ReplayFilterMixin):
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except asyncio.CancelledError:
+            hop.note_failure(None)
+            raise
         except ProviderChainUnavailable as error:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
@@ -1286,9 +1287,16 @@ class ListenReceiver(ReplayFilterMixin):
         """
         while self.host.state.active and not self.host.state.stt_terminal_failure:
             socket = self.stt_socket
+            outcome = getattr(socket, 'leg_outcome', None)
+            if outcome is not None and outcome.owner_closing:
+                return
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
                     continue
+                if outcome is not None and outcome.owner_closing:
+                    return
+                if self.host.state.active and not self.host.state.stt_terminal_failure:
+                    settle_terminal_socket(socket, self._serving_provider(), 'connection_lost')
                 await terminate_live_stt_session(
                     self.host.request.websocket,
                     self.host.state,
@@ -1382,7 +1390,8 @@ class ListenReceiver(ReplayFilterMixin):
             if ring_action == 'failover':
                 if await self._failover_stt_socket():
                     continue
-                return
+                # Fall through to the idempotent terminal send path. The
+                # recovery latch prevents it from rebuilding the same chain.
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1725,6 +1734,12 @@ class ListenReceiver(ReplayFilterMixin):
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            # Teardown owns subsequent tail-send/transport symptoms. Mark the
+            # outcome before any await; drain may still deliver valid text.
+            for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
+                mark_teardown = getattr(socket, 'mark_owner_teardown', None)
+                if callable(mark_teardown):
+                    mark_teardown()
             if decoded_audio_bytes:
                 self._emit_realtime_demand(request, decoded_audio_bytes)
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
@@ -1821,6 +1836,7 @@ class ListenReceiver(ReplayFilterMixin):
                     logger.warning('Failed to close a live STT socket during receiver shutdown')
                 finally:
                     release_live_stt_socket(socket)
+        self._settle_pending_live_failover_failure()
 
     def clear(self) -> None:
         self.image_chunks.clear()

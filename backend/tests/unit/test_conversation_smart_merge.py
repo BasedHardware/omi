@@ -15,7 +15,7 @@ from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
-from database import sync_bridges
+from database import sync_bridges, action_item_refresh as refresh_db
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -67,8 +67,9 @@ class World:
         self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
-        for module in (smart_merge_db, sync_bridges, conversations_db):
+        for module in (smart_merge_db, sync_bridges, conversations_db, refresh_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
+        monkeypatch.setattr(refresh_db, 'bump_action_items_list_version', lambda uid: None)
         monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, 'get_conversation', self.get)
@@ -898,8 +899,15 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
     # Later decisions saw the stretch: the last state lists the four fragments before A.
     last_state = world.jev_calls[-1]['state']
     assert last_state.count('\n- ') == 4 and 'Title: title f5' in last_state and 'Title: title f6' in last_state
-    visible = [key[-1] for key, row in world.store.rows.items() if not row.get('deleted')]
+    visible = [
+        key[-1]
+        for key, row in world.store.rows.items()
+        if key[:3] == ('users', UID, 'conversations') and not row.get('deleted')
+    ]
     assert visible == ['f0']
+    # One content-free audit sibling per absorb, outside the conversation collection.
+    audits = sorted(key[-1] for key in world.store.rows if key[:3] == ('users', UID, 'smart_merge_audit'))
+    assert audits == sorted(ids[1:])
 
 
 # --------------------------------------------------------------------------- storage

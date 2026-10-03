@@ -81,7 +81,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final phase = provider.apiViewState.phase;
-      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
+      final typedResultAlreadyProjected =
+          phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
@@ -439,7 +440,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
         // Successful empty results use the existing icon and conversation guidance.
-        final showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired;
@@ -458,19 +460,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
-                          ? CustomScrollView(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
-                                ),
-                              ],
-                            )
-                          : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
-                              : _buildTasksList(categorizedItems, provider),
+                      ? CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(child: ActionItemsApiStatus(provider: provider)),
+                            ),
+                          ],
+                        )
+                      : categorizedItems.values.every((l) => l.isEmpty)
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // The empty state points to conversation capture on Home.
@@ -501,9 +503,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
-      ],
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
     );
   }
 
@@ -629,7 +629,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -640,7 +640,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(title, style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -720,7 +720,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1254,10 +1254,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
 final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
   color: OmiColors.textTertiary,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
 );
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.

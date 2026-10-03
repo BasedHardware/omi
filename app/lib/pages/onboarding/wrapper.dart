@@ -19,6 +19,7 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -434,28 +435,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           body: Stack(
             children: [
               if (index == kAuthPage || showBackground) _background(),
-              // Page component (no transition for content)
-              pages[index],
-              if (kProgressSteps.contains(index))
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: OmiSpacing.md),
-                    child: OnboardingProgressDots(
-                      current: kProgressSteps.indexOf(index),
-                      total: kProgressSteps.length,
-                    ),
-                  ),
-                ),
-              if (previous != null)
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: OmiSpacing.xs, top: OmiSpacing.xxs),
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: OmiBackButton.circled(key: const Key('onboarding_back'), onPressed: _goBack),
-                    ),
-                  ),
-                ),
+              OnboardingStepLayout(
+                reserveHeader: index == kSpeechProfilePage,
+                onBack: previous == null ? null : _goBack,
+                progress: kProgressSteps.contains(index)
+                    ? OnboardingProgressDots(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
+                    : null,
+                child: pages[index],
+              ),
             ],
           ),
         ),

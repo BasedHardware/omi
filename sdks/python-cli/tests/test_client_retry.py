@@ -10,7 +10,7 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import USER_AGENT, OmiClient
+from omi_cli.client import USER_AGENT, OmiClient, _parse_retry_after
 from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
 
 
@@ -297,6 +297,16 @@ def test_param_filtering_drops_none(authed_profile, respx_mock) -> None:
     request = route.calls.last.request
     assert "categories" not in request.url.params
     assert request.url.params["limit"] == "25"
+
+
+def test_parse_retry_after_rejects_non_finite_numbers() -> None:
+    assert _parse_retry_after("12") == 12.0
+    assert _parse_retry_after("  300  ") == 300.0
+    assert _parse_retry_after("inf") is None
+    assert _parse_retry_after("Infinity") is None
+    assert _parse_retry_after("1e999") is None
+    assert _parse_retry_after("NaN") is None
+    assert _parse_retry_after("nan") is None
 
 
 def test_429_with_retry_after_waits_at_least_that_long(authed_profile, respx_mock, monkeypatch) -> None:

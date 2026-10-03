@@ -527,7 +527,7 @@ actor APIClient {
   }
 
   /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
-  private func authorizedRetryRequest(
+  func authorizedRetryRequest(
     from request: URLRequest,
     retriedAuth: Bool,
     authPolicy: RequestAuthPolicy
@@ -725,6 +725,7 @@ actor APIClient {
   /// accounts. The authorization header still belongs to the original owner,
   /// so never let that response flow into the new owner's local state.
   nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    try ScreenTaskWorkAuthority.require()
     if let authorizationSnapshot = authPolicy.authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw AuthError.userChangedDuringRequest

@@ -2,9 +2,9 @@ sealed class AuthTokenResult {
   const AuthTokenResult();
 
   String? get tokenOrNull => switch (this) {
-        AuthTokenSuccess(:final token) => token,
-        _ => null,
-      };
+    AuthTokenSuccess(:final token) => token,
+    _ => null,
+  };
 }
 
 final class AuthTokenSuccess extends AuthTokenResult {
@@ -40,7 +40,7 @@ enum AuthSessionExpirationReason {
   missingToken,
   terminalTokenFailure,
   backendRejectedRefreshedToken,
-  accountDeleted
+  accountDeleted,
 }
 
 final class AuthSessionExpiredEvent {
@@ -48,6 +48,13 @@ final class AuthSessionExpiredEvent {
 
   final AuthSessionExpirationReason reason;
   final String? code;
+}
+
+final class AuthSessionSnapshot {
+  const AuthSessionSnapshot({required this.ownerUid, required this.generation});
+
+  final String ownerUid;
+  final int generation;
 }
 
 final class AuthUserSnapshot {

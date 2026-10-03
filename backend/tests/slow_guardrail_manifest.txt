@@ -37,6 +37,7 @@ tests/unit/test_firestore_di_seam.py
 tests/unit/test_firestore_query_contract.py
 tests/unit/test_firestore_query_shapes.py
 tests/unit/test_flush_pending_batch1.py
+tests/unit/test_live_gate_replay.py
 tests/unit/test_llm_gateway_coverage_guardrails.py
 tests/unit/test_managed_spend_ledger.py
 tests/unit/test_memories_validation.py
@@ -51,3 +52,6 @@ tests/unit/test_subscription_import_cycle.py
 tests/unit/test_sync_ordered_assignment.py
 tests/unit/test_thread_join_elimination.py
 tests/unit/test_vad_gate.py
+
+# Full shadow replay calibration runs outside the per-test CPU lane.
+tests/unit/test_live_shadow_replay.py

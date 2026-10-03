@@ -91,6 +91,10 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -423,9 +427,9 @@ env:
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "25"
+    value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
-    value: "8"
+    value: "16"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS

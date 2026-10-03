@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/phone',
     '/v1/mobile',
     '/v1/screen-activity',
+    '/v1/screen-task',
     '/v1/screen-frame-egress',
     '/v1/search',
     '/v1/speaker-tag-prompts',
@@ -335,6 +336,13 @@ APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
     ): (
         'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
         'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
     ),
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/ui/components/omi_button.dart';
+import 'package:omi/ui/components/omi_icon_button.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -26,10 +27,10 @@ enum OmiPermissionStatus {
   /// Maps a `permission_handler` status. `denied` stays [askable] because both platforms prompt
   /// again after a plain denial; they report `permanentlyDenied` once they stop prompting.
   static OmiPermissionStatus fromStatus(PermissionStatus status) => switch (status) {
-        PermissionStatus.granted || PermissionStatus.limited || PermissionStatus.provisional => granted,
-        PermissionStatus.permanentlyDenied || PermissionStatus.restricted => blocked,
-        PermissionStatus.denied => askable,
-      };
+    PermissionStatus.granted || PermissionStatus.limited || PermissionStatus.provisional => granted,
+    PermissionStatus.permanentlyDenied || PermissionStatus.restricted => blocked,
+    PermissionStatus.denied => askable,
+  };
 }
 
 /// One permission as a pre-prompt: what it is, why Omi wants it, and one action that fits its state.
@@ -107,30 +108,30 @@ class OmiPermissionRow extends StatelessWidget {
 
     final Widget trailing = switch (status) {
       OmiPermissionStatus.granted => Semantics(
-          label: l10n.permissionAllowed,
-          child: ExcludeSemantics(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check_circle, color: OmiColors.success, size: 20),
-                const SizedBox(width: OmiSpacing.xxs),
-                Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-              ],
-            ),
+        label: l10n.permissionAllowed,
+        child: ExcludeSemantics(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+              const SizedBox(width: OmiSpacing.xxs),
+              Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+            ],
           ),
         ),
+      ),
       OmiPermissionStatus.askable => OmiButton(
-          key: const Key('omi_permission_allow'),
-          label: l10n.allow,
-          onPressed: onAllow,
-          size: OmiButtonSize.compact,
-        ),
+        key: const Key('omi_permission_allow'),
+        label: l10n.allow,
+        onPressed: onAllow,
+        size: OmiButtonSize.compact,
+      ),
       OmiPermissionStatus.blocked || OmiPermissionStatus.serviceOff => OmiButton.secondary(
-          key: const Key('omi_permission_open_settings'),
-          label: l10n.openSettings,
-          onPressed: _openSettings,
-          size: OmiButtonSize.compact,
-        ),
+        key: const Key('omi_permission_open_settings'),
+        label: l10n.openSettings,
+        onPressed: _openSettings,
+        size: OmiButtonSize.compact,
+      ),
     };
 
     return Container(
@@ -141,13 +142,20 @@ class OmiPermissionRow extends StatelessWidget {
         borderRadius: OmiRadius.lgAll,
         border: Border.all(color: OmiColors.border),
       ),
+      // The action sits on the title line so the reason and status lines get the card's width
+      // instead of wrapping in a narrow column beside the button.
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (leading != null || icon != null) ...[
             ExcludeSemantics(
               child: IconTheme.merge(
                 data: IconThemeData(color: OmiColors.textSecondary, size: 22),
-                child: SizedBox(width: 24, child: Center(child: leading ?? Icon(icon))),
+                child: SizedBox(
+                  width: 24,
+                  height: kOmiMinTapTarget,
+                  child: Center(child: leading ?? Icon(icon)),
+                ),
               ),
             ),
             const SizedBox(width: OmiSpacing.sm),
@@ -156,8 +164,18 @@ class OmiPermissionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: OmiType.headline.copyWith(fontSize: OmiType.callout.fontSize)),
-                const SizedBox(height: 2),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(title, style: OmiType.headline.copyWith(fontSize: OmiType.callout.fontSize)),
+                      ),
+                      const SizedBox(width: OmiSpacing.sm),
+                      trailing,
+                    ],
+                  ),
+                ),
                 Text(reason, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 if (statusLine != null) ...[
                   const SizedBox(height: OmiSpacing.xxs),
@@ -166,8 +184,6 @@ class OmiPermissionRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: OmiSpacing.sm),
-          trailing,
         ],
       ),
     );

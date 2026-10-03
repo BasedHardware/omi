@@ -2,6 +2,48 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.437",
+      "date": "2026-10-03",
+      "changes": [
+        "Connection keys are no longer created automatically. Generate one yourself when you want to connect a tool."
+      ]
+    },
+    {
+      "version": "0.12.436",
+      "date": "2026-10-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.435",
+      "date": "2026-10-02",
+      "changes": [
+        "Fixed screen task suggestions across context switches, account changes, privacy exclusions and service limits"
+      ]
+    },
+    {
+      "version": "0.12.434",
+      "date": "2026-10-02",
+      "changes": [
+        "Web Search on the floating typed chat uses the same public-web lookup as the main chat window."
+      ]
+    },
+    {
+      "version": "0.12.433",
+      "date": "2026-10-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.432",
+      "date": "2026-10-02",
+      "changes": [
+        "Added an Export All Data action in Settings > Data Controls that saves a verified JSON copy of your account data"
+      ]
+    },
+    {
       "version": "0.12.431",
       "date": "2026-10-01",
       "changes": [

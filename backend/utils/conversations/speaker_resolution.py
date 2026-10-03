@@ -34,9 +34,9 @@ from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES
 from utils.observability.fallback import record_fallback
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.other.storage import (
     download_speaker_embedding_cache,
-    iter_audio_chunk_pcm,
     upload_speaker_embedding_cache,
 )
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
@@ -50,6 +50,7 @@ from utils.stt.conversation_speakers import (
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,15 @@ def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
         prints[OWNER_IDENTITY] = np.asarray(owner, dtype=np.float32)
+    # Owner recognition is plan-independent: an entitlement read failure fails
+    # closed for person prints only, never for the owner's own voiceprint.
+    try:
+        named_allowed = named_speaker_prompts_allowed(uid)
+    except Exception as error:
+        logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        return prints
+    if not named_allowed:
+        return prints
     for person in users_db.get_people(uid) or []:
         embedding = usable_person_voiceprint(person)
         if embedding and person.get('id'):

@@ -24,30 +24,34 @@ const _page = 'lib/pages/conversations/conversations_page.dart (ConversationsPag
 
 /// A ConversationProvider already holding [items], grouped by date, whose deletes succeed locally.
 List<SingleChildWidget> _listProviders(List<ServerConversation> items) {
-  final provider = ConversationProvider(
-    conversationListFetcher: () async => (items: items, ok: true),
-    isSignedIn: () => true,
-  )
-    ..conversationDeleteFetcherOverride = ((_) async => true)
-    ..conversations = items
-    ..groupConversationsByDate();
+  final provider =
+      ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
+        ..conversationDeleteFetcherOverride = ((_) async => true)
+        ..conversations = items
+        ..groupConversationsByDate();
   return [
     ChangeNotifierProvider<ConversationProvider>.value(value: provider),
     ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
   ];
 }
 
-const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', members: [
-  CaptureGroupMember(id: 'grouped-a', source: 'desktop'),
-  CaptureGroupMember(id: 'grouped-a-omi', source: 'omi'),
-]);
+const _twoSourceGroup = CaptureGroup(
+  id: 'group-1',
+  primaryId: 'grouped-a',
+  members: [
+    CaptureGroupMember(id: 'grouped-a', source: 'desktop'),
+    CaptureGroupMember(id: 'grouped-a-omi', source: 'omi'),
+  ],
+);
 
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
     id: 'conversations-locked-preview',
     title: 'Locked conversations with an upgrade action',
     page: _page,
-    state: 'An unlocked conversation followed by three locked previews; synthetic titles only',
+    state:
+        'An unlocked conversation followed by three consecutive locked previews, which share one '
+        'frosted card and one upgrade action; synthetic titles only',
     run: (a) async {
       final items = [
         auditConversation('unlocked', title: 'Design catch-up with Alex'),
@@ -63,7 +67,8 @@ final conversationsScenarios = <AuditScenario>[
       ];
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
       expect(find.byType(ConversationListItem), findsNWidgets(4));
-      expect(find.text('Upgrade to Unlimited'), findsNWidgets(3));
+      expect(find.byType(LockedConversationRun), findsOneWidget);
+      expect(find.text('Upgrade to Unlimited'), findsOneWidget);
       await a.shot('Conversation list with frosted locked previews');
     },
   ),
@@ -131,7 +136,8 @@ final conversationsScenarios = <AuditScenario>[
         stats: DayStats(totalConversations: 5, actionItemsCount: 3),
       );
       await a.pump(
-          DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [summary], ok: true)));
+        DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [summary], ok: true)),
+      );
       await a.shot('Open Daily Recaps');
     },
   ),

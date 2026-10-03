@@ -20,6 +20,7 @@ import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_shee
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 
 Person _person(String id, String name, {String voice = 'unknown'}) =>
@@ -39,25 +40,25 @@ TranscriptSegment _line(String id, int speaker, {bool isUser = false, String? pe
     );
 
 Widget _app(Widget child, {List<Person> people = const []}) => ChangeNotifierProvider.value(
-      value: PeopleProvider()..people = people,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: child),
-      ),
-    );
+  value: PeopleProvider()..people = people,
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: child),
+  ),
+);
 
 PersonVoiceMatch _match(String conversationId) => PersonVoiceMatch(
-      conversationId: conversationId,
-      title: 'Lunch planning',
-      startedAt: DateTime(2026, 9, 30, 12),
-      speakerId: 2,
-      talkSeconds: 840,
-      segmentIds: const ['e1'],
-      clipStart: 1,
-      clipEnd: 9,
-      matchLevel: 'strong',
-    );
+  conversationId: conversationId,
+  title: 'Lunch planning',
+  startedAt: DateTime(2026, 9, 30, 12),
+  speakerId: 2,
+  talkSeconds: 840,
+  segmentIds: const ['e1'],
+  clipStart: 1,
+  clipEnd: 9,
+  matchLevel: 'strong',
+);
 
 void main() {
   setUp(() async {
@@ -87,12 +88,18 @@ void main() {
     });
 
     testWidgets('a check for the user\'s own answer, Likely for a guess, nothing for an unnamed voice', (tester) async {
-      await tester.pumpWidget(_app(const Column(children: [
-        SpeakerLabelBadge(source: 'manual'),
-        SpeakerLabelBadge(source: 'carried'),
-        SpeakerLabelBadge(source: 'auto'),
-        SpeakerLabelBadge(source: null),
-      ])));
+      await tester.pumpWidget(
+        _app(
+          const Column(
+            children: [
+              SpeakerLabelBadge(source: 'manual'),
+              SpeakerLabelBadge(source: 'carried'),
+              SpeakerLabelBadge(source: 'auto'),
+              SpeakerLabelBadge(source: null),
+            ],
+          ),
+        ),
+      );
       expect(find.byKey(const Key('speaker_label_confirmed')), findsNWidgets(2));
       expect(find.byKey(const Key('speaker_label_likely')), findsOneWidget);
       expect(find.text('Likely'), findsOneWidget);
@@ -101,7 +108,10 @@ void main() {
     testWidgets('the question names the person on both answers', (tester) async {
       var yes = 0, not = 0;
       await tester.pumpWidget(_app(SpeakerLikelyConfirm(name: 'Jordan Lee', onYes: () => yes++, onNot: () => not++)));
-      expect(find.text('Sounds like Jordan Lee'), findsOneWidget);
+      // Two light chips, no boxed question: the "Likely" badge asks, and screen readers hear it.
+      expect(find.text('Sounds like Jordan Lee'), findsNothing);
+      expect(find.bySemanticsLabel('Sounds like Jordan Lee'), findsOneWidget);
+      expect(find.byType(OmiFilterChip), findsNWidgets(2));
       await tester.tap(find.text('Yes'));
       await tester.tap(find.text('Not Jordan Lee'));
       expect((yes, not), (1, 1));
@@ -110,17 +120,17 @@ void main() {
 
   group('rejecting a label', () {
     ServerConversation conversation() => ServerConversation(
-          id: 'c',
-          createdAt: DateTime(2026),
-          structured: Structured('Title', 'Summary'),
-          status: ConversationStatus.completed,
-          transcriptSegments: [
-            _line('a', 1, personId: 'jordan', source: 'auto'),
-            _line('b', 1, personId: 'jordan', source: 'auto'),
-            _line('c', 2, personId: 'jordan', source: 'manual'),
-            _line('d', 0, isUser: true, source: 'auto'),
-          ],
-        );
+      id: 'c',
+      createdAt: DateTime(2026),
+      structured: Structured('Title', 'Summary'),
+      status: ConversationStatus.completed,
+      transcriptSegments: [
+        _line('a', 1, personId: 'jordan', source: 'auto'),
+        _line('b', 1, personId: 'jordan', source: 'auto'),
+        _line('c', 2, personId: 'jordan', source: 'manual'),
+        _line('d', 0, isUser: true, source: 'auto'),
+      ],
+    );
 
     ConversationDetailProvider provider(ServerConversation value, SpeakerRejectionCall reject) {
       final provider = ConversationDetailProvider(rejectSpeaker: reject)..selectedDate = value.createdAt;
@@ -195,18 +205,19 @@ void main() {
       final value = conversation();
       final assigned = Completer<bool>();
       final calls = <String>[];
-      final detail = ConversationDetailProvider(
-        assignSpeaker: (_, __, {isUser, personId, speakerId}) {
-          calls.add('assign');
-          return assigned.future;
-        },
-        rejectSpeaker: (_, __, ___, {personId, segmentIds}) async {
-          calls.add('reject');
-          return ApiSuccess(value);
-        },
-      )
-        ..selectedDate = value.createdAt
-        ..setCachedConversation(value);
+      final detail =
+          ConversationDetailProvider(
+              assignSpeaker: (_, __, {isUser, personId, speakerId}) {
+                calls.add('assign');
+                return assigned.future;
+              },
+              rejectSpeaker: (_, __, ___, {personId, segmentIds}) async {
+                calls.add('reject');
+                return ApiSuccess(value);
+              },
+            )
+            ..selectedDate = value.createdAt
+            ..setCachedConversation(value);
       final first = detail.assignSpeaker(['a'], 'maya', speakerId: 1);
       await Future<void>.delayed(Duration.zero);
       final rejection = detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson);
@@ -232,19 +243,21 @@ void main() {
 
     testWidgets('the tag sheet offers the rejections that fit the line', (tester) async {
       final rejected = <SpeakerRejection>[];
-      await tester.pumpWidget(_app(
-        NameSpeakerBottomSheet(
-          speakerId: 1,
-          segmentId: 'a',
-          segments: [_line('a', 1, personId: 'jordan', source: 'auto')],
-          onSpeakerAssigned: (_, __, ___, ____, _____) async => false,
-          onSpeakerRejected: (kind) async {
-            rejected.add(kind);
-            return true;
-          },
+      await tester.pumpWidget(
+        _app(
+          NameSpeakerBottomSheet(
+            speakerId: 1,
+            segmentId: 'a',
+            segments: [_line('a', 1, personId: 'jordan', source: 'auto')],
+            onSpeakerAssigned: (_, __, ___, ____, _____) async => false,
+            onSpeakerRejected: (kind) async {
+              rejected.add(kind);
+              return true;
+            },
+          ),
+          people: [_person('jordan', 'Jordan Lee')],
         ),
-        people: [_person('jordan', 'Jordan Lee')],
-      ));
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('name_speaker_not_me')), findsNothing);
@@ -258,15 +271,17 @@ void main() {
     });
 
     testWidgets('the live sheet, which cannot reject, shows no rejections', (tester) async {
-      await tester.pumpWidget(_app(
-        NameSpeakerBottomSheet(
-          speakerId: 1,
-          segmentId: 'a',
-          segments: [_line('a', 1, personId: 'jordan', source: 'auto')],
-          onSpeakerAssigned: (_, __, ___, ____, _____) async => false,
+      await tester.pumpWidget(
+        _app(
+          NameSpeakerBottomSheet(
+            speakerId: 1,
+            segmentId: 'a',
+            segments: [_line('a', 1, personId: 'jordan', source: 'auto')],
+            onSpeakerAssigned: (_, __, ___, ____, _____) async => false,
+          ),
+          people: [_person('jordan', 'Jordan Lee')],
         ),
-        people: [_person('jordan', 'Jordan Lee')],
-      ));
+      );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('name_speaker_not_a_person')), findsNothing);
     });
@@ -383,20 +398,33 @@ void main() {
 
       await pump(const SpeakerTagOutcome(personId: 'maya', personName: 'Maya', linesLabeled: 12));
       expect(find.text('Labeled as Maya'), findsOneWidget);
-      expect(find.text('Lines labeled: 12'), findsOneWidget);
+      expect(find.text('Labeled 12 lines'), findsOneWidget);
       expect(find.text('Learning voice…'), findsOneWidget);
       expect(find.byKey(const Key('speaker_tag_outcome_review')), findsNothing);
 
-      await pump(SpeakerTagOutcome(
-          personId: 'maya', personName: 'Maya', linesLabeled: 12, voiceState: 'learned', matches: [_match('c1')]));
+      await pump(
+        SpeakerTagOutcome(
+          personId: 'maya',
+          personName: 'Maya',
+          linesLabeled: 12,
+          voiceState: 'learned',
+          matches: [_match('c1')],
+        ),
+      );
       expect(find.text('Voice learned'), findsOneWidget);
       expect(find.text('Omi will recognize Maya next time.'), findsOneWidget);
-      expect(find.text('Earlier conversations with this voice: 1'), findsOneWidget);
+      expect(find.text('Found in 1 earlier conversation'), findsOneWidget);
       await tester.tap(find.byKey(const Key('speaker_tag_outcome_review')));
       expect(reviewed, 1);
 
-      await pump(const SpeakerTagOutcome(
-          personId: 'maya', personName: 'Maya', linesLabeled: 12, voiceState: 'needs_more_speech'));
+      await pump(
+        const SpeakerTagOutcome(
+          personId: 'maya',
+          personName: 'Maya',
+          linesLabeled: 12,
+          voiceState: 'needs_more_speech',
+        ),
+      );
       expect(find.text('Voice not learned yet'), findsOneWidget);
       expect(find.text('Omi needs more clear speech from Maya and will keep trying.'), findsOneWidget);
     });
@@ -405,15 +433,19 @@ void main() {
   group('earlier matches', () {
     testWidgets('each answer is sent once and an answered conversation leaves the list', (tester) async {
       final answers = <(String, bool)>[];
-      await tester.pumpWidget(_app(EarlierVoiceMatchesList(
-        personName: 'Maya',
-        matches: [_match('c1'), _match('c2')],
-        playClip: (_) async => true,
-        onAnswer: (match, same) async {
-          answers.add((match.conversationId, same));
-          return true;
-        },
-      )));
+      await tester.pumpWidget(
+        _app(
+          EarlierVoiceMatchesList(
+            personName: 'Maya',
+            matches: [_match('c1'), _match('c2')],
+            playClip: (_) async => true,
+            onAnswer: (match, same) async {
+              answers.add((match.conversationId, same));
+              return true;
+            },
+          ),
+        ),
+      );
       expect(find.textContaining('14m of this voice'), findsNWidgets(2));
 
       await tester.tap(find.text('Yes').first);
@@ -424,12 +456,16 @@ void main() {
     });
 
     testWidgets('an answer the server refused keeps the conversation in the list', (tester) async {
-      await tester.pumpWidget(_app(EarlierVoiceMatchesList(
-        personName: 'Maya',
-        matches: [_match('c1')],
-        playClip: (_) async => true,
-        onAnswer: (_, __) async => false,
-      )));
+      await tester.pumpWidget(
+        _app(
+          EarlierVoiceMatchesList(
+            personName: 'Maya',
+            matches: [_match('c1')],
+            playClip: (_) async => true,
+            onAnswer: (_, __) async => false,
+          ),
+        ),
+      );
       await tester.tap(find.text('No'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -451,8 +487,9 @@ void main() {
 
     testWidgets('names who was carried over and offers Change', (tester) async {
       var changed = 0, closed = 0;
-      await tester
-          .pumpWidget(_app(CarriedSpeakerBanner(name: 'Maya', onChange: () => changed++, onClose: () => closed++)));
+      await tester.pumpWidget(
+        _app(CarriedSpeakerBanner(name: 'Maya', onChange: () => changed++, onClose: () => closed++)),
+      );
       expect(find.text('Still Maya. Carried over from your last conversation.'), findsOneWidget);
       await tester.tap(find.text('Change'));
       await tester.tap(find.byIcon(Icons.close));

@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
@@ -16,6 +16,8 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:uuid/uuid.dart';
@@ -43,28 +45,28 @@ enum MobileFeedbackReason {
 }
 
 String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
-      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
-      MobileFeedbackKind.recordingQuality => 'recording_quality',
-    };
+  MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+  MobileFeedbackKind.recordingQuality => 'recording_quality',
+};
 
 String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
-      MobileFeedbackTargetKind.conversation => 'conversation',
-      MobileFeedbackTargetKind.recording => 'recording',
-    };
+  MobileFeedbackTargetKind.conversation => 'conversation',
+  MobileFeedbackTargetKind.recording => 'recording',
+};
 
 String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
-      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
-      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
-      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
-      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
-      MobileFeedbackReason.summaryOther => 'summary_other',
-      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
-      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
-      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
-      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
-      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
-      MobileFeedbackReason.recordingOther => 'recording_other',
-    };
+  MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+  MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+  MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+  MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+  MobileFeedbackReason.summaryOther => 'summary_other',
+  MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+  MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+  MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+  MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+  MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+  MobileFeedbackReason.recordingOther => 'recording_other',
+};
 
 /// Persist explicit, content-free mobile feedback through the idempotent
 /// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
@@ -78,10 +80,7 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(
-    Map<String, dynamic> payload, {
-    required String expectedFeedbackId,
-  }) {
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so
@@ -113,15 +112,16 @@ class MobileFeedbackReceipt {
 
 /// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
 /// accept an override of this shape so tests can observe the request path.
-typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
-  required MobileFeedbackKind kind,
-  required String targetId,
-  required int value,
-  MobileFeedbackReason? reason,
-  String? correlationId,
-  String? feedbackId,
-  required MobileFeedbackTargetKind targetKind,
-});
+typedef MobileFeedbackSubmit =
+    Future<MobileFeedbackReceipt?> Function({
+      required MobileFeedbackKind kind,
+      required String targetId,
+      required int value,
+      MobileFeedbackReason? reason,
+      String? correlationId,
+      String? feedbackId,
+      required MobileFeedbackTargetKind targetKind,
+    });
 
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
@@ -584,16 +584,10 @@ Future<String?> getUsageDeviceTimeZone() async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
-  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
-    'period': period,
-    if (timeZone != null) 'time_zone': timeZone,
-  });
-  var response = await makeApiCall(
-    url: url.toString(),
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final url = Uri.parse(
+    '${Env.apiBaseUrl}v1/users/me/usage',
+  ).replace(queryParameters: {'period': period, if (timeZone != null) 'time_zone': timeZone});
+  var response = await makeApiCall(url: url.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
@@ -966,49 +960,19 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
 /// the entire JSON into memory. Returns the file path on success, null on failure.
-Future<String?> exportUserDataToFile(String filePath) async {
-  final file = File(filePath);
-  IOSink? sink;
-  try {
-    final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
-    if (response.statusCode != 200) {
-      Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
-      return null;
-    }
-    final downloadSink = file.openWrite();
-    sink = downloadSink;
-    var bytesWritten = 0;
-    await for (final chunk in response.stream) {
-      downloadSink.add(chunk);
-      bytesWritten += chunk.length;
-    }
-    await downloadSink.flush();
-    await downloadSink.close();
-    sink = null;
-    if (bytesWritten == 0) {
-      Logger.debug('exportUserDataToFile failed: empty response body');
-      if (await file.exists()) {
-        await file.delete();
-      }
-      return null;
-    }
-    return filePath;
-  } catch (e) {
-    Logger.debug('exportUserDataToFile error: $e');
-    final openSink = sink;
-    if (openSink != null) {
-      try {
-        await openSink.close();
-      } catch (_) {}
-    }
-    if (await file.exists()) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-    return null;
-  }
-}
+Future<String?> exportUserDataToFile(
+  String filePath, {
+  void Function(int bytesReceived)? onProgress,
+  Future<void>? abortTrigger,
+  AuthSessionSnapshot? authorizationSnapshot,
+  AuthService? authService,
+}) => export_user_data.exportUserDataToFile(
+  filePath,
+  onProgress: onProgress,
+  abortTrigger: abortTrigger,
+  authorizationSnapshot: authorizationSnapshot,
+  authService: authService,
+);
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');

@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "आप हा संदेश अहवाल द्यायला निश्चित आहात?",
+    "reportMessageConfirm": "हा संदेश नोंदवायचा?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "आप चॅट साफ करू इच्छिता? ही कारवाई पूर्ववत केली जाऊ शकत नाही.",
+    "clearChatConfirm": "या चॅटमधील सर्व संदेश हटवले जातील. हे पूर्ववत करता येणार नाही.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "आपली सर्व स्मृती आणि संभाषण स्थायीपणे हटवल्या जातील.",
+    "allDataErased": "तुमच्या स्मृती आणि संभाषणे मिटवली जातील.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "आपली अ‍ॅप्स आणि एकीकरण तातडीने डिस्कनेक्ट केली जाईल.",
+    "appsDisconnected": "तुमचे अॅप्स आणि इंटिग्रेशन डिस्कनेक्ट होतील.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "आप {appName} मधून डिस्कनेक्ट करू इच्छिता? आप कधीही पुन्हा कनेक्ट करू शकता.",
+    "disconnectAppMessage": "तुम्ही {appName} कधीही पुन्हा कनेक्ट करू शकता.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "आपल्याला खरोखर हे कार्य हटवायचे आहे का?",
+    "deleteActionItemMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "आपल्याला खरोखर {count} निवडलेली कार्य{s} हटवायची आहेत का?",
+    "deleteSelectedItemsMessage": "{count} निवडलेली कार्य{s} हटवायची?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 अद्याप कोणत्याही स्मृती नाही",
+    "noMemoriesYet": "अद्याप कोणत्याही स्मृती नाही",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 कोणत्याही स्मृती सापडली नाही",
+    "noMemoriesFound": "कोणत्याही स्मृती सापडली नाही",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "आपल्याला खरोखर Omi ची स्मृती स्पष्ट करायची आहे? हे क्रिया पूर्ववत् केली जाऊ शकत नाही.",
+    "clearMemoryMessage": "तुमच्या सर्व स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "आपल्याला खरोखर हे कार्य हटवायचे आहे का?",
+    "deleteActionItemConfirmMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "अॅप भाषा मेनू आणि बटण बदलते. भाषण भाषा आपल्या रेकॉर्डिंग कसे ट्रांसक्राइब केली जाते यावर परिणाम करते.",
+    "languageSettingsHelperText": "अॅप भाषा मेनू आणि बटणे बदलते. प्राथमिक भाषा तुमची रेकॉर्डिंग कशी ट्रांसक्राइब केली जातात यावर परिणाम करते.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "thisActionCannotBeUndone": "हे पूर्ववत करता येणार नाही.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "आपल्याला खात्री आहे की आपण हे कार्य हटवू इच्छिता? ही क्रिया पूर्ववत केली जाऊ शकत नाही.",
+    "deleteActionItemConfirmation": "हे कार्य हटवायचे? हे पूर्ववत करता येणार नाही.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "आप खात्रीने हा संदेश नोंदवू इच्छितात?",
+    "confirmReportMessage": "हा संदेश नोंदवायचा?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "आप खात्रीने चॅट साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "confirmClearChat": "हा चॅट साफ करायचा? हे पूर्ववत करता येणार नाही.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "आप खात्रीने हे स्मृती हटवू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "deleteMemoryConfirmation": "ही स्मृती हटवायची? हे पूर्ववत करता येणार नाही.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "आप खात्रीने Omi ची स्मृती साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही आणि सर्व {count} स्मृती कायमचा हटवेल।",
+    "clearMemoryConfirmation": "सर्व {count} स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Omi ला स्वयंचलितपणे सर्वोत्तम अॅप निवडू द्या",
-    "deleteConversationConfirmation": "आप हा संभाषण हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteConversationConfirmation": "हे संभाषण हटवायचे? हे पूर्ववत करता येणार नाही.",
     "conversationDeleted": "संभाषण हटवले",
     "generatingLink": "लिंक तयार होत आहे…",
     "editConversation": "संभाषण संपादित करा",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "आप आपल्या अॅप अपडेट करण्याचे सुनिश्चित आहात? आमच्या टीम द्वारे पुनरावलोकन केल्यानंतर बदल प्रतिबिंबित होतील.",
+    "updateAppConfirmation": "आमच्या टीमने पुनरावलोकन केल्यानंतर बदल लागू होतील.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "आप आपल्या सदस्यता रद्द करण्याचे सुनिश्चित आहात? आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
+    "cancelSubscriptionConfirmation": "आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "हे क्रिया पूर्ववत् करू शकत नाही. या की वापरणारी कोणतीही अनुप्रयोग यापुढे API मध्ये प्रवेश करू शकणार नाही.",
+    "revokeApiKeyWarning": "ही की वापरणाऱ्या अ‍ॅप्सचा API प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "आप हा {item} हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteItemConfirmation": "हा {item} हटवणे पूर्ववत करता येणार नाही.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "आप \"{keyName}\" की रद्द करण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "revokeKeyConfirmation": "\"{keyName}\" वापरणाऱ्या सर्व गोष्टींचा प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल. आप सुनिश्चित आहात?",
+    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi च्या अनंत स्मृती अनलॉक करा",
+    "unlockOmiInfiniteMemory": "अमर्यादित स्मृती",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "कनेक्शन तपासा आणि पुन्हा प्रयत्न करा",
+    "checkConnectionTryAgain": "तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "हे Limitless मधून आयात केलेले सर्व संभाषण स्थायीरित्या हटाईल. ही कारवाई पूर्ववत्त करता येणार नाही.",
+    "deleteAllLimitlessWarning": "Limitless मधून आयात केलेली सर्व संभाषणे हटवली जातील. हे पूर्ववत करता येणार नाही.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "आप {name} चा नमुना हटविण्याचा खरेच निश्चय आहे?",
+    "deleteSampleConfirmation": "{name} यांचा आवाजाचा नमुना काढला जाईल. हे पूर्ववत करता येणार नाही.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "आप {name} हटविण्याचा खरेच निश्चय आहे? हे सर्व संबंधित भाषण नमुने देखील काढून टाकेल.",
+    "deletePersonConfirmation": "यामुळे {name} यांचे आवाजाचे नमुने काढले जातील आणि हे पूर्ववत करता येणार नाही. मागील संभाषणांमधील त्यांचे बोलणे नाव नसलेले वक्ते बनेल.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "आप रेकॉर्डिंग थांबवण्याचा आणि संभाषण आता सारांशित करण्याचा खरेच निश्चय आहे?",
+    "stopRecordingConfirmation": "रेकॉर्डिंग थांबवून आत्ताच संभाषणाचा सारांश तयार करायचा?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
+    "premiumMinutesInfo": "दर महिन्याला 300 प्रीमियम मिनिटे. अमर्यादित मोफत ट्रांसक्रिप्शनसाठी \"उपकरणावर\" निवडा.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
+    "premiumMinutesMonth": "दर महिन्याला 300 प्रीमियम मिनिटे. अमर्यादित मोफत ट्रांसक्रिप्शनसाठी \"उपकरणावर\" निवडा. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi चा अंतर्निर्मित लाइव्ह ट्रान्सक्रिप्शन स्वयंचलित स्पीकर शोध आणि डायराइজेशनसह रिअल-टाइम संभाषणांसाठी अनुकूलित आहे.",
+    "omiTranscriptionOptimized": "Omi चे लाइव्ह ट्रांसक्रिप्शन रिअल-टाइम संभाषणांसाठी बनवले आहे आणि कोण काय म्हणाले ते दाखवते.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "आपण खरोखर या रेकॉर्डिंगला कायमीपणे हटवू इच्छिता का? हे पूर्ववत करता येणार नाही.",
+    "deleteRecordingConfirmation": "हे पूर्ववत करता येणार नाही.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "आप्पण आपल्या Unlimited योजना {title} वर स्विच करत आहात. आप्पण आगे जाण्यास खरोखर इच्छुक आहात का?",
+    "planSwitchingDescriptionWithTitle": "तुम्ही तुमची Unlimited योजना {title} वर स्विच करत आहात.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "आम्हाला अधिक सांगा",
     "deleteFlowFeedbackSubtitle": "Omi तुमच्यासाठी कसे उपयुक्त ठरले असते?",
     "deleteFlowFeedbackHint": "ऐच्छिक — तुमचे विचार आम्हाला एक चांगले उत्पादन बनवण्यात मदत करतात.",
-    "deleteFlowConfirmTitle": "हे कायमचे आहे",
-    "deleteFlowConfirmSubtitle": "एकदा खाते हटवले की ते पुनर्प्राप्त करण्याचा कोणताही मार्ग नाही.",
+    "deleteFlowConfirmTitle": "तुमचे खाते हटवायचे?",
+    "deleteFlowConfirmSubtitle": "हे पूर्ववत करता येणार नाही, सपोर्टलाही नाही.",
     "deleteConsequenceSubscription": "कोणतीही सक्रिय सदस्यता रद्द केली जाईल.",
     "deleteConsequenceNoRecovery": "तुमचे खाते पुनर्संचयित केले जाऊ शकत नाही — सपोर्टद्वारेही नाही.",
     "deleteTypeToConfirm": "पुष्टी करण्यासाठी DELETE टाइप करा",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "सिंक Omi ट्रान्सक्रिप्शन वापरते",
     "syncCustomSttWarningMessage": "तुम्ही तुमचा स्वतःचा ट्रान्सक्रिप्शन प्रदाता वापरता. ही रेकॉर्डिंग सिंक केल्यास ती Omi च्या सर्व्हरवर ट्रान्सक्राइब होतील आणि तुमच्या प्लॅनच्या ट्रान्सक्रिप्शन मर्यादेत मोजली जातील.",
     "transcribeLaterTitle": "नंतर ट्रान्सक्राइब करणे",
-    "transcribeLaterDescription": "थेट ट्रान्सक्राइब करण्याऐवजी आता ऑडिओ रेकॉर्ड करा आणि गरजेनुसार नंतर ट्रान्सक्राइब करा. रेकॉर्डिंग तुमच्या फोनवर साठवली जातात; नंतर ती अपलोड करून संभाषणे तयार करा.",
+    "transcribeLaterDescription": "आता रेकॉर्ड करा, हवे तेव्हा ट्रांसक्राइब करा. तोपर्यंत ऑडिओ तुमच्या फोनवरच राहतो.",
     "transcribeLaterNote": "फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.",
     "transcribeLaterStorageFull": "तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.",
     "unmute": "आवाज सुरू करा",
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "क्लाउड ट्रान्सक्रिप्शन",
     "copyMessage": "संदेश कॉपी करा",
     "deleteOnDeviceModel": "मॉडेल हटवा",
-    "deleteOnDeviceModelConfirm": "तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?",
+    "deleteOnDeviceModelConfirm": "हे मॉडेल हटवायचे?",
     "downgradeAnyway": "तरीही डाउनग्रेड करा",
     "downgradeLimitBattery": "७ पट जास्त बॅटरी वापर",
     "downgradeLimitDelay": "५-७ सेकंदांचा विलंब",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "मध्यम",
     "whisperModelSizeSmall": "लहान",
     "whisperModelSizeTiny": "अतिशय लहान",
-    "planSheetChooseYourPlan": "अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.",
+    "planSheetChooseYourPlan": "तुमच्यासाठी योग्य प्लॅन निवडा.",
     "availableOnMacMobileWeb": "Mac, मोबाइल आणि वेबवर उपलब्ध",
     "popularBadge": "लोकप्रिय",
     "worksOnDesktop": "डेस्कटॉपवर चालते",
@@ -10789,7 +10789,7 @@
     "moreOptions": "अधिक पर्याय",
     "filterByDate": "तारखेनुसार फिल्टर करा",
     "memoryGraph": "स्मृती आलेख",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{आवाज ओळखण्यासाठी तयार आहे} saved_sample_awaiting_embedding{नमुना जतन केला; आवाज प्रक्रिया अजून आवश्यक आहे} not_learned{आवाज शिकलेला नाही} other{आवाजाची स्थिती अज्ञात आहे}}",
     "tagSpeakerIncludingLaterSpeech": "या वक्त्याचे नंतरचे बोलणेही टॅग करा",
     "updateSummaryWithNewNames": "नवीन नावांसह सारांश अद्यतनित करा",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Omi द्वारे कॉल करण्यासाठी तुमचा क्रमांक सत्यापित करा.",
     "phoneDeleteNumberFailed": "हा क्रमांक हटवता आला नाही",
     "forgetDeviceConfirmTitle": "डिव्हाइस विसरायचे?",
-    "forgetDeviceConfirmMessage": "Omi या डिव्हाइसशी कनेक्ट होणे थांबवेल. ते पुन्हा वापरण्यासाठी, तुम्हाला ते पुन्हा पेअर करावे लागेल.",
+    "forgetDeviceConfirmMessage": "Omi या डिव्हाइसशी कनेक्ट होणे थांबवेल.",
     "deviceForgottenMessage": "डिव्हाइस विसरले",
     "unpairDeviceConfirmTitle": "डिव्हाइस अनपेअर करायचे?",
     "rollBack": "रोल बॅक करा",
@@ -11252,20 +11252,20 @@
     "evidenceNoVoice": "अजून आवाजाचा नमुना नाही",
     "evidenceNotHeard": "अजून संभाषणात ऐकले नाही",
     "evidenceNothing": "तुम्ही अजून यांना लेबल किंवा पुष्टी केलेली नाही",
-    "effectCountsALot": "खूप महत्त्वाचे",
-    "effectCounts": "महत्त्वाचे",
-    "effectCountsALittle": "थोडे महत्त्वाचे",
-    "effectBarelyCounts": "जवळजवळ नगण्य",
-    "effectCountsAgainst": "विरोधात जाते",
+    "effectCountsALot": "खूप मदत करते",
+    "effectCounts": "मदत करते",
+    "effectCountsALittle": "थोडी मदत करते",
+    "effectBarelyCounts": "जवळजवळ मदत करत नाही",
+    "effectCountsAgainst": "नुकसान करते",
     "effectNeeded": "पुष्टी होण्यासाठी आवश्यक",
     "confidenceToReachConfirmed": "पुष्टी होण्यासाठी",
     "confidenceNextVoice": "Omi ला {name} च्या आवाजाचा नमुनाही हवा आहे. “आवाज लक्षात ठेवा” चालू ठेवून त्यांना लेबल करा.",
     "confidenceIsConfirmed": "{name} ची पुष्टी झाली आहे. प्रत्येक लेबलमधून Omi शिकत राहते.",
-    "confidenceFootnote": "खात्री फक्त तुमच्या उत्तरांनीच खूप बदलते. फक्त आपोआप जुळण्या जवळजवळ मोजल्या जात नाहीत.",
+    "confidenceFootnote": "खात्री फक्त तुमच्या उत्तरांनीच खूप बदलते. फक्त आपोआप जुळण्या जवळजवळ मदत करत नाहीत.",
     "personWhyConfidence": "का?",
     "pinPersonTitle": "{name} ला पिन करा",
     "pinPersonSubtitle": "{name} ला ठेवा आणि तुमच्या संभाषणांत त्यांची अपेक्षा ठेवा",
-    "pinPersonHonestLine": "अंदाज लावण्याऐवजी Omi तुम्हाला जवळच्या जुळण्यांची पुष्टी करायला सांगेल.",
+    "pinPersonHonestLine": "जवळपास सारखे आवाज जुळवण्यापूर्वी Omi विचारते.",
     "pinAction": "पिन करा",
     "unpinAction": "अनपिन करा",
     "personPinnedToast": "{name} पिन केले",
@@ -11322,21 +11322,40 @@
     "collapseAction": "आकसा",
     "speakerTagPromptNotMeAction": "मी नाही",
     "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{1 वक्ता} other{{count} वक्ते}}",
     "siriShortcutsSetupHint": "शॉर्टकट्स → Siri मध्ये Omi चालू करा. “{askPhrase}” किंवा “{questionPhrase}” म्हणा, नंतर तुमचा प्रश्न विचारा.",
     "siriShortcutsSearchHint": " तुम्ही “{searchPhrase} for what I did today” असेही म्हणू शकता.",
     "updateAvailableTitle": "अपडेट उपलब्ध आहे",
     "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
     "updateRequiredTitle": "अपडेट आवश्यक आहे",
     "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा.",
+    "exportingAllData": "तुमचा डेटा एक्सपोर्ट होत आहे… Omi उघडे ठेवा; मोठ्या खात्यांना अनेक मिनिटे लागू शकतात.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 वक्ता} other{{count} वक्ते}}",
     "autoRemoveSyncedCopiesTitle": "सिंक केलेल्या प्रती आपोआप काढा",
     "autoRemoveSyncedCopiesDays": "सिंक केलेल्या प्रती {days} दिवसांनंतर हटवल्या जातात",
     "autoRemoveSyncedCopiesDescription": "सिंकनंतर {days} दिवसांनी स्थानिक प्रती हटवते. क्लाउड प्रती ठेवल्या जातात.",
     "localCopiesSection": "स्थानिक प्रती",
-    "speakerLabelLinesLabeled": "लेबल लावलेल्या ओळी: {count}",
+    "speakerLabelLinesLabeled": "{count, plural, =1{1 ओळीला लेबल लावले} other{{count} ओळींना लेबल लावले}}",
     "speakerLabelVoiceStatus": "{state, select, learned{आवाज शिकला} pending{आवाज शिकत आहे…} disabled{आवाज जतन करणे बंद आहे} other{आवाज अजून शिकलेला नाही}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi पुढच्या वेळी {name} यांना ओळखेल.} pending{यास काही सेकंद लागतात.} disabled{Omi ला {name} यांना ओळखता यावे म्हणून सेटिंग्जमध्ये आवाज जतन करणे चालू करा.} other{Omi ला {name} यांचे आणखी स्पष्ट बोलणे हवे आहे आणि तो प्रयत्न करत राहील.}}",
-    "speakerLabelEarlierMatches": "या आवाजासह मागील संभाषणे: {count}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{मागील 1 संभाषणात आढळला} other{मागील {count} संभाषणांमध्ये आढळला}}",
     "speakerLabelText": "{part, select, likely{संभाव्य} soundsLike{{name} सारखा वाटतो} notPerson{{name} नाही} carried{अजूनही {name}. तुमच्या मागील संभाषणातून पुढे आणले.} change{बदला} alsoTitle{हे देखील {name} आहेत का?} alsoBody{Omi ला हाच आवाज मागील संभाषणांमध्ये आढळला.} confirmed{तुम्ही हे लेबल निश्चित केले} other{पुनरावलोकन}}",
-    "speakerLabelTalkTime": "या आवाजाचे {duration}"
+    "speakerLabelTalkTime": "या आवाजाचे {duration}",
+    "findDeviceNoneTitle": "कोणताही Omi सापडला नाही",
+    "findDeviceNoneMessage": "ते चालू करा आणि तुमच्या फोनजवळ धरा.",
+    "startupFailedDetails": "तपशील",
+    "couldNotLoadApiKeys": "API की लोड करता आल्या नाहीत.",
+    "speakerTagPromptNoAction": "नाही…",
+    "diagnosticsRightNow": "आत्ता",
+    "diagnosticsLast7Days": "गेले 7 दिवस",
+    "diagnosticsConnectedFor": "कनेक्ट असलेला वेळ",
+    "diagnosticsVerdictReconnects": "आपोआप पुन्हा जोडले जाते",
+    "diagnosticsVerdictReconnectsDetail": "थोडक्यात खंड, प्रत्येक वेळी सुमारे {duration} मध्ये परत",
+    "diagnosticsVerdictNoDrops": "या आठवड्यात कोणताही खंड नाही",
+    "diagnosticsVerdictTrouble": "कनेक्ट होण्यात अडचण",
+    "diagnosticsVerdictTroubleDetail": "गेल्या 24 तासांतील अयशस्वी कनेक्शन: {count}",
+    "diagnosticsDrops": "खंड",
+    "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
+    "diagnosticsLongestGap": "सर्वात मोठा खंड",
+    "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
+    "diagnosticsLastDuration": "गेले {duration}"
 }

@@ -324,6 +324,8 @@ class FailoverStack:
         self.owner_name = owner_name
 
         async def persistence_call(fn, *args, **kwargs):
+            if fn is speakers_module.named_speaker_prompts_allowed:
+                return True
             if fn is conversations_db.get_conversation:
                 raw = dict(self.store.rows.get(('users', UID, 'conversations', args[1])) or {})
                 # The canonical read decode: the stored row carries zlib-compressed
