@@ -52,6 +52,17 @@ def test_login_rejects_non_ascii_key_before_network(cli_runner, respx_mock) -> N
     assert route.call_count == 0
 
 
+def test_validate_rejects_internal_whitespace() -> None:
+    with pytest.raises(UsageError) as info:
+        api_key_auth.validate_api_key_format("omi_dev_" + "a" * 16 + " " + "b" * 16)
+    assert "whitespace" in str(info.value).lower()
+
+
+def test_validate_rejects_control_characters() -> None:
+    with pytest.raises(UsageError):
+        api_key_auth.validate_api_key_format("omi_dev_" + "a" * 16 + "\x00" + "b" * 16)
+
+
 def test_validate_strips_whitespace() -> None:
     key = "omi_dev_" + "x" * 32
     result = api_key_auth.validate_api_key_format(f"  {key}\n")

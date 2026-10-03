@@ -50,6 +50,12 @@ def validate_api_key_format(api_key: str) -> str:
             detail="Developer keys are ASCII-only. Paste the token exactly as shown in the Omi web app.",
         )
 
+    if not all(0x21 <= ord(ch) <= 0x7E for ch in cleaned):
+        raise UsageError(
+            message="API key contains whitespace or control characters",
+            detail="Developer keys are single tokens without spaces or control characters. Paste the token exactly as shown in the Omi web app.",
+        )
+
     if len(cleaned) < len(DEV_API_KEY_PREFIX) + 16:
         raise UsageError(
             message="API key looks too short",
