@@ -16,8 +16,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import tests.unit.test_sync_v2 as sync_v2_harness
+from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
+from tests.unit.test_sync_cross_job_assignment import intake
+from tests.unit.test_sync_lineage_dedupe_replay import at, live_row, seeded_store
 from tests.unit.test_sync_recording_lineage import ORIGIN, generation
 from tests.unit.test_wal_audio_coverage import EPOCH, RATE, ROOT, _envelope, _frame_bytes, _run
+from utils.capture_evidence import SourcePositionMap
+from utils.conversations import lifecycle
+from utils.sync import recording_lineage
 from utils.sync import wal_audio_coverage as coverage_mod
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -207,12 +213,366 @@ async def test_received_but_untranscribed_wal_reaches_stt_and_is_saved(coordinat
     assert state.outcomes[0].value == 'success'
 
 
+def _committed_envelope(covered, *, fed=None, wall0=1760000000.0, spf=FRAME_SAMPLES, root=ROOT, epoch=EPOCH):
+    """Real committed proof from the live producer for ordinals `covered`.
+
+    Wall anchors follow the producer's frame-end convention:
+    receipt_wall = wav_start + (ordinal + 1) * frame_duration.
+    """
+    fed_ordinals = list(range(max(covered) + 1)) if fed is None else list(fed)
+    covered_set = set(covered)
+    source = SourcePositionMap(committed=True)
+    notes = []
+    note_start = None
+    sample_cursor = 0
+    for ordinal in fed_ordinals:
+        source.accept(
+            {'capture_root': root, 'clock_epoch': epoch, 'source_frame': ordinal},
+            sample_start=sample_cursor,
+            sample_count=spf,
+            rate_hz=RATE,
+            payload=_frame_bytes(ordinal, min(spf, 4096)),
+            receipt_wall_time=wall0 + (ordinal + 1) * spf / RATE,
+        )
+        if ordinal in covered_set:
+            if note_start is None:
+                note_start = sample_cursor
+            note_end = sample_cursor + spf
+        elif note_start is not None:
+            notes.append((note_start, note_end))
+            note_start = None
+        sample_cursor += spf
+    if note_start is not None:
+        notes.append((note_start, note_end))
+    source.remember_transcripts(
+        [
+            {'id': f's{i}', '_capture_start_sample': start, '_capture_end_sample': end}
+            for i, (start, end) in enumerate(notes)
+        ]
+    )
+    segments = [
+        SimpleNamespace(id=f's{i}', text='x', start=0.0, end=1.0, audio_alignment=None) for i in range(len(notes))
+    ]
+    return source.committed_snapshot('conv', segments)
+
+
+def _wire_real(
+    pipeline,
+    monkeypatch,
+    tmp_path,
+    *,
+    lineage_rows,
+    word,
+    frame_values=range(10),
+    wav_writer=_write_labeled_wav,
+    frame_samples=FRAME_SAMPLES,
+):
+    """Real-coordinator wiring: real decode handoff, retrieve_vad_segments,
+    process_segment and StrictFirestore intake; only provider words, VAD
+    intervals, job ledger and context I/O are stubbed."""
+    wav_path = tmp_path / f'{WAV_STEM}.wav'
+    wav_writer(wav_path, frame_values)
+    frame_count = len(list(frame_values))
+
+    def decode(raw_paths, decoded_frames=None):
+        if decoded_frames is not None:
+            decoded_frames[str(wav_path)] = [frame_samples] * frame_count
+        return [str(wav_path)]
+
+    job_updates = []
+    outcomes = []
+    prerecorded_calls = []
+    processed_paths = []
+
+    monkeypatch.setattr(pipeline, 'decode_files_to_wav', decode)
+    monkeypatch.setattr(pipeline, '_cleanup_files', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', _ts)
+    monkeypatch.setattr(pipeline, 'get_wav_duration', _duration)
+    monkeypatch.setattr(pipeline, 'async_resolve_geolocation', AsyncMock(side_effect=lambda geo: geo))
+    monkeypatch.setattr(pipeline, 'get_byok_keys', lambda: {})
+    monkeypatch.setattr(pipeline, 'set_byok_uid', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'lineage_resolution_requested', lambda *a, **k: True)
+    monkeypatch.setattr(pipeline, 'bind_or_converge_sync_ledger_completion', lambda **k: None)
+    monkeypatch.setattr(pipeline, '_mark_job_processing_for_run', lambda *a, **k: None)
+    monkeypatch.setattr(
+        pipeline, '_update_sync_job_for_run', lambda *a, **k: job_updates.append(a[2] if len(a) > 2 else k)
+    )
+    monkeypatch.setattr(pipeline, '_finalize_sync_job_failure', AsyncMock())
+    monkeypatch.setattr(pipeline, '_finalize_sync_job_for_run', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'get_sync_job', lambda *a, **k: {'partial_result': {}})
+    monkeypatch.setattr(pipeline, 'get_processed_segments', lambda *a, **k: set())
+    monkeypatch.setattr(pipeline, 'get_processed_sync_segment_ids', lambda *a, **k: set())
+    monkeypatch.setattr(pipeline, '_add_processed_segment_for_run', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'add_processed_sync_segment_id', lambda *a, **k: True)
+    monkeypatch.setattr(pipeline, 'checkpoint_sync_content_partial_result', lambda *a, **k: True)
+    monkeypatch.setattr(pipeline, 'mark_sync_content_completed', lambda *a, **k: True)
+    monkeypatch.setattr(pipeline, 'delete_sync_job_run_lock_epoch', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, '_record_sync_segment_outcome', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, '_record_sync_segment_failure_async', AsyncMock())
+    monkeypatch.setattr(pipeline, '_reprocess_merged_conversations', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'schedule_person_voice_learning_retries', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, '_record_restricted_sync_dg_usage', AsyncMock())
+    monkeypatch.setattr(pipeline, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(pipeline, 'try_mark_once', lambda *a, **k: True)
+    monkeypatch.setattr(pipeline, 'record_usage', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'plan_segment_targets', lambda *a, **k: {})
+    monkeypatch.setattr(pipeline, 'users_db', MagicMock(get_user_transcription_preferences=MagicMock(return_value={})))
+    monkeypatch.setattr(pipeline, '_load_sync_segment_context', AsyncMock(return_value=(False, None, {})))
+    monkeypatch.setattr(
+        pipeline,
+        '_record_sync_job_outcome_async',
+        AsyncMock(side_effect=lambda outcome, **kwargs: outcomes.append(outcome)),
+    )
+    monkeypatch.setattr(coverage_mod, 'get_timestamp_from_path', _ts)
+    monkeypatch.setattr(coverage_mod, 'get_wav_duration', _duration)
+    monkeypatch.setattr(coverage_mod, 'parse_sync_filename_timestamp', _ts)
+    monkeypatch.setattr(recording_lineage, 'load_lineage', lambda *a, **k: (list(lineage_rows), None, False))
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda path, **k: [{'start': 0, 'end': _duration(path)}])
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
+    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
+    monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
+
+    def fake_prerecorded(url, **kwargs):
+        prerecorded_calls.append(url)
+        return (['w'], 'en')
+
+    monkeypatch.setattr(pipeline, 'prerecorded', fake_prerecorded)
+    real_process = pipeline.process_segment
+
+    def tracking_process(path, *args, **kwargs):
+        processed_paths.append(path)
+        return real_process(path, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline, 'process_segment', tracking_process)
+    monkeypatch.setattr(
+        pipeline,
+        'postprocess_words',
+        lambda words, offset: _segments_from_bytes(processed_paths[-1], word, frame_samples),
+    )
+    monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *a: {})
+    finish = MagicMock()
+    monkeypatch.setattr(pipeline, 'finish_sync_segment', finish)
+    return SimpleNamespace(
+        wav_path=wav_path,
+        job_updates=job_updates,
+        outcomes=outcomes,
+        prerecorded_calls=prerecorded_calls,
+        processed_paths=processed_paths,
+        finish=finish,
+    )
+
+
+async def _run_real(pipeline, tmp_path, *, target_conversation_id=None, session=ORIGIN):
+    await pipeline._run_full_pipeline_background_async(
+        'job-coverage',
+        'u',
+        ['/tmp/f.bin'],
+        'omi',
+        False,
+        str(tmp_path / 'job'),
+        target_conversation_id=target_conversation_id,
+        client_device_id='pendant',
+        recording_session_id=session,
+        audio_start_seconds=1759999000.0,
+        audio_end_seconds=1760000100.0,
+        task_mode=True,
+        capture_evidence_claims={BIN_NAME: _claim()},
+    )
+
+
+def _live_segments(word, count):
+    return [
+        {
+            'start': i * 0.5,
+            'end': i * 0.5 + 0.5,
+            'text': word(i),
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 0,
+            'is_user': False,
+        }
+        for i in range(count)
+    ]
+
+
+def _stored_texts(store, row):
+    return [s['text'] for s in store.rows[('users', 'u', 'conversations', row['id'])]['transcript_segments']]
+
+
+@pytest.mark.asyncio
+async def test_committed_live_frames_suppressed_and_new_speech_saved(real_pipeline, monkeypatch, tmp_path):
+    pipeline = real_pipeline
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(7))
+
+    def word(value):
+        return f'live-word-{value}' if value < 7 else f'new-word-{value}'
+
+    row = live_row(
+        started_at=at(1760000000),
+        finished_at=at(1760000003.5),
+        transcript_segments=_live_segments(word, 7),
+    )
+    store = seeded_store([row])
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    state = _wire_real(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)], word=word)
+    await _run_real(pipeline, tmp_path, target_conversation_id=row['id'])
+
+    texts = _stored_texts(store, row)
+    assert sorted(texts) == sorted([word(i) for i in range(7)] + [word(i) for i in range(7, 10)])
+    for i in range(7):
+        assert texts.count(f'live-word-{i}') == 1
+    assert state.finish.call_count == 1
+    assert state.finish.call_args.args[1]['id'] == row['id']
+    assert state.finish.call_args.args[2]['updated_memories'] == {row['id']}
+    assert state.outcomes[-1].value == 'success'
+    assert len(state.processed_paths) == 1
+    assert _read_payload(state.processed_paths[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
+    assert state.prerecorded_calls
+
+
+@pytest.mark.asyncio
+async def test_fully_committed_wal_skips_provider_and_enrichment(coordinator, monkeypatch, tmp_path):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(10))
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    await _run_batch(module, stubs, tmp_path)
+    assert state.vad_seen == []
+    assert state.processed == []
+    assert len(state.outcomes) == 1
+    assert state.outcomes[0].value == 'success'
+
+
+@pytest.mark.asyncio
+async def test_cross_lifetime_root_keeps_untranscribed_wal(real_pipeline, monkeypatch, tmp_path):
+    pipeline = real_pipeline
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(10), wall0=1760000000.0 + 86400.0)
+
+    def word(value):
+        return f'new-word-{value}'
+
+    row = live_row(
+        started_at=at(1760000000),
+        finished_at=at(1760000005.0),
+        transcript_segments=[],
+    )
+    store = seeded_store([row])
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    state = _wire_real(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)], word=word)
+    await _run_real(pipeline, tmp_path, target_conversation_id=row['id'])
+    assert not (tmp_path / f'{WAV_STEM}.coverage').exists()
+    assert len(state.processed_paths) == 1
+    assert _read_payload(state.processed_paths[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+    texts = _stored_texts(store, row)
+    assert sorted(texts) == sorted(word(i) for i in range(10))
+    assert state.finish.call_count == 1
+    assert state.outcomes[-1].value == 'success'
+
+
+@pytest.mark.asyncio
+async def test_committed_hole_keeps_prelive_and_new_speech_separately(coordinator, monkeypatch, tmp_path):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(3, 7))
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    await _run_batch(module, stubs, tmp_path)
+    assert len(state.vad_seen) == 2
+    payloads = sorted(
+        (_read_payload(path) for path in state.vad_seen),
+        key=lambda payload: int.from_bytes(payload[:2], 'little', signed=True),
+    )
+    assert payloads[0] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (0, 1, 2))
+    assert payloads[1] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
+
+
+@pytest.mark.asyncio
+async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_path):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    source = SourcePositionMap(committed=True)
+    for i in range(10):
+        source.accept(
+            {'capture_root': ROOT, 'clock_epoch': EPOCH, 'source_frame': i},
+            sample_start=i * FRAME_SAMPLES,
+            sample_count=FRAME_SAMPLES,
+            rate_hz=RATE,
+            payload=_frame_bytes(i, 4096),
+            receipt_wall_time=1760000000.0 + (i + 1) * FRAME_SAMPLES / RATE,
+        )
+    source.remember_transcripts(
+        [
+            {
+                'id': 's1',
+                '_capture_start_sample': 3 * FRAME_SAMPLES + FRAME_SAMPLES // 2,
+                '_capture_end_sample': 7 * FRAME_SAMPLES - FRAME_SAMPLES // 2,
+            }
+        ]
+    )
+    env = source.committed_snapshot(
+        'conv', [SimpleNamespace(id='s1', text='x', start=0.0, end=1.0, audio_alignment=None)]
+    )
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    await _run_batch(module, stubs, tmp_path)
+    assert len(state.vad_seen) == 2
+    payloads = sorted(
+        (_read_payload(path) for path in state.vad_seen),
+        key=lambda payload: int.from_bytes(payload[:2], 'little', signed=True),
+    )
+    assert payloads[0] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (0, 1, 2, 3))
+    assert payloads[1] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (6, 7, 8, 9))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        lambda e: e.update(version=2),
+        lambda e: e['lifetime'].update(complete=False),
+        lambda e: e['lifetime'].update(history=[]),
+        lambda e: e['runs'][0].update(samples_per_frame=FRAME_SAMPLES + 1),
+        lambda e: e['runs'][0].update(receipt_wall_start=e['runs'][0]['receipt_wall_start'] + 5.0),
+        lambda e: e['runs'][0].update(clock_epoch=EPOCH + 1),
+        lambda e: e.update(proof='receipt_v1'),
+    ],
+)
+async def test_mismatched_committed_evidence_keeps_original(coordinator, monkeypatch, tmp_path, mutate):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(7))
+    mutate(env)
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    await _run_batch(module, stubs, tmp_path)
+    assert len(state.vad_seen) == 1
+    original = state.vad_seen[0]
+    assert '.coverage' not in original
+    assert _read_payload(original) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+
+
 @pytest.mark.asyncio
 async def test_flag_off_keeps_original_bytes_path_and_no_lookup(coordinator, monkeypatch, tmp_path):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch, coverage_flag='off')
-    env = _envelope([_run(0, 7, samples_per_frame=FRAME_SAMPLES)])
+    env = _committed_envelope(range(7))
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
     await _run_batch(module, stubs, tmp_path)
     assert state.coverage_calls() == []
@@ -220,6 +580,63 @@ async def test_flag_off_keeps_original_bytes_path_and_no_lookup(coordinator, mon
     original = state.vad_seen[0]
     assert original.endswith(f'{WAV_STEM}.wav')
     assert _read_payload(original) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+
+
+@pytest.mark.asyncio
+async def test_flag_typo_keeps_original_bytes_path_and_no_lookup(coordinator, monkeypatch, tmp_path):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch, coverage_flag='treu')
+    env = _committed_envelope(range(7))
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    await _run_batch(module, stubs, tmp_path)
+    assert state.coverage_calls() == []
+    assert len(state.vad_seen) == 1
+    original = state.vad_seen[0]
+    assert original.endswith(f'{WAV_STEM}.wav')
+    assert _read_payload(original) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+
+
+@pytest.mark.asyncio
+async def test_committed_bounded_context_and_short_new_tail_saved(real_pipeline, monkeypatch, tmp_path):
+    """Short frames: context budget keeps <=0.25s of covered neighbors, tail saved."""
+    pipeline = real_pipeline
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(9), spf=SMALL_FRAME_SAMPLES)
+
+    def word(value):
+        return f'live-word-{value}' if value < 9 else 'new-word-9'
+
+    row = live_row(
+        started_at=at(1760000000),
+        finished_at=at(1760000004.5),
+        transcript_segments=_live_segments(word, 9),
+    )
+    store = seeded_store([row])
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    state = _wire_real(
+        pipeline,
+        monkeypatch,
+        tmp_path,
+        lineage_rows=[generation(1, capture_evidence=env)],
+        word=word,
+        wav_writer=_write_short_frame_wav,
+        frame_samples=SMALL_FRAME_SAMPLES,
+    )
+    await _run_real(pipeline, tmp_path, target_conversation_id=row['id'])
+    assert len(state.processed_paths) == 1
+    assert _read_payload(state.processed_paths[0]) == b''.join(_frame_bytes(v, SMALL_FRAME_SAMPLES) for v in (8, 9))
+    texts = _stored_texts(store, row)
+    assert texts.count('new-word-9') == 1
+    assert sorted(texts) == sorted([word(i) for i in range(9)] + ['live-word-8', 'new-word-9'])
+    assert state.finish.call_count == 1
+    assert state.outcomes[-1].value == 'success'
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,8 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from utils.sync.committed_coverage import validated_committed_ranges
+
 MAX_DECODED_FRAMES = 360000
 MAX_RECEIVED_INTERVALS = 32
 MAX_OUTPUT_INTERVALS = 32
@@ -144,11 +146,19 @@ def _validated_received_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> 
     return tuple(merged)
 
 
-def validated_live_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> tuple[tuple[int, int], ...] | None:
+def validated_live_ranges(
+    claim: Mapping,
+    envelopes: Sequence[Mapping],
+    *,
+    wal_start_seconds: object = None,
+    frame_samples: Sequence[int] | None = None,
+) -> tuple[tuple[int, int], ...] | None:
     received = _validated_received_ranges(claim, envelopes)
     if received is None:
         return None
-    return ()
+    return validated_committed_ranges(
+        claim, envelopes, wal_start_seconds=wal_start_seconds, frame_samples=frame_samples
+    )
 
 
 def plan_unreceived_frames(

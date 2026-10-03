@@ -33,14 +33,24 @@ lexical drop); lexical or exact-range text alone never suppresses
 (`SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false`, same allowlist). All-repeat uploads
 acknowledge without writes or enrichment, and `SYNC_LINEAGE_RESOLVE_ENABLED`
 off restores whole-batch binding. One level earlier, uploads carrying the
-opt-in S1 source-position signal additionally trim source frames the live
-socket positively received before VAD/STT (`SYNC_WAL_AUDIO_COVERAGE_ENABLED`,
-default on, same allowlist): kept frames become derivative WAVs under a
+opt-in S1 source-position signal additionally trim source frames covered by a
+committed live transcript proof before VAD/STT (`SYNC_WAL_AUDIO_COVERAGE_ENABLED`,
+default on, same allowlist): only `committed_transcript_v1` envelopes authorize
+trimming and receipt-only snapshots abstain, while the proof's receipt wall
+anchors must independently reproduce the decoded WAL basename clock and
+geometry within 2 s — a negative lifetime check that rejects stale or
+competing reuse of a capture root rather than treating time agreement as
+proof; recall stays conservative and very close cross-socket root resets
+additionally rely on the independent app root-rotation release: kept frames become derivative WAVs under a
 `.coverage/` sibling named by phone-clock offset — a kept interval may also
 carry up to 0.25 s per side of already-received context frames (small bounded
 duplication; non-contiguous captures are never concatenated) — while missing,
 malformed, conflicting or out-of-bounds evidence retains the original audio,
-and an upload without the claim costs no lookup. Derivatives are internally
+and an upload without the claim costs no lookup. The lexical receipt matcher
+stays disabled on this production seam — it is invoked with no WAL context
+with which to prove live ranges — so only committed frame proof suppresses
+audio; exact sync-scoped retries at intake remain unchanged, and the bounded
+context margin conservatively preserves repeats. Derivatives are internally
 marked `coverage_trimmed` so the 1 s VAD minimum admits genuinely new
 sub-second slices; unmarked audio keeps the floor unchanged. The live-dedupe switch also gates the lineage
 diagnostics added with it: on, a clean no-row lookup probes the recording id

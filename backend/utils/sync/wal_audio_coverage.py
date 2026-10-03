@@ -350,7 +350,13 @@ def apply_batch_wal_audio_coverage(
             continue
         claim = mapping['claim']
         frame_samples = decoded_frames.get(path, [])
-        ranges = validated_live_ranges(claim, envelopes)
+        try:
+            wal_start_seconds: Any = float(get_timestamp_from_path(path))
+        except (ValueError, TypeError):
+            wal_start_seconds = None
+        ranges = validated_live_ranges(
+            claim, envelopes, wal_start_seconds=wal_start_seconds, frame_samples=frame_samples
+        )
         if ranges is None:
             return {'status': 'abstained', 'reason': 'evidence', 'stats': stats}
         keep = plan_unreceived_frames(
