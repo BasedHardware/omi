@@ -79,10 +79,16 @@ OnboardingPermissionsSource resolveOnboardingPermissionsSource(
 /// failed ask never keeps the reader on the screen.
 Future<void> requestMissingOnboardingPermissions(OnboardingPermissionsSource source) async {
   for (final permission in source.permissions) {
+    OmiPermissionStatus status;
     try {
-      if (await source.status(permission) == OmiPermissionStatus.askable) {
-        await source.request(permission);
-      }
+      status = await source.status(permission);
+    } catch (_) {
+      // Same reading as the rows: an unreadable status still shows Allow.
+      status = OmiPermissionStatus.askable;
+    }
+    if (status != OmiPermissionStatus.askable) continue;
+    try {
+      await source.request(permission);
     } catch (e) {
       Logger.debug('Onboarding permission request failed for ${permission.name}: $e');
     }
