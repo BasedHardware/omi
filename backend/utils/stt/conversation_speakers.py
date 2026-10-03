@@ -129,6 +129,7 @@ def resolve_conversation_speakers(
     *,
     manual_speakers: Optional[Mapping[int, Identity]] = None,
     voiceprints: Optional[Mapping[str, Any]] = None,
+    abstained_segment_ids: Optional[Set[str]] = None,
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.
 
@@ -143,7 +144,7 @@ def resolve_conversation_speakers(
     to resolve with, and the caller keeps capture's ids.
     """
     manual_speakers = dict(manual_speakers or {})
-    eligible = [
+    all_eligible = [
         s
         for s in segments
         if _seg(s, 'id')
@@ -151,6 +152,8 @@ def resolve_conversation_speakers(
         and str(sid).isdigit()
         and int(sid) != OMI_SPEAKER_ID_SENTINEL
     ]
+    abstained = abstained_segment_ids or set()
+    eligible = [s for s in all_eligible if _seg(s, 'id') not in abstained]
     if not eligible:
         return None
 
@@ -376,7 +379,11 @@ def resolve_conversation_speakers(
     }
     reserved = set(all_old_ids) | set(manual_speakers) | {OMI_SPEAKER_ID_SENTINEL}
     next_fresh = max(reserved) + 1
-    taken: Set[int] = set()
+    taken: Set[int] = {
+        int(_seg(s, 'speaker_id'))
+        for s in all_eligible
+        if _seg(s, 'id') in abstained and int(_seg(s, 'speaker_id')) not in manual_speakers
+    }
     manual_keys_by_token: Dict[str, List[int]] = {}
     for key, identity in manual_speakers.items():
         manual_keys_by_token.setdefault(identity.token, []).append(key)
@@ -425,8 +432,8 @@ def resolve_conversation_speakers(
             new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
         },
         embedded_segments=len(vectors),
-        input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in eligible}),
-        coverage=_coverage(eligible, vectors, manual_speakers),
+        input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in all_eligible}),
+        coverage=_coverage(all_eligible, vectors, manual_speakers, abstained),
         stats={
             'voices': len(members_of),
             'eligible_segments': len(eligible),
@@ -435,13 +442,21 @@ def resolve_conversation_speakers(
     )
 
 
-def _coverage(eligible: Sequence[Any], vectors: Mapping[str, Any], manual_speakers: Mapping[int, Identity]) -> float:
+def _coverage(
+    eligible: Sequence[Any],
+    vectors: Mapping[str, Any],
+    manual_speakers: Mapping[int, Identity],
+    abstained: Set[str],
+) -> float:
     embeddable = [s for s in eligible if _duration(s) >= MIN_EMBED_SECONDS]
     total = sum(_duration(s) for s in embeddable)
     if total <= 0:
         return 1.0
     placed = sum(
-        _duration(s) for s in embeddable if _seg(s, 'id') in vectors or int(_seg(s, 'speaker_id')) in manual_speakers
+        _duration(s)
+        for s in embeddable
+        if _seg(s, 'id') not in abstained
+        and (_seg(s, 'id') in vectors or int(_seg(s, 'speaker_id')) in manual_speakers)
     )
     return placed / total
 

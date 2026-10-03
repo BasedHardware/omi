@@ -1,10 +1,10 @@
 """Background voice-learning orchestration for manual speaker assignments.
 
 After a successful assignment the router hands scheduling here so the route
-stays slim: retire superseded sample blobs, queue person voice-learning for
-labeled people, and queue an owner confirmation for "that's me" labels. All
-policy stays in the underlying sample functions; this module only decides
-what a successful assignment may schedule.
+stays slim: retire superseded sample blobs and run the durable learning-job
+coordinator for the work the assignment transaction committed. All policy
+stays in the underlying functions; this module only decides what a
+successful assignment may schedule.
 """
 
 from typing import Any, List, Mapping, Optional, Sequence
@@ -12,8 +12,7 @@ from typing import Any, List, Mapping, Optional, Sequence
 from database import conversations as conversations_db
 from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.other.storage import delete_speech_profile_blob
-from utils.speaker_identification import extract_speaker_samples
-from utils.speaker_tag_prompts.service import store_owner_voice_sample
+from utils.speaker_learning_jobs import run_authorized_owner_learning, run_authorized_person_learning
 
 
 def commit_manual_assignment(
@@ -75,7 +74,7 @@ def schedule_assignment_teaching(
         return
     if person_id:
         background_tasks.add_task(
-            extract_speaker_samples,
+            run_authorized_person_learning,
             uid=uid,
             person_id=person_id,
             conversation_id=conversation_id,
@@ -83,7 +82,7 @@ def schedule_assignment_teaching(
         )
     elif is_user:
         background_tasks.add_task(
-            store_owner_voice_sample,
+            run_authorized_owner_learning,
             uid=uid,
             conversation_id=conversation_id,
             segment_ids=list(resolved),
