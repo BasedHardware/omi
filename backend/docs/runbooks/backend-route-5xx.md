@@ -4,51 +4,79 @@ The production backend deploy provisions the `backend_route_5xx` Cloud
 Logging counter and the "Backend single-route 5xx regression" Cloud
 Monitoring alert in `based-hardware`. The counter matches Cloud Run request
 log entries for the `backend` service with `httpRequest.status` in
-[500, 600), and the alert fires when one route exceeds **15 errors inside a
-rolling 900-second window for 600 consecutive seconds**. It routes through
-`SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`.
+[500, 600), and the alert fires when one route family exceeds **15 errors
+inside a rolling 900-second window for 600 consecutive seconds**. It routes
+through `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`.
 
-Route identity is a bounded set of at most 64 custom label tuples:
-`method` + `route` for static paths, or `method` + `route_resource`
-+ `/{id}/` + `route_action` for `POST /v1/conversations/{id}/reprocess`
-(conversation IDs are collapsed, never labelled). `status_class` is `5` for
-every tuple, and statuses and revisions are summed — the alert compares
-routes, not status codes or revisions. The tuple bound covers the custom
-labels only; Cloud Run resource labels such as the revision still multiply
-the underlying series before the group-by reduces them.
+Route identity is `method` + `route`. `route` is extracted by
+`^https?://[^/?#]+((?:/v[0-9]+)?(?:/[a-z][a-z_-]*){1,3})(?:/|[?#]|$)`: an
+optional version segment (`/v1`, `/v3`) followed by up to three complete
+path segments made only of lowercase letters, `_` and `-`. Capture stops
+before the first segment that does not match — digits, uppercase letters
+and encoded punctuation end the family, and a partial segment is never
+captured. Status codes and revisions are summed; methods and families are
+not. Examples:
 
-## Scope limitation
+- `GET /v1/users/people?include_stats=true` → `GET` + `/v1/users/people`
+- `POST /v1/conversations/abc123/reprocess` → `POST` + `/v1/conversations`:
+  the conversation ID is invalid as a segment, so reprocess merges into
+  the parent family
+- `POST /v1/conversations/from-segments` → `POST` +
+  `/v1/conversations/from-segments`: all three segments are valid, so it
+  stays a separate family
+- `GET /v1/a/b/c/d` → `GET` + `/v1/a/b/c` (depth is truncated to three
+  segments, not emptied)
 
-The initial route catalogue covers the supplied incident and chronic routes
-from 2026-10-02 (`/v1/users/people`, `/v1/dev/user/memories`,
-`/v1/dev/user/goals`, `/v3/memories`, `/v1/conversations/from-segments`,
-`/v2/voice-message/transcribe`, `/v1/conversations/{id}/reprocess`). It is
-not every backend route: uncatalogued paths still increment the metric with
-an empty route tuple but are excluded from the alert condition, and no
-signal here proves the absence of bursts on unmonitored routes. Extending
-the catalogue means adding paths to `.github/monitoring/backend_route_5xx_metric.json`
-and re-running the deploy provisioner.
+## Cardinality limitation
+
+The shape bound is not a strict finite cap. Most real ID shapes end the
+capture before the ID segment: server-generated UUIDv4-shaped IDs
+contain a version digit, and ULIDs and mixed-case/digit-bearing
+Firestore-style IDs do not match a complete lowercase segment. The
+alphabet alone is still no exclusion guarantee: `goal_` + hex IDs need
+not contain a digit, so an all-letter one like `goal_abcdefabcdef`
+passes as the third segment under `/v1/goals`, and lowercase slugs like
+`/v2/desktop/previews/feature-branch` form complete families. Arbitrary
+malformed lowercase paths produce families too, so worst-case label
+count is bounded by traffic shape, not by a fixed route list.
 
 ## Why these numbers
 
 - The 2026-10-02 People regression returned 504 on ~30% of calls at 70-90
-  per hour. At a steady 70-90/h the 16th error lands ~10.7-13.7 minutes
-  after the first; the 10-minute dwell then holds, so the policy pages
-  ~20.7-23.7 minutes after onset, plus log-ingestion and evaluation
-  latency — inside the four-hour blind spot that let it go unnoticed.
-- The worst chronic route averaged 264/24h = ~11/h = ~2.75 errors per
-  15-minute window, well under the 15 threshold, so chronic background 5xx
-  does not page continuously. Sustained averages do not rule out short
-  bursts; this policy only guarantees a page for a sustained regression.
+  per hour: 17.5-22.5 errors per 15-minute window. The 16th error lands
+  `16/r*60` ≈ 10.7-13.7 minutes after the first; the 10-minute dwell then
+  holds, so the policy pages ≈20.7-23.7 minutes after onset, plus
+  log-ingestion and evaluation latency — inside the four-hour blind spot
+  that let it go unnoticed.
+- Firing needs more than 15 errors inside one family's rolling 15-minute
+  window held for 10 minutes — a sustained rate above ~60 errors/hour.
+  Measured chronic per-15-minute averages sit far below:
+  `/v1/dev/user/memories` 2.75, `/v1/dev/user/goals` 2.55, `/v3/memories`
+  1.29 POST / 1.66 GET (methods group separately, so the combined 283 does
+  not stack), `/v1/conversations` 1.43 at the 137 reported parent calls
+  ("or more" gives no upper bound), `/v1/conversations/from-segments` 1.14
+  as its own family (reprocess at 0.29 merges into the parent),
+  `/v2/voice-message/transcribe` 0.39, `/memory/search` 0.15. No measured
+  chronic average pages continuously, but unmeasured parent-family volume
+  or bursts could — the threshold intentionally has no exemptions so
+  unseen routes still page.
 
 ## Respond to an alert
 
-1. Find the affected route, status code, and revision in the `backend`
-   Cloud Run request logs (the alert names the route tuple). Pay special
-   attention to platform 504s — a 504 generated by the Cloud Run platform
-   can appear in request logs without any application ERROR log, so check
-   platform logs and upstream latency/timeouts too, not only app errors.
-2. Compare the onset timestamp with the deploy/rollout history and with the
-   route's dependency timeouts (Firestore reads, downstream services) to
-   identify what changed; the reprocess route appears as
-   `/v1/conversations/{id}/reprocess` with the ID collapsed.
+1. Find the affected method and route family in the `backend` Cloud Run
+   request logs. The alert names a family, which can be a parent of the
+   failing route — reprocess pages as `POST /v1/conversations`, and slugs
+   or all-letter IDs can appear in the family itself — so read the full
+   request path in the logs. Pay special attention to platform 504s: a
+   504 generated by the Cloud Run platform can appear in request logs
+   without any application ERROR log, so check platform logs and upstream
+   latency/timeouts too, not only app errors.
+2. Compare the onset timestamp with the deploy/rollout history and with
+   the route's dependency timeouts (Firestore reads, downstream services)
+   to identify what changed.
+
+Re-deploying does not churn the alert: the provisioner reconciles
+read-before-write, writes nothing when the metric filter/extractors and
+policy already match, and carries over the existing condition's resource
+name when it does update — unchanged deploys never restart the 600-second
+dwell.

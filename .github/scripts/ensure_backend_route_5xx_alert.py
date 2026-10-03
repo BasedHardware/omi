@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Ensure the per-route backend 5xx metric and alert policy exist.
+"""Ensure the backend route-family 5xx metric and alert policy exist.
 
 The log-based metric counts Cloud Run platform request-log entries with
 httpRequest.status in [500, 600) for the `backend` service and labels each
-series with a bounded (method, route, route_resource, route_action,
-status_class) tuple. Route identity is method + route for static paths, or
-method + route_resource + /{id}/ + route_action for the parameterised
-reprocess route; unknown paths extract empty route labels and are excluded
-by the alert condition. The initial catalogue covers the supplied
-incident/chronic routes only.
+series with (method, route). Route is a generic path family: an optional
+version plus up to three complete lowercase path segments, stopping at the
+first segment that does not match. Any matching non-empty family can page;
+there is no fixed route list.
 
 Metric and policy bodies are immutable configuration under
 .github/monitoring/; this script only loads, provisions, and verifies them.
+Both resources reconcile read-before-write: an existing metric is updated
+only when its filter or label extractors differ, and an existing policy is
+updated only when its managed fields drift — carrying over the existing
+condition's resource name so unchanged deploys do not restart the dwell.
 Policy creation reuses ensure_monitoring_metric_alert_policy.ensure_policy
-so the documented metric-propagation retry stays in one place; the stored
-policy is then updated with the complete configured body and verified.
+so the documented metric-propagation retry stays in one place.
 """
 
 from __future__ import annotations
@@ -40,8 +41,6 @@ COMPARISON_OPERATORS = {"COMPARISON_GT": ">"}
 GROUP_BY_FIELDS = (
     "metric.label.method",
     "metric.label.route",
-    "metric.label.route_resource",
-    "metric.label.route_action",
 )
 
 
@@ -80,14 +79,30 @@ def _aggregation(threshold: dict[str, object]) -> str:
     return json.dumps(aggregations[0], separators=(",", ":"))
 
 
+def _parse_described(described: subprocess.CompletedProcess[str], resource: str) -> dict[str, object]:
+    try:
+        payload = json.loads(described.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{resource} describe returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{resource} describe returned a non-object")
+    return payload
+
+
 def _ensure_metric(*, name: str, config: Path, project: str, runner: Runner) -> None:
-    described = _run(runner, ["logging", "metrics", "describe", name, f"--project={project}"])
+    desired = _load_json(config)
+    described = _run(runner, ["logging", "metrics", "describe", name, f"--project={project}", "--format=json"])
     if described.returncode:
         error = (described.stderr or described.stdout).strip()
         if "not found" not in error.lower() and "not_found" not in error.lower():
             raise RuntimeError(error or "failed to describe Cloud Logging metric")
         operation = "create"
     else:
+        existing = _parse_described(described, "Cloud Logging metric")
+        if existing.get("filter") == desired.get("filter") and (existing.get("labelExtractors") or {}) == (
+            desired.get("labelExtractors") or {}
+        ):
+            return
         operation = "update"
 
     result = _run(
@@ -142,8 +157,24 @@ def _update_policy(
     raise RuntimeError("unreachable Monitoring policy update state")
 
 
-def _verify_policy(policy: dict[str, object], body: dict[str, object], channels: list[str]) -> None:
-    """Compare core fields; describe output may add names and output-only fields."""
+def _describe_policy(*, policy: str, project: str, runner: Runner) -> dict[str, object]:
+    described = _run(runner, ["monitoring", "policies", "describe", policy, f"--project={project}", "--format=json"])
+    if described.returncode:
+        raise RuntimeError((described.stderr or described.stdout).strip() or "failed to describe Monitoring policy")
+    return _parse_described(described, "Monitoring policy")
+
+
+def _sole_condition_name(policy: dict[str, object]) -> str:
+    conditions = policy.get("conditions")
+    if not isinstance(conditions, list) or len(conditions) != 1 or not isinstance(conditions[0], dict):
+        raise RuntimeError("existing Monitoring policy must have exactly one condition to update")
+    name = conditions[0].get("name")
+    if not isinstance(name, str) or not name:
+        raise RuntimeError("existing Monitoring policy condition has no resource name to preserve")
+    return name
+
+
+def _policy_drift(policy: dict[str, object], body: dict[str, object], channels: list[str]) -> list[str]:
     condition = _condition(body)
     expected_threshold = condition["conditionThreshold"]
     errors: list[str] = []
@@ -160,22 +191,22 @@ def _verify_policy(policy: dict[str, object], body: dict[str, object], channels:
 
     trigger = actual_threshold.get("trigger")
     actual_trigger_count = trigger.get("count") if isinstance(trigger, dict) else None
+    expected_documentation = body["documentation"]
     documentation = policy.get("documentation")
-    actual_doc_content = documentation.get("content") if isinstance(documentation, dict) else ""
+    actual_doc_content = documentation.get("content") if isinstance(documentation, dict) else None
+    actual_doc_mime = documentation.get("mimeType") if isinstance(documentation, dict) else None
     actual_channels = policy.get("notificationChannels")
 
     checks = (
         (policy.get("displayName") == body["displayName"], "policy display name"),
         (policy.get("combiner") == body["combiner"], "combiner"),
-        (policy.get("enabled") is True, "enabled state"),
+        (policy.get("enabled") == body["enabled"], "enabled state"),
         (
             isinstance(actual_channels, list) and sorted(actual_channels) == sorted(channels),
             "notification channels",
         ),
-        (
-            isinstance(actual_doc_content, str) and str(body["documentation"]["content"]) in actual_doc_content,
-            "documentation",
-        ),
+        (actual_doc_content == expected_documentation["content"], "documentation content"),
+        (actual_doc_mime == expected_documentation.get("mimeType"), "documentation MIME type"),
         (actual_condition.get("displayName") == condition["displayName"], "condition display name"),
         (actual_threshold.get("filter") == expected_threshold["filter"], "condition filter"),
         (actual_threshold.get("comparison") == expected_threshold["comparison"], "comparison"),
@@ -187,7 +218,11 @@ def _verify_policy(policy: dict[str, object], body: dict[str, object], channels:
 
     expected_aggregation = expected_threshold["aggregations"][0]
     actual_aggregations = actual_threshold.get("aggregations")
-    if not isinstance(actual_aggregations, list) or len(actual_aggregations) != 1:
+    if (
+        not isinstance(actual_aggregations, list)
+        or len(actual_aggregations) != 1
+        or not isinstance(actual_aggregations[0], dict)
+    ):
         errors.append("exactly one aggregation")
     else:
         actual_aggregation = actual_aggregations[0]
@@ -199,6 +234,12 @@ def _verify_policy(policy: dict[str, object], body: dict[str, object], channels:
             elif actual_value != expected_value:
                 errors.append(f"aggregation {key}")
 
+    return errors
+
+
+def _verify_policy(policy: dict[str, object], body: dict[str, object], channels: list[str]) -> None:
+    """Compare managed fields; describe output may add names and output-only fields."""
+    errors = _policy_drift(policy, body, channels)
     if errors:
         raise RuntimeError("Monitoring policy drift: " + ", ".join(errors))
 
@@ -210,11 +251,12 @@ def ensure_alert(
     runner: Runner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
 ) -> str:
-    """Create or update the metric and policy, then verify the stored policy."""
+    """Reconcile the metric and policy read-before-write, preserving the condition name."""
     if not project.strip():
         raise ValueError("project must not be empty")
     channels = _notification_channels(notification_channels)
     body = _load_json(POLICY_CONFIG)
+    body["notificationChannels"] = channels
     condition = _condition(body)
     threshold = condition["conditionThreshold"]
 
@@ -236,19 +278,24 @@ def ensure_alert(
         sleep=sleep,
     )
 
-    body["notificationChannels"] = channels
+    existing = _describe_policy(policy=policy, project=project, runner=runner)
+    if not _policy_drift(existing, body, channels):
+        return policy
+
+    condition_name = _sole_condition_name(existing)
+    condition["name"] = condition_name
     _update_policy(project=project, policy=policy, body=body, runner=runner, sleep=sleep)
 
-    described = _run(runner, ["monitoring", "policies", "describe", policy, f"--project={project}", "--format=json"])
-    if described.returncode:
-        raise RuntimeError((described.stderr or described.stdout).strip() or "failed to describe Monitoring policy")
-    try:
-        payload = json.loads(described.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Monitoring policy describe returned invalid JSON") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError("Monitoring policy describe returned a non-object")
-    _verify_policy(payload, body, channels)
+    updated = _describe_policy(policy=policy, project=project, runner=runner)
+    _verify_policy(updated, body, channels)
+    updated_conditions = updated.get("conditions")
+    surviving_name = (
+        updated_conditions[0].get("name")
+        if isinstance(updated_conditions, list) and len(updated_conditions) == 1
+        else None
+    )
+    if surviving_name != condition_name:
+        raise RuntimeError("Monitoring policy condition resource name changed across update")
     return policy
 
 
