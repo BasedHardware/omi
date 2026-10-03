@@ -20,12 +20,16 @@ export class ProactivityFeedConsumer {
   private owner: string | null = null
   private busy: number | null = null
   private lastAttempt = 0
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryDelay = 30_000
   constructor(
     private path: string,
     private openTarget: (target: ProactivityTarget) => Promise<boolean>
   ) {}
 
   sessionChanged(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = null
     const session = getBackendSession()
     const owner = session ? tokenUid(session.token) : null
     if (owner !== this.owner || !owner) {
@@ -39,14 +43,24 @@ export class ProactivityFeedConsumer {
     void this.refresh()
   }
 
-  async refresh(): Promise<void> {
+  private scheduleOutboxRetry(): void {
+    if (this.retryTimer || !this.store?.pending.length) return
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      void this.refresh(true)
+    }, this.retryDelay)
+    this.retryTimer.unref()
+  }
+
+  async refresh(outcomesOnly = false): Promise<void> {
     const epoch = getSessionEpoch()
-    if (this.busy !== null || Date.now() - this.lastAttempt < 30_000) return
+    if (this.busy !== null) { if (outcomesOnly) this.scheduleOutboxRetry(); return }
+    if (!outcomesOnly && Date.now() - this.lastAttempt < 30_000) return
     const original = getBackendSession()
     const owner = original && tokenUid(original.token)
     if (!owner) return
     this.busy = epoch
-    this.lastAttempt = Date.now()
+    if (!outcomesOnly) this.lastAttempt = Date.now()
     const current = (): boolean =>
       getSessionEpoch() === epoch && tokenUid(getBackendSession()?.token ?? '') === owner
     try {
@@ -75,6 +89,8 @@ export class ProactivityFeedConsumer {
         if (!current()) return
         store.acknowledge(entry.request.event_id)
       }
+      this.retryDelay = 30_000
+      if (outcomesOnly) return
       const feed = await get_proactivity_feed({ limit: 50 }, { X_App_Platform: 'windows' }, init)
       if (!current() || !feed.enabled) return
       for (const item of feed.items) {
@@ -91,6 +107,7 @@ export class ProactivityFeedConsumer {
             if (!current()) return
             try {
               store.record(id, request)
+              this.scheduleOutboxRetry()
             } catch {
               console.warn('[proactivity] outcome persistence failed')
             }
@@ -100,10 +117,16 @@ export class ProactivityFeedConsumer {
         // The shared toast is one slot. Never overwrite it with a burst of feed items.
         if (admitted) break
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof OmiApiError) {
+        const seconds = Number(error.response?.headers.get('Retry-After'))
+        if (Number.isFinite(seconds) && seconds > 0) this.retryDelay = Math.max(30_000, seconds * 1000)
+        if (error.status === 401 && current()) await pullFreshSession()
+      }
       console.warn('[proactivity] request deferred for retry')
     } finally {
       if (this.busy === epoch) this.busy = null
+      if (current()) this.scheduleOutboxRetry()
     }
   }
 }

@@ -32,6 +32,7 @@ const item = { id: 'item', created_at: '2026-10-03T12:00:00Z', acted: false, dis
 const response = { enabled: true, items: [item], server_time: '2026-10-03T13:00:00Z' }
 let directory: string, file: string, now: number
 beforeEach(() => {
+  vi.useFakeTimers()
   directory = mkdtempSync(join(tmpdir(), 'pv2-consumer-'))
   file = join(directory, 'journal.json')
   now = 2_000_000
@@ -43,6 +44,8 @@ beforeEach(() => {
   state.present.mockReset().mockReturnValue(true)
 })
 afterEach(() => {
+  vi.clearAllTimers()
+  vi.useRealTimers()
   vi.restoreAllMocks()
   rmSync(directory, { recursive: true, force: true })
 })
@@ -70,6 +73,15 @@ describe('feed consumer transport and owner boundary', () => {
     now += 600_000
     await restarted.refresh()
     expect(state.outcome).toHaveBeenCalledTimes(2)
+  })
+  it('retries pending outcomes in the background without polling another feed', async () => {
+    const consumer = new ProactivityFeedConsumer(file, async () => true)
+    await consumer.refresh()
+    state.present.mock.calls[0][1].onOutcome('item', { action: 'shown', channel: 'feed', surface: 'windows', event_id: 'timer-event' })
+    now += 30_000
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(state.outcome).toHaveBeenCalledOnce()
+    expect(state.feed).toHaveBeenCalledOnce()
   })
   it('drops delayed feed responses after owner switch', async () => {
     let resolve!: (value: unknown) => void
