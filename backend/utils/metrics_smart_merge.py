@@ -8,12 +8,15 @@ and ``record_*`` helpers never raise.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from prometheus_client import REGISTRY, Counter, Histogram
 
 
 def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
     """Module-reload-safe collector: reuse only an identical registration, else raise."""
-    existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
+    registered = getattr(REGISTRY, '_names_to_collectors', {})
+    existing = registered.get(name) if isinstance(registered, Mapping) else None
     if existing is not None:
         if type(existing) is not factory or list(getattr(existing, '_labelnames', ())) != list(labelnames):
             raise ValueError(f'metric {name} already registered with a different shape')
