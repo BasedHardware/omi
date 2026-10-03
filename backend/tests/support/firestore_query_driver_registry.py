@@ -2505,9 +2505,26 @@ _add(
 
 
 # Producer serving paths use bounded history and canonical source mappings.
+def _proactivity_producer_clock(_client):
+    # utc_now is imported from config, outside the harness's module clock scope.
+    return unittest.mock.patch('database.proactivity_producers.utc_now', return_value=T0)
+
+
 _add(DriverEntry('database.proactivity_producers.delivered_mentor_items', base={'uid': UID}))
-_add(DriverEntry('database.proactivity_producers.record_mentor_reply', base={'uid': UID}))
-_add(DriverEntry('database.proactivity_producers.record_task_completion', base={'uid': UID, 'task_id': 'item-1'}))
+_add(
+    DriverEntry(
+        'database.proactivity_producers.record_mentor_reply',
+        base={'uid': UID},
+        patchers=(_proactivity_producer_clock,),
+    )
+)
+_add(
+    DriverEntry(
+        'database.proactivity_producers.record_task_completion',
+        base={'uid': UID, 'task_id': 'item-1'},
+        patchers=(_proactivity_producer_clock,),
+    )
+)
 
 _add(
     CoveredByEntry(
