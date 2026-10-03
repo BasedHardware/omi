@@ -41,7 +41,6 @@ import sys
 import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-
 COMPLETED_STATUSES = {"achieved", "completed", "done"}
 INACTIVE_STATUSES = {"paused", "abandoned", "archived", "inactive"}
 BOOLEAN_TRUE_VALUES = {"true", "yes", "1", "done", "completed"}
@@ -83,7 +82,6 @@ def is_truthy(flag: Any) -> bool:
     if isinstance(flag, str):
         return flag.strip().lower() in BOOLEAN_TRUE_VALUES
     return False
-
 
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
@@ -258,8 +256,6 @@ def is_goal_completed(goal: Dict[str, Any]) -> bool:
     return current >= target
 
 
-
-
 def determine_status_category(goal: Dict[str, Any]) -> str:
     """Categorize goal status into one of: 'achieved', 'inactive', 'active'."""
     if is_goal_completed(goal):
@@ -295,7 +291,6 @@ def extract_goals(raw_data: Any) -> List[Dict[str, Any]]:
             # Single goal object
             if raw_data:
                 goals_list = [raw_data]
-
 
     # Ensure stable goal id for each record
     normalized_goals: List[Dict[str, Any]] = []
@@ -419,7 +414,6 @@ def format_goal_tree(goal: Dict[str, Any]) -> str:
                 sub_box = "[x]" if is_truthy(raw_done) else "[ ]"
                 lines.append(f"  - {sub_box} {sub_title}")
 
-
             elif isinstance(sub, str) and sub.strip():
                 clean_sub = re.sub(r"\s+", " ", str(sub)).strip()
                 sub_box = "[x]" if completed else "[ ]"
@@ -448,9 +442,7 @@ def goals_to_markdown(
     achieved_count = sum(1 for g in goals if determine_status_category(g) == "achieved")
     inactive_count = sum(1 for g in goals if determine_status_category(g) == "inactive")
 
-    overall_progress = (
-        sum(calculate_progress(g) for g in goals) / total if total > 0 else 0.0
-    )
+    overall_progress = sum(calculate_progress(g) for g in goals) / total if total > 0 else 0.0
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -632,11 +624,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     # Filter by goal type if requested
     if args.goal_type != "all":
-        goals = [
-            g
-            for g in goals
-            if str(g.get("goal_type") or "numeric").strip().lower() == args.goal_type
-        ]
+        goals = [g for g in goals if str(g.get("goal_type") or "numeric").strip().lower() == args.goal_type]
 
     # Handle output-dir mode (e.g. writing separate notes per category or vault file)
     if args.output_dir:
