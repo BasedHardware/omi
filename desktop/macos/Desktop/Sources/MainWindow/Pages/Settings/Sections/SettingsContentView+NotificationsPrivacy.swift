@@ -1,3 +1,4 @@
+import Combine
 import OmiTheme
 import Sparkle
 import SwiftUI
@@ -31,6 +32,49 @@ extension SettingsContentView {
             GlassSeparator()
 
             notificationFrequencySlider(settingId: "notifications.frequency")
+
+            GlassSeparator()
+
+            // Sits with the frequency slider because it answers the same question — how
+            // often may Omi interrupt — but for a bounded window rather than forever. The
+            // floating bar's "Hide for 2 hours" is deliberately not this: that hides the
+            // bar and still lets notifications through.
+            settingRow(
+              title: "Silence Notifications",
+              subtitle: notificationSnoozeSubtitle,
+              settingId: "notifications.snooze"
+            ) {
+              Menu {
+                // Knowingly duplicated from `NotificationService.snoozeDurations`, and not
+                // guarded by a test: `testOfferedDurationsAreSaneAndAscending` checks that
+                // constant alone, so these three can drift from it silently. Change both
+                // places together.
+                //
+                // A ForEach over the constant was tried and reverted after the release-mode
+                // whole-module compile hit its 60 min job cap. The revert then ran 56m55s
+                // with a compile-identical tree, against 51m on the head before it — so the
+                // ForEach was not the cause; that lane is simply running at ~95% of its cap
+                // and drifting up. Restoring it is safe on the merits and still a bad bet
+                // until the lane has margin.
+                Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
+                Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
+                Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
+                Button("Until tomorrow") {
+                  NotificationService.snoozeNotificationsUntilTomorrow()
+                  notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
+                }
+                if notificationsSnoozedUntil != nil {
+                  Divider()
+                  Button("Resume now") {
+                    NotificationService.endNotificationSnooze()
+                    notificationsSnoozedUntil = nil
+                  }
+                }
+              } label: {
+                Text(notificationsSnoozedUntil == nil ? "Off" : "Silenced")
+              }
+              .frame(width: 110)
+            }
 
             GlassSeparator()
 
@@ -201,6 +245,12 @@ extension SettingsContentView {
     // the pane agreeing to listen.
     .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
       syncNotificationTogglesFromAssistantSettings()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .proactiveNotificationSnoozeDidChange)) { _ in
+      refreshNotificationSnoozeState()
+    }
+    .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+      refreshNotificationSnoozeState()
     }
   }
 
@@ -394,4 +444,37 @@ extension SettingsContentView {
 
   // MARK: - Account Section
 
+}
+
+extension SettingsContentView {
+  /// Reads the live expiry rather than the cached state so a snooze that lapsed while
+  /// Settings sat open is reported as off.
+  var notificationSnoozeSubtitle: String {
+    guard let until = NotificationService.currentSnoozeExpiry(), until > Date() else {
+      return "Pause suggestions and nudges for a while"
+    }
+    let formatter = DateFormatter()
+    formatter.timeStyle = .short
+    formatter.dateStyle = .none
+    let time = formatter.string(from: until)
+    // "Until tomorrow" lands on another calendar day, where a bare time is ambiguous —
+    // 9:00 AM tomorrow and 9:00 AM today read identically.
+    guard Calendar.current.isDateInToday(until) else {
+      return "Silenced until \(time) tomorrow"
+    }
+    return "Silenced until \(time)"
+  }
+
+  func applyNotificationSnooze(_ duration: TimeInterval) {
+    NotificationService.snoozeNotifications(for: duration)
+    refreshNotificationSnoozeState()
+  }
+
+  func refreshNotificationSnoozeState(now: Date = Date()) {
+    guard let expiry = NotificationService.currentSnoozeExpiry(), expiry > now else {
+      notificationsSnoozedUntil = nil
+      return
+    }
+    notificationsSnoozedUntil = expiry
+  }
 }
