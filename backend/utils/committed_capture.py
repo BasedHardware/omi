@@ -2,8 +2,11 @@
 
 A committed envelope claims coverage only for transcript segments that the
 transcript transaction itself committed, anchored to the receipt runs that
-carried their audio. It stores capture identity and positions only — never
-text, uid, row ids, or segment ids. Receipt-only evidence is produced
+carried their audio. The emitted envelope carries capture identity and
+positions only — never text, uid, row ids, or segment ids. In process memory
+the map keys pending notes by transcript segment id and acknowledgements by
+conversation id; that state is per-session, bounded, and never persisted or
+logged. Receipt-only evidence is produced
 elsewhere; this map never fabricates coverage it did not observe.
 """
 
