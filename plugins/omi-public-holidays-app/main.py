@@ -245,8 +245,8 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"holiday lookup failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="holiday lookup failed")
 
 
 @app.post("/tools/get_next_public_holidays", response_model=ChatToolResponse)
@@ -262,8 +262,8 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="upcoming holiday lookup failed")
 
 
 @app.post("/tools/get_long_weekends", response_model=ChatToolResponse)
@@ -279,8 +279,8 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
         if len(weekends) > request.limit:
             lines.append(f"... {len(weekends) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="long-weekend lookup failed")
 
 
 @app.post("/tools/list_supported_countries", response_model=ChatToolResponse)
@@ -293,5 +293,5 @@ async def list_supported_countries() -> ChatToolResponse:
         for item in countries:
             lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"country list request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="country list request failed")
