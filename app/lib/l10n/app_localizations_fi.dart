@@ -12228,6 +12228,24 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Ääni';
+
+  @override
+  String get assistantVoice => 'Avustajan ääni';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Äänivalintasi on yhteinen mobiilissa ja työpöydällä.';
+
+  @override
+  String get readChatRepliesAloud => 'Lue chat-vastaukset ääneen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Puhuu vain, kun Äänivastaus sen sallii.';
+
+  @override
+  String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }

@@ -377,6 +377,22 @@ import XCTest
         .deferUntilIdle)
     }
 
+    func testAssistantVoiceHandoffDefersWhileActiveAndReplacesIdle() {
+      XCTAssertEqual(RealtimeHubSessionHandoffReason(rawValue: "assistant_voice"), .assistantVoice)
+      XCTAssertEqual(
+        RealtimeHubSessionHandoffPolicy.decide(
+          bindingMatchesRequirement: false,
+          canReplaceIdleSession: false,
+          hasBufferedTurn: false),
+        .deferUntilIdle)
+      XCTAssertEqual(
+        RealtimeHubSessionHandoffPolicy.decide(
+          bindingMatchesRequirement: false,
+          canReplaceIdleSession: true,
+          hasBufferedTurn: false),
+        .replacePreservingBufferedTurn)
+    }
+
     func testCapturedTurnGetsOneTransparentRebindThenFallsBack() {
       XCTAssertEqual(
         RealtimeHubSessionHandoffPolicy.decide(

@@ -36,8 +36,8 @@ class VoicePlaybackOutputSnapshot {
 /// Test seam for the process-wide playback singleton. Production leaves this null.
 @visibleForTesting
 class VoicePlaybackDebugHooks {
-  final Future<Uint8List?> Function({required String text})? synthesize;
-  final TtsSynthesisRequest Function({required String text})? synthesizeStream;
+  final Future<Uint8List?> Function({required String text, String? voiceId})? synthesize;
+  final TtsSynthesisRequest Function({required String text, String? voiceId})? synthesizeStream;
   final Future<void> Function(Uint8List bytes)? play;
   final Future<Duration> Function(ProgressiveTtsAudioSource source)? playStream;
   final Future<void> Function()? stopPlayback;
@@ -90,6 +90,7 @@ class OmiVoicePlaybackService {
   VoicePlaybackDebugHooks? debugHooks;
 
   bool _initialized = false;
+  int _beginAttemptSeq = 0;
   String? _activeMessageId;
 
   bool _lifecycleOpen = false;
@@ -182,9 +183,9 @@ class OmiVoicePlaybackService {
     } catch (_) {}
   }
 
-  /// Plays one onboarding preview regardless of the saved response mode.
-  /// Uses the same cloud voice as a real reply and falls back to system TTS.
-  Future<void> playPreview(String text) async {
+  /// Plays one preview regardless of the saved response mode.
+  /// Uses the same cloud voice as a real reply; falls back to system TTS unless [allowSystemFallback] is false.
+  Future<void> playPreview(String text, {String? voiceId, bool allowSystemFallback = true}) async {
     final cleaned = _cleanedPlaybackText(text);
     if (cleaned.isEmpty) return;
 
@@ -203,7 +204,7 @@ class OmiVoicePlaybackService {
 
     var fallbackText = cleaned;
     try {
-      final request = _synthesize(cleaned);
+      final request = _synthesize(cleaned, voiceId: voiceId);
       _previewSynthesisRequest = request;
       final audio = await request.response;
       if (!_previewActive || !identical(_previewStopSignal, stopSignal)) return;
@@ -222,6 +223,7 @@ class OmiVoicePlaybackService {
       }
     } catch (e) {
       if (_previewActive && identical(_previewStopSignal, stopSignal) && fallbackText.isNotEmpty) {
+        if (!allowSystemFallback) rethrow;
         Logger.debug('OmiVoicePlaybackService: preview cloud voice failed, using system voice: $e');
         await _speakPreviewFallback(fallbackText);
       }
@@ -244,7 +246,9 @@ class OmiVoicePlaybackService {
   }
 
   /// Start a new response lifecycle. Cancels any prior in-flight playback.
-  Future<void> beginResponse({required String messageId}) async {
+  Future<void> beginResponse({required String messageId, bool Function()? canBegin}) async {
+    final attempt = ++_beginAttemptSeq;
+    bool stillCurrent() => attempt == _beginAttemptSeq && (canBegin?.call() ?? true);
     final startedAt = _now();
     final mode = SharedPreferencesUtil().voiceResponseMode;
     debugPrint('OmiVoicePlayback: beginResponse messageId=$messageId mode=$mode');
@@ -258,9 +262,12 @@ class OmiVoicePlaybackService {
     }
 
     await _ensureInitialized();
+    if (!stillCurrent()) return;
     await _cancelPreview();
+    if (!stillCurrent()) return;
 
     final output = await _probeOutput();
+    if (!stillCurrent()) return;
     // Mode 1 (headphones only): skip if no private-listening output is
     // connected so Omi never blasts a private answer out of the phone
     // speaker in public. Mode 2 (always) bypasses this gate.
@@ -290,6 +297,7 @@ class OmiVoicePlaybackService {
     }
 
     await _clearInFlightState();
+    if (!stillCurrent()) return;
     final continuing = _lifecycleOpen && _activeMessageId == messageId;
     _activeMessageId = messageId;
     _spoken = 0;
@@ -298,6 +306,10 @@ class OmiVoicePlaybackService {
     }
 
     await _activateSession();
+    if (!stillCurrent()) {
+      if (attempt == _beginAttemptSeq) await _deactivateSession();
+      return;
+    }
   }
 
   /// True if at least one "private-listening" output is connected — AirPods
@@ -384,10 +396,19 @@ class OmiVoicePlaybackService {
     }
   }
 
+  Future<void> interruptResponse({
+    required String messageId,
+    VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none,
+  }) async {
+    if (_activeMessageId != messageId) return;
+    await interrupt(source: source);
+  }
+
   /// Immediately cancel all synthesis + playback.
   Future<void> interrupt({
     VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none,
   }) async {
+    _beginAttemptSeq++;
     if (_lifecycleOpen) {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
@@ -756,16 +777,16 @@ class OmiVoicePlaybackService {
     );
   }
 
-  TtsSynthesisRequest _synthesize(String text) {
+  TtsSynthesisRequest _synthesize(String text, {String? voiceId}) {
     if (debugHooks != null) {
       final synthesizeStream = debugHooks!.synthesizeStream;
-      if (synthesizeStream != null) return synthesizeStream(text: text);
+      if (synthesizeStream != null) return synthesizeStream(text: text, voiceId: voiceId);
       final synthesize = debugHooks!.synthesize;
       if (synthesize == null) {
         throw StateError('Voice playback test hooks are installed without a synthesize function');
       }
       return TtsSynthesisRequest(
-        response: synthesize(text: text).then((bytes) {
+        response: synthesize(text: text, voiceId: voiceId).then((bytes) {
           if (bytes == null) return null;
           return TtsAudioStream(
             bytes: Stream<List<int>>.value(bytes),
@@ -777,7 +798,7 @@ class OmiVoicePlaybackService {
         cancel: () async {},
       );
     }
-    return synthesizeSpeechStream(text: text);
+    return synthesizeSpeechStream(text: text, voiceId: voiceId);
   }
 
   ProgressiveTtsAudioSource _sourceFor(TtsAudioStream stream) => ProgressiveTtsAudioSource(
@@ -1013,6 +1034,7 @@ class OmiVoicePlaybackService {
     }
     debugHooks = null;
     _initialized = false;
+    _beginAttemptSeq = 0;
     _activeMessageId = null;
     _spoken = 0;
     _synthesisQueue.clear();

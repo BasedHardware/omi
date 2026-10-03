@@ -97,7 +97,8 @@ void main() {
     expect(opened, 1);
   });
 
-  testWidgets('onboarding: Continue never prompts; Allow prompts that one permission', (tester) async {
+  testWidgets('onboarding: Allow prompts that one permission; Continue asks only for what is still missing',
+      (tester) async {
     final source = _FakeSource();
     var continued = 0;
     await tester.pumpWidget(_app(PermissionsWidget(goNext: () => continued++, source: source)));
@@ -107,15 +108,16 @@ void main() {
     expect(find.text('Allow'), findsOneWidget);
     expect(find.text('Open Settings'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('onboarding_permissions_continue')));
-    await tester.pump();
-    expect(continued, 1);
-    expect(source.requested, isEmpty, reason: 'Continue moves on without firing any system prompt');
-
     await tester.tap(find.text('Allow'));
     await tester.pumpAndSettle();
     expect(source.requested, [OnboardingPermission.location]);
     expect(find.text('Allowed'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('onboarding_permissions_continue')));
+    await tester.pumpAndSettle();
+    expect(continued, 1);
+    expect(source.requested, [OnboardingPermission.location],
+        reason: 'Continue does not re-ask an allowed permission or prompt for a blocked one');
   });
 
   testWidgets('the action sits on the title line and the reason uses the width below it', (tester) async {

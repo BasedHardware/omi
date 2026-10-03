@@ -301,6 +301,9 @@ SCHEMA_GROUPS = {
             'RebuildResponse',
             'ErrorResponse',
             'StatusResponse',
+            'TtsVoice',
+            'TtsVoiceCatalog',
+            'AssistantVoicePreference',
         ),
     },
     'wrapped_task_integrations': {

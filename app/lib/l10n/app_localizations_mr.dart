@@ -12231,6 +12231,24 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'आवाज';
+
+  @override
+  String get assistantVoice => 'सहाय्यकाचा आवाज';
+
+  @override
+  String get voiceSharedAcrossDevices => 'तुमचा निवडलेला आवाज मोबाइल आणि डेस्कटॉप दोन्हींवर शेअर होतो.';
+
+  @override
+  String get readChatRepliesAloud => 'चॅट उत्तरे मोठ्याने वाचा';
+
+  @override
+  String get readChatRepliesAloudDescription => 'फक्त \"व्हॉइस रिस्पॉन्स\" परवानगी दिली तेव्हाच बोलते.';
+
+  @override
+  String get voicePreviewSample => 'हाय, मी Omi आहे. हा माझा आवाज आहे.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return 'या आवाजाचे $duration';
   }

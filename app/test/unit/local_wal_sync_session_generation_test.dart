@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -107,5 +108,34 @@ void main() {
     expect(await sync.getAllWals(), isEmpty);
     expect(listener.walUpdatedCount, 0);
     expect(persistCalls, isEmpty);
+  });
+
+  test('stale codec change resumed after clearUserData cannot reset the successor session', () async {
+    final hang = Completer<void>();
+    final persistEntered = Completer<void>();
+    final listener = _MockListener();
+    final sync = LocalWalSyncImpl(
+      listener,
+      persistWals: (wals) async {
+        if (!persistEntered.isCompleted) persistEntered.complete();
+        await hang.future;
+      },
+    );
+    sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: 'root-a');
+
+    final stale = sync.onAudioCodecChanged(BleAudioCodec.opus);
+    await persistEntered.future;
+    sync.clearUserData();
+    final generationAfterClear = sync.captureEvidenceGeneration;
+    sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: 'root-b');
+    hang.complete();
+    await stale;
+
+    expect(sync.testFrames.map((f) => f.payload), [
+      [2]
+    ]);
+    expect(sync.testFrames.single.sourceFramePosition, 0);
+    expect(sync.testFrames.single.sourceClockEpoch, 0);
+    expect(sync.captureEvidenceGeneration, generationAfterClear);
   });
 }

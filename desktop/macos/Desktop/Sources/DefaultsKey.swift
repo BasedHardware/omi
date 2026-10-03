@@ -197,6 +197,12 @@ struct ScopedDefaultsKey {
     Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
   }
 
+  static func assistantVoiceID(ownerID: String) -> Self {
+    Self(rawValue: "assistantVoiceID.\(ownerID)")
+  }
+
+  static let legacyShortcutSelectedVoiceID = Self(rawValue: "shortcut_selectedVoiceID")
+
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
   }

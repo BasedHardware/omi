@@ -305,3 +305,8 @@ def test_notifications_cadence_covers_every_local_hour_boundary():
     assert job['owner'] == '.github/workflows/gcp_notifications_job.yml'
     assert job['target']['uri'].endswith('/jobs/notifications-job:run')
     assert job['retry']['max_retry'] == '0s'
+    # Dedicated least-privilege invoker, never the project default compute account.
+    assert (
+        job['target']['oauth']['service_account']
+        == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
+    )
