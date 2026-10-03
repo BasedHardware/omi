@@ -917,11 +917,12 @@ def get_people(uid: str, *, include_dismissed: bool = False):
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:
-    """Server-side count of the user's people (speaker profiles) collection."""
+    """Server-side count of active people, excluding soft-dismissed profiles like `get_people`."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     people_ref = client.collection('users').document(uid).collection('people')
-    result = people_ref.count().get()
-    return int(result[0][0].value or 0)
+    total = int(people_ref.count().get()[0][0].value or 0)
+    dismissed = int(people_ref.where(filter=FieldFilter('is_dismissed', '==', True)).count().get()[0][0].value or 0)
+    return max(total - dismissed, 0)
 
 
 def get_person_by_name(uid: str, name: str):
@@ -936,6 +937,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
     Note: db.get_all() returns results in arbitrary order (Firestore behavior).
     Callers must not assume the result order matches person_ids order.
+    Dismissed people are returned on purpose: callers resolve IDs already stored on past
+    segments, and dismissal hides a profile from lists without rewriting that history.
     """
     if not person_ids:
         return []
