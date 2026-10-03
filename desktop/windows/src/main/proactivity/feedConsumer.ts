@@ -22,6 +22,7 @@ export class ProactivityFeedConsumer {
   private lastAttempt = 0
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryDelay = 30_000
+  private nextOutcomeAttempt = 0
   constructor(
     private path: string,
     private openTarget: (target: ProactivityTarget) => Promise<boolean>
@@ -41,6 +42,8 @@ export class ProactivityFeedConsumer {
       this.store = null
       this.owner = owner
       this.lastAttempt = 0
+      this.nextOutcomeAttempt = 0
+      this.retryDelay = 30_000
     }
     this.busy = null
     void this.refresh()
@@ -48,10 +51,13 @@ export class ProactivityFeedConsumer {
 
   private scheduleOutboxRetry(): void {
     if (this.retryTimer || !this.store?.pending.length) return
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null
-      void this.refresh(true)
-    }, this.retryDelay)
+    this.retryTimer = setTimeout(
+      () => {
+        this.retryTimer = null
+        void this.refresh(true)
+      },
+      Math.max(this.retryDelay, this.nextOutcomeAttempt - Date.now())
+    )
     this.retryTimer.unref()
   }
 
@@ -80,7 +86,7 @@ export class ProactivityFeedConsumer {
       }
       const store = this.store
       const init = { baseURL: session.apiBase.replace(/\/$/, ''), token: session.token }
-      for (const entry of store.pending) {
+      for (const entry of Date.now() >= this.nextOutcomeAttempt ? store.pending : []) {
         if (!current()) return
         try {
           await record_proactivity_outcome(
@@ -126,8 +132,12 @@ export class ProactivityFeedConsumer {
     } catch (error) {
       if (error instanceof OmiApiError) {
         const seconds = Number(error.response?.headers.get('Retry-After'))
-        if (Number.isFinite(seconds) && seconds > 0)
+        if (Number.isFinite(seconds) && seconds > 0) {
           this.retryDelay = Math.max(30_000, seconds * 1000)
+          this.nextOutcomeAttempt = Date.now() + this.retryDelay
+          if (this.retryTimer) clearTimeout(this.retryTimer)
+          this.retryTimer = null
+        }
         if (error.status === 401 && current()) await pullFreshSession()
       }
       console.warn('[proactivity] request deferred for retry')

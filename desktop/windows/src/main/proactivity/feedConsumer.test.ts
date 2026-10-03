@@ -13,7 +13,10 @@ vi.mock('../../renderer/src/lib/omiApi.generated', () => ({
   get_proactivity_feed: state.feed,
   record_proactivity_outcome: state.outcome,
   OmiApiError: class extends Error {
-    constructor(public status: number) {
+    constructor(
+      public status: number,
+      public response?: Response
+    ) {
       super()
     }
   }
@@ -28,6 +31,7 @@ vi.mock('../assistants/core/session', () => ({
 }))
 vi.mock('./notificationAdapter', () => ({ presentProactivityNotification: state.present }))
 import { ProactivityFeedConsumer } from './feedConsumer'
+import { OmiApiError } from '../../renderer/src/lib/omiApi.generated'
 const item = { id: 'item', created_at: '2026-10-03T12:00:00Z', acted: false, dismissed: false }
 const response = { enabled: true, items: [item], server_time: '2026-10-03T13:00:00Z' }
 let directory: string, file: string, now: number
@@ -87,6 +91,28 @@ describe('feed consumer transport and owner boundary', () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(state.outcome).toHaveBeenCalledOnce()
     expect(state.feed).toHaveBeenCalledOnce()
+  })
+  it('honors Retry-After across foreground refreshes', async () => {
+    const consumer = new ProactivityFeedConsumer(file, async () => true)
+    await consumer.refresh()
+    state.present.mock.calls[0][1].onOutcome('item', {
+      action: 'shown',
+      channel: 'feed',
+      surface: 'windows',
+      event_id: 'limited'
+    })
+    state.outcome.mockRejectedValueOnce(
+      new OmiApiError(429, new Response('', { headers: { 'Retry-After': '3600' } }))
+    )
+    now += 30_000
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(state.outcome).toHaveBeenCalledOnce()
+    now += 600_000
+    await consumer.refresh()
+    expect(state.outcome).toHaveBeenCalledOnce()
+    now += 3_000_000
+    await consumer.refresh()
+    expect(state.outcome).toHaveBeenCalledTimes(2)
   })
   it('drops delayed feed responses after owner switch', async () => {
     let resolve!: (value: unknown) => void
