@@ -182,7 +182,7 @@ Owner flip GO requires all of: prod shadow P(user) >= 0.9 share among answered t
 ## Live relevance ramp and coordinator runbook
 
 Ramp by conversation: **1% -> 10% -> 50% -> 100%**, with **24 h soak per
-stage** and K fixed at 2. Stage 2 (J=10) started 2026-10-02 after stage 1
+stage** and K fixed at 2. Stage 2 (J=10) started 2026-10-03 after stage 1
 soaked 24 h from 2026-10-01 22:46Z, recording 14 Jev gateway timeouts and no
 Jev-attributable 5xx. It is live with keep-all K=2 on the five processing
 hosts; keep-all wins any overlap, and all remaining conversations outside the
