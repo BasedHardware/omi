@@ -80,4 +80,46 @@ void main() {
     await Future.wait([first, second]);
     expect(provider.isLoading, isFalse);
   });
+
+  test('the catalog loads even when start-up already filled apps from the cache', () async {
+    SharedPreferencesUtil().appsList = [
+      App.fromJson({
+        'id': 'app_journal',
+        'name': 'Journal',
+        'author': 'Test Author',
+        'description': 'test',
+        'image': '',
+        'capabilities': ['memories'],
+        'status': 'approved',
+        'category': 'productivity',
+        'approved': true,
+        'private': false,
+        'enabled': true,
+        'deleted': false,
+      }),
+    ];
+    final provider = AppProvider();
+    addTearDown(provider.dispose);
+    var catalogRequests = 0;
+    provider.retrieveAppsGroupedOverride = () async {
+      catalogRequests++;
+      return [
+        {
+          'capability': {'id': 'external_integration', 'title': 'Integrations'},
+          'data': <App>[],
+        },
+      ];
+    };
+    provider.getEnabledAppsOverride = () async => <String>[];
+    provider.retrievePopularAppsOverride = () async => <App>[];
+
+    provider.setAppsFromCache();
+    expect(provider.apps, isNotEmpty);
+    expect(provider.groupedApps, isEmpty);
+
+    await provider.ensureCatalogLoaded();
+
+    expect(catalogRequests, 1);
+    expect(provider.groupedApps, hasLength(1));
+  });
 }
