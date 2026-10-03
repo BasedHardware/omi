@@ -838,10 +838,17 @@ async def test_connect_refused_errors_count_toward_the_gate(connect_backoff, mon
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'reason',
-    ['auth', 'provider_budget_exhausted', 'provider_auth_rejected', 'capacity_full', 'config_incomplete', 'vad_failed'],
+    'reason,expected_dials',
+    [
+        ('auth', 1),
+        ('provider_budget_exhausted', 1),
+        ('provider_auth_rejected', 1),
+        ('capacity_full', 3),
+        ('config_incomplete', 3),
+        ('vad_failed', 3),
+    ],
 )
-async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff, monkeypatch, reason):
+async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff, monkeypatch, reason, expected_dials):
     monkeypatch.setattr(live_chain, 'note_capacity_full', lambda *args: None)
     soniox = AsyncMock(side_effect=live_chain.RejectedStream(reason))
     for _ in range(3):
@@ -849,7 +856,7 @@ async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff
             st, '_soniox_circuit', resilience.ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
         )
         await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
-    assert soniox.await_count == 3
+    assert soniox.await_count == expected_dials
     state = connect_backoff._states.get('soniox')
     assert state is None or not state.refusals
 

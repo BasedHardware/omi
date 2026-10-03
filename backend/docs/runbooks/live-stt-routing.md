@@ -42,8 +42,26 @@ wrong classification, and neither proves Redis persistence. Redis drop counters 
 `omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
-State uses `omi:live-stt:cost-v7:<target>:<bounded-language>` and `all`. Do not
-reuse v5 evidence. At stage 100, one hashed user contributes at most three
+State uses `omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<bounded-language>`
+with recovery lease keys under the same cost prefix. Fleet keys split two
+`omi:live-stt:fleet-v2:<stage>:<32-hex identity>` scopes: selection bench,
+recovery probe and score keys digest the family, actual endpoint and
+credential, while the account bench key digests only family and credential, so
+the credential-wide quarantine spans every custom endpoint but survives an
+endpoint rotation that resets selection/score/probe and cost state. Registry
+targets with a custom `endpoint` write and read their own endpoint-scoped
+selection/score/probe partitions — a sibling endpoint's serve deaths, connect
+refusals and transcript outcomes never bench the configured default or other
+siblings, while the credential-wide account bench still protects all of them.
+With `STT_ROUTING_MODE=off` snapshots answer a neutral score and merge only
+family account deadlines, ignoring but not erasing selection state. The stage
+comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod;
+`PROVIDER_MODE=offline` still yields `offline`);
+a changed endpoint, credential or stage starts its scoped state
+with no migration or backfill of older namespaces, which are never read. Raw
+URLs and keys never appear in Redis paths, logs or metrics. A pod's in-memory
+health views reset when that identity changes. Do not
+reuse older-namespace evidence. At stage 100, one hashed user contributes at most three
 success/failure outcomes in a five-minute Redis-time window. Windows hold at
 most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),
 plus an eight-fingerprint outage reserve. At saturation, eight distinct new
@@ -55,13 +73,40 @@ not feed failure-only samples into CUSUM or refill existing user budgets. Any
 state keys expire after 900 idle seconds; benched/trial state persists to prevent
 expiry bypassing staged recovery and holds no healthy-window fingerprint list. Raw observation counts remain uncapped for
 reconciliation. Trials retain their separate user votes, generation fences,
-5→25→100 shares, and exponentially increasing cooldown. Redis CAS enforces all
-of this fleet-wide. Shared snapshots refresh off connect, normally every five
+5→25→100 shares, and exponentially increasing cooldown. Trial promotion needs
+30 admitted outcomes from at least 10 witnesses after 300 seconds for the 5%
+step, and 60 admitted outcomes from at least 20 witnesses after 600 seconds for
+the 25% step; a completed admitted window before the dwell holds at its stage.
+Redis CAS enforces all
+of this fleet-wide. Bench writes are one atomic Lua update — an active account
+quarantine rejects a selection write, same-kind writes keep the longest
+deadline — and expired cleanup is a compare-delete that re-checks the observed
+value inside Redis before removing it, so a renewed bench survives a read/delete
+race. Shared snapshots refresh off connect, normally every five
 seconds, under a 75 ms deadline; local fallback retains known benches.
+Every refresh reads all registry targets across the closed supported-language
+vocabulary plus `all`, so a language bench is honored on its first request even
+without prior interest. Freshness is per `(target, language)`; an unread
+language raises `CostHealthUnavailable` instead of reporting stage 100, which
+the chain treats as a filtered-static-order fail-open. Per-target language
+comparisons are counted in
+`omi_stt_cost_routing_language_state_total{target,comparison}` with
+`agree|language_restricted|global_restricted|unknown|stale`.
 
-The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v7)
+Every dial — proposal candidates, last resorts and the static fallback in all
+modes — passes the same permission filter: actual engine match, capability for
+the requested and expected languages, sticky registry ramp (including the
+`parakeet-window` minimum of registry percent and window allocation), and
+active account quarantine. If filtering empties the chain the connect raises
+`ProviderChainUnavailable` with a bounded retry and counts
+`omi_stt_cost_routing_no_permitted_target_total`. An invalid registry cannot
+prove permissions, so a managed session gets the typed chain-unavailable and a
+`router_error` fail-open rather than a default that could reopen a withdrawn
+target.
+
+The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v8)
 has the taxonomy, registry and second-endpoint example, exact gate, and
-reproducible calibration. The gate stays 8%. In cost-v7 simulation, every
+reproducible calibration. The gate stays 8%. In gate simulation, every
 realistic-floor row has zero false benches in 400k sessions; 40%/60%/100%
 provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
@@ -91,7 +136,7 @@ minutes plus the following positive coverage; elapsed time alone never passes:
    send it new primary traffic. Do not manufacture probe traffic to qualify it.
    A complete registry override must retain Parakeet and Soniox entries; after
    active selection their registered Modulate sibling cannot reappear as a
-   static tail. Router-error fail-open still uses the documented static chain.
+   static tail. Router-error fail-open still uses the filtered static chain.
 5. Transcript-success, no-text share, first-text latency, window capacity and
    GPU pressure remain within the conditions below. Confirm the existing
    transcript-success alert is evaluated and routed to the live contact point.
@@ -159,8 +204,10 @@ reason vocabulary and boundary (`client_gone`/`owner_teardown`), preinitialized.
 Require Modulate provider-failure counts to match the managed serving cohort
 of selection plus live/terminal fallback emissions per reason before `on`.
 The paired counters alone can agree while both classify client churn wrongly.
-New `cost-v7` state discards v5/v6 post-client failures and strikes; it does not
-migrate or backfill those samples. The sequential gate and vote budgets stay intact.
+New `cost-v8`/`fleet-v2` state discards all earlier namespaces' post-client
+failures and strikes; it does not migrate or backfill those samples. The
+sequential 8% gate and healthy vote budgets stay unchanged; trial vote budgets
+are tightened to admitted outcomes only.
 
 Independent lifecycle oracle: the chain counts `opened` when handing off a
 connected managed leg (including same-provider replacement), transport release
@@ -220,6 +267,8 @@ sum by (proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-l
 sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics",proposed_primary="unavailable"}[1h])) or vector(0)
 sum(increase(omi_stt_cost_routing_all_degraded_total{job="backend-listen-metrics"}[1h])) or vector(0)
 sum by (reason) (increase(omi_stt_cost_routing_fail_open_total{job="backend-listen-metrics"}[1h]))
+sum(increase(omi_stt_cost_routing_no_permitted_target_total{job="backend-listen-metrics"}[1h])) or vector(0)
+sum by (target, comparison) (increase(omi_stt_cost_routing_language_state_total{job="backend-listen-metrics"}[1h]))
 ```
 
 `static_primary` is the configured eligible nomination before local circuit and
@@ -274,7 +323,11 @@ with the control arm and the pre-ramp baseline. At small sample sizes these are
 operational gates, not a statistical proof of non-inferiority.
 
 Kill switch: set `STT_ROUTING_ON_PERCENT=0` or `STT_ROUTING_MODE=shadow` (`off`
-also restores static selection). Apply through the coordinator's config PR and
+also restores static selection; snapshots go neutral and read only family
+account benches — a stale selection bench cannot shed the chain, and shared
+account quarantine stays enforced in
+every mode, so `off` never reopens a credential another pod withdrew). Apply
+through the coordinator's config PR and
 normal deployment; this is not an instant process-local env mutation.
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws the window leg.
 Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.yaml`
