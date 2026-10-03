@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 import json
 import re
@@ -61,7 +61,7 @@ from llm_gateway.gateway.metrics import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.request_context import JITBudgetHeaders, request_id_for
+from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
@@ -765,7 +765,6 @@ def _accounting_context(
     api_surface: str,
     payer: str,
     fallback_feature: str,
-    jit_budget: JITBudgetHeaders | None = None,
 ) -> AccountingContext:
     feature = caller.usage_feature or fallback_feature
     return AccountingContext.create(
@@ -785,51 +784,6 @@ def _jit_receipt_headers(context: AccountingContext, trace: AttemptTrace) -> dic
     if receipt is None:
         return {}
     return {'x-omi-jit-gateway-receipt': encode_jit_gateway_receipt(receipt)}
-
-
-def _apply_jit_request_budget(request_body: dict[str, Any], budget: JITBudgetHeaders) -> None:
-    """Apply a qualification-only output cap and conservative input preflight."""
-    if _contains_jit_unsupported_modality(request_body):
-        raise GatewayInvalidRequestError(
-            'JIT qualification currently accepts text-only provider inputs',
-            param='messages',
-        )
-    # A character-count heuristic underestimates non-ASCII text and ignores
-    # tool/system fields. UTF-8 bytes are a conservative tokenizer-independent
-    # upper bound (every token consumes at least one byte), so the QA gate
-    # fails closed before a provider attempt rather than guessing low.
-    estimated_input_tokens = len(json.dumps(request_body, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
-    if estimated_input_tokens > budget.max_input_tokens:
-        raise GatewayInvalidRequestError('JIT input budget exceeded', param='messages')
-    has_output_limit = False
-    for key in ('max_tokens', 'max_completion_tokens'):
-        if key not in request_body or request_body[key] is None:
-            # OpenAI treats the two fields as aliases.  Remove explicit nulls so
-            # they cannot suppress the qualification ceiling or reach a
-            # provider that coerces null unexpectedly.
-            request_body.pop(key, None)
-            continue
-        value = request_body[key]
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            raise GatewayInvalidRequestError('invalid JIT output token budget', param=key)
-        request_body[key] = min(value, budget.max_output_tokens)
-        has_output_limit = True
-    if not has_output_limit:
-        request_body['max_completion_tokens'] = budget.max_output_tokens
-
-
-def _contains_jit_unsupported_modality(value: object) -> bool:
-    """Reject image/audio payloads whose billable input envelope is not tokenized here."""
-    if isinstance(value, Mapping):
-        modality = value.get('type')
-        # Tool schemas can define a property named "type" whose value is itself
-        # a schema, or use a list of JSON Schema types. Neither is a modality tag.
-        if isinstance(modality, str) and modality in {'image_url', 'image', 'input_audio', 'audio'}:
-            return True
-        return any(_contains_jit_unsupported_modality(child) for child in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_contains_jit_unsupported_modality(child) for child in value)
-    return False
 
 
 def _request_stream_usage(request: dict[str, Any], provider: str) -> None:

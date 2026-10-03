@@ -16,7 +16,7 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway import executor as gateway_executor
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
-from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for
+from llm_gateway.gateway.request_context import jit_budget_headers_for
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
@@ -98,134 +98,6 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
-
-
-def test_jit_budget_caps_request_tokens_without_touching_normal_chat_defaults():
-    body = valid_request(max_tokens=9_999, max_completion_tokens=8_000)
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-run-1',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=32_768,
-        max_spend_micro_usd=50_000,
-    )
-
-    openai_compatible._apply_jit_request_budget(body, budget)
-
-    assert body['max_tokens'] == 2_048
-    assert body['max_completion_tokens'] == 2_048
-
-    normal_body = valid_request()
-    assert 'max_completion_tokens' not in normal_body
-
-
-@pytest.mark.parametrize(
-    'aliases',
-    [
-        {'max_tokens': None},
-        {'max_completion_tokens': None},
-        {'max_tokens': None, 'max_completion_tokens': None},
-    ],
-)
-def test_jit_budget_null_output_aliases_still_apply_ceiling(aliases):
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-run-null',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=32_768,
-        max_spend_micro_usd=50_000,
-    )
-    body = valid_request(**aliases)
-
-    openai_compatible._apply_jit_request_budget(body, budget)
-
-    assert body['max_completion_tokens'] == 2_048
-    assert 'max_tokens' not in body
-
-
-@pytest.mark.parametrize('value', [0, -1, True, False, 1.5, '2048'])
-def test_jit_budget_rejects_malformed_output_alias(value):
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-run-invalid',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=32_768,
-        max_spend_micro_usd=50_000,
-    )
-    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='output token budget'):
-        openai_compatible._apply_jit_request_budget(valid_request(max_tokens=value), budget)
-
-
-def test_jit_budget_preflight_rejects_overlarge_input():
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-run-1',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=8,
-        max_spend_micro_usd=50_000,
-    )
-
-    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='input budget exceeded'):
-        openai_compatible._apply_jit_request_budget(valid_request(), budget)
-
-
-def test_jit_budget_preserves_tool_schema_types_and_output_ceiling():
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-tool-schema',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=32_768,
-        max_spend_micro_usd=50_000,
-    )
-    tools = [
-        {
-            'type': 'function',
-            'function': {
-                'name': 'search_knowledge',
-                'parameters': {
-                    'type': 'object',
-                    'properties': {
-                        'type': {'type': 'string'},
-                        'query': {'type': ['string', 'null']},
-                    },
-                },
-            },
-        }
-    ]
-    body = valid_request(tools=tools)
-
-    openai_compatible._apply_jit_request_budget(body, budget)
-
-    assert body['tools'] == tools
-    assert body['max_completion_tokens'] == 2_048
-
-
-def test_jit_budget_preflight_rejects_unpriced_image_or_audio_inputs():
-    budget = JITBudgetHeaders(
-        contract_version='jit-cloud-qa-v1',
-        run_id='jit-run-1',
-        max_attempts=3,
-        max_output_tokens=2_048,
-        max_input_tokens=32_768,
-        max_spend_micro_usd=50_000,
-    )
-    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='text-only'):
-        openai_compatible._apply_jit_request_budget(
-            valid_request(
-                messages=[
-                    {
-                        'role': 'user',
-                        'content': [{'type': 'input_audio', 'input_audio': {'data': 'AAAA', 'format': 'wav'}}],
-                    }
-                ]
-            ),
-            budget,
-        )
 
 
 def test_jit_budget_header_parser_is_absent_for_normal_chat_and_bounded_for_qa(monkeypatch):
