@@ -189,6 +189,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Pusher runs keyless on Workload Identity; listen still mounts the nik-164 key until
+            # its own cut-over (credential hygiene D4 phase 2), which removes this entry.
+            "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "SONIOX_ESTIMATED_USD_PER_HOUR",
