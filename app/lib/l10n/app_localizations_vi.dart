@@ -12219,24 +12219,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Giọng nói';
-
-  @override
-  String get assistantVoice => 'Giọng trợ lý';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Giọng nói bạn chọn được dùng chung trên di động và máy tính.';
-
-  @override
-  String get readChatRepliesAloud => 'Đọc to câu trả lời trong chat';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.';
-
-  @override
-  String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
@@ -12304,6 +12286,39 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get chatReplyOffline => 'Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.';
+
+  @override
+  String get chatReplyServerError => 'Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyTimeout => 'Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Bạn chưa đăng nhập. Đăng nhập và thử lại.';
+
+  @override
+  String get chatAppsLoadFailed => 'Không thể tải ứng dụng trò chuyện. Vui lòng thử lại.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Giọng nói';
+
+  @override
+  String get assistantVoice => 'Giọng trợ lý';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Giọng nói bạn chọn được dùng chung trên di động và máy tính.';
+
+  @override
+  String get readChatRepliesAloud => 'Đọc to câu trả lời trong chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.';
+
+  @override
+  String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
 
   @override
   String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';

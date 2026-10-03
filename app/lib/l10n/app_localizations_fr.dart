@@ -12326,24 +12326,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voix';
-
-  @override
-  String get assistantVoice => 'Voix de l\'assistant';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Votre choix de voix est partagé entre le mobile et le bureau.';
-
-  @override
-  String get readChatRepliesAloud => 'Lire les réponses du chat à voix haute';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Parle uniquement lorsque la réponse vocale l\'autorise.';
-
-  @override
-  String get voicePreviewSample => 'Salut, je suis Omi. Voici ma voix.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
@@ -12411,6 +12393,39 @@ class AppLocalizationsFr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Dernières $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Impossible de se connecter. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get chatReplyServerError => 'Un problème est survenu de notre côté. Veuillez réessayer.';
+
+  @override
+  String get chatReplyTimeout => 'La réponse a pris trop de temps. Veuillez réessayer.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Vous n\'êtes pas connecté. Connectez-vous et réessayez.';
+
+  @override
+  String get chatAppsLoadFailed => 'Impossible de charger les applications de chat. Veuillez réessayer.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voix';
+
+  @override
+  String get assistantVoice => 'Voix de l\'assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Votre choix de voix est partagé entre le mobile et le bureau.';
+
+  @override
+  String get readChatRepliesAloud => 'Lire les réponses du chat à voix haute';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parle uniquement lorsque la réponse vocale l\'autorise.';
+
+  @override
+  String get voicePreviewSample => 'Salut, je suis Omi. Voici ma voix.';
 
   @override
   String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';

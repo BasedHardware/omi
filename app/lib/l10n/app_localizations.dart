@@ -21879,42 +21879,6 @@ abstract class AppLocalizations {
   /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
   String speakerLabelText(String part, String name);
 
-  /// Settings section title for assistant voice
-  ///
-  /// In en, this message translates to:
-  /// **'Voice'**
-  String get assistantVoiceSettingsTitle;
-
-  /// Row label for the assistant voice picker
-  ///
-  /// In en, this message translates to:
-  /// **'Assistant Voice'**
-  String get assistantVoice;
-
-  /// Support line under the assistant voice picker
-  ///
-  /// In en, this message translates to:
-  /// **'Your voice choice is shared across mobile and desktop.'**
-  String get voiceSharedAcrossDevices;
-
-  /// Toggle label for reading chat replies aloud
-  ///
-  /// In en, this message translates to:
-  /// **'Read chat replies aloud'**
-  String get readChatRepliesAloud;
-
-  /// Toggle helper text explaining replies are only spoken when Voice response mode allows it
-  ///
-  /// In en, this message translates to:
-  /// **'Only speaks when Voice response allows it.'**
-  String get readChatRepliesAloudDescription;
-
-  /// Sample text synthesized when previewing an assistant voice
-  ///
-  /// In en, this message translates to:
-  /// **'Hi, I\'m Omi. This is my voice.'**
-  String get voicePreviewSample;
-
   /// How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)
   ///
   /// In en, this message translates to:
@@ -22028,6 +21992,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last {duration}'**
   String diagnosticsLastDuration(String duration);
+
+  /// Shown when a chat reply fails because the device has no connectivity
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect. Check your connection and try again.'**
+  String get chatReplyOffline;
+
+  /// Shown when a chat reply fails with a server error
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong on our side. Please try again.'**
+  String get chatReplyServerError;
+
+  /// Shown when a chat reply times out
+  ///
+  /// In en, this message translates to:
+  /// **'The response took too long. Please try again.'**
+  String get chatReplyTimeout;
+
+  /// Shown when a chat reply fails because the user is not signed in
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re not signed in. Sign in and try again.'**
+  String get chatReplyNotSignedIn;
+
+  /// Shown in the chat apps drawer when loading installed chat apps fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load chat apps. Please try again.'**
+  String get chatAppsLoadFailed;
+
+  /// Settings section title for assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get assistantVoiceSettingsTitle;
+
+  /// Row label for the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant Voice'**
+  String get assistantVoice;
+
+  /// Support line under the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice choice is shared across mobile and desktop.'**
+  String get voiceSharedAcrossDevices;
+
+  /// Toggle label for reading chat replies aloud
+  ///
+  /// In en, this message translates to:
+  /// **'Read chat replies aloud'**
+  String get readChatRepliesAloud;
+
+  /// Toggle helper text explaining replies are only spoken when Voice response mode allows it
+  ///
+  /// In en, this message translates to:
+  /// **'Only speaks when Voice response allows it.'**
+  String get readChatRepliesAloudDescription;
+
+  /// Sample text synthesized when previewing an assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Hi, I\'m Omi. This is my voice.'**
+  String get voicePreviewSample;
 
   /// No description provided for @peopleStatsIncomplete.
   ///

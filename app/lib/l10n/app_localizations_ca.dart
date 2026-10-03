@@ -12294,24 +12294,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Veu';
-
-  @override
-  String get assistantVoice => 'Veu de l\'assistent';
-
-  @override
-  String get voiceSharedAcrossDevices => 'La veu que tries es comparteix entre el mòbil i l\'escriptori.';
-
-  @override
-  String get readChatRepliesAloud => 'Llegeix les respostes del xat en veu alta';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Només parla quan la \"Resposta de veu\" ho permet.';
-
-  @override
-  String get voicePreviewSample => 'Hola, soc l\'Omi. Aquesta és la meva veu.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
@@ -12379,6 +12361,39 @@ class AppLocalizationsCa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últims $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'No s\'ha pogut connectar. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get chatReplyServerError => 'Alguna cosa ha fallat per part nostra. Torna-ho a provar.';
+
+  @override
+  String get chatReplyTimeout => 'La resposta ha trigat massa. Torna-ho a provar.';
+
+  @override
+  String get chatReplyNotSignedIn => 'No has iniciat sessió. Inicia sessió i torna-ho a provar.';
+
+  @override
+  String get chatAppsLoadFailed => 'No s\'han pogut carregar les apps de xat. Torna-ho a provar.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Veu';
+
+  @override
+  String get assistantVoice => 'Veu de l\'assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La veu que tries es comparteix entre el mòbil i l\'escriptori.';
+
+  @override
+  String get readChatRepliesAloud => 'Llegeix les respostes del xat en veu alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Només parla quan la \"Resposta de veu\" ho permet.';
+
+  @override
+  String get voicePreviewSample => 'Hola, soc l\'Omi. Aquesta és la meva veu.';
 
   @override
   String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';

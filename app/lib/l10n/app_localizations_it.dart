@@ -12293,24 +12293,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voce';
-
-  @override
-  String get assistantVoice => 'Voce dell\'assistente';
-
-  @override
-  String get voiceSharedAcrossDevices => 'La voce scelta è condivisa tra mobile e desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Leggi le risposte della chat ad alta voce';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Parla solo quando \"Risposta vocale\" lo consente.';
-
-  @override
-  String get voicePreviewSample => 'Ciao, sono Omi. Questa è la mia voce.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
@@ -12378,6 +12360,39 @@ class AppLocalizationsIt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimi $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Impossibile connettersi. Controlla la connessione e riprova.';
+
+  @override
+  String get chatReplyServerError => 'Qualcosa è andato storto da parte nostra. Riprova.';
+
+  @override
+  String get chatReplyTimeout => 'La risposta ha impiegato troppo tempo. Riprova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Non hai effettuato l\'accesso. Accedi e riprova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Impossibile caricare le app di chat. Riprova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Voce dell\'assistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La voce scelta è condivisa tra mobile e desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Leggi le risposte della chat ad alta voce';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parla solo quando \"Risposta vocale\" lo consente.';
+
+  @override
+  String get voicePreviewSample => 'Ciao, sono Omi. Questa è la mia voce.';
 
   @override
   String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';

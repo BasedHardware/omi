@@ -37,6 +37,7 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
 # and must not be used to exempt normal HTTP response DTO decoding.
 STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
     {
+        (APP_API_DIR / 'messages.dart', 'parseMessageChunk'),
         (APP_API_DIR / 'messages.dart', 'parseVoiceMessageStreamChunk'),
     }
 )
