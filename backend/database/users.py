@@ -240,8 +240,7 @@ def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[floa
     frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
-    val = user_data.get('meeting_note_screenshots_enabled')
-    return True if val is None else bool(val)
+    return True if (val := user_data.get('meeting_note_screenshots_enabled')) is None else bool(val)
 
 
 def set_meeting_note_screenshots_enabled(uid: str, value: bool):

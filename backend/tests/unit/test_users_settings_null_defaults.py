@@ -170,4 +170,3 @@ def test_meeting_note_screenshots_enabled_respects_rpc_timeout(users):
         res = users.get_meeting_note_screenshots_enabled("uid", rpc_timeout=2.5)
         assert res is True
         mock_doc.get.assert_called_with(timeout=2.5, retry=None)
-
