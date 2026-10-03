@@ -208,7 +208,7 @@ void main() {
   }
 
   group('live card', () {
-    testWidgets('names the source as a glyph, the state and the time, with Pause', (tester) async {
+    testWidgets('names the source as a glyph, the state and the latest line, with Pause', (tester) async {
       final capture = _Capture(_Live.pendant);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
       // The source is a glyph with a spoken name, not a text label (David, 2026-09-26).
@@ -216,7 +216,12 @@ void main() {
       // The card is one button, so the spoken name merges into its label.
       expect(find.bySemanticsLabel(RegExp('^${en.captureSourcePendant}\n')), findsOneWidget);
       expect(find.text(en.listening), findsOneWidget);
-      expect(find.text('12:04'), findsOneWidget);
+      // The session clock is not the conversation, so the pill does not show it.
+      expect(find.text('12:04'), findsNothing);
+      expect(find.text('Keep the pendant flow as it is.'), findsOneWidget);
+      final statusBox = tester.getRect(find.text(en.listening));
+      final previewBox = tester.getRect(find.text('Keep the pendant flow as it is.'));
+      expect((statusBox.center.dy - previewBox.center.dy).abs(), lessThan(4));
       expect(find.bySemanticsLabel(en.pause), findsOneWidget);
       expect(find.byIcon(Icons.mic), findsNothing, reason: 'mics belong to Ask Omi');
 
@@ -273,8 +278,9 @@ void main() {
       final capture = _Capture(_Live.pendant, failure: true);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
       expect(find.text(en.captureNotTranscribing), findsOneWidget);
-      expect(find.text('12:04  ·  ${en.captureAudioSavedTranscribesLater}'), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(find.text(en.captureAudioSavedTranscribesLater), findsOneWidget);
+      expect(find.textContaining('12:04'), findsNothing);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
       // The control matches the state: capture is live, so it pauses (it never reads Resume here).
       expect(find.bySemanticsLabel(en.resume), findsNothing);
       await tester.tap(find.bySemanticsLabel(en.pause));
@@ -346,10 +352,11 @@ void main() {
           capture: _Capture(_Live.idleDeviceConnected), device: device);
       expect(find.text(en.disconnected), findsOneWidget);
       expect(find.textContaining(en.reconnecting), findsOneWidget);
-      // Nothing records while the pendant is gone, so the time stops at the drop.
-      final elapsed = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed;
+      // The session clock is gone, so a drop has nothing to freeze or advance.
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
+      expect(find.textContaining('12:04'), findsNothing);
       await tester.pump(const Duration(seconds: 3));
-      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, elapsed);
+      expect(find.textContaining('12:04'), findsNothing);
       await tester.tap(find.text(en.disconnected));
       await tester.pumpAndSettle();
       expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
@@ -425,7 +432,7 @@ void main() {
     await tester.pump();
     expect(find.byType(LiveCaptureCard), findsOneWidget);
     expect(find.text(en.listening), findsOneWidget);
-    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNotNull);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
     capture.verified = false;
     capture.notifyListeners();
     await tester.pump();
