@@ -1,6 +1,6 @@
 # Proactivity v2 spine contract
 
-Status: **Phase 1 proposal for coordinator review; implementation not started.**
+Status: **G1 accepted with amendments; Phase 2 implementation authorized.**
 Date: 2026-10-03. Branch: `lane/proactivity-v2-spine`.
 Integration destination: `lane/proactivity-v2`; no PR to main from this lane.
 Source baseline: `159df547f4dc4657af0c92675e99a0202949711a` (fetched main).
@@ -20,11 +20,21 @@ interesting-memory review remains unchanged. Neither becomes a v2 model producer
 in this build. Task follow-ups never create, complete or modify a task themselves.
 
 The integration owner owns old-path deletion, client cards, producer wiring and
-rollout. The run record's 15:24 update keeps Focus on its legacy path pending a
-later port, whereas the task's introductory deletion list includes Focus. This
-lane changes neither path; coordinator must reconcile that exception before
-claiming *every* remaining proactive model call is capped. Legacy mentor rollback
-is also an explicit transitional exception, not evidence of v2 budget coverage.
+rollout. Focus remains on its legacy desktop proxy path with existing proxy
+quotas, outside the v2 budget, until a later port. Legacy mentor is the other
+transitional exception. The guarantee is **every v2 producer is hard-capped**.
+Daily recap stays outside both this budget and this ledger in this build.
+
+### Review amendments G1 (accepted 2026-10-03)
+
+Neo and Plus budget reference prices are $20. Producer targets may be provisional
+(10% acted within 24h, $0.25 per acted item; negative-rate alert above 5%). Mentor
+retains its existing push channel and chat thread; follow-ups start feed-only.
+Server-observed replies/completions share the outcome reducer. Jev receives a
+$0.042/M input, zero-output rate card and bounded request pricing. Focus and legacy
+mentor are transitional exceptions. Follow-ups hook the existing action-item
+reminder scheduler; spine adds no scheduler. These amendments supersede the
+original measurement-before-enable restrictions below.
 
 ## 2. Reuse and deliberate differences
 
@@ -54,16 +64,18 @@ not generated classes per producer. Each row has these required fields:
 - `min_acted_24h_rate`, `max_micro_usd_per_acted_item`, `kill_min_deliveries`,
   `evaluation_window_days`, `push_earned`, `push_evidence_reference`.
 
-Unmeasured estimates/targets are represented in configuration by omitted numeric
-keys plus `measurement_status=required`; the loader refuses `enabled=true` until
-they are supplied. This is intentional: the run record requires measurement
-before numeric efficacy targets. Do not manufacture targets to unblock launch.
-Contract review/build can proceed with disabled rows and synthetic test targets.
+Rows may be enabled with `measurement_status=provisional` and numeric bars:
+`min_acted_24h_rate=0.10`, `max_micro_usd_per_acted_item=250000`.
+Provisional expected micro-USD/delivery: mentor 60000 (2026-10-03 reconstruction),
+follow-ups 2000. Negative rate alerts above 5% but is not a kill input. Measured
+benchmark/baseline evidence replaces provisional values via a versioned change.
+Missing numeric targets still reject enablement; provisional rows obey the same
+>=200 mature-delivery kill latch.
 
 | Name | Signal / event trigger | Identity | Initial safety ceilings | Estimate, target and kill criterion |
 | --- | --- | --- | --- | --- |
-| `conversation_mentor_v2` | Newly eligible conversation segment revision after existing deterministic debounce; existing mentor opt-in; no polling timer | conversation ID + eligible revision + producer version | 60 provider calls/user/UTC day, at most 3/item; text request <=32,768 bytes, output <=2,048 tokens/call | Measured estimate and target required from mentor lane; kill below configured acted rate OR above configured cost/acted after >=200 mature deliveries. |
-| `commitment_followup` | Due/overdue transition of an already-extracted, still-open action item, delivered by its existing event/due-work mechanism; a repeated scan is not a new event | action-item ID + due revision + transition kind + producer version | 9 calls/user/UTC day, exactly <=1/item; text request <=8,192 bytes, output <=512 tokens | Measured estimate and target required from follow-up lane; same >=200 mature-delivery kill rule. |
+| `conversation_mentor_v2` | Newly eligible conversation segment revision after existing deterministic debounce; existing mentor opt-in; no polling timer | conversation ID + eligible revision + producer version | 60 provider calls/user/UTC day, at most 3/item; text request <=32,768 bytes, output <=2,048 tokens/call | Provisional estimate 60000 micro-USD; 10% acted, 250000 micro-USD/acted; kill below configured acted rate OR above configured cost/acted after >=200 mature deliveries. |
+| `commitment_followup` | Due/overdue transition of an already-extracted, still-open action item, hooked by producer lane into `routers/action_items.py::_schedule_action_item_reminder`; a repeated scan is not a new event | action-item ID + due revision + transition kind + producer version | 9 calls/user/UTC day, exactly <=1/item; text request <=8,192 bytes, output <=512 tokens | Provisional estimate 2000 micro-USD; 10% acted, 250000 micro-USD/acted; same >=200 mature-delivery kill rule. |
 
 These call ceilings are proposed conservative engineering backstops, not measured
 quality targets. Gateway lane is initially the existing `omi:auto:proactive-notification`
@@ -155,10 +167,10 @@ Compute with integers (equivalently `monthly_cents * 1000 // 30`).
 | `operator` | 4900 | 163333 | 0.163333 |
 | `architect` | 19900 | 663333 | 0.663333 |
 | `unlimited_v2` | 2999 | 99966 | 0.099966 |
-| `unlimited` (Neo) | pending | 99966 | lowest known paid cap |
-| `plus` | pending | 99966 | lowest known paid cap |
+| `unlimited` (Neo) | 2000 | 66666 | 0.066666 |
+| `plus` | 2000 | 66666 | 0.066666 |
 
-Pending paid prices use the *computed minimum* known paid cap and emit
+Future unpriced paid plans use the *computed minimum* known paid cap and emit
 `record_fallback(area='proactivity_v2', from_mode='plan_price',
 to_mode='lowest_known_paid_cap', reason='price_pending', outcome='recovered')`.
 No special allowance for developers, BYOK, trials, client-supplied plans or
@@ -276,7 +288,11 @@ await publish_item(item=item, content=content, target=target)
 identity; `publish_item` rechecks them and refuses pending/unknown cost, deleted
 sources, expired items or an already-terminal claim. A silent model result closes
 the same item with cost, without a card. Mentor step names are `gate`, `generate`,
-`critic`; commitment uses `phrase`. No producer-specific base classes.
+`critic` and `prefilter`; commitment uses `phrase`. Jev prefilter uses
+`omi:auto:jev-decisions`, priced as provider `openrouter`, model `typesafe/jev-1.13`
+at 42000 micro-USD/M input tokens and zero output. Reserve the serialized Jev
+request UTF-8 byte length plus bounded chat framing as input; only text requests
+with bounded messages/schema are admitted. No cache discount is assumed. No producer-specific base classes.
 
 Use existing accounting `feature` with allowlisted values
 `proactivity_v2_conversation_mentor_v2` and `proactivity_v2_commitment_followup`.
@@ -395,6 +411,19 @@ item negative; it wins admission and push rechecks. Feed hides that producer's
 items. Re-enable/settings UI is outside this spine; any future re-enable must be
 an explicit user action, never rollout state or process restart.
 
+### Server-observed outcomes
+
+Internal `record_server_outcome(item_id, action)` runs in the authenticated owner
+context (explicit `uid` at the database boundary), never as an HTTP route. It uses
+the same transactional first-event reducer, with source/surface `server` and a
+deterministic event ID. The first user message in the mentor thread within 24h
+of item delivery is `replied`; canonical completion of the linked follow-up task
+is `accepted`. Producer lanes attach these hooks and supply the owner/item mapping.
+Push transport acceptance supplies a server delivery anchor for this legacy
+channel, separately marked `server_push`; it does not fabricate client exposure.
+Server-observed positive action confirms exposure if no client receipt exists;
+cohort reporting distinguishes server-observed and client-observed evidence.
+
 ### Generated boundary and ownership
 
 Add `/v1/proactivity` to the app-client OpenAPI exporter. Generate from Pydantic
@@ -417,7 +446,8 @@ Publishing makes the item available in the feed and costs no additional model ca
 Delivery/value denominator is confirmed exposure, not availability or FCM success.
 Report availability, first exposure, transport acceptance and action separately.
 
-Both producer rows start `push_earned=false`. Promotion requires >=200 mature,
+Mentor starts `push_earned=true`, evidence `legacy mentor channel, grandfathered 2026-10-03; subject to kill rule`. It still obeys the aggregate nine/day ceiling and every recheck. The mentor producer lane continues writing to its existing mentor chat thread.
+Follow-ups start `push_earned=false`. New promotion requires >=200 mature,
 confirmed feed deliveries meeting that producer's measured thresholds, an evidence
 reference and coordinator-approved config change. There is no automatic promotion.
 A kill automatically revokes push and model admission.
@@ -466,7 +496,7 @@ or enablement require explicit coordinator action with new version/evidence.
 | --- | --- |
 | `proactivity_v2` | Server PostHog exposure flag; absent/unknown/error = off for generation and push; no UID bypass. |
 | `MENTOR_PIPELINE` | Server env `legacy|v2`, default legacy; invalid denies mentor invocation. Mentor owner implements exclusive dispatch; v2 failure never falls back to legacy automatically. |
-| Producer registration / health | Disabled until measurement supplied; durable kill overrides registry enabled. |
+| Producer registration / health | Provisional targets permit enablement; durable kill overrides registry enabled. |
 | User producer preference | Explicit false wins every admission/publication/push check. |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Must be true for v2; existing sink semantics unchanged for other traffic. |
 
@@ -492,7 +522,7 @@ never refunds spend. Money/outcome truth is Firestore, not analytics arrival.
 4. Producer lanes adopt claim/model/publish and remove any v2 unbudgeted path.
    Mentor flip exclusively selects legacy or v2. Integration owner supplies both
    client feed consumers and outcome instrumentation, then deletes agreed old paths.
-5. Flag off initially. Enable bounded cohort only with measured producer rows,
+5. Flag off initially. Enable bounded cohort only with provisional or measured producer rows,
    readiness checks and actual mobile/macOS feed-to-object/action verification.
 
 Rollback: set `proactivity_v2=false`; all new v2 generation/push stops, in-flight
@@ -528,6 +558,8 @@ Phase 1 changes **only this file**. Phase 2 spine additions:
 - `desktop/macos/Desktop/Tests/ProactivityWireTests.swift`
 
 Phase 2 spine modifications:
+
+- `backend/llm_gateway/config/cost_rate_cards.yaml` — Jev input pricing
 
 - `backend/config/plan_catalog.json`, `backend/scripts/generate_plan_catalog.py`,
   `backend/config/plan_catalog_generated.py` — validated cap policy/projection
@@ -607,10 +639,10 @@ opens no PR and performs no merge, production reads, flag change or deployment.
 
 ## Review decisions needed before Phase 2
 
-Accept or amend: durable Firestore balance with Redis lease (hard-cap protection
+G1 accepted: durable Firestore balance with Redis lease (hard-cap protection
 against Redis loss), UTC day, 90-day retention/write count, initial call ceilings,
-confirmed-exposure metric semantics, seven-day mature cohort and target-required
-producer defaults. Measurement lanes must populate estimates/thresholds before
-real enablement; coordinator must reconcile Focus's legacy exception and assign
+confirmed-exposure metric semantics, seven-day mature cohort and provisional
+producer defaults. Measurement lanes replace provisional estimates/thresholds
+with evidence; coordinator owns Focus's legacy exception and assigns
 TTL/index deployment. These are concrete design choices for this requested
 contract checkpoint, not additional implementation approval stages.
