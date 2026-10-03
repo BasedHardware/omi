@@ -77,6 +77,14 @@ REPLAY_PACKET_BYTES = 16 * 1024
 WRITER_SLOT_SECONDS = 2.0
 
 
+def _next_audio_slot(previous: float, duration: float, now: float) -> float:
+    """Advance the armed audio slot from the previous slot, not the observed
+    send/write time: sub-frame timer oversleep is absorbed instead of
+    accumulating drift, while a slip of one frame or longer rebases on the
+    clock so it never banks catch-up credit."""
+    return (now if now - previous >= duration else previous) + duration
+
+
 class AudioDeliveryExpired(TimeoutError):
     """A queued live audio frame outlived its absolute capture-age deadline."""
 
@@ -85,9 +93,10 @@ class RecoveryWriterPace:
     """Opt-in per-recovery-leg wire cadence shared with the typed limits.
 
     Sustained writes stay at <=1x audio time plus the bounded jitter allowance
-    of queued-plus-in-flight bytes. There is no catch-up credit: the next write
-    start is ``max(now, previous_write_start + audio_duration)``, so a blocked
-    write never earns debt that a resumed transport could burst with.
+    of queued-plus-in-flight bytes. There is no catch-up credit: slots advance
+    from the previously armed slot (sub-frame timer oversleep is absorbed, not
+    accumulated), and a stall of one frame or longer rebases on the clock, so
+    a blocked write never earns debt that a resumed transport could burst with.
     """
 
     def __init__(self, sample_rate: int, rate: float, budget: Callable[[], float | None] = lambda: None) -> None:
@@ -119,7 +128,7 @@ class RecoveryWriterPace:
     def note_write(self, nbytes: int) -> float:
         """Record the write start immediately before ws.send."""
         start = clock()
-        self.next_write = start + nbytes / (2 * self.sample_rate * self.rate)
+        self.next_write = _next_audio_slot(self.next_write, nbytes / (2 * self.sample_rate * self.rate), start)
         return start
 
     def complete_write(self) -> None:
@@ -280,7 +289,7 @@ class ReplayPacer:
         finally:
             if token is not None:
                 audio_send_deadline.reset(token)
-        self.next_send = clock() + len(data) / (2 * self.sample_rate * self.rate)
+        self.next_send = _next_audio_slot(self.next_send, len(data) / (2 * self.sample_rate * self.rate), clock())
         await sleep(0)
         return accepted is True and not socket.is_connection_dead
 

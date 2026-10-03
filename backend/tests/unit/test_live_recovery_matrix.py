@@ -2140,3 +2140,100 @@ async def test_sustained_soniox_429_storm_skips_then_probe_recovers(monkeypatch,
         await stop(soniox_raws)
         for release in releases:
             release()
+
+
+def skipped_totals() -> dict:
+    return {
+        tuple(sorted(sample.labels.items())): sample.value
+        for family in REPLAY_SKIPPED.collect()
+        for sample in family.samples
+        if sample.name.endswith('_total')
+    }
+
+
+@pytest.mark.slow
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
+async def test_exact_1x_live_stream_survives_oversleeping_pacing_timers(monkeypatch, virtual_clock, successor):
+    """180 virtual seconds of exact-1x live PCM behind a 6s seeded ring while
+    every positive pacing timer lands 15ms late. The adopted successor must
+    hold a bounded tail on one dial with zero skipped audio and byte-exact
+    prefix+live ordering; clock-anchored pacing fills the 26s tail, dies
+    capacity_full, and exhausts the remaining targets."""
+
+    monkeypatch.setattr(
+        replay_delivery,
+        'sleep',
+        lambda seconds: virtual_clock.sleep(seconds + 0.015) if seconds > 0 else virtual_clock.sleep(seconds),
+    )
+    actual, base, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
+    ring = sized_ring(6)
+    actual._window_replay_audio = ring
+    actual._window_replay_started = True
+    actual.capture_timeline = CaptureTimeline(sample_rate=SAMPLE_RATE)
+    captured = b''.join(data for _, data in ring.snapshot())
+    actual.capture_timeline.accept(captured, 1000.0, 1.0)
+    kill_source(actual, 'parakeet-window')
+    monkeypatch.setattr(actual, '_capture', lambda *args, **kwargs: None)
+    frames = 180 * SAMPLE_RATE // 480
+    skipped_before = skipped_totals()
+    produced = bytearray()
+    peak_tail = [0]
+    emitted_end = [0.0]
+
+    async def produce():
+        raw = None
+        for n in range(frames):
+            chunk = marker_chunk(n + 1)
+            start, _, _ = actual.capture_timeline.accept(chunk, 1006.0 + n * 0.03, 7.0 + n * 0.03)
+            actual._stt_buffer_start_sample = start
+            buffer = bytearray(chunk)
+            await actual._flush_stt_buffer(buffer, force=True)
+            produced.extend(chunk)
+            if len(raws):
+                raw = raws[-1]
+                peak_tail[0] = max(
+                    peak_tail[0],
+                    actual._replay_tail_bytes + getattr(actual.stt_socket, '_tail_bytes', 0),
+                )
+                if n % 150 == 149 and raw._ws.byte_count // 2 > emitted_end[0] * SAMPLE_RATE:
+                    emitted_end[0] = raw._ws.byte_count // 2 / SAMPLE_RATE
+                    raw._stream_transcript(
+                        [{'text': 'synthetic', 'start': 0.0, 'end': emitted_end[0], 'speaker': 'speaker_0'}]
+                    )
+            await virtual_clock.sleep(0.03)
+
+    failover = asyncio.create_task(actual._failover_stt_socket())
+    producer = asyncio.create_task(produce())
+    try:
+        await producer
+        assert await failover
+        assert len(raws) == 1
+        raw = raws[-1]
+        assert isinstance(raw, SafeSonioxSocket if successor == 'soniox' else SafeModulateSocket)
+        assert not actual.host.state.stt_terminal_failure
+        assert not actual.stt_socket.is_connection_dead
+        actual.host.request.websocket.close.assert_not_awaited()
+        assert raw._send_queue.high_water <= 2
+        assert peak_tail[0] <= replay_delivery.LIVE_TAIL_SECONDS * SAMPLE_RATE * 2
+        assert actual.recovery.state is RecoveryState.recovered
+        assert actual.recovery.deadline is None
+        assert len(base.emitted) >= 1
+        expected = captured + bytes(produced)
+        actual.host.state.active = False
+        await actual._drain_stt_sockets()
+        assert raw._ws.pcm == expected
+        skips = {
+            key: value - skipped_before.get(key, 0.0)
+            for key, value in skipped_totals().items()
+            if value - skipped_before.get(key, 0.0) > 1e-9
+        }
+        assert skips == {}, skips
+        assert_legs_drained(legs, observations)
+    finally:
+        producer.cancel()
+        failover.cancel()
+        await asyncio.gather(producer, failover, return_exceptions=True)
+        if actual.stt_socket is not None:
+            actual.stt_socket.finish()
+        await stop(raws)
