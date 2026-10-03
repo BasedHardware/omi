@@ -138,6 +138,7 @@ from models.app import (
     AppBaseModel,
     AppReview,
     AppCatalogItem,
+    AppApiKeyResponse,
 )
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
@@ -322,13 +323,6 @@ class AppSearchResponse(PydanticBaseModel):
     data: List[AppCatalogItem] = Field(default_factory=list)
     pagination: AppPagination
     filters: AppSearchFilters
-
-
-class AppApiKeyResponse(PydanticBaseModel):
-    id: str
-    label: str
-    created_at: Optional[datetime] = None
-    secret: Optional[str] = None
 
 
 class PersonaMutationResponse(AppMutationResponse):
@@ -1408,8 +1402,7 @@ def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [details for details in reviews.values() if details.get('review')]
-    return reviews
+    return AppReview.deserialize_many_safe(reviews)
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
@@ -2477,7 +2470,7 @@ def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=403, detail='You are not authorized to view API keys for this app')
 
     keys = list_api_keys_db(app_id)
-    return keys
+    return AppApiKeyResponse.deserialize_many_safe(keys)
 
 
 @router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'], response_model=AppStatusMessageResponse)
