@@ -235,15 +235,14 @@ def list_goal_progress_events(
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
-
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
-
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
-
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='Invalid goal metric bounds') from exc
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-
     _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
     return normalize_goal_response(updated_goal)
 
@@ -360,7 +359,7 @@ def extract_and_update_progress(
                     'goal_title': u.get('goal_title'),
                     'previous_value': u.get('old_value'),
                     'new_value': u.get('new_value'),
-                    'reasoning': u.get('reasoning', ''),
+                    'reasoning': str(u.get('reasoning') or ''),
                 }
                 for u in updates
             ],
