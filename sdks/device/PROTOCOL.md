@@ -12,6 +12,22 @@ Shared contract for device SDKs (`sdks/python`, `sdks/swift`, `sdks/react-native
 | Battery service | `0000180f-0000-1000-8000-00805f9b34fb` |
 | Battery level | `00002a19-0000-1000-8000-00805f9b34fb` |
 
+## Settings service (Omi CV1 firmware, `omi/firmware/omi/src/lib/core/transport.c`)
+
+| Role | UUID | Value |
+|------|------|-------|
+| Settings service | `19b10010-e8f2-537e-4f6c-d104768a1214` | |
+| LED dim ratio (read/write) | `19b10011-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0–100 |
+| Mic gain (read/write) | `19b10012-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0–8 |
+| Charging status (read/notify) | `19b10013-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0/1 |
+| Capture mute (read/write) | `19b10015-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0=capturing, 1=muted |
+
+Capture mute is persisted in NVS (`muted`). Disconnect must not resume capture;
+only an explicit unmute (app write or offline double-tap) does. Support is
+announced by bit 10 (`0x400`) of the features characteristic
+(`19b10021-e8f2-537e-4f6c-d104768a1214`). `19b10014` / bit 9 is allocated to
+device name; mute uses the next free characteristic and feature bit.
+
 ## Codec IDs (first byte of codec characteristic)
 
 | ID | Codec | Firmware |
