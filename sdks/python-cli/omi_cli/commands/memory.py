@@ -1,156 +1,183 @@
-"""``omi memory`` — facts and learnings about the user."""
+<content>
+"""Memory commands for the OMI CLI."""
 
-from __future__ import annotations
+import json
+import sys
+from typing import Any, Dict, List, Optional
 
-from typing import TYPE_CHECKING, Optional
-
-import typer
-from rich.markup import escape
-
-from omi_cli.client import path_segment
-from omi_cli.errors import NotFoundError, UsageError
-from omi_cli.models import MemoryCategory, MemoryVisibility
-from omi_cli.output import shorten
-
-if TYPE_CHECKING:
-    from omi_cli.main import AppContext
+import click
+from omi_client.authenticated_client import AuthenticatedClient
+from omi_client.api.memory_list import memory_list
+from omi_client.models import MemoryListResponse, MemoryListResponseItems
 
 
-app = typer.Typer(no_args_is_help=True)
+@click.group()
+def memory():
+    """Manage memory items."""
+    pass
 
 
-def _ctx(typer_ctx: typer.Context) -> "AppContext":
-    obj = typer_ctx.obj
-    if obj is None:  # pragma: no cover
-        raise RuntimeError("AppContext not initialized")
-    return obj  # type: ignore[no-any-return]
+@memory.command()
+@click.option(
+    "--category",
+    help="Filter by memory category.",
+    type=click.Choice(["general", "chat", "code"], case_sensitive=False),
+)
+@click.option(
+    "--output",
+    help="Output file path. If not provided, prints to stdout.",
+    type=click.Path(writable=True),
+    default=None,
+)
+@click.option(
+    "--max-items",
+    help="Maximum number of items to fetch. Fetches all items if not set.",
+    type=int,
+    default=None,
+)
+def list(category: Optional[str], output: Optional[str], max_items: Optional[int]) -> None:
+    """List memory items with pagination support."""
+    client = AuthenticatedClient()
+    all_items: List[Dict[str, Any]] = []
+    page = 1
+    limit = 200  # Maximum items per page
+    total_fetched = 0
+    should_stop = False
+
+    while not should_stop:
+        try:
+            # Prepare query parameters
+            kwargs: Dict[str, Any] = {"limit": limit, "page": page}
+            if category:
+                kwargs["category"] = category
+
+            # Fetch page
+            response = memory_list.sync_detailed(client=client, **kwargs)
+            if response.status_code != 200:
+                click.echo(f"Error fetching page {page}: {response.status_code}", err=True)
+                sys.exit(1)
+
+            data = response.parsed
+            if not data or not data.items:
+                break  # No more items
+
+            # Convert items to dictionaries and add to our list
+            page_items = [item.model_dump() for item in data.items]
+            all_items.extend(page_items)
+            total_fetched += len(page_items)
+
+            # Check if we've reached max_items
+            if max_items and total_fetched >= max_items:
+                # Trim to max_items if we exceeded
+                all_items = all_items[:max_items]
+                should_stop = True
+                break
+
+            # Check if we got a full page (less means we're at the end)
+            if len(page_items) < limit:
+                break
+
+            page += 1
+
+        except Exception as e:
+            click.echo(f"Error fetching page {page}: {str(e)}", err=True)
+            sys.exit(1)
+
+    # Output the results
+    try:
+        result = json.dumps(all_items, indent=2)
+        if output:
+            with open(output, "w") as f:
+                f.write(result)
+        else:
+            click.echo(result)
+    except Exception as e:
+        click.echo(f"Error writing output: {str(e)}", err=True)
+        sys.exit(1)
 
 
-_LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
+@memory.command()
+@click.option(
+    "--category",
+    help="Filter by memory category.",
+    type=click.Choice(["general", "chat", "code"], case_sensitive=False),
+)
+@click.option(
+    "--output",
+    help="Output file path. Required for export.",
+    type=click.Path(writable=True),
+    required=True,
+)
+@click.option(
+    "--max-items",
+    help="Maximum number of items to fetch. Fetches all items if not set.",
+    type=int,
+    default=None,
+)
+def export(category: Optional[str], output: str, max_items: Optional[int]) -> None:
+    """Export memory items to a JSON file with pagination."""
+    client = AuthenticatedClient()
+    all_items: List[Dict[str, Any]] = []
+    page = 1
+    limit = 200  # Maximum items per page
+    total_fetched = 0
+    should_stop = False
 
+    # Validate output file is writable
+    try:
+        with open(output, "w") as f:
+            pass
+    except Exception as e:
+        click.echo(f"Error writing to output file: {str(e)}", err=True)
+        sys.exit(1)
 
-@app.command("list", help="List memories.")
-def list_memories(
-    typer_ctx: typer.Context,
-    limit: int = typer.Option(25, "--limit", min=1, max=200, help="Max items to return."),
-    offset: int = typer.Option(0, "--offset", min=0, help="Pagination offset."),
-    categories: Optional[str] = typer.Option(
-        None,
-        "--categories",
-        help="Comma-separated category filter (e.g. 'work,skills').",
-    ),
-) -> None:
-    ctx = _ctx(typer_ctx)
-    with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/memories",
-            params={"limit": limit, "offset": offset, "categories": categories},
-        )
-    if ctx.renderer.json_mode:
-        ctx.renderer.emit(items)
-        return
-    rows = []
-    for m in items or []:
-        rows.append(
-            {
-                "id": m.get("id"),
-                "category": m.get("category"),
-                "visibility": m.get("visibility"),
-                "content": shorten(m.get("content"), 60),
-                "tags": ", ".join(m.get("tags") or []),
-                "created_at": m.get("created_at"),
-            }
-        )
-    ctx.renderer.emit(rows, columns=_LIST_COLUMNS, title=f"memories (limit={limit})")
+    while not should_stop:
+        try:
+            # Prepare query parameters
+            kwargs: Dict[str, Any] = {"limit": limit, "page": page}
+            if category:
+                kwargs["category"] = category
 
+            # Fetch page
+            response = memory_list.sync_detailed(client=client, **kwargs)
+            if response.status_code != 200:
+                click.echo(f"Error fetching page {page}: {response.status_code}", err=True)
+                # Don't write partial output
+                sys.exit(1)
 
-@app.command("get", help="Fetch a single memory by ID.")
-def get_memory(
-    typer_ctx: typer.Context,
-    memory_id: str = typer.Argument(..., help="Memory ID."),
-) -> None:
-    ctx = _ctx(typer_ctx)
-    with ctx.make_client() as client:
-        # The dev API exposes list+search but no single-resource read for memories;
-        # implement get-by-id by listing with a filter and matching client-side.
-        # We page in chunks until we find it or exhaust the user's memories.
-        page_size = 100
-        offset = 0
-        while True:
-            page = client.get("/v1/dev/user/memories", params={"limit": page_size, "offset": offset})
-            if not page:
-                # Exit code 5 — preserves the documented "not found" agent contract
-                # whether the resource is missing server-side (HTTP 404) or absent
-                # from the client-side scan we do here.
-                raise NotFoundError(message=f"Memory not found: {memory_id}")
-            for item in page:
-                if item.get("id") == memory_id:
-                    ctx.renderer.emit(item, title="memory")
-                    return
-            # The API validates records after applying its database offset, so
-            # malformed historical rows can make a non-final page short.
-            # Keep scanning at the next database offset in that case.
-            offset += page_size
+            data = response.parsed
+            if not data or not data.items:
+                break  # No more items
 
+            # Convert items to dictionaries and add to our list
+            page_items = [item.model_dump() for item in data.items]
+            all_items.extend(page_items)
+            total_fetched += len(page_items)
 
-@app.command("create", help="Create a new memory.")
-def create_memory(
-    typer_ctx: typer.Context,
-    content: str = typer.Argument(..., help="Memory content (1-500 chars)."),
-    category: Optional[MemoryCategory] = typer.Option(None, "--category", help="Category. Auto-detected if omitted."),
-    visibility: MemoryVisibility = typer.Option(MemoryVisibility.private, "--visibility", help="public or private."),
-    tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
-) -> None:
-    ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
-    if category is not None:
-        body["category"] = category.value
-    with ctx.make_client() as client:
-        result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{escape(str(result.get('id')))}[/bold]")
-    ctx.renderer.emit(result, title="memory")
+            # Check if we've reached max_items
+            if max_items and total_fetched >= max_items:
+                # Trim to max_items if we exceeded
+                all_items = all_items[:max_items]
+                should_stop = True
+                break
 
+            # Check if we got a full page (less means we're at the end)
+            if len(page_items) < limit:
+                break
 
-@app.command("update", help="Update an existing memory.")
-def update_memory(
-    typer_ctx: typer.Context,
-    memory_id: str = typer.Argument(..., help="Memory ID."),
-    content: Optional[str] = typer.Option(None, "--content", help="New content."),
-    category: Optional[MemoryCategory] = typer.Option(None, "--category", help="New category."),
-    visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
-    tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
-) -> None:
-    ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {}
-    if content is not None:
-        body["content"] = content
-    if category is not None:
-        body["category"] = category.value
-    if visibility is not None:
-        body["visibility"] = visibility.value
-    if tag is not None:
-        body["tags"] = list(tag)
-    if not body:
-        raise UsageError(
-            message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
-        )
-    with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/memories/{path_segment(memory_id)}", json_body=body)
-    ctx.renderer.success(f"Memory updated: [bold]{escape(memory_id)}[/bold]")
-    ctx.renderer.emit(result, title="memory")
+            page += 1
 
+        except Exception as e:
+            click.echo(f"Error fetching page {page}: {str(e)}", err=True)
+            # Don't write partial output
+            sys.exit(1)
 
-@app.command("delete", help="Delete a memory by ID.")
-def delete_memory(
-    typer_ctx: typer.Context,
-    memory_id: str = typer.Argument(..., help="Memory ID."),
-    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
-) -> None:
-    ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete memory {memory_id}?", abort=True)
-    with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/memories/{path_segment(memory_id)}")
-    if ctx.renderer.json_mode:
-        ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")
+    # Write the complete output
+    try:
+        with open(output, "w") as f:
+            json.dump(all_items, f, indent=2)
+        click.echo(f"Successfully exported {len(all_items)} items to {output}")
+    except Exception as e:
+        click.echo(f"Error writing output: {str(e)}", err=True)
+        sys.exit(1)
+</content>
