@@ -1,6 +1,7 @@
 """Live TDT runs through real admission, socket, VAD and receiver seams; no network."""
 
 import asyncio
+from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,7 +11,16 @@ import numpy as np
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
-from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
+from utils.stt import (
+    connect_backoff as connect_backoff_module,
+    live_chain,
+    live_router,
+    parakeet_window as window,
+    provider_resilience,
+    soniox as soniox_module,
+    streaming as st,
+    vad_gate,
+)
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.observability.fallback import record_fallback
 from utils.stt.live_metrics import (
@@ -78,6 +88,16 @@ def runtime(monkeypatch):
         )
     monkeypatch.setattr(st, '_deepgram_is_available', lambda: True)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
+    monkeypatch.setattr(soniox_module, '_rate_limit_events', [])
+    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(
+        connect_backoff_module,
+        '_shared',
+        connect_backoff_module.ConnectRefusalBackoff(on_event=live_chain._connect_backoff_event),
+    )
     # Keep the production VAD state machine/remapper; supply a deterministic
     # speech detector (nonzero PCM=speech) instead of downloading a model.
     # Ingest AGC scales the 0x01 marker, so a byte-literal test would drop speech.

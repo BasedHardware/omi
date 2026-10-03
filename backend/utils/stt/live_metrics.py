@@ -231,5 +231,5 @@ for _source in PROVIDER_FAMILIES:
         RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
 for _provider in PROVIDER_FAMILIES:
     LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
-    for _event in ('opened', 'probe', 'skipped', 'reset'):
+    for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
         CONNECT_BACKOFF.labels(provider=_provider, event=_event)

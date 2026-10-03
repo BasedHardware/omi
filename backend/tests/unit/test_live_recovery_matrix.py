@@ -1992,7 +1992,7 @@ async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench
         assert sum(len(dials) for dials in dg_dials.values()) == 20
         assert all(len(dials) == 1 for dials in dg_dials.values())
         window_connect.assert_not_called()
-        assert quarantined == []
+        assert not [call for call in quarantined if call and call[0] == 'soniox']
         for actual in actuals:
             websocket = actual.host.request.websocket
             assert websocket.client_state is WebSocketState.CONNECTED

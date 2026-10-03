@@ -287,6 +287,7 @@ async def connect_configured_chain(
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
     capacity_resorts = []
+    backoff_skipped = []
 
     def attempt_identity(service: STTService, target) -> str:
         if target is not None:
@@ -295,13 +296,19 @@ async def connect_configured_chain(
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
 
-    async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
+    async def attempt(
+        service: STTService, connect: Connect, target=None, *, force_backoff: bool = False, rescue: bool = False
+    ) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, primary_open
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
-        backoff_lease = connect_backoff().acquire(attempt_identity(service, target), provider=service.value)
+        backoff_lease = connect_backoff().acquire(
+            attempt_identity(service, target), provider=service.value, force=force_backoff
+        )
         if backoff_lease is None:
             on_close()
+            if not force_backoff:
+                backoff_skipped.append((service, connect, target, rescue))
             primary_open |= not backup(service, target)
             prior_reason, prior_capacity_subtype = 'circuit_open', None
             record_fallback(
@@ -655,9 +662,37 @@ async def connect_configured_chain(
             if await _allow_rescue_probe(_circuit_for_primary(service), probes, rescue_deadline):
                 prior_reason = 'last_resort'
                 prior_capacity_subtype = None
-                result = await attempt(service, connect)
+                result = await attempt(service, connect, rescue=True)
                 if result is not None:
                     return result
+    if not attempted and backoff_skipped:
+        for service, connect, target, rescue in sorted(
+            backoff_skipped,
+            key=lambda route: connect_backoff().cooldown_until(attempt_identity(route[0], route[2])),
+        ):
+            identity = attempt_identity(service, target)
+            if connect is None or provider_for_service(service) in failed or identity in failed_targets:
+                continue
+            if recovery is not None and not recovery.can_attempt(identity):
+                continue
+            account = fleet_states.get(service.value)
+            if account is not None and account.bench == 'account' and account.excluded:
+                continue
+            circuit = target_circuit(target, _circuit_for_primary(service))
+            if not circuit.allow_request(max_probes=probes, force=rescue):
+                continue
+            primary_open = True
+            record_fallback(
+                component='stt_selection',
+                from_mode=origin,
+                to_mode=service.value,
+                reason='circuit_open',
+                outcome='degraded',
+            )
+            result = await attempt(service, connect, target, force_backoff=True, rescue=rescue)
+            if result is not None:
+                return result
+            break
     CHAIN_EXHAUSTED.inc()
     pending = PendingLiveFailover(
         component='stt_selection',

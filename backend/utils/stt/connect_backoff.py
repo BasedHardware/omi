@@ -105,19 +105,27 @@ class ConnectRefusalBackoff:
         with self._lock:
             self._states.clear()
 
-    def acquire(self, identity: str, *, provider: str = 'unknown') -> ConnectLease | None:
+    def acquire(self, identity: str, *, provider: str = 'unknown', force: bool = False) -> ConnectLease | None:
         with self._lock:
             state = self._state(identity, provider)
             now = self._clock()
             if not state.open:
                 return ConnectLease(self, state, state.epoch, probe=False)
             if state.probe_in_flight or now < state.cooldown_until:
+                if force:
+                    self._event(state.provider, 'escape')
+                    return ConnectLease(self, state, state.epoch, probe=False)
                 self._event(state.provider, 'skipped')
                 return None
             state.probe_in_flight = True
             state.epoch += 1
             self._event(state.provider, 'probe')
             return ConnectLease(self, state, state.epoch, probe=True)
+
+    def cooldown_until(self, identity: str) -> float:
+        with self._lock:
+            state = self._states.get(identity)
+            return state.cooldown_until if state is not None else 0.0
 
     def _reset(self, state: _TargetState) -> None:
         announce = state.open or bool(state.refusals)

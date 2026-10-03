@@ -218,6 +218,78 @@ def test_finish_is_idempotent():
     assert backoff.acquire('soniox') is not None
 
 
+def test_forced_escape_is_a_non_probe_lease_whose_success_resets():
+    clock, backoff = make()
+    events = []
+    backoff.on_event = lambda provider, event: events.append(event)
+    for _ in range(3):
+        backoff.acquire('soniox').finish(refused=True)
+    assert backoff.acquire('soniox') is None
+    escape = backoff.acquire('soniox', force=True)
+    assert escape is not None
+    assert not escape.probe
+    assert events == ['opened', 'skipped', 'escape']
+    assert backoff.cooldown_until('soniox') == 2.0
+    escape.finish(success=True)
+    assert backoff.cooldown_until('soniox') == 0.0
+    assert backoff.acquire('soniox') is not None
+
+
+def test_forced_escape_refusal_and_neutral_finishes_cannot_extend_or_escalate():
+    clock, backoff = make()
+    for _ in range(3):
+        backoff.acquire('soniox').finish(refused=True)
+    backoff.acquire('soniox', force=True).finish(refused=True)
+    assert backoff.cooldown_until('soniox') == 2.0
+    assert backoff._states['soniox'].cooldown_seconds == 2.0
+    backoff.acquire('soniox', force=True).finish()
+    assert backoff.cooldown_until('soniox') == 2.0
+    clock.now += 1.9
+    assert backoff.acquire('soniox') is None
+    clock.now += 0.1
+    probe = backoff.acquire('soniox', force=True)
+    assert probe is not None and probe.probe
+
+
+def test_escape_lease_refusal_leaves_a_held_probe_held():
+    clock, backoff = make()
+    for _ in range(3):
+        backoff.acquire('soniox').finish(refused=True)
+    clock.now += 2.0
+    probe = backoff.acquire('soniox')
+    assert probe is not None and probe.probe
+    escape = backoff.acquire('soniox', force=True)
+    assert escape is not None and not escape.probe
+    escape.finish(refused=True)
+    assert backoff.acquire('soniox') is None
+    probe.finish(refused=True)
+    clock.now += 3.9
+    assert backoff.acquire('soniox') is None
+    clock.now += 0.1
+    assert backoff.acquire('soniox') is not None
+
+
+def test_escape_events_emit_the_bounded_provider_family():
+    clock, backoff = make()
+    events = []
+    backoff.on_event = lambda provider, event: events.append((provider, event))
+    for _ in range(3):
+        backoff.acquire('east', provider='soniox').finish(refused=True)
+    backoff.acquire('east', provider='soniox', force=True)
+    for _ in range(3):
+        backoff.acquire('west', provider='custom-vendor').finish(refused=True)
+    backoff.acquire('west', provider='custom-vendor', force=True)
+    assert ('soniox', 'escape') in events
+    assert ('unknown', 'escape') in events
+    assert all(provider in ('soniox', 'unknown') for provider, _ in events)
+
+
+def test_cooldown_until_never_creates_state():
+    clock, backoff = make()
+    assert backoff.cooldown_until('never-seen') == 0.0
+    assert 'never-seen' not in backoff._states
+
+
 def test_cache_is_bounded_and_evicts_the_oldest_identity():
     clock, backoff = make(max_identities=64)
     for index in range(65):

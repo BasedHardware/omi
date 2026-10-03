@@ -4,6 +4,7 @@ import asyncio
 import json
 import random
 import time
+from collections import deque
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -18,6 +19,7 @@ from utils.stt import (
     live_health,
     live_session,
     live_router,
+    soniox as soniox_module,
     streaming as st,
 )
 from utils.stt.live_gate import GateState, begin_trial, transition
@@ -25,7 +27,7 @@ from utils.stt.live_signal import PROVIDER_FAILURE_REASONS, provider_observation
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.live_router import select, connecting_target
 from utils.stt.live_rollout import window_allocation
-from utils.stt.live_metrics import COST_SHADOW, COST_DECISION
+from utils.stt.live_metrics import COST_SHADOW, COST_DECISION, CONNECT_BACKOFF
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +47,16 @@ def controls(monkeypatch):
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
-    connect_backoff_module.connect_backoff().reset()
+    monkeypatch.setattr(st, 'health', pod)
+    monkeypatch.setattr(live_health, 'health', pod)
+    monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
+    monkeypatch.setattr(soniox_module, '_rate_limit_events', [])
+    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(
+        connect_backoff_module,
+        '_shared',
+        connect_backoff_module.ConnectRefusalBackoff(on_event=live_chain._connect_backoff_event),
+    )
 
 
 def test_cost_capability_and_stable_ties():
@@ -519,6 +530,118 @@ async def test_admitted_non_capacity_candidate_dial_suppresses_capacity_escape(m
         )
 
     assert seen == [candidate_b.id]
+
+
+def _cooldown_targets():
+    return [
+        Target('modulate-a', 'modulate', 0.04, endpoint='wss://mod-a.invalid/stream'),
+        Target('modulate-b', 'modulate', 0.05, endpoint='wss://mod-b.invalid/stream'),
+        Target('modulate-velma-2', 'modulate', 0.055),
+    ]
+
+
+def _seed_backoff_cooldowns(*identities: str) -> None:
+    backoff = connect_backoff_module.connect_backoff()
+    for identity in identities:
+        for _ in range(3):
+            backoff.acquire(identity, provider='modulate').finish(refused=True)
+
+
+@pytest.mark.asyncio
+async def test_backoff_escape_dials_the_earliest_cooled_target_id_once(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    targets = _cooldown_targets()
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: targets)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    _seed_backoff_cooldowns('modulate-a', 'modulate-b', 'modulate-velma-2')
+    escapes_before = CONNECT_BACKOFF.labels(provider='modulate', event='escape')._value.get()
+    seen = []
+
+    async def connect():
+        seen.append(connecting_target.get().id)
+        return SimpleNamespace(is_connection_dead=False)
+
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={},
+        failed=set(),
+        models=['modulate-velma-2'],
+        routing_uid='u',
+        routing_language='en',
+    )
+
+    assert service == st.STTService.modulate
+    assert seen == ['modulate-a']
+    assert CONNECT_BACKOFF.labels(provider='modulate', event='escape')._value.get() == escapes_before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exclusion', ['account', 'failed_targets'])
+async def test_backoff_escape_never_bypasses_hard_exclusions(monkeypatch, exclusion):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    targets = _cooldown_targets()
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
+    if exclusion == 'account':
+        monkeypatch.setattr(
+            live_chain.health,
+            'cached_snapshot',
+            lambda *_: {'modulate': live_health.ProviderState(bench='account', bench_until=time.time() + 600)},
+        )
+        failed_targets = set()
+    else:
+        monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+        failed_targets = {target.id for target in targets}
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: targets)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    _seed_backoff_cooldowns('modulate-a', 'modulate-b', 'modulate-velma-2')
+    connect = AsyncMock(side_effect=AssertionError('no cooled route may be force-dialed'))
+    with pytest.raises(RuntimeError, match='chain exhausted'):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=connect,
+            callbacks={},
+            failed=set(),
+            failed_targets=failed_targets,
+            models=['modulate-velma-2'],
+            routing_uid='u',
+            routing_language='en',
+        )
+    connect.assert_not_called()
+
+
+@pytest.mark.parametrize('mode', ['dirty', 'clean'])
+def test_process_singletons_start_fresh_each_test(monkeypatch, mode):
+    backoff = connect_backoff_module.connect_backoff()
+    assert backoff is live_chain.connect_backoff()
+    if mode == 'dirty':
+        monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+        for _ in range(3):
+            backoff.acquire('soniox', provider='soniox').finish(refused=True)
+        live_chain._recent_connect_failures.append((time.monotonic(), 'soniox'))
+        live_router.note_capacity_full('modulate-velma-2')
+        live_router.target_circuit(Target('custom', 'modulate', 0.05, endpoint='wss://x.invalid'))
+        live_chain.health.quarantine('soniox', 'selection', 60)
+        soniox_module._rate_limit_events.append(time.monotonic())
+        assert backoff._states
+        assert live_chain._recent_connect_failures
+        assert live_router._capacity_until
+        assert live_router._target_circuits
+        assert live_chain.health._benches
+        assert soniox_module._rate_limit_events
+        return
+    assert not backoff._states
+    assert not live_chain._recent_connect_failures
+    assert not live_router._capacity_until
+    assert not live_router._target_circuits
+    assert not soniox_module._rate_limit_events
+    pod = live_chain.health
+    assert pod is live_session.health is st.health is live_health.health
+    assert not pod._benches
 
 
 def test_health_session_is_once_and_late_failure_after_text_counts(monkeypatch):

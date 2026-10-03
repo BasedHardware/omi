@@ -153,6 +153,14 @@ legs honor capacity signals and a five-second process-local cooldown after
 `capacity_full`, without treating capacity as provider disruption. If every
 candidate is capacity-blocked, one least-recently-refused candidate may dial
 through its normal circuit/admission gate so a sole recovered target can serve.
+Connect-refusal backoff is separate from account and selection-health benches:
+three target-local 429/connect refusals within 10s cool the target for 2/4/8/10s.
+If backoff suppresses every otherwise-admissible route before any real dial, one
+earliest-cooldown-expiry target still receives a bounded attempt. A due probe
+claims the exclusive probe slot; an early extra attempt does not claim that slot
+or extend/escalate cooldown on refusal. Account, failed-target, capability,
+window admission, and recovery time/attempt exclusions remain hard. The escape
+emits the bounded connect-backoff `escape` event and shared fallback telemetry.
 Global-stage pod cache views (including freshness/unknown state), scoped CAS
 transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)

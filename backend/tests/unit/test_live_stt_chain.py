@@ -15,7 +15,9 @@ from utils.stt import (
     connect_metrics,
     live_chain,
     live_health,
+    live_router,
     provider_resilience as resilience,
+    recovery_state,
     streaming as st,
 )
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation
@@ -38,7 +40,13 @@ def configured(monkeypatch):
         monkeypatch.setattr(
             st, f'_{name}_circuit', resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30)
         )
-    connect_backoff_module.connect_backoff().reset()
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    monkeypatch.setattr(
+        connect_backoff_module,
+        '_shared',
+        connect_backoff_module.ConnectRefusalBackoff(on_event=live_chain._connect_backoff_event),
+    )
 
 
 def socket(**kwargs):
@@ -842,7 +850,7 @@ async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff
 
 
 @pytest.mark.asyncio
-async def test_all_cooled_targets_cannot_be_bypassed_by_rescue(connect_backoff):
+async def test_all_cooled_targets_get_one_bounded_escape_and_can_recover(connect_backoff):
     soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
     modulate = AsyncMock(side_effect=SonioxRateLimitError('transient'))
     for _ in range(3):
@@ -864,8 +872,86 @@ async def test_all_cooled_targets_cannot_be_bypassed_by_rescue(connect_backoff):
             failed=set(),
             models=['soniox', 'modulate-velma-2'],
         )
+    assert soniox.await_count == 1
+    modulate.assert_not_called()
+    recovered = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=recovered,
+        callbacks={st.STTService.modulate: modulate},
+        failed=set(),
+        models=['soniox', 'modulate-velma-2'],
+    )
+    assert service == st.STTService.soniox
+    recovered.assert_awaited_once()
+    modulate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_all_cooling_escape_dials_only_the_earliest_expiry_once(connect_backoff):
+    for _ in range(3):
+        connect_backoff.acquire('modulate-velma-2', provider='modulate').finish(refused=True)
+    connect_backoff.now[0] += 0.5
+    for _ in range(3):
+        connect_backoff.acquire('soniox', provider='soniox').finish(refused=True)
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    controller = recovery_state.LiveRecoveryController(host)
+    token = recovery_state.current_recovery.set(controller)
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    modulate = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    try:
+        with pytest.raises(live_chain.LiveChainExhausted):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=soniox,
+                callbacks={st.STTService.modulate: modulate},
+                failed=set(),
+                models=['soniox', 'modulate-velma-2'],
+            )
+    finally:
+        recovery_state.current_recovery.reset(token)
+    modulate.assert_awaited_once()
+    soniox.assert_not_called()
+    assert connect_backoff.cooldown_until('modulate-velma-2') == 2.0
+    assert connect_backoff.cooldown_until('soniox') == 2.5
+    assert connect_backoff._states['modulate-velma-2'].cooldown_seconds == 2.0
+    assert connect_backoff._states['soniox'].cooldown_seconds == 2.0
+    assert controller.attempted_targets == {'modulate-velma-2'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['exhausted', 'departed', 'deadline_expired'])
+async def test_cooling_escape_cannot_dial_a_terminal_episode(connect_backoff, terminal):
+    for identity, provider in (('soniox', 'soniox'), ('modulate-velma-2', 'modulate')):
+        for _ in range(3):
+            connect_backoff.acquire(identity, provider=provider).finish(refused=True)
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    ticks = [0.0]
+    controller = recovery_state.LiveRecoveryController(host, clock=lambda: ticks[0])
+    if terminal == 'departed':
+        controller.mark_client_leaving()
+    elif terminal == 'deadline_expired':
+        controller.begin(family='soniox')
+        ticks[0] = recovery_state.RECOVERY_EPISODE_SECONDS + 1
+    else:
+        controller.state = recovery_state.RecoveryState.exhausted
+    token = recovery_state.current_recovery.set(controller)
+    soniox = AsyncMock(side_effect=AssertionError('a terminal episode has no escape dial'))
+    modulate = AsyncMock(side_effect=AssertionError('a terminal episode has no escape dial'))
+    try:
+        with pytest.raises(live_chain.LiveChainExhausted):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=soniox,
+                callbacks={st.STTService.modulate: modulate},
+                failed=set(),
+                models=['soniox', 'modulate-velma-2'],
+            )
+    finally:
+        recovery_state.current_recovery.reset(token)
     soniox.assert_not_called()
     modulate.assert_not_called()
+    assert not controller.attempted_targets
 
 
 @pytest.mark.asyncio
