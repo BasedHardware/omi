@@ -620,13 +620,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       guard NotificationPermissionPolicy.isGranted(authorizationStatus) else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
 
-        // The drop happens *here*, not in `deliverNotification` below, which
-        // this guard never reaches. The other real drop site is
-        // `contextDirectorPresentationPreflight`, whose callers abort on a
-        // non-`.queued` preflight; both go through `reportUnauthorizedDrop`.
-        // The insight-delivery ledger underneath covers only the subset
-        // not already take the message, which is why authorization needs its
-        // own unconditional event.
+        // Report at the authorization boundary, before delivery is skipped.
         Self.reportUnauthorizedDrop(
           status: authorizationStatus,
           surface: ProactiveNotificationKind.from(assistantId: assistantId)
@@ -659,12 +653,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Single reporter for "this notification was dropped because the app is not
   /// authorized to show it".
   ///
-  /// Exists so the two real drop sites — `sendNotification`'s authorization
-  /// guard and `contextDirectorPresentationPreflight`'s — cannot drift, and so
-  /// `NotificationServiceSkipEventPlacementTests` can pin *where* it is called
-  /// from. Placement is the whole contract: an earlier version of this event
-  /// sat in `deliverNotification`, which an unauthorized notification never
-  /// reaches, so it compiled, passed its tests, and emitted nothing.
+  /// Report here because denied notifications never reach `deliverNotification`.
   @MainActor
   static func reportUnauthorizedDrop(status: UNAuthorizationStatus, surface: ProactiveNotificationKind) {
     AnalyticsManager.shared.notificationDeliverySkipped(

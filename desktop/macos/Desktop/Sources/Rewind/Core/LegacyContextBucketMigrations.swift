@@ -207,25 +207,6 @@ enum ContextBucketSchema {
         ownerHash: legacyOwnerHash(sourceOwnerID)))
   }
 
-  @discardableResult
-  static func deleteExpiredDeliveries(in db: Database, now: Date) throws -> Int {
-    try db.execute(
-      sql: "DELETE FROM proactive_deliveries WHERE expiresAt <= ?",
-      arguments: [now])
-    return db.changesCount
-  }
-
-  /// Terminal `proactive_candidates` rows (consumed, expired, or simply past
-  /// their `expiresAt`) never get read again — without this they accumulate
-  /// indefinitely whenever the reconciler feature is on.
-  @discardableResult
-  static func deleteExpiredProactiveCandidates(in db: Database, now: Date) throws -> Int {
-    try db.execute(
-      sql: "DELETE FROM proactive_candidates WHERE state <> 'armed' OR expiresAt <= ?",
-      arguments: [now])
-    return db.changesCount
-  }
-
   /// Test/migration fixture helper retained for callers that need to seed the
   /// pre-context-buckets defaults entry. Production reads/removes use the
   /// typed `ScopedDefaultsKey` directly below so the storage namespace cannot

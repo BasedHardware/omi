@@ -104,30 +104,7 @@ class AssistantCoordinator {
     return true
   }
 
-  /// Content-refresh transition for a long dwell whose on-screen content
-  /// changed (see `ContextDwellRefreshPolicy`): closes and reopens the ACTIVE
-  /// context through the ordinary visit machinery, so the departing frame —
-  /// which now contains what the user typed — gets extraction, departure
-  /// evaluation, and the fresh visit gets its normal entry evaluation. Every
-  /// quota, cooldown, dedup, and budget gate applies unchanged.
-  /// Returns the arriving visit's fence so the caller can capture a
-  /// post-entry frame BEFORE engaging the director: the entry evaluation only
-  /// grounds on frames captured at or after the visit began, and the
-  /// preview-skip path may not produce another full frame for a static screen.
-
-  /// Releases a completed transition and schedules the latest context observed
-  /// during its persistence await. The follow-up runs on the main actor, so it
-  /// cannot race the coordinator's tracked state or start a second write in
-  /// parallel with the completed request.
-  /// Every registered assistant hears every context switch, in buckets mode and out of it.
-  ///
-  /// The context-buckets rollout forwarded switches only to the task assistant, which
-  /// silently starved the suggestion and memory assistants: `SuggestionAssistant.analyze`
-  /// returns nil before any logging when no context switch ever armed its dwell anchor,
-  /// so focus nudges stopped fleet-wide for everyone in the flag cohort with no error
-  /// anywhere (Aug 13–14 2026). Buckets mode changes who WRITES bucket exits, never who
-  /// HEARS switches — and hearing a switch must not depend on bucket-visit persistence,
-  /// so this fires outside the transition do/catch.
+  /// Every registered assistant receives context changes independently of storage.
   func fireContextSwitchOnAllAssistants(
     departingFrame: CapturedFrame?,
     newApp: String,
@@ -150,45 +127,10 @@ class AssistantCoordinator {
 
   // MARK: - Frame Tracking & Distribution
 
-  /// The app of the context currently tracked for switches; the dwell task
-  /// uses it to drop stale captures after an app switch.
-  var currentTrackedApp: String? { lastTrackedApp }
-
-  /// Whether the tracker still points at this exact context. The dwell task
-  /// guards every capture with it: an app-only check let a same-app tab/title
-  /// switch during the async capture overwrite the tracked frame with the
-  /// departed window's pixels, contaminating the active bucket.
-  func isTracking(app: String, windowTitle: String?) -> Bool {
-    lastTrackedApp == app
-      && ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle)
-        == ContextDetection.normalizeWindowTitle(windowTitle)
-  }
-
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame
   }
-
-  /// The latest tracked frame as a director grounding candidate. Only frames
-  /// captured at or after the visit began qualify here; the departed-visit
-  /// bound is applied by the caller with `frameMayGroundDirector` AFTER
-  /// re-reading visit freshness, because a bound computed from a pre-lookup
-  /// freshness read races the context switch — the switch can land between
-  /// that read and this lookup, leaving the lookup unbounded exactly when it
-  /// must not be.
-
-  /// Whether a sampled frame may ground a director evaluation for a visit
-  /// whose freshness was read AFTER the frame was sampled.
-  ///
-  /// Active visit (`endedAt == nil`): any frame captured at or after
-  /// `startedAt`, today's behavior. Departed visit: the frame must also have
-  /// entered the tracker no later than the departure (`storedAt <= endedAt`).
-  /// Capture time alone cannot exclude the next context's screen on the switch
-  /// tick — that frame is *captured* before the transition writes `endedAt` —
-  /// but it is only *stored* after `checkContextSwitch` (which persists the
-  /// departure) returns, so the stored-at bound separates the two exactly. The
-  /// capture-time epsilon additionally keeps the frame near the visit's own
-  /// window under clock skew.
 
   /// Distribute a captured frame to all enabled assistants
   /// - Parameter frame: The captured frame to analyze

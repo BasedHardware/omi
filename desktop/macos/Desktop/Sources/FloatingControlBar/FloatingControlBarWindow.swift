@@ -3838,25 +3838,6 @@ class FloatingControlBarManager {
     return .presented
   }
 
-  /// Read-only presentation check used before context-director candidate
-  /// graduation. It prevents expensive/durable work when the bar cannot accept
-  /// a notification, while `showNotification` remains the final race-safe gate.
-  func contextNotificationPreflight(
-    ownerID: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) -> OwnerBoundNotificationPresentationResult {
-    guard !ownerID.isEmpty,
-      authorizationSnapshot.ownerID == ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-    else { return .rejectedOwnerChange }
-    guard window != nil else { return .windowUnavailable }
-    return .queued
-  }
-
-  /// Let a card own the keyboard. The bar is ordinarily a non-activating
-  /// panel, so a text field inside a notification would silently swallow every
-  /// keystroke; the Share card's address field needs the panel to be key while
-  /// the owner types, and only while they type.
   func focusBarWindowForTextEntry() {
     guard let window else { return }
     NSApp.activate(ignoringOtherApps: true)
@@ -3970,7 +3951,7 @@ class FloatingControlBarManager {
       }
       if presentNotification(nextNotification, in: window) { return }
       // The final presentation seam can reject a card after it has left the
-      // queue (for example, when its JIT account generation became stale).
+      // queue (for example, when its owner session became stale).
       // Keep draining so one rejected card cannot strand newer work.
     }
   }
@@ -4710,7 +4691,7 @@ class FloatingControlBarManager {
         }
         if presentNotification(nextNotification, in: window) { return }
         // The final presentation seam can reject a card after it has left the
-        // queue (for example, when its JIT account generation became stale).
+        // queue (for example, when its owner session became stale).
         // Keep draining so one rejected card cannot strand newer work.
       }
     }

@@ -63,9 +63,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var monitoringSessionTracker = MonitoringSessionTracker()
   private let monitoringSessionStore: MonitoringSessionPersisting = MonitoringSessionDefaultsStore.shared
   private var monitoringHeartbeatTimer: Timer?
-  // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
-  // the last real context switch or fired refresh, reset on real switches.
-
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
@@ -957,10 +954,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
-      // Content-refresh dwell tracking (see ContextDwellRefreshPolicy). This
-      // sits BEFORE the capture decision on purpose: typed text moves almost
-      // no preview pixels, so the preview-skip path starves full captures
-      // during exactly the dwells this exists to re-evaluate.
       if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
         if delaySeconds > 0 {
