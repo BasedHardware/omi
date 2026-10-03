@@ -13,6 +13,12 @@ struct bt_uuid_128 {
 };
 
 #define BT_UUID_128_ENCODE(...) 0
+/* Brace-in-macro formatting differs between clang-format major versions
+ * (CI runs 18, local toolchains commonly 19+); keep the stub macro in
+ * its compact hand-written form.
+ */
+/* clang-format off */
 #define BT_UUID_INIT_128(...) {{.type = 0}, {0}}
+/* clang-format on */
 
 #endif

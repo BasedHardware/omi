@@ -12,9 +12,15 @@ typedef struct {
     int64_t ticks;
 } k_timeout_t;
 
+/* Cast-compound-literal spacing differs between clang-format major versions
+ * (CI runs 18, local toolchains commonly 19+); keep the stub macros in their
+ * compact hand-written form.
+ */
+/* clang-format off */
 #define K_NO_WAIT ((k_timeout_t) {0})
 #define K_FOREVER ((k_timeout_t) {-1})
 #define K_MSEC(ms) ((k_timeout_t) {(ms)})
+/* clang-format on */
 #define K_PRIO_PREEMPT(p) (p)
 
 extern int64_t z_stub_now_ms;

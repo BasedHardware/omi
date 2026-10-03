@@ -10,7 +10,13 @@ struct gpio_dt_spec {
     uint32_t dt_flags;
 };
 
+/* Brace-in-macro formatting differs between clang-format major versions
+ * (CI runs 18, local toolchains commonly 19+); keep the stub macro in
+ * its compact hand-written form.
+ */
+/* clang-format off */
 #define GPIO_DT_SPEC_GET_OR(node_id, prop, default_value) {.port = &z_stub_dev_gpio1, .pin = 11, .dt_flags = 0}
+/* clang-format on */
 #define GPIO_DISCONNECTED 0x1
 #define GPIO_OUTPUT 0x2
 

@@ -245,7 +245,11 @@ static void z_reset_all(void)
     z_clear_calls = 0;
     z_on_sd_read = NULL;
     z_read_calls = 0;
-    z_sd = (sd_ring_info_t) {.read_seq = 0, .write_seq = 40, .capacity_packets = 288, .ring_id = 0x1122};
+    z_sd.read_seq = 0;
+    z_sd.dropped_packets = 0;
+    z_sd.write_seq = 40;
+    z_sd.capacity_packets = 288;
+    z_sd.ring_id = 0x1122;
     z_sd_ready = true;
     custody_epoch = custody_granted_caps = custody_live_token = 0;
     worker_seen_epoch = 0;

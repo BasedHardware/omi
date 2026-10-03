@@ -25,11 +25,17 @@ struct bt_gatt_service {
 #define BT_GATT_PERM_WRITE 0x02
 #define BT_GATT_CCC_NOTIFY 0x0001
 
+/* Brace-in-macro formatting differs between clang-format major versions
+ * (CI runs 18, local toolchains commonly 19+); keep the stub macros in
+ * their compact hand-written form.
+ */
+/* clang-format off */
 #define BT_GATT_PRIMARY_SERVICE(uuid) {.tag = 1}
 #define BT_GATT_CHARACTERISTIC(uuid, props, perm, read_fn, write_fn, user_data)                                        \
     {.tag = 2, .ref1 = (const void *) (read_fn), .ref2 = (const void *) (write_fn)}
 #define BT_GATT_CCC(cfg_changed, perm) {.tag = 3, .ref1 = (const void *) (cfg_changed)}
 #define BT_GATT_SERVICE(attr_array) {.attrs = (attr_array)}
+/* clang-format on */
 
 struct bt_gatt_notify_params {
     const struct bt_gatt_attr *attr;
