@@ -13,6 +13,7 @@ import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
+import { LocalModelsCard } from './LocalModelsCard'
 import { CLAUDE_SIGN_IN_FAILED } from '../../../lib/claudeSignIn'
 import type {
   AgentDetectionMap,
@@ -497,6 +498,8 @@ export function AgentsTab(): React.JSX.Element {
       {(Object.keys(EXTERNAL_AGENT_GUIDES) as ExternalAgentId[]).map((id) =>
         renderExternalAgent(id)
       )}
+
+      <LocalModelsCard />
     </div>
   )
 }

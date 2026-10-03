@@ -37,6 +37,7 @@ import { registerChatFilesHandlers } from './ipc/chatFiles'
 import { registerKgHandlers } from './ipc/kg'
 import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
+import { registerModelManagerHandlers } from './ipc/models'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
 import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
@@ -894,6 +895,7 @@ app.whenReady().then(async () => {
     app.focus({ steal: true })
   })
   registerIntegrationsHandlers()
+  registerModelManagerHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers({

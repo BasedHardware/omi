@@ -1443,6 +1443,13 @@ export type OmiBridgeApi = {
   agentControlTools: () => Promise<
     Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
   >
+  // --- Local model download manager ---
+  modelsList: () => Promise<ModelEntry[]>
+  modelsStatus: () => Promise<ModelStatus[]>
+  modelsDownload: (id: string) => Promise<{ ok: boolean; error?: string }>
+  modelsCancel: (id: string) => Promise<boolean>
+  modelsDelete: (id: string) => Promise<{ ok: boolean; error?: string }>
+  onModelsProgress: (cb: (p: ModelDownloadProgress) => void) => () => void
 }
 
 // --- Coding agents ---
@@ -2749,4 +2756,38 @@ export interface VoiceTurnOutboxEntry {
   attempts: number
   lastError: string | null
   updatedAtMs: number
+}
+
+// --- Local model download manager (desktop) ---
+// Curated local models + a download engine (resume + sha256 verify + reuse of
+// any file already in the user's Hugging Face cache), so a user picks a model
+// in-app instead of hand-wiring llama-server.
+
+export type ModelEntry = {
+  id: string // stable slug
+  label: string // human label
+  repo: string // Hugging Face repo id
+  file: string // GGUF filename within the repo
+  revision: string // 'main' or a commit sha (pins cache dedupe)
+  sizeBytes: number // expected size (progress + disk preflight)
+  sha256?: string // expected LFS sha256 -> verify + exact cache hit when known
+  minRamGb: number // advisory gate for the UI
+  vision: boolean
+}
+
+export type ModelInstallState = 'absent' | 'partial' | 'installed'
+
+export type ModelStatus = {
+  entry: ModelEntry
+  state: ModelInstallState
+  bytesOnDisk: number
+  fromCache: boolean
+}
+
+export type ModelDownloadProgress = {
+  id: string
+  received: number
+  total: number
+  phase: 'cache' | 'download' | 'verify' | 'done' | 'error' | 'cancelled'
+  error?: string
 }
