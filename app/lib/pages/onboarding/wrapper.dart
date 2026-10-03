@@ -439,10 +439,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,
                 progress: kProgressSteps.contains(index)
-                    ? OnboardingProgressDots(
-                        current: kProgressSteps.indexOf(index),
-                        total: kProgressSteps.length,
-                      )
+                    ? OnboardingProgressDots(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
                 child: pages[index],
               ),

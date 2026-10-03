@@ -12327,6 +12327,17 @@ class AppLocalizationsUr extends AppLocalizations {
   String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
 
   @override
+  String get previousDay => 'پچھلا دن';
+
+  @override
+  String get nextDay => 'اگلا دن';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date کو کوئی کام نہیں';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';
 
   @override

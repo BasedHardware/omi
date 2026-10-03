@@ -12312,6 +12312,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
 
   @override
+  String get previousDay => 'روز قبل';
+
+  @override
+  String get nextDay => 'روز بعد';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'هیچ وظیفه‌ای در $date نیست';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';
 
   @override

@@ -550,11 +550,7 @@ abstract class DeviceConnection {
     required int? expectedRingId,
   }) async {
     if (await isConnected()) {
-      return await performAdvanceRingCustody(
-        newReadSeq,
-        expectedEpoch: expectedEpoch,
-        expectedRingId: expectedRingId,
-      );
+      return await performAdvanceRingCustody(newReadSeq, expectedEpoch: expectedEpoch, expectedRingId: expectedRingId);
     }
     return null;
   }

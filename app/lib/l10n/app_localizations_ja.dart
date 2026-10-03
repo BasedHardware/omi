@@ -12125,6 +12125,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get peopleStatsIncomplete => '集計が不完全な場合があります。';
 
   @override
+  String get previousDay => '前の日';
+
+  @override
+  String get nextDay => '次の日';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$dateのタスクはありません';
+  }
+
+  @override
   String get reprocessingConversationProgress => '会話を再処理しています…';
 
   @override

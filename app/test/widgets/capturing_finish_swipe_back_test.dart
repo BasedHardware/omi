@@ -120,7 +120,8 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider(
-            create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))..people = []),
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))..people = [],
+        ),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
@@ -141,8 +142,9 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
     ),
   );
   unawaited(
-    Navigator.of(tester.element(find.text('home')))
-        .push(omiPageRoute(builder: (_) => const ConversationCapturingPage())),
+    Navigator.of(
+      tester.element(find.text('home')),
+    ).push(omiPageRoute(builder: (_) => const ConversationCapturingPage())),
   );
   await tester.pumpAndSettle();
   expect(find.byType(ConversationCapturingPage), findsOneWidget);

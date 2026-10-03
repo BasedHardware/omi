@@ -22035,6 +22035,24 @@ abstract class AppLocalizations {
   /// **'Counts may be incomplete.'**
   String get peopleStatsIncomplete;
 
+  /// Day page navigation: go to the day before
+  ///
+  /// In en, this message translates to:
+  /// **'Previous day'**
+  String get previousDay;
+
+  /// Day page navigation: go to the day after
+  ///
+  /// In en, this message translates to:
+  /// **'Next day'**
+  String get nextDay;
+
+  /// Empty state on the single-day tasks page
+  ///
+  /// In en, this message translates to:
+  /// **'No tasks on {date}'**
+  String noTasksOnDate(Object date);
+
   /// Shown with a progress bar while the open conversation is reprocessed.
   ///
   /// In en, this message translates to:

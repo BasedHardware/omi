@@ -13,10 +13,25 @@ extension DesktopAutomationActionRegistry {
         guard AppBuild.isNonProduction else {
           return ["error": "proactive_assistant_proxy_routes is disabled on production bundles"]
         }
+        guard let geminiURL = URL(string: GeminiClient.proxyBaseURL) else {
+          return ["error": "invalid gemini proxy base url"]
+        }
+        var geminiRequest = URLRequest(url: geminiURL)
+        geminiRequest.applyGeminiProxyHeaders(
+          lane: .taskExtraction,
+          workload: .extraction,
+          authorization: ""
+        )
+        // These echo the fixed sample this probe sends through the shared
+        // header helper — they verify the helper contract, not that each real
+        // request path (focus, memory, embedding, …) carries its own lane.
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
           "proactivity_base_url": JITRolloutClient.backendBaseURL,
+          "gemini_helper_sample_lane": geminiRequest.value(forHTTPHeaderField: "X-Omi-Lane") ?? "",
+          "gemini_helper_sample_workload": geminiRequest.value(forHTTPHeaderField: "X-Omi-Workload") ?? "",
+          "gemini_helper_sample_client_platform": geminiRequest.value(forHTTPHeaderField: "X-App-Platform") ?? "",
         ]
       }
 

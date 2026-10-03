@@ -23,9 +23,11 @@ void main() {
     testWidgets('resolves true when Undo is tapped, after onUndo ran', (tester) async {
       var restored = false;
       bool? undone;
-      await tester.pumpWidget(feedbackHarness((context) async {
-        undone = await OmiFeedback.undo(context, 'Task deleted', onUndo: () => restored = true);
-      }));
+      await tester.pumpWidget(
+        feedbackHarness((context) async {
+          undone = await OmiFeedback.undo(context, 'Task deleted', onUndo: () => restored = true);
+        }),
+      );
       await tapTrigger(tester);
 
       expect(shownSnackBar(tester).duration, OmiFeedbackTiming.undo);
@@ -38,9 +40,11 @@ void main() {
 
     testWidgets('resolves false when it times out', (tester) async {
       bool? undone;
-      await tester.pumpWidget(feedbackHarness((context) async {
-        undone = await OmiFeedback.undo(context, 'Memory deleted', onUndo: () {});
-      }));
+      await tester.pumpWidget(
+        feedbackHarness((context) async {
+          undone = await OmiFeedback.undo(context, 'Memory deleted', onUndo: () {});
+        }),
+      );
       await tapTrigger(tester);
       expect(undone, isNull);
       await tester.pump(OmiFeedbackTiming.undo + const Duration(seconds: 1));
@@ -51,10 +55,12 @@ void main() {
     testWidgets('resolves false when the next toast replaces it', (tester) async {
       bool? undone;
       late BuildContext captured;
-      await tester.pumpWidget(feedbackHarness((context) async {
-        captured = context;
-        undone = await OmiFeedback.undo(context, 'Conversation deleted', onUndo: () {});
-      }));
+      await tester.pumpWidget(
+        feedbackHarness((context) async {
+          captured = context;
+          undone = await OmiFeedback.undo(context, 'Conversation deleted', onUndo: () {});
+        }),
+      );
       await tapTrigger(tester);
       OmiFeedback.confirm(captured, 'Saved');
       await tester.pumpAndSettle();
@@ -122,14 +128,16 @@ void main() {
     await tapTrigger(tester);
 
     late BuildContext inside;
-    Navigator.of(captured).push(MaterialPageRoute<void>(
-      builder: (_) => Scaffold(
-        body: OmiFeedbackClearance(
-          bottom: 88,
-          child: Builder(builder: (context) => (inside = context, const SizedBox()).$2),
+    Navigator.of(captured).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          body: OmiFeedbackClearance(
+            bottom: 88,
+            child: Builder(builder: (context) => (inside = context, const SizedBox()).$2),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     OmiFeedback.confirm(inside, 'Label removed');
     await tester.pumpAndSettle();
@@ -157,16 +165,20 @@ void main() {
 
     setUp(() {
       written = [];
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-        if (call.method == 'Clipboard.setData') written.add((call.arguments as Map)['text'] as String?);
-        return null;
-      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') written.add((call.arguments as Map)['text'] as String?);
+          return null;
+        },
+      );
     });
 
     tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
     });
 
     testWidgets('empty text: nothing copied, nothing shown', (tester) async {
@@ -180,9 +192,7 @@ void main() {
 
     testWidgets('copies and confirms with the subject', (tester) async {
       OmiClipboard.debugSystemConfirmsCopy = false;
-      await tester.pumpWidget(
-        feedbackHarness((context) => OmiClipboard.copy(context, 'hello', what: 'Transcript')),
-      );
+      await tester.pumpWidget(feedbackHarness((context) => OmiClipboard.copy(context, 'hello', what: 'Transcript')));
       await tapTrigger(tester);
       expect(written, ['hello']);
       expect(find.text('Transcript copied'), findsOneWidget);

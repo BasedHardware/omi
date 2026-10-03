@@ -24,11 +24,7 @@ class _NoConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
-BleDisconnectEvent _event(
-  int timestamp, {
-  String eventType = 'disconnect',
-  int timeToReconnectMs = 0,
-}) {
+BleDisconnectEvent _event(int timestamp, {String eventType = 'disconnect', int timeToReconnectMs = 0}) {
   return BleDisconnectEvent(
     timestamp: timestamp,
     reason: eventType == 'fail_to_connect' ? 'connection_timeout' : 'clean_disconnect',
@@ -101,8 +97,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  BleDeviceDiagnostics diagnostics(List<BleDisconnectEvent> history,
-      {int reconnectionCount = 10048, int failToConnectCount = 12, int? connectedAt}) {
+  BleDeviceDiagnostics diagnostics(
+    List<BleDisconnectEvent> history, {
+    int reconnectionCount = 10048,
+    int failToConnectCount = 12,
+    int? connectedAt,
+  }) {
     return BleDeviceDiagnostics(
       disconnectHistory: history,
       reconnectionCount: reconnectionCount,
@@ -218,10 +218,14 @@ void main() {
     const week = 7 * 24 * 3600 * 1000;
     mockBleHostApi(
       'getDeviceDiagnostics',
-      diagnostics([
-        for (var i = 0; i < 357; i++)
-          _event(now - week + (i + 1) * week ~/ 358, timeToReconnectMs: i == 100 ? 40000 : 1000 + (i % 3) * 1000),
-      ], reconnectionCount: 368, failToConnectCount: 0),
+      diagnostics(
+        [
+          for (var i = 0; i < 357; i++)
+            _event(now - week + (i + 1) * week ~/ 358, timeToReconnectMs: i == 100 ? 40000 : 1000 + (i % 3) * 1000),
+        ],
+        reconnectionCount: 368,
+        failToConnectCount: 0,
+      ),
     );
     mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({'counters_since': now - 30 * 24 * 3600 * 1000}));
 
@@ -274,30 +278,40 @@ void main() {
     final now = DateTime(2026, 10, 3, 12).millisecondsSinceEpoch;
 
     test('long gaps never turn the verdict; only a failed connect in 24 h does', () {
-      final gaps = summarizeDiagnostics([
-        _event(now - 2 * hour, timeToReconnectMs: 45 * 60 * 1000),
-        _event(now - 30 * hour, eventType: 'fail_to_connect'),
-      ], nowMs: now, sinceMs: now - 48 * hour);
+      final gaps = summarizeDiagnostics(
+        [
+          _event(now - 2 * hour, timeToReconnectMs: 45 * 60 * 1000),
+          _event(now - 30 * hour, eventType: 'fail_to_connect'),
+        ],
+        nowMs: now,
+        sinceMs: now - 48 * hour,
+      );
       expect(gaps.hasTrouble, isFalse);
       expect(gaps.longestGapMs, 45 * 60 * 1000);
       expect(gaps.failed, 1);
       expect(gaps.failedLast24h, 0);
 
-      final recent = summarizeDiagnostics([
-        _event(now - 23 * hour, eventType: 'fail_to_connect'),
-      ], nowMs: now, sinceMs: now - 48 * hour);
+      final recent = summarizeDiagnostics(
+        [_event(now - 23 * hour, eventType: 'fail_to_connect')],
+        nowMs: now,
+        sinceMs: now - 48 * hour,
+      );
       expect(recent.hasTrouble, isTrue);
       expect(recent.failedLast24h, 1);
     });
 
     test('median, longest gap and hourly rate over the window', () {
-      final summary = summarizeDiagnostics([
-        _event(now - 200 * hour, timeToReconnectMs: 99000), // before the anchor
-        _event(now - 3 * hour, timeToReconnectMs: 1000),
-        _event(now - 2 * hour, timeToReconnectMs: 3000),
-        _event(now - 1 * hour, timeToReconnectMs: 2000),
-        _event(now - 1 * hour, timeToReconnectMs: 0), // not reconnected
-      ], nowMs: now, sinceMs: now - 2 * hour);
+      final summary = summarizeDiagnostics(
+        [
+          _event(now - 200 * hour, timeToReconnectMs: 99000), // before the anchor
+          _event(now - 3 * hour, timeToReconnectMs: 1000),
+          _event(now - 2 * hour, timeToReconnectMs: 3000),
+          _event(now - 1 * hour, timeToReconnectMs: 2000),
+          _event(now - 1 * hour, timeToReconnectMs: 0), // not reconnected
+        ],
+        nowMs: now,
+        sinceMs: now - 2 * hour,
+      );
       expect(summary.drops, 2);
       expect(summary.medianReconnectMs, 2500);
       expect(summary.longestGapMs, 3000);

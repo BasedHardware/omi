@@ -57,8 +57,12 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
               alignment: const Alignment(0, 0.4),
               child: ExcludeSemantics(
                 // The asset is white; tint it so it shows on the light page too.
-                child: Image.asset(Assets.images.logoTransparent.path,
-                    width: 120, height: 120, color: OmiColors.textPrimary),
+                child: Image.asset(
+                  Assets.images.logoTransparent.path,
+                  width: 120,
+                  height: 120,
+                  color: OmiColors.textPrimary,
+                ),
               ),
             ),
           ),

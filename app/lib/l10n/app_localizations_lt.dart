@@ -12336,6 +12336,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String get peopleStatsIncomplete => 'Skaičiai gali būti neišsamūs.';
 
   @override
+  String get previousDay => 'Ankstesnė diena';
+
+  @override
+  String get nextDay => 'Kita diena';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date nėra užduočių';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Pokalbis apdorojamas iš naujo…';
 
   @override

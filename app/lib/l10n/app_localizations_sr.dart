@@ -12326,6 +12326,17 @@ class AppLocalizationsSr extends AppLocalizations {
   String get peopleStatsIncomplete => 'Бројеви можда нису потпуни.';
 
   @override
+  String get previousDay => 'Претходни дан';
+
+  @override
+  String get nextDay => 'Следећи дан';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нема задатака за $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Поновна обрада разговора…';
 
   @override

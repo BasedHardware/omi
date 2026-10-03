@@ -20,6 +20,8 @@ from uuid import uuid4
 
 import yaml
 
+from config.desktop_gemini_attribution_generated import GEMINI_CLIENT_PLATFORMS, GEMINI_LANES
+
 RATE_CARD_FILE = Path(__file__).resolve().parents[1] / 'config' / 'cost_rate_cards.yaml'
 MICRO_USD_PER_USD = 1_000_000
 TOKENS_PER_MILLION = 1_000_000
@@ -156,6 +158,8 @@ class AccountingContext:
     api_surface: str
     payer: str
     app_platform: str | None = None
+    product_lane: str | None = None
+    client_platform: str | None = None
     # Opaque qualification-run correlation. Normal chat leaves this absent.
     jit_run_id: str | None = None
     jit_contract_version: str | None = None
@@ -171,6 +175,8 @@ class AccountingContext:
         api_surface: str,
         payer: str,
         app_platform: str | None = None,
+        product_lane: str | None = None,
+        client_platform: str | None = None,
         jit_run_id: str | None = None,
         jit_contract_version: str | None = None,
     ) -> 'AccountingContext':
@@ -183,6 +189,8 @@ class AccountingContext:
             api_surface=api_surface,
             payer=payer,
             app_platform=app_platform,
+            product_lane=product_lane,
+            client_platform=client_platform,
             jit_run_id=jit_run_id,
             jit_contract_version=jit_contract_version,
         )
@@ -318,6 +326,8 @@ class AccountingEvent:
     cost_basis: str
     provider_response_id: str | None
     app_platform: str | None = None
+    product_lane: str | None = None
+    client_platform: str | None = None
     jit_run_id: str | None = None
     jit_contract_version: str | None = None
 
@@ -334,6 +344,8 @@ class AccountingEvent:
             'api_surface': self.api_surface,
             'payer': self.payer,
             'app_platform': self.app_platform,
+            'product_lane': self.product_lane,
+            'client_platform': self.client_platform,
             'jit_run_id': self.jit_run_id,
             'jit_contract_version': self.jit_contract_version,
             'provider': self.provider,
@@ -368,6 +380,14 @@ class AccountingEvent:
             'cost_basis': self.cost_basis,
             'provider_response_id': self.provider_response_id,
         }
+
+
+def _bounded_desktop_tag(value: str | None, allowed: frozenset[str]) -> str | None:
+    """Absent for other callers; desktop tags share the generated wire vocabulary."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    return normalized if normalized in allowed else 'unknown'
 
 
 def openai_usage_from_response(
@@ -594,6 +614,8 @@ def build_accounting_event(
         api_surface=context.api_surface,
         payer=context.payer,
         app_platform=context.app_platform,
+        product_lane=_bounded_desktop_tag(context.product_lane, GEMINI_LANES),
+        client_platform=_bounded_desktop_tag(context.client_platform, GEMINI_CLIENT_PLATFORMS),
         provider=attempt.provider,
         configured_model=attempt.configured_model,
         actual_model_version=attempt.actual_model_version,

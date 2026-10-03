@@ -12351,6 +12351,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
 
   @override
+  String get previousDay => 'ಹಿಂದಿನ ದಿನ';
+
+  @override
+  String get nextDay => 'ಮುಂದಿನ ದಿನ';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date ರಂದು ಯಾವುದೇ ಕಾರ್ಯಗಳಿಲ್ಲ';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override

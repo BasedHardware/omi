@@ -40,7 +40,7 @@ enum AuthSessionExpirationReason {
   missingToken,
   terminalTokenFailure,
   backendRejectedRefreshedToken,
-  accountDeleted
+  accountDeleted,
 }
 
 final class AuthSessionExpiredEvent {

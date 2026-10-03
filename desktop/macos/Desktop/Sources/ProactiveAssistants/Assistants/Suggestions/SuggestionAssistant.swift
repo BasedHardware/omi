@@ -90,6 +90,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       apiKey: apiKey,
       model: model,
       fallbackModel: "gemini-2.5-flash",
+      lane: .suggestions,
       workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)

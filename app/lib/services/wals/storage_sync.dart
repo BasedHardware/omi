@@ -733,7 +733,12 @@ class StorageSyncImpl implements StorageSync {
   }
 
   Future<void> _registerWithLocalSync(
-      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
+    Wal wal,
+    File file,
+    int timerStart,
+    int frameCount,
+    int admittedGeneration,
+  ) async {
     final localSync = _localSync;
     if (localSync == null) {
       throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
