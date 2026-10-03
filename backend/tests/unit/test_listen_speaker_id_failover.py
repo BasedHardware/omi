@@ -451,17 +451,21 @@ class FailoverStack:
         self.websocket = FakeListenWebSocket(self.clock)
         self.request.websocket = self.websocket
         self.state.active = True
-        self.receive_task = asyncio.create_task(self.receiver.receive_data())
+        self.receive_task = None
 
     def restore(self):
         receiver_module.time = self._real_time
 
     async def finish(self):
         """Teardown: the one real disconnect, then the mounted loop's exit."""
+        if self.receive_task is None:
+            return
         self.websocket.feed_disconnect()
         await asyncio.gather(self.receive_task, return_exceptions=True)
 
     async def run_receive(self, frames):
+        if self.receive_task is None:
+            self.receive_task = asyncio.create_task(self.receiver.receive_data())
         ack = asyncio.Event()
         self.websocket.feed(frames)
         self.websocket.queue.put_nowait({'_ack': ack})
