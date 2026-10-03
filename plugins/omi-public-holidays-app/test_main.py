@@ -192,6 +192,39 @@ class PublicHolidayRequestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             main.HolidayRequest(country_code=7, year=2026)
 
+    def test_null_limit_takes_default(self):
+        self.assertEqual(main.HolidayRequest(country_code="us", year=2026, limit=None).limit, main.MAX_ITEMS)
+        self.assertEqual(main.NextHolidayRequest(country_code="de", limit=None).limit, 8)
+        self.assertEqual(main.LongWeekendRequest(country_code="jp", year=2026, limit=None).limit, main.MAX_ITEMS)
+
+    def test_string_numeric_fields_are_coerced(self):
+        req = main.HolidayRequest(country_code="us", year="2026", limit="10")
+        self.assertEqual(req.year, 2026)
+        self.assertEqual(req.limit, 10)
+
+        next_req = main.NextHolidayRequest(country_code="de", limit="5")
+        self.assertEqual(next_req.limit, 5)
+
+        lw_req = main.LongWeekendRequest(country_code="jp", year="2027", limit="15")
+        self.assertEqual(lw_req.year, 2027)
+        self.assertEqual(lw_req.limit, 15)
+
+    def test_null_year_defaults_to_current_year(self):
+        import datetime
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        req = main.HolidayRequest(country_code="us", year=None)
+        self.assertEqual(req.year, current_year)
+
+    def test_invalid_limit_or_year_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="us", year=2026, limit=0)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="us", year=2026, limit=999)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="us", year=1950)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="us", year=2026, limit="invalid")
+
 
 class PublicHolidayFormattingTests(unittest.TestCase):
     def test_format_holiday_handles_unexpected_types(self):
