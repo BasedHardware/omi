@@ -23,7 +23,7 @@ Future<bool> arePermissionsGranted() async {
 
 /// Interstitial shown when onboarding was completed (from backend) but permissions haven't been
 /// granted on this device (fresh install). Same rows as the first-run step
-/// ([OnboardingPermissionsPanel]); Continue goes home without prompting.
+/// ([OnboardingPermissionsPanel]); Continue asks for whatever is still missing, then goes home.
 class PermissionsInterstitialPage extends StatefulWidget {
   const PermissionsInterstitialPage({super.key, this.source});
 
@@ -82,7 +82,11 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                   key: const Key('permissions_interstitial_continue'),
                   label: context.l10n.continueButton,
                   expand: true,
-                  onPressed: () {
+                  onPressed: () async {
+                    await requestMissingOnboardingPermissions(
+                      resolveOnboardingPermissionsSource(context, widget.source),
+                    );
+                    if (!context.mounted) return;
                     PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                     _goHome(context);
                   },
