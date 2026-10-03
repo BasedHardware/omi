@@ -532,11 +532,14 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
     assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
-    assert _MODULE['_render_secrets'](desktop['secrets']) == (
+    expected_secrets = (
         f'GEMINI_API_KEY={gemini_secret}:latest\n'
         'METRICS_SECRET=METRICS_SECRET:latest\n'
         'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
     )
+    if env == 'prod':
+        expected_secrets += '\nREDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest'
+    assert _MODULE['_render_secrets'](desktop['secrets']) == expected_secrets
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
 

@@ -2749,6 +2749,12 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        REDIS_DB_PORT:
+          value: '13151'
+          category: service_discovery
+        REDIS_DB_HOST:
+          value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+          category: service_discovery
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -2769,6 +2775,9 @@ environments:
           version: latest
         POSTHOG_PROJECT_API_KEY:
           secret: POSTHOG_PROJECT_API_KEY
+          version: latest
+        REDIS_DB_PASSWORD:
+          secret: REDIS_DB_PASSWORD
           version: latest
     cloud_run:
       network:
