@@ -3,8 +3,8 @@ import Network
 
 // MARK: - Realtime Omni Service
 //
-// One WebSocket client that talks to either Gemini 3.1 Flash Live or
-// OpenAI gpt-realtime-2 and exposes two capabilities the floating bar needs:
+// One WebSocket client that talks to Gemini 3.1 Flash Live, OpenAI gpt-realtime-2,
+// or OpenAI GPT-Live-1 and exposes two capabilities the floating bar needs:
 //
 //   • STT  — stream mic PCM in, receive the user's transcript out.
 //   • TTS  — send assistant text in, receive spoken PCM audio out.
@@ -18,6 +18,10 @@ import Network
 //               response.create, response.output_audio(.delta), input transcription.
 //   Gemini Live: BidiGenerateContentSetup, realtimeInput{audio}, clientContent,
 //               serverContent.modelTurn.parts.inlineData / inputTranscription.
+//   GPT-Live:   session.start {model, instructions, audio.format/output.voice},
+//               session.input_audio.append, session.output_audio.delta,
+//               session.input/output_transcript.delta, session.closed. Full-duplex;
+//               no response.create/commit. STT-only here (TTS has no text frame).
 //
 // Key resolution (phase 1): BYOK / env. Production should proxy through the omi
 // backend so keys stay server-side and usage is metered — see `resolveKey`.
@@ -70,6 +74,24 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
   /// grow `pendingAudio` unboundedly.
   private static let maxPendingAudioBytes = 3_840_000
   private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
+  // GPT-Live PTT finalization drain: audio and transcript events travel
+  // asynchronously, so input-transcript deltas can still be in flight when PTT
+  // is released. Finalizing at the instant of release truncates the spoken
+  // question (the late delta is rejected after the coordinator advanced), so
+  // release starts a bounded quiet-period drain instead: deltas keep flowing to
+  // the delegate as interim, each one re-arms the quiet window, and a hard cap
+  // bounds the total wait. The task holds self weakly; stop() cancels it.
+  private var gptLiveFinalizePending = false
+  private var gptLiveFinalizeTask: Task<Void, Never>?
+  private var gptLiveDrainDeadline: Date?
+  /// Quiet period with no new input-transcript delta before the turn finalizes.
+  private static let gptLiveDrainQuietSeconds: TimeInterval = 0.6
+  /// Hard cap on the drain measured from PTT release.
+  private static let gptLiveDrainMaxSeconds: TimeInterval = 2.0
+  /// Exactly one final+finish per input turn: a drain completion followed by
+  /// `session.closed` (or a repeated finalize) must not double-finish the turn.
+  /// A new input delta after the turn finalized re-opens a new input turn.
+  private var gptLiveTurnFinalized = false
 
   // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
   // (URLSession drops after the HTTP/2 upgrade; Network.framework gets
@@ -79,8 +101,8 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
   private var usesNW: Bool { false }
   private var nw: NWConnection?
 
-  /// Mic PCM input rate per provider (Gemini 16k, OpenAI GA requires ≥24k).
-  var requiredInputSampleRate: Int { provider == .gptRealtime2 ? 24000 : 16000 }
+  /// Mic PCM input rate per provider (Gemini 16k, OpenAI GA and GPT-Live require ≥24k).
+  var requiredInputSampleRate: Int { provider == .geminiFlashLive ? 16000 : 24000 }
   /// Both providers emit 24kHz PCM16.
   let outputSampleRate = 24000
 
@@ -90,7 +112,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     provider: RealtimeOmniProvider, relayBaseURL: String, authHeader: String,
     sttOnly: Bool = true, delegate: RealtimeOmniServiceDelegate
   ) {
-    self.provider = provider == .auto ? .geminiFlashLive : provider
+    self.provider = provider == .auto ? .gptLive : provider
     self.model = self.provider.modelID
     self.relayBaseURL = relayBaseURL
     self.authHeader = authHeader
@@ -142,6 +164,12 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     pendingAudio.removeAll()
     pendingAudioBytes = 0
     pendingCommit = false
+    // A PTT release whose drain was still pending must not fire delegate
+    // callbacks after the service stopped.
+    gptLiveFinalizeTask?.cancel()
+    gptLiveFinalizeTask = nil
+    gptLiveFinalizePending = false
+    gptLiveDrainDeadline = nil
   }
 
   deinit {
@@ -236,12 +264,15 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2:
       send(json: ["type": "input_audio_buffer.append", "audio": b64])
+    case .gptLive:
+      send(json: ["type": "session.input_audio.append", "audio": b64])
     case .geminiFlashLive, .auto:
       send(json: ["realtimeInput": ["audio": ["data": b64, "mimeType": "audio/pcm;rate=16000"]]])
     }
   }
 
   /// Signal end of the user's PTT turn.
+  @MainActor
   func commitInputTurn() {
     // If the turn ended before the session opened (very short press), defer the
     // commit so it can't precede setup/activityStart — markReady() flushes it
@@ -253,9 +284,64 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2:
       send(json: ["type": "input_audio_buffer.commit"])
+    case .gptLive:
+      // GPT-Live is full-duplex with no client commit frame, and the warm session
+      // stays open, so it never emits `session.closed` on PTT release. Close the
+      // input turn locally via a bounded transcript drain (see
+      // `scheduleGptLiveFinalize`): finalizing at the instant of release would
+      // truncate the question when a delta is still in flight.
+      scheduleGptLiveFinalize()
     case .geminiFlashLive, .auto:
       send(json: ["realtimeInput": ["activityEnd": [:]]])
     }
+  }
+
+  /// Start or extend the bounded drain that ends a GPT-Live input turn.
+  ///
+  /// Each `session.input_transcript.delta` that arrives while a drain is pending
+  /// re-arms the quiet window (the delta still reaches the delegate as interim,
+  /// so the UI keeps updating), and the total wait is capped at
+  /// `gptLiveDrainMaxSeconds` from release so a chatty stream cannot stall the
+  /// coordinator past its own timeout/fallback.
+  @MainActor
+  private func scheduleGptLiveFinalize() {
+    gptLiveFinalizePending = true
+    if gptLiveDrainDeadline == nil {
+      gptLiveDrainDeadline = Date().addingTimeInterval(Self.gptLiveDrainMaxSeconds)
+    }
+    let delay = min(
+      Self.gptLiveDrainQuietSeconds,
+      max(0, gptLiveDrainDeadline?.timeIntervalSinceNow ?? 0))
+    gptLiveFinalizeTask?.cancel()
+    guard delay > 0 else {
+      finalizeGptLiveInputTurn()
+      return
+    }
+    gptLiveFinalizeTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      guard !Task.isCancelled else { return }
+      self?.finalizeGptLiveInputTurn()
+    }
+  }
+
+  /// Terminal for a GPT-Live PTT input turn on the warm omni session.
+  ///
+  /// The input transcript deltas already reached the delegate as interim; an empty
+  /// final makes the delegate resolve them (`PushToTalkManager` falls back to its
+  /// `lastInterimText`), and `omniDidFinishTurn` reaches the single terminal
+  /// coordinator outcome. Split out so the terminal contract is directly testable.
+  /// Idempotent per input turn: a drain completion followed by `session.closed`
+  /// must not double-finish; a later input delta re-opens a new turn.
+  @MainActor
+  func finalizeGptLiveInputTurn() {
+    gptLiveFinalizeTask?.cancel()
+    gptLiveFinalizeTask = nil
+    gptLiveFinalizePending = false
+    gptLiveDrainDeadline = nil
+    guard !gptLiveTurnFinalized else { return }
+    gptLiveTurnFinalized = true
+    delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
+    delegate?.omniDidFinishTurn()
   }
 
   // MARK: TTS — speak assistant text out
@@ -279,6 +365,16 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
           "turnComplete": true,
         ]
       ])
+    case .gptLive:
+      // GPT-Live's documented protocol exposes no "speak this text" frame; the
+      // model speaks on its own. Surface the capability gap instead of dropping it.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_omni",
+        from: "gpt_live_speak",
+        to: "app_tts",
+        reason: "capability_mismatch",
+        outcome: .degraded,
+        extra: ["user_visible": false])
     }
   }
 
@@ -317,8 +413,26 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
           "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
         ]
       ])
+    case .gptLive:
+      // GPT-Live-1's first frame is `session.start`; full-duplex, no VAD/commit.
+      send(json: [
+        "type": "session.start",
+        "event_id": UUID().uuidString,
+        "session": [
+          "model": model,
+          "instructions": Self.gptLiveInstructions,
+          "audio": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "output": ["voice": "marin"],
+          ],
+        ],
+      ])
     }
   }
+
+  /// Minimal system prompt for the STT-only omni shell.
+  private static let gptLiveInstructions =
+    "You are Omi, a concise voice transcription assistant. Transcribe what you hear; do not add commentary."
 
   private func makeRequest() -> URLRequest? {
     // Connect to the omi backend's omni relay. The backend holds the provider
@@ -329,7 +443,12 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       .replacingOccurrences(of: "https://", with: "wss://")
       .replacingOccurrences(of: "http://", with: "ws://")
     let wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
-    let providerParam = provider == .gptRealtime2 ? "openai" : "gemini"
+    let providerParam: String
+    switch provider {
+    case .gptRealtime2: providerParam = "openai"
+    case .gptLive: providerParam = "gpt_live"
+    case .geminiFlashLive, .auto: providerParam = "gemini"
+    }
     guard var comps = URLComponents(string: "\(wsBase)/v1/omni/relay") else { return nil }
     comps.queryItems = [
       URLQueryItem(name: "provider", value: providerParam),
@@ -374,6 +493,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2: handleOpenAI(obj)
     case .geminiFlashLive, .auto: handleGemini(obj)
+    case .gptLive: handleGPTLive(obj)
     }
   }
 
@@ -451,6 +571,45 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       commitInputTurn()
     }
     delegate?.omniDidConnect()
+  }
+
+  @MainActor
+  private func handleGPTLive(_ e: [String: Any]) {
+    guard let type = e["type"] as? String else { return }
+    switch type {
+    case "session.started":
+      markReady()
+    case "session.output_audio.delta":
+      if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) {
+        delegate?.omniDidReceiveAudio(d)
+      }
+    case "session.input_transcript.delta":
+      if let t = e["delta"] as? String {
+        delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: nil)
+        if gptLiveFinalizePending {
+          // A delta still in flight for the released turn: it reaches the
+          // delegate as interim, and the bounded drain's quiet window re-arms.
+          scheduleGptLiveFinalize()
+        } else {
+          // New utterance after a finalized turn: re-open a new input turn.
+          gptLiveTurnFinalized = false
+        }
+      }
+    case "session.output_transcript.delta":
+      // STT-only shell: the assistant's own text is not the user's transcript.
+      break
+    case "session.closed":
+      // The protocol reports usage only at close; the omni shell does not bill here.
+      finalizeGptLiveInputTurn()
+    case "error":
+      let msg =
+        (e["error"] as? [String: Any])?["message"] as? String
+        ?? e["message"] as? String
+        ?? "GPT-Live error"
+      notifyError(msg)
+    default:
+      break
+    }
   }
 
   // MARK: - Send helpers

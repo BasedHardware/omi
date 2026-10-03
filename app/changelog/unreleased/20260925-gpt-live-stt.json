@@ -1,0 +1,1 @@
+{"change": "Live transcription now uses OpenAI GPT-Live as the streaming provider. Transcripts keep full utterances instead of only the last word, sessions wait for the service to confirm startup before recording, and existing installs saved on Gemini Live keep their setting visible in Transcription Settings."}

@@ -11,6 +11,13 @@ import VoiceTurnDomain
 // Two providers, normalized to ONE internal stream surface
 // (RealtimeHubSessionDelegate):
 //
+//   • GPT-Live — wss://api.openai.com/v1/live/sessions (BYOK, direct) or
+//               wss://<backend>/v1/omni/relay?provider=gpt_live (managed; the relay
+//               injects the OpenAI key server-side). Full-duplex: session.start,
+//               session.input_audio.append, session.output_audio.delta,
+//               session.input/output_transcript.delta. No response.create/commit.
+//               Transport: URLSession WebSocket.
+//
 //   • OpenAI  — wss://api.openai.com/v1/realtime?model=gpt-realtime-2
 //               Bearer = BYOK OpenAI key, NO `OpenAI-Beta` header (GA).
 //               Native spoken audio out (24 kHz PCM) + function calling.
@@ -24,8 +31,8 @@ import VoiceTurnDomain
 //               and resets it (the documented reason the legacy path needed a
 //               relay); pinning ALPN avoids the upgrade.
 //
-// Normalized events: transcript_in (input STT) / audio_out (OpenAI) |
-// text_out (Gemini) / tool_call / turn.done.
+// Normalized events: transcript_in (input STT) / audio_out (OpenAI, GPT-Live) |
+// text_out (Gemini, GPT-Live) / tool_call / turn.done.
 
 private struct PendingOpenAIResponseIdentity {
   let identity: RealtimeHubEventIdentity
@@ -91,12 +98,31 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private let contextCacheReplaced: Bool
   private weak var delegate: RealtimeHubSessionDelegate?
 
-  /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
-  var requiredInputSampleRate: Int { provider == .openai ? 24000 : 16000 }
+  /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA and GPT-Live need 24k).
+  var requiredInputSampleRate: Int { provider == .gemini ? 16000 : 24000 }
   /// Provider-specific interruption contract for a new PTT turn while a reply is still streaming.
+  /// GPT-Live is full-duplex and model-managed (the model decides when to speak), so it
+  /// uses the closest existing strategy: keep the warm socket and let the provider
+  /// interrupt itself. `.inSessionCancel` is chosen over `.freshSession` because a
+  /// reconnect would discard the in-session context the full-duplex model relies on.
   var bargeInStrategy: RealtimeHubBargeInStrategy {
     provider == .gemini ? .freshSession : .inSessionCancel
   }
+
+  /// OpenAI realtime and GPT-Live are full-duplex: input may ride the socket as soon
+  /// as it opens, with no per-turn Gemini activity window.
+  private var isFullDuplexProvider: Bool { provider != .gemini }
+
+  /// Provider string used for the log tag and backend usage reporting.
+  private var providerWireName: String {
+    switch provider {
+    case .openai: return "openai"
+    case .gemini: return "gemini"
+    case .gptLive: return "gpt_live"
+    }
+  }
+
+  private var usesRawWS: Bool { provider == .gemini }
 
   // All socket + state access is serialized here (audio arrives on the capture
   // thread; receives on the URLSession/NW queue). Delegate calls hop to main.
@@ -119,7 +145,6 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
   var rawWS: RealtimeRawWebSocketTransport?
   private let rawWebSocketFactory: (URL, DispatchQueue) -> RealtimeRawWebSocketTransport
-  private var usesRawWS: Bool { provider == .gemini }
 
   private var isOpen = false
   private var terminated = false
@@ -181,6 +206,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private var geminiResponsePending = false
   private var pendingOpenAIToolCallIds = Set<String>()
   private var pendingGeminiToolCallIds = Set<String>()
+  /// GPT-Live: true while the model's spoken reply for the current utterance is
+  /// streaming. GPT-Live is full-duplex with no response.create/response.done
+  /// handshake, so this gates local reply bookkeeping only (not a wire commit).
+  private var gptLiveResponseActive = false
   /// A provider may close the function-call cycle without producing a user-facing
   /// response. One explicit internal continuation is permitted for that exact voice
   /// turn; further retries would create an unbounded tool/turn loop.
@@ -203,7 +232,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
-  private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
+  private var tag: String { "RealtimeHub[\(providerWireName):\(provider.modelID)]" }
 
   init(
     provider: RealtimeHubProvider,
@@ -309,6 +338,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     openAIPendingInputIdentities.removeAll()
     openAIInputItemIdentities.removeAll()
     geminiResponsePending = false
+    gptLiveResponseActive = false
     postToolContinuationAttempted = false
     activeEventIdentity = nil
     completedGeminiEventIdentity = nil
@@ -374,6 +404,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         // Gemini can't cleanly cancel a streaming reply (it keeps speaking), so the
         // controller interrupts Gemini by reconnecting a fresh socket instead.
         break
+      case .gptLive:
+        // GPT-Live is full-duplex and model-managed: the protocol exposes no
+        // response.cancel / input_audio_buffer.clear frame, so there is nothing to
+        // write. Drop the local reply bookkeeping and let the provider interrupt
+        // itself; the warm session (and its context) is preserved.
+        self.gptLiveResponseActive = false
       }
     }
   }
@@ -382,7 +418,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   func sendAudio(_ pcm: Data) {
     q.async { [weak self] in
       guard let self else { return }
-      guard self.isOpen, self.provider == .openai || self.activityOpen else {
+      guard self.isOpen, self.isFullDuplexProvider || self.activityOpen else {
         self.pendingAudio.append(pcm)
         return
       }
@@ -495,7 +531,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await withCheckedContinuation { continuation in
       q.async {
         continuation.resume(
-          returning: self.isOpen && (self.provider == .openai || self.activityOpen))
+          returning: self.isOpen && (self.isFullDuplexProvider || self.activityOpen))
       }
     }
   }
@@ -510,9 +546,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// OpenAI has a real mid-session system-message role, so background reference
   /// material cannot become a competing user request. Gemini Live exposes no
   /// equivalent after setup: its realtime text shares the user's activity stream
-  /// and modality ordering is explicitly not guaranteed. Sending there can steal
-  /// the next spoken turn, so Gemini returns `unsupported` without writing bytes.
-  /// The completion/card remains available through its canonical UI/tool surface.
+  /// and modality ordering is explicitly not guaranteed. GPT-Live's documented
+  /// protocol has no mid-session role either (only `session.start.instructions`),
+  /// so it also returns `unsupported` without writing bytes. The completion/card
+  /// remains available through its canonical UI/tool surface.
   func sendBackgroundAgentContext(_ text: String) async -> RealtimeBackgroundContextDeliveryResult {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
@@ -523,7 +560,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         guard self.provider == .openai else {
           DesktopDiagnosticsManager.shared.recordFallback(
             area: "realtime_hub",
-            from: "gemini_background_context",
+            from: self.provider == .gptLive
+              ? "gpt_live_background_context"
+              : "gemini_background_context",
             to: "canonical_tool_or_card",
             reason: "capability_mismatch",
             outcome: .degraded,
@@ -587,6 +626,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       flushedTrustedTurnInstruction = text
       pendingTrustedTurnInstruction = nil
       return true
+    case .gptLive:
+      // GPT-Live has no per-turn instruction/response.create surface; only the
+      // session-level `session.start.instructions` is supported.
+      return false
     }
   }
 
@@ -623,6 +666,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       case .gemini:
         providerHasResponseInFlight =
           self.activityOpen || self.geminiResponsePending || !self.pendingGeminiToolCallIds.isEmpty
+      case .gptLive:
+        providerHasResponseInFlight = self.gptLiveResponseActive
       }
       if self.postToolContinuationAttempted {
         completionBox.value(providerHasResponseInFlight ? .alreadyInFlight : .exhausted)
@@ -652,6 +697,18 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.activityOpen = false
         self.geminiResponsePending = true
         log("\(self.tag): requested explicit Gemini post-tool continuation")
+      case .gptLive:
+        // GPT-Live tool/delegation mapping is a follow-up; never fabricate a
+        // continuation frame. Surface the capability gap explicitly.
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "realtime_hub",
+          from: "gpt_live_tool_continuation",
+          to: "cascade",
+          reason: "capability_mismatch",
+          outcome: .degraded,
+          extra: ["user_visible": false])
+        completionBox.value(.exhausted)
+        return
       }
       completionBox.value(.started)
     }
@@ -680,6 +737,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           continuation.resume(returning: false)
           return
         }
+        // GPT-Live's documented protocol accepts audio input only; there is no
+        // text-input frame. Fail closed rather than buffering an unsendable input.
+        guard self.provider != .gptLive else {
+          log("\(self.tag): \(logLabel) unsupported by GPT-Live (audio-only protocol)")
+          continuation.resume(returning: false)
+          return
+        }
         guard self.isOpen else {
           self.bufferTextInput(text, logLabel: logLabel, reason: "socket not open")
           continuation.resume(returning: true)
@@ -703,7 +767,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   private func flushPendingTextInputs() {
     guard isOpen else { return }
-    guard provider == .openai || activityOpen else { return }
+    guard isFullDuplexProvider || activityOpen else { return }
     let inputs = pendingTextInputs
     pendingTextInputs.removeAll()
     for input in inputs {
@@ -725,6 +789,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           "content": [["type": "input_text", "text": text]],
         ],
       ]
+    case .gptLive:
+      // Unreachable: sendTextInput rejects GPT-Live text before this point. Kept
+      // explicit so a future text frame has one place to land.
+      return [:]
     }
   }
 
@@ -765,6 +833,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       self.postToolContinuationAttempted = false
       if self.provider == .openai, let trustedTurnInstruction {
         self.pendingTrustedTurnInstruction = trustedTurnInstruction
+      }
+      if self.provider == .gptLive {
+        // Full-duplex: a new PTT turn opens a fresh local reply window and sends
+        // no activity bracket. The provider decides when to speak.
+        self.gptLiveResponseActive = false
+        return
       }
       guard self.provider == .gemini else { return }
       // A second begin on an already-open window must not reset flush state
@@ -813,7 +887,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     q.async { [weak self] in
       guard let self else { return }
       self.resetTurnUsage()  // fresh per-turn usage before the model responds
-      guard self.isOpen, self.provider == .openai || self.activityOpen else {
+      guard self.isOpen, self.isFullDuplexProvider || self.activityOpen else {
         self.pendingCommit = true
         return
       }
@@ -869,6 +943,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       activityOpen = false
       geminiResponsePending = true
     // Gemini auto-responds at activityEnd; no explicit response request.
+    case .gptLive:
+      // Full-duplex: no client commit and no response.create. The model decides
+      // when to speak. Mark the local reply window open so barge-in bookkeeping
+      // tracks the streaming utterance.
+      gptLiveResponseActive = true
+    // GPT-Live speaks on its own; no explicit response request.
     }
   }
 
@@ -914,6 +994,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         }
         self.activityOpen = false
+      case .gptLive:
+        // No provider cancel/clear frame exists; drop the local reply window and
+        // keep the warm full-duplex session (the provider handles interruptions).
+        self.gptLiveResponseActive = false
       }
     }
   }
@@ -986,6 +1070,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.send(json: wire) { error in
           onWireEnqueuedBox.value?(error == nil)
         }
+      case .gptLive:
+        // GPT-Live delivers tool/delegation calls as `response.event` envelopes;
+        // mapping them onto the hub's tool pipeline is a follow-up. Surface the
+        // capability gap explicitly instead of silently dropping the result.
+        log("\(self.tag): tool result for \(name) dropped — GPT-Live tool mapping pending")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "realtime_hub",
+          from: "gpt_live_tool_result",
+          to: "cascade",
+          reason: "capability_mismatch",
+          outcome: .degraded,
+          extra: ["user_visible": false])
+        onWireEnqueuedBox.value?(false)
       }
     }
   }
@@ -1134,6 +1231,31 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       comps.queryItems = [URLQueryItem(name: param, value: auth.value)]
       guard let url = comps.url else { return nil }
       return URLRequest(url: url)
+    case .gptLive:
+      // GPT-Live-1. Managed sessions must never ship the OpenAI key, so they
+      // connect through the Omi relay, which injects the key server-side. BYOK
+      // sessions connect client-direct with the user's own OpenAI key.
+      switch auth {
+      case .byokKey(let key):
+        guard let url = URL(string: "wss://api.openai.com/v1/live/sessions") else { return nil }
+        var r = URLRequest(url: url)
+        r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        return r
+      case .ephemeral:
+        let base = DesktopBackendEnvironment.pythonBaseURL()
+          .replacingOccurrences(of: "https://", with: "wss://")
+          .replacingOccurrences(of: "http://", with: "ws://")
+        let wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        guard var comps = URLComponents(string: "\(wsBase)/v1/omni/relay") else { return nil }
+        comps.queryItems = [
+          URLQueryItem(name: "provider", value: provider.mintProviderParam),
+          URLQueryItem(name: "model", value: provider.modelID),
+        ]
+        guard let url = comps.url else { return nil }
+        var r = URLRequest(url: url)
+        r.setValue("Bearer \(auth.value)", forHTTPHeaderField: "Authorization")
+        return r
+      }
     }
   }
 
@@ -1228,6 +1350,23 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           "contextWindowCompression": ["slidingWindow": [:]],
         ]
       ])
+    case .gptLive:
+      // GPT-Live-1 full-duplex session. The first client frame is `session.start`;
+      // the model then decides when to speak (no response.create/commit loop).
+      // Tool/delegation declarations are intentionally omitted: the `response.event`
+      // tool envelope mapping is a follow-up (see sendToolResult / handleGPTLive).
+      send(json: [
+        "type": "session.start",
+        "event_id": UUID().uuidString,
+        "session": [
+          "model": provider.modelID,
+          "instructions": instructions,
+          "audio": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "output": ["voice": RealtimeHubVoicePolicy.voiceName(for: .gptLive)],
+          ],
+        ],
+      ])
     }
   }
 
@@ -1245,7 +1384,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
     flushPendingVideoIntoTurn()
     flushPendingTextInputs()
-    if pendingCommit, provider == .openai || activityOpen {
+    if pendingCommit, isFullDuplexProvider || activityOpen {
       pendingCommit = false
       commitInputTurnNow()
     }
@@ -1263,11 +1402,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       send(json: ["type": "input_audio_buffer.append", "audio": b64])
     case .gemini:
       send(json: ["realtimeInput": ["audio": ["data": b64, "mimeType": "audio/pcm;rate=16000"]]])
+    case .gptLive:
+      send(json: ["type": "session.input_audio.append", "audio": b64])
     }
   }
 
   private func flushPendingAudioIfReady() {
-    guard isOpen, provider == .openai || activityOpen else { return }
+    guard isOpen, isFullDuplexProvider || activityOpen else { return }
     for chunk in pendingAudio { appendAudioFrame(chunk) }
     pendingAudio.removeAll()
   }
@@ -1298,6 +1439,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     switch provider {
     case .openai: handleOpenAI(obj)
     case .gemini: handleGemini(obj)
+    case .gptLive: handleGPTLive(obj)
     }
   }
 
@@ -1391,12 +1533,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
     let inD = usage["input_token_details"] as? [String: Any]
     let outD = usage["output_token_details"] as? [String: Any]
-    usageInText += n(inD, "text_tokens")
-    usageInAudio += n(inD, "audio_tokens")
-    usageInImage += n(inD, "image_tokens")
+    let inText = n(inD, "text_tokens")
+    let inAudio = n(inD, "audio_tokens")
+    let inImage = n(inD, "image_tokens")
+    // OpenAI may report only aggregate totals (no modality split); fall back to the
+    // aggregate so the turn is still reported instead of silently dropped.
+    usageInText += inText + inAudio + inImage > 0 ? inText : n(usage, "input_tokens")
+    usageInAudio += inAudio
+    usageInImage += inImage
     usageInCached += n(inD, "cached_tokens")
-    usageOutText += n(outD, "text_tokens")
-    usageOutAudio += n(outD, "audio_tokens")
+    let outText = n(outD, "text_tokens")
+    let outAudio = n(outD, "audio_tokens")
+    usageOutText += outText + outAudio > 0 ? outText : n(usage, "output_tokens")
+    usageOutAudio += outAudio
   }
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
@@ -1436,6 +1585,31 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     usageInCached = (um["cachedContentTokenCount"] as? Int) ?? 0
   }
 
+  /// GPT-Live: `session.closed.usage` carries OpenAI-style counts (modality split
+  /// under `input_token_details` / `output_token_details`). Usage is session-scoped
+  /// rather than per-turn — the protocol only reports it on close — so it is summed
+  /// here and reported on the final turn's finish.
+  private func accumulateGPTLiveUsage(_ usage: [String: Any]) {
+    func n(_ d: [String: Any]?, _ k: String) -> Int {
+      (d?[k] as? Int) ?? (d?[k] as? NSNumber)?.intValue ?? 0
+    }
+    let inD = usage["input_token_details"] as? [String: Any]
+    let outD = usage["output_token_details"] as? [String: Any]
+    let inText = n(inD, "text_tokens")
+    let inAudio = n(inD, "audio_tokens")
+    let inImage = n(inD, "image_tokens")
+    // Session-scoped usage may arrive aggregate-only; fall back to the totals so
+    // the closing turn is still reported rather than dropped.
+    usageInText += inText + inAudio + inImage > 0 ? inText : n(usage, "input_tokens")
+    usageInAudio += inAudio
+    usageInImage += inImage
+    usageInCached += n(inD, "cached_tokens")
+    let outText = n(outD, "text_tokens")
+    let outAudio = n(outD, "audio_tokens")
+    usageOutText += outText + outAudio > 0 ? outText : n(usage, "output_tokens")
+    usageOutAudio += outAudio
+  }
+
   /// Report the turn's usage to the backend (managed sessions only — BYOK pays direct).
   /// Resets first so a second finishTurn (barge-in edge) can't double-report.
   private func reportUsageIfNeeded() {
@@ -1453,7 +1627,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     let turnId = activeEventIdentity?.turnID.rawValue.uuidString ?? ""
     resetTurnUsage()
     guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
-    let providerName = provider == .gemini ? "gemini" : "openai"
+    let providerName = providerWireName
     let model = provider.modelID
     Task {
       await APIClient.shared.reportRealtimeUsage(
@@ -1692,6 +1866,87 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
+  // MARK: GPT-Live events
+  //
+  // GPT-Live-1 is full-duplex: the client sends `session.input_audio.append` and
+  // the model decides when to speak, streaming `session.output_audio.delta` /
+  // `session.output_transcript.delta`. There is no response.create/commit loop and
+  // no per-response `done` event in the documented protocol, so turn completion is
+  // best-effort here (a `response.event` done envelope when present, else
+  // `session.closed`); the reducer's providerResponse deadline remains the bound.
+  // Tool/delegation calls arrive as `response.event` envelopes — mapping them onto
+  // the hub tool pipeline is an explicit follow-up (never fabricated here).
+
+  private func handleGPTLive(_ e: [String: Any]) {
+    guard let type = e["type"] as? String else { return }
+    switch type {
+    case "session.started":
+      markReady()
+    case "session.output_audio.delta":
+      if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) {
+        gptLiveResponseActive = true
+        emitAudio(d)
+      }
+    case "session.input_transcript.delta":
+      if let t = e["delta"] as? String {
+        emitTranscript(t, isFinal: false)
+      }
+    case "session.output_transcript.delta":
+      if let t = e["delta"] as? String {
+        gptLiveResponseActive = true
+        emitText(t, isFinal: false)
+      }
+    case "session.closed":
+      if let usage = e["usage"] as? [String: Any] { accumulateGPTLiveUsage(usage) }
+      gptLiveResponseActive = false
+      // No per-utterance final in the protocol: mark the accumulated transcript /
+      // reply final once, at session close.
+      emitTranscript("", isFinal: true)
+      emitText("", isFinal: true)
+      finishTurn()
+    case "session.interrupted":
+      // Provider-managed barge-in: the model already stopped; drop local bookkeeping.
+      gptLiveResponseActive = false
+    case "response.event":
+      handleGPTLiveResponseEvent(e)
+    case "error":
+      let msg =
+        (e["error"] as? [String: Any])?["message"] as? String
+        ?? e["message"] as? String
+        ?? "GPT-Live realtime error"
+      notifyError(.providerError(msg))
+    default:
+      if (e["interrupted"] as? Bool) == true { gptLiveResponseActive = false }
+    }
+  }
+
+  /// GPT-Live tool/delegation calls arrive as `response.event` envelopes. The
+  /// envelope shape is not yet contracted with the hub's tool pipeline, so a tool
+  /// call is surfaced through the shared fallback path rather than silently dropped,
+  /// and a response-completed envelope is used as the best-effort turn boundary.
+  private func handleGPTLiveResponseEvent(_ event: [String: Any]) {
+    let nested = event["event"] as? [String: Any] ?? event
+    let nestedType = (nested["type"] as? String) ?? ""
+    if nestedType.contains("function_call") || nestedType.contains("tool_call") {
+      log("\(tag): GPT-Live response.event tool call received — mapping pending")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub",
+        from: "gpt_live_response_event_tool",
+        to: "cascade",
+        reason: "capability_mismatch",
+        outcome: .degraded,
+        extra: ["user_visible": false])
+      return
+    }
+    if nestedType == "response.done" || nestedType == "response.completed" {
+      gptLiveResponseActive = false
+      emitText("", isFinal: true)
+      finishTurn()
+      return
+    }
+    log("\(tag): GPT-Live response.event (unhandled) type=\(nestedType)")
+  }
+
   private func nextGeminiSyntheticToolCallId(name: String) -> String {
     geminiSyntheticToolCallCounter += 1
     return "\(name):\(geminiSyntheticToolCallCounter)"
@@ -1784,7 +2039,7 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
   func urlSession(
     _ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol proto: String?
   ) {
-    log("RealtimeHub: WS didOpen (OpenAI)")
+    log("RealtimeHub: WS didOpen (\(provider.displayName))")
     q.async {
       guard !self.terminated else { return }
       self.receiveLoop()

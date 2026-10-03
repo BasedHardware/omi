@@ -4,7 +4,7 @@ vi.mock('../apiClient', () => ({
   desktopApi: { post: vi.fn() }
 }))
 
-import { mapOpenAiUsage, mapGeminiUsage, usageDelta, usageTotal } from './usageReport'
+import { mapOpenAiUsage, mapGeminiUsage, mapGptLiveUsage, usageDelta, usageTotal } from './usageReport'
 
 describe('mapOpenAiUsage', () => {
   it('splits audio vs text from the details arrays', () => {
@@ -82,6 +82,45 @@ describe('mapGeminiUsage', () => {
   it('tolerates an empty metadata object', () => {
     const body = mapGeminiUsage({}, 'm')
     expect(usageTotal(body)).toBe(0)
+  })
+})
+
+describe('mapGptLiveUsage', () => {
+  it('splits audio vs text from the token detail blocks', () => {
+    const body = mapGptLiveUsage(
+      {
+        input_tokens: 14,
+        output_tokens: 9,
+        input_token_details: { text_tokens: 10, audio_tokens: 4, cached_tokens: 3 },
+        output_token_details: { text_tokens: 7, audio_tokens: 2 }
+      },
+      'gpt-live-1'
+    )
+    expect(body).toEqual({
+      provider: 'gpt_live',
+      model: 'gpt-live-1',
+      input_text_tokens: 10,
+      input_audio_tokens: 4,
+      input_cached_tokens: 3,
+      output_text_tokens: 7,
+      output_audio_tokens: 2
+    })
+  })
+
+  it('falls back to the aggregate totals when no modality split is present', () => {
+    const body = mapGptLiveUsage(
+      {
+        input_tokens: 14,
+        output_tokens: 9,
+        input_token_details: { cached_tokens: 3 }
+      },
+      'gpt-live-1'
+    )
+    expect(body.input_text_tokens).toBe(14)
+    expect(body.input_audio_tokens).toBe(0)
+    expect(body.input_cached_tokens).toBe(3)
+    expect(body.output_text_tokens).toBe(9)
+    expect(body.output_audio_tokens).toBe(0)
   })
 })
 

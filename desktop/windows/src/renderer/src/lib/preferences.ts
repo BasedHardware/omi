@@ -122,9 +122,10 @@ export type Preferences = {
   // and via the Ctrl+= / Ctrl+- / Ctrl+0 shortcuts.
   fontScale?: number
   // Realtime-voice provider selection (macOS RealtimeOmniProvider.selectedProvider).
-  // 'auto' (default) defers to autoModelSelector's daily quality/speed pick;
-  // 'openai'/'gemini' pins a concrete lane. Resolved to a concrete VoiceProvider
-  // at session start via resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
+  // 'auto' (default) defers to autoModelSelector's daily quality/speed pick, whose
+  // no-pick fallback is 'gpt_live' (GPT-Live-1); 'gpt_live'/'openai'/'gemini' pins
+  // a concrete lane. Resolved to a concrete VoiceProvider at session start via
+  // resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
   voiceProvider?: VoiceProviderSetting
   // Warm-hub system-wide PTT kill-switch (Track 2 / A5 PR-6). Default ON (flipped
   // after the driver was made functional + live-verified end-to-end): a PTT press

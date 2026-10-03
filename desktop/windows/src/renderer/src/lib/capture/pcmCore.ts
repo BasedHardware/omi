@@ -14,6 +14,24 @@ export function floatTo16BitPCM(f32: Float32Array): Int16Array {
   return i16
 }
 
+/** Power-of-two ScriptProcessor buffer size, in samples at the CONTEXT rate,
+ *  that yields roughly `frameSamples` at `targetRate`.
+ *
+ *  `createScriptProcessor` sizes are always context-rate samples, but callers
+ *  specify the frame at the target rate. When the platform refuses the requested
+ *  context rate and falls back to a hardware rate (e.g. 48 kHz for a 24 kHz
+ *  GPT-Live uplink), the frame must be scaled or every emitted chunk is the wrong
+ *  duration. Clamped to the ScriptProcessor power-of-two bounds [256, 16384]. */
+export function scriptProcessorFrameSize(
+  frameSamples: number,
+  contextRate: number,
+  targetRate: number
+): number {
+  const desired = targetRate > 0 ? (frameSamples * contextRate) / targetRate : frameSamples
+  const powerOfTwo = 2 ** Math.round(Math.log2(Math.max(1, desired)))
+  return Math.max(256, Math.min(16384, powerOfTwo))
+}
+
 /** One-shot linear-interpolation resampler: reinterpret `f32` sampled at
  *  `fromRate` as `toRate`. Output length is round(len·toRate/fromRate). Used for
  *  whole buffers (tests, offline); the streaming capture path uses

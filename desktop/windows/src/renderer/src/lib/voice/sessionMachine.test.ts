@@ -20,6 +20,13 @@ describe('voice session machine', () => {
     expect(s).toEqual({ status: 'idle' })
   })
 
+  it('supports the gpt_live lane (the default provider)', () => {
+    let s = transition(initialVoiceState, { type: 'start', provider: 'gpt_live' })
+    expect(s).toEqual({ status: 'connecting', provider: 'gpt_live' })
+    s = transition(s, { type: 'connected' })
+    expect(s).toEqual({ status: 'live', provider: 'gpt_live', muted: false })
+  })
+
   it('mint fallback changes the provider while connecting', () => {
     const s = run([
       { type: 'start', provider: 'openai' },

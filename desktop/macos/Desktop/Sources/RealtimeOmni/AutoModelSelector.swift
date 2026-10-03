@@ -10,7 +10,7 @@ import Foundation
 // The realtime audio variants aren't always in AA's LLM index, so each selectable
 // provider maps to the closest representative model slug as a quality/speed proxy.
 // The whole thing degrades gracefully: no key / network error / unknown schema →
-// we keep the last good pick, or fall back to Gemini (cheapest + fastest).
+// we keep the last good pick, or fall back to GPT-Live (the default).
 //
 // Production note: for "all Auto users to agree", the canonical pick should come
 // from a backend cron writing one value all clients read. This client-side daily
@@ -51,14 +51,14 @@ final class AutoModelSelector {
 
   /// Read the daily pick from the omi backend (which runs the Artificial
   /// Analysis quality/speed scoring server-side, keeping the AA key off the
-  /// client). Falls back to Gemini only if we've never had a pick.
+  /// client). Falls back to GPT-Live only if we've never had a pick.
   func refresh() async {
     let httpBase = DesktopBackendEnvironment.pythonBaseURL()
       .replacingOccurrences(of: "wss://", with: "https://")
       .replacingOccurrences(of: "ws://", with: "http://")
     let base = httpBase.hasSuffix("/") ? String(httpBase.dropLast()) : httpBase
     guard let url = URL(string: "\(base)/v1/auto/model-pick") else {
-      if currentPick == nil { store(.geminiFlashLive) }
+      if currentPick == nil { store(.gptLive) }
       return
     }
     do {
@@ -73,12 +73,12 @@ final class AutoModelSelector {
         let raw = obj["provider"] as? String,
         let provider = RealtimeOmniProvider(rawValue: raw)
       else {
-        if currentPick == nil { store(.geminiFlashLive) }
+        if currentPick == nil { store(.gptLive) }
         return
       }
       store(provider)
     } catch {
-      if currentPick == nil { store(.geminiFlashLive) }
+      if currentPick == nil { store(.gptLive) }
     }
   }
 

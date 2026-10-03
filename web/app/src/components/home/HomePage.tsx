@@ -12,7 +12,7 @@ import { useScrollEdges } from '@/hooks/useScrollEdges';
 import { ChatComposer, type ChatComposerHandle } from '@/components/chat/ChatComposer';
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
 import { RecordingStage } from '@/components/chat/RecordingStage';
-import { useGeminiLive } from '@/hooks/useGeminiLive';
+import { useGptLive } from '@/hooks/useGptLive';
 import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
@@ -82,7 +82,7 @@ export function HomePage() {
   const askRef = useRef<ChatComposerHandle>(null);
   const currentsRef = useRef<HTMLDivElement>(null);
   const { ref: scrollRef, edges } = useScrollEdges<HTMLDivElement>();
-  const live = useGeminiLive({ messages, onExchange: appendRealtimeExchange });
+  const live = useGptLive({ messages, onExchange: appendRealtimeExchange });
   const isLive = live.state !== 'idle';
   const loadHistoryRef = useRef(loadHistory);
   loadHistoryRef.current = loadHistory;

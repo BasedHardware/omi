@@ -44,8 +44,8 @@ vi.mock('@/components/chat/ChatContext', () => ({
     },
   }),
 }));
-vi.mock('@/hooks/useGeminiLive', () => ({
-  useGeminiLive: () => ({
+vi.mock('@/hooks/useGptLive', () => ({
+  useGptLive: () => ({
     state: 'idle',
     segments: [],
     duration: 0,
@@ -155,7 +155,7 @@ describe('Home Currents ordering', () => {
     expect(sendMessage).toHaveBeenCalledWith('New question', [], undefined, []);
   });
 
-  it('routes the composer live control through Gemini Live', () => {
+  it('routes the composer live control through GPT Live', () => {
     render(<HomePage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start live test' }));

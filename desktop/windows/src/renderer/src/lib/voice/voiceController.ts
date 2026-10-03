@@ -24,9 +24,11 @@ import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelect
 import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
 import { buildVoiceSystemInstruction } from './systemInstruction'
 import { getPreferences } from '../preferences'
+import { openAiByokKeyCached } from '../byokKeys'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
+import { startGptLiveSession } from './gptLiveSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
@@ -288,37 +290,47 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
 
   const headset = await refreshHeadsetState()
 
+  // BYOK is selected BEFORE the managed mint: the mint deliberately enforces
+  // managed quota and requires the platform OPENAI_API_KEY, so it would block or
+  // fail over a BYOK user whose direct OpenAI session is actually fine (the REST
+  // mint's key can't reach the WebSocket anyway — the cached key connects direct).
+  const byokKey = preferredProvider === 'gpt_live' ? openAiByokKeyCached() : undefined
   // Mint, falling back to the other lane when THIS provider is down/unconfigured.
   let provider = preferredProvider
-  let token: string
-  try {
+  let token = ''
+  if (byokKey === undefined) {
     try {
-      token = (await mintRealtimeToken(provider)).token
+      try {
+        token = (await mintRealtimeToken(provider)).token
+      } catch (e) {
+        const failure = e instanceof MintError ? e.failure : null
+        if (!failure?.tryOtherProvider) throw e
+        // GPT-Live is the default lane and always falls over to Gemini (the available
+        // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
+        const other: VoiceProvider =
+          provider === 'openai' ? 'gemini' : provider === 'gemini' ? 'gpt_live' : 'gemini'
+        trackEvent('fallback_triggered', {
+          component: 'realtime_mint',
+          from: provider,
+          to: other,
+          reason: 'provider_unavailable',
+          outcome: 'recovered'
+        })
+        provider = other
+        if (mySeq === startSeq) dispatch({ type: 'provider-changed', provider })
+        token = (await mintRealtimeToken(provider)).token
+      }
     } catch (e) {
+      if (mySeq !== startSeq) return // user stopped while minting
       const failure = e instanceof MintError ? e.failure : null
-      if (!failure?.tryOtherProvider) throw e
-      const other: VoiceProvider = provider === 'openai' ? 'gemini' : 'openai'
-      trackEvent('fallback_triggered', {
-        component: 'realtime_mint',
-        from: provider,
-        to: other,
-        reason: 'provider_unavailable',
-        outcome: 'recovered'
+      record('mint-failed', failure?.message ?? (e as Error)?.message)
+      dispatch({
+        type: 'fail',
+        message: failure?.message ?? `voice session failed: ${(e as Error)?.message ?? e}`,
+        retryable: failure?.retryable ?? true
       })
-      provider = other
-      if (mySeq === startSeq) dispatch({ type: 'provider-changed', provider })
-      token = (await mintRealtimeToken(provider)).token
+      return
     }
-  } catch (e) {
-    if (mySeq !== startSeq) return // user stopped while minting
-    const failure = e instanceof MintError ? e.failure : null
-    record('mint-failed', failure?.message ?? (e as Error)?.message)
-    dispatch({
-      type: 'fail',
-      message: failure?.message ?? `voice session failed: ${(e as Error)?.message ?? e}`,
-      retryable: failure?.retryable ?? true
-    })
-    return
   }
   if (mySeq !== startSeq) return
 
@@ -335,21 +347,34 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   // newer session's handle, orphaning its live mic/socket.
   let session: ProviderSessionHandle
   try {
-    session =
-      provider === 'openai'
-        ? await startOpenAiSession({
-            clientSecret: token,
-            instructions,
-            onSpeakers: !headset,
-            sinkId: sinkId || undefined,
-            cb
-          })
-        : await startGeminiSession({
-            authToken: token,
-            instructions,
-            sinkId: sinkId || undefined,
-            cb
-          })
+    if (provider === 'gpt_live') {
+      // BYOK: a cached OpenAI key routes GPT-Live direct to OpenAI (selected
+      // before the mint above). Otherwise the Omi relay injects the platform
+      // key server-side. A fallback into gpt_live consults the cache here too.
+      const key = byokKey ?? openAiByokKeyCached()
+      session = await startGptLiveSession({
+        token: key ?? token,
+        byok: key !== undefined,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else if (provider === 'openai') {
+      session = await startOpenAiSession({
+        clientSecret: token,
+        instructions,
+        onSpeakers: !headset,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else {
+      session = await startGeminiSession({
+        authToken: token,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    }
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })
@@ -379,6 +404,13 @@ export function setVoiceMuted(muted: boolean): void {
 
 /** Typed user turn into the live voice conversation (model replies with voice). */
 export function sendVoiceText(text: string): void {
+  // GPT-Live is full-duplex with no text-input frame (see
+  // gptLiveSession.sendUserText), so a typed turn would be silently dropped.
+  // Surface the drop on the event trail instead of recording a false send.
+  if ((state.status === 'connecting' || state.status === 'live') && state.provider === 'gpt_live') {
+    record('user-text-unsupported', text.slice(0, 80))
+    return
+  }
   handle?.sendUserText(text)
   record('user-text', text.slice(0, 80))
 }
