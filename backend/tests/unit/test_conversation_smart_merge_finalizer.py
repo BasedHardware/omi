@@ -100,7 +100,8 @@ async def test_absorbed_conversation_skips_every_derived_effect_and_completes_fa
     calls, row = harness
     seen = {}
 
-    async def absorbed(uid, conversation_id, initial_row, *, trigger, owner):
+    async def absorbed(uid, conversation_id, initial_row, *, trigger, owner, job_lease):
+        assert job_lease == (1, 1)
         seen.update(uid=uid, conversation_id=conversation_id, row=initial_row, trigger=trigger, owner=owner)
         return True
 

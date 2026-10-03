@@ -475,6 +475,7 @@ def test_smart_merge_survivor_refresh_does_not_resend_exported_tasks(world, monk
     monkeypatch.setattr(smart_merge.smart_merge_db, 'get_firestore_client', _no_real_firestore)
     monkeypatch.setattr(smart_merge.smart_merge_db, 'claim_survivor_refresh', lambda *a, **k: 2)
     monkeypatch.setattr(smart_merge.smart_merge_db, 'checkpoint_survivor_processing', lambda *a, **k: True)
+    monkeypatch.setattr(smart_merge.smart_merge_db, 'survivor_refresh_is_current', lambda *a, **k: True)
     monkeypatch.setattr(smart_merge.smart_merge_db, 'release_survivor_refresh', lambda *a, **k: None)
     monkeypatch.setattr(smart_merge.smart_merge_db, 'complete_survivor_refresh', lambda *a, **k: True)
     monkeypatch.setattr(smart_merge.conversations_db, 'get_conversation', lambda *a, **k: dict(row))

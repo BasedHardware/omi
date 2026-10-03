@@ -563,9 +563,26 @@ cleanup or refresh fails fails the finalization attempt; every retry resumes the
 donor, whatever the mode, before the fanout claim (which fences the discarded
 donor and so closes the job), after checking its job epoch/generation/binding.
 Stale or terminal jobs never resume. A failed refresh releases its unique invocation
-lease; even same-job refreshes are exclusive. A processing receipt tied to both
-merge and sync revisions lets a failed vector write retry without rerunning the
-completed processing bundle. Deferred retraction keeps cleanup retryable. Late
+lease; even same-job refreshes are exclusive. A lease another live invocation
+holds is waited out inside the attempt (backoff polls on the event loop, at most
+one lease lifetime plus one poll, shortened to reserve refresh headroom in
+the remaining finalization lease) instead of immediately failing it. Each
+poll rechecks the original job epoch/generation and lease expiry; a cap or
+insufficient headroom still spends one attempt. An expired lease is taken over
+under a new invocation token. Processing persistence and lease-state writes
+compare that token; receipted refreshes revalidate it before vector writes.
+There is no refresh heartbeat or aggregate refresh deadline. A holder that
+persists before expiry can still emit unfenced derived effects after takeover,
+and a vector admission read is not an atomic external-write fence. These are
+shipping blockers for slow-holder takeover, not exactly-once guarantees.
+Cloud Tasks dispatch and middleware allow 1500 seconds, but the separate
+Cloud Run service request timeout is inherited and must be verified. A
+processing receipt tied to both merge and sync revisions lets a failed vector write retry without rerunning the
+completed processing bundle. Deferred donor retraction does not itself block
+the survivor refresh; existing canonical-mutation guards still reject a
+refresh while a live destructive account operation owns the gate. A deferred
+retraction receipt stays pending and the job stays retryable; the sync bridge
+replays it on a later append to the survivor. Late
 repair WALs that target a donor append to its survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.
