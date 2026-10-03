@@ -2,6 +2,8 @@
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from config.live_stt_recovery import recovery_enabled
+
 REPLAY_WALL = Histogram(
     'omi_stt_replay_wall_seconds',
     'Elapsed prefix replay time',
@@ -221,15 +223,17 @@ def provider_family(name: object) -> str:
     return 'unknown'
 
 
-for _source in PROVIDER_FAMILIES:
-    for _successor in PROVIDER_FAMILIES:
-        REPLAY_WALL.labels(source=_source, successor=_successor)
-        REPLAY_AUDIO.labels(source=_source, successor=_successor)
-        REPLAY_QUEUE_HIGH_WATER.labels(source=_source, successor=_successor)
-        REPLAY_SKIPPED.labels(source=_source, successor=_successor)
-        REPLAY_CLOSED.labels(source=_source, successor=_successor)
-        RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
-for _provider in PROVIDER_FAMILIES:
-    LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
-    for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
-        CONNECT_BACKOFF.labels(provider=_provider, event=_event)
+# Zero-fill recovery series only on pods running recovery, so flag-off scrapes match main.
+if recovery_enabled():
+    for _source in PROVIDER_FAMILIES:
+        for _successor in PROVIDER_FAMILIES:
+            REPLAY_WALL.labels(source=_source, successor=_successor)
+            REPLAY_AUDIO.labels(source=_source, successor=_successor)
+            REPLAY_QUEUE_HIGH_WATER.labels(source=_source, successor=_successor)
+            REPLAY_SKIPPED.labels(source=_source, successor=_successor)
+            REPLAY_CLOSED.labels(source=_source, successor=_successor)
+            RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
+    for _provider in PROVIDER_FAMILIES:
+        LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
+        for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
+            CONNECT_BACKOFF.labels(provider=_provider, event=_event)

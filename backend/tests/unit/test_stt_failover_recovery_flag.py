@@ -835,3 +835,31 @@ async def test_run_pins_missing_mode_from_receiver_and_resets(monkeypatch, pinne
     assert runtime.recovery_enabled is pinned
     assert seen == [pinned]
     assert current_recovery_enabled.get() is None
+
+
+_RECOVERY_SERIES_PROBE = (
+    'from prometheus_client import REGISTRY\n'
+    'import utils.stt.live_metrics  # noqa: F401\n'
+    "print(sum(1 for m in REGISTRY.collect() if m.name == 'omi_stt_replay_wall_seconds' for _ in m.samples))\n"
+)
+
+
+@pytest.mark.parametrize('value, expect_series', [(None, False), ('false', False), ('true', True)])
+def test_recovery_series_zero_filled_only_when_flag_on(value, expect_series):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != 'STT_FAILOVER_RECOVERY_ENABLED'}
+    if value is not None:
+        env['STT_FAILOVER_RECOVERY_ENABLED'] = value
+    out = subprocess.run(
+        [sys.executable, '-c', _RECOVERY_SERIES_PROBE],
+        cwd=Path(__file__).resolve().parents[2],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert (int(out.stdout.strip()) > 0) is expect_series
