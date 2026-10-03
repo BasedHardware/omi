@@ -519,7 +519,7 @@ def target_capacity_endpoint(*, location: str) -> tuple[str, str]:
 
 
 def model_payload(payload: Mapping[str, object], model: str) -> dict[str, object]:
-    """Adapt thinking for each real attempt, including cross-family fallback."""
+    """Adapt thinking and legacy tool history for the model actually serving."""
     adapted = dict(payload)
     key = 'generation_config' if 'generation_config' in adapted else 'generationConfig'
     value = adapted.get(key, {})
@@ -535,7 +535,31 @@ def model_payload(payload: Mapping[str, object], model: str) -> dict[str, object
             config.pop('thinking_config', None)
             config['thinkingConfig'] = {'thinkingBudget': 0 if level == 'minimal' else 1024}
     adapted[key] = config
+    contents = payload.get('contents')
+    if model.startswith('gemini-3') and isinstance(contents, list):
+        # Old desktop builds (and histories predating signature preservation)
+        # cannot recover a signature the gateway discarded. Google's documented
+        # migration marker admits that history. Preserve real signatures and
+        # only fill the first function call: parallel calls need not each sign.
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+        adapted['contents'] = [_legacy_tool_signature(content) for content in contents]
     return adapted
+
+
+def _legacy_tool_signature(content: object) -> object:
+    if not isinstance(content, Mapping) or content.get('role') != 'model':
+        return content
+    parts = content.get('parts')
+    if not isinstance(parts, list):
+        return content
+    for index, part in enumerate(parts):
+        if not isinstance(part, Mapping) or 'functionCall' not in part:
+            continue
+        if part.get('thoughtSignature') or part.get('thought_signature'):
+            return content
+        signed = {**part, 'thoughtSignature': 'skip_thought_signature_validator'}
+        return {**content, 'parts': [*parts[:index], signed, *parts[index + 1 :]]}
+    return content
 
 
 def reservation_capacity(model: str, states: Mapping[str, State], *, override: str = '') -> str:
