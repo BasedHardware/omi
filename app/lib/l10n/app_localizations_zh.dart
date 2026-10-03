@@ -545,8 +545,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unpairDialogTitle => '取消配对设备';
 
   @override
-  String get unpairDialogMessage =>
-      '这将取消配对设备，使其可以连接到其他手机。您必须前往 设置 > 蓝牙 并遗忘该设备以完成此过程。';
+  String get unpairDialogMessage => '这将取消配对设备，使其可以连接到其他手机。您必须前往 设置 > 蓝牙 并遗忘该设备以完成此过程。';
 
   @override
   String get deviceNotConnected => '设备未连接';
@@ -2353,8 +2352,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unpairDeviceDialogTitle => '取消配对设备';
 
   @override
-  String get unpairDeviceDialogMessage =>
-      '这将取消设备配对，以便可以连接到另一部手机。您需要转到设置 > 蓝牙并忘记设备以完成该过程。';
+  String get unpairDeviceDialogMessage => '这将取消设备配对，以便可以连接到另一部手机。您需要转到设置 > 蓝牙并忘记设备以完成该过程。';
 
   @override
   String get unpair => '取消配对';
@@ -2656,8 +2654,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noTasksYet => '暂无任务';
 
   @override
-  String get tasksFromConversationsWillAppear =>
-      '您的对话中的任务将显示在此处。\n单击创建以手动添加一个。';
+  String get tasksFromConversationsWillAppear => '您的对话中的任务将显示在此处。\n单击创建以手动添加一个。';
 
   @override
   String get monthJan => '1月';
@@ -2825,8 +2822,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get submitAppPublicDescription => '您的应用将被审核并公开。即使在审核期间，您也可以立即开始使用它！';
 
   @override
-  String get submitAppPrivateDescription =>
-      '您的应用将被审核并私下提供给您。即使在审核期间，您也可以立即开始使用它！';
+  String get submitAppPrivateDescription => '您的应用将被审核并私下提供给您。即使在审核期间，您也可以立即开始使用它！';
 
   @override
   String get startEarning => '开始赚钱！💰';
@@ -3076,8 +3072,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get microphonePermissionRequired => '录音需要麦克风权限。';
 
   @override
-  String get microphonePermissionDenied =>
-      '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风 中授予权限。';
+  String get microphonePermissionDenied => '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风 中授予权限。';
 
   @override
   String failedToCheckMicrophonePermission(String error) {
@@ -3307,8 +3302,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whatWeCollect => '我们收集的信息';
 
   @override
-  String get dataCollectionMessage =>
-      '继续即表示您的对话、录音和个人信息将安全地存储在我们的服务器上，以提供 AI 驱动的见解并启用所有应用功能。';
+  String get dataCollectionMessage => '继续即表示您的对话、录音和个人信息将安全地存储在我们的服务器上，以提供 AI 驱动的见解并启用所有应用功能。';
 
   @override
   String get dataProtection => '数据保护';
@@ -3341,8 +3335,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nameMustBeAtLeast2Characters => '姓名必须至少包含2个字符';
 
   @override
-  String get tellUsHowYouWouldLikeToBeAddressed =>
-      '告诉我们您希望如何称呼您。这有助于个性化您的 Omi 体验。';
+  String get tellUsHowYouWouldLikeToBeAddressed => '告诉我们您希望如何称呼您。这有助于个性化您的 Omi 体验。';
 
   @override
   String charactersCount(int count) {
@@ -3377,8 +3370,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get detectBrowserBasedMeetings => '检测基于浏览器的会议';
 
   @override
-  String get accessibilityDescription =>
-      'Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。';
+  String get accessibilityDescription => 'Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。';
 
   @override
   String get pleaseWait => '请稍候…';
@@ -4013,8 +4005,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get issueActivatingApp => '激活此应用时出现问题。请重试。';
 
   @override
-  String get dataAccessNoticeDescription =>
-      '此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责';
+  String get dataAccessNoticeDescription => '此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责';
 
   @override
   String get copyUrl => '复制链接';
@@ -4102,8 +4093,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get omiApiKeys => 'Omi API密钥';
 
   @override
-  String get apiKeysDescription =>
-      'API密钥用于在您的应用程序与Omi服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他Omi服务。';
+  String get apiKeysDescription => 'API密钥用于在您的应用程序与Omi服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他Omi服务。';
 
   @override
   String get aboutOmiApiKeys => '关于Omi API密钥';
@@ -4234,8 +4224,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get maximumSecurityE2ee => '最高安全级别（E2EE）';
 
   @override
-  String get e2eeDescription =>
-      '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
+  String get e2eeDescription => '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
 
   @override
   String get importantTradeoffs => '重要权衡：';
@@ -4507,8 +4496,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yourPrivacyMattersToUs => '您的隐私对我们很重要';
 
   @override
-  String get privacyIntroText =>
-      '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
+  String get privacyIntroText => '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
 
   @override
   String get whatWeTrack => '我们追踪什么';
@@ -4526,8 +4514,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commitmentText => '我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。';
 
   @override
-  String get thankYouText =>
-      '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
+  String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
 
   @override
   String get password => '密码';
@@ -4574,8 +4561,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => '导出已开始。这可能需要几秒钟…';
 
   @override
-  String get knowledgeGraphDeleteDescription =>
-      '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
+  String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
 
   @override
   String get configureDailySummaryDigest => '配置您的每日任务摘要';
@@ -4591,10 +4577,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -4870,8 +4853,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectingYourStripeAccount => '正在连接您的 Stripe 账户';
 
   @override
-  String get stripeOnboardingInstructions =>
-      '请在浏览器中完成 Stripe 注册流程。完成后此页面将自动更新。';
+  String get stripeOnboardingInstructions => '请在浏览器中完成 Stripe 注册流程。完成后此页面将自动更新。';
 
   @override
   String get failedTryAgain => '失败了？重试';
@@ -5002,15 +4984,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get installOmiOnAppleWatch => '在您的 Apple Watch 上\n安装 Omi';
 
   @override
-  String get installOmiOnAppleWatchDescription =>
-      '要将 Apple Watch 与 Omi 配合使用，您需要先在手表上安装 Omi 应用。';
+  String get installOmiOnAppleWatchDescription => '要将 Apple Watch 与 Omi 配合使用，您需要先在手表上安装 Omi 应用。';
 
   @override
   String get openOmiOnAppleWatch => '在您的 Apple Watch 上\n打开 Omi';
 
   @override
-  String get openOmiOnAppleWatchDescription =>
-      'Omi 应用已安装在您的 Apple Watch 上。打开它并点击开始。';
+  String get openOmiOnAppleWatchDescription => 'Omi 应用已安装在您的 Apple Watch 上。打开它并点击开始。';
 
   @override
   String get openWatchApp => '打开 Watch 应用';
@@ -5019,15 +4999,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => '我已安装并打开应用';
 
   @override
-  String get unableToOpenWatchApp =>
-      '无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。';
+  String get unableToOpenWatchApp => '无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch 连接成功！';
 
   @override
-  String get appleWatchNotReachable =>
-      '仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。';
+  String get appleWatchNotReachable => '仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5473,8 +5451,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get howToTakeGoodSample => '如何获取好的样本？';
 
   @override
-  String get goodSampleInstructions =>
-      '1. 确保您在安静的地方。\n2. 说话要清晰自然。\n3. 确保您的设备在颈部的自然位置。\n\n创建后，您随时可以改进它或重新创建。';
+  String get goodSampleInstructions => '1. 确保您在安静的地方。\n2. 说话要清晰自然。\n3. 确保您的设备在颈部的自然位置。\n\n创建后，您随时可以改进它或重新创建。';
 
   @override
   String get noDeviceConnectedUseMic => '没有连接设备。将使用手机麦克风。';
@@ -5896,8 +5873,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get performanceWarning => '性能警告';
 
   @override
-  String get largeModelWarning =>
-      '此模型较大，可能导致应用崩溃或在移动设备上运行非常缓慢。\n\n建议使用 \"small\" 或 \"base\" 模型。';
+  String get largeModelWarning => '此模型较大，可能导致应用崩溃或在移动设备上运行非常缓慢。\n\n建议使用 \"small\" 或 \"base\" 模型。';
 
   @override
   String get usingNativeIosSpeech => '使用原生 iOS 语音识别';
@@ -5972,8 +5948,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelLabel => '模型';
 
   @override
-  String get modelTooLargeWarning =>
-      '此模型较大，可能导致应用在移动设备上崩溃或运行非常缓慢。\n\n建议使用 small 或 base。';
+  String get modelTooLargeWarning => '此模型较大，可能导致应用在移动设备上崩溃或运行非常缓慢。\n\n建议使用 small 或 base。';
 
   @override
   String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
@@ -6916,15 +6891,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get planUpgradeScheduledMessage =>
-      '升级已安排！您的月度计划将持续到计费周期结束，届时自动切换为年度计划。';
+  String get planUpgradeScheduledMessage => '升级已安排！您的月度计划将持续到计费周期结束，届时自动切换为年度计划。';
 
   @override
   String get couldNotSchedulePlanChange => '无法安排计划变更。请重试。';
 
   @override
-  String get subscriptionReactivatedDefault =>
-      '您的订阅已重新激活！现在不收费 - 您将在当前周期结束时计费。';
+  String get subscriptionReactivatedDefault => '您的订阅已重新激活！现在不收费 - 您将在当前周期结束时计费。';
 
   @override
   String get subscriptionSuccessfulCharged => '订阅成功！您已为新的计费周期付费。';
@@ -7120,12 +7093,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get onboardingNotificationDeniedSystemPrefs =>
-      '通知权限被拒绝。请在系统偏好设置中授予权限。';
+  String get onboardingNotificationDeniedSystemPrefs => '通知权限被拒绝。请在系统偏好设置中授予权限。';
 
   @override
-  String get onboardingNotificationDeniedNotifications =>
-      '通知权限被拒绝。请在系统偏好设置 > 通知中授予权限。';
+  String get onboardingNotificationDeniedNotifications => '通知权限被拒绝。请在系统偏好设置 > 通知中授予权限。';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
@@ -7144,8 +7115,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingMicrophoneRequired => '录音需要麦克风权限。';
 
   @override
-  String get onboardingMicrophoneDenied =>
-      '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风中授予权限。';
+  String get onboardingMicrophoneDenied => '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风中授予权限。';
 
   @override
   String onboardingMicrophoneStatusCheckPrefs(String status) {
@@ -7161,8 +7131,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingScreenCaptureRequired => '录制系统音频需要屏幕捕获权限。';
 
   @override
-  String get onboardingScreenCaptureDenied =>
-      '屏幕捕获权限被拒绝。请在系统偏好设置 > 隐私与安全 > 屏幕录制中授予权限。';
+  String get onboardingScreenCaptureDenied => '屏幕捕获权限被拒绝。请在系统偏好设置 > 隐私与安全 > 屏幕录制中授予权限。';
 
   @override
   String onboardingScreenCaptureStatusCheckPrefs(String status) {
@@ -7257,8 +7226,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureMicrophonePermissionRequired => '需要麦克风权限';
 
   @override
-  String get captureMicrophonePermissionInSystemPreferences =>
-      '在系统偏好设置中授予麦克风权限';
+  String get captureMicrophonePermissionInSystemPreferences => '在系统偏好设置中授予麦克风权限';
 
   @override
   String get captureScreenRecordingPermissionRequired => '需要屏幕录制权限';
@@ -7270,12 +7238,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get devModeInvalidAudioBytesWebhookUrl => '无效的音频字节 webhook URL';
 
   @override
-  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
-      '无效的实时转录 webhook URL';
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => '无效的实时转录 webhook URL';
 
   @override
-  String get devModeInvalidConversationCreatedWebhookUrl =>
-      '无效的对话创建 webhook URL';
+  String get devModeInvalidConversationCreatedWebhookUrl => '无效的对话创建 webhook URL';
 
   @override
   String get devModeInvalidDaySummaryWebhookUrl => '无效的每日摘要 webhook URL';
@@ -7873,8 +7839,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingWhatIKnowAboutYouTitle => '这是我了解到的关于你的信息';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription =>
-      '这张地图会随着 Omi 从你的对话中学习而更新。';
+  String get onboardingWhatIKnowAboutYouDescription => '这张地图会随着 Omi 从你的对话中学习而更新。';
 
   @override
   String get apiEnvironment => 'API 环境';
@@ -8248,8 +8213,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fairUseAboutTitle => '关于公平使用';
 
   @override
-  String get fairUseAboutBody =>
-      'Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。';
+  String get fairUseAboutBody => 'Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8287,8 +8251,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get improveConnectionTitle => '改善连接';
 
   @override
-  String get improveConnectionContent =>
-      '我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。';
+  String get improveConnectionContent => '我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。';
 
   @override
   String get improveConnectionAction => '知道了';
@@ -8373,8 +8336,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get permissionEnable => '启用';
 
   @override
-  String get permissionsPageDescription =>
-      '这些权限是Omi运作的核心。它们启用通知、基于位置的体验和音频捕获等关键功能。';
+  String get permissionsPageDescription => '这些权限是Omi运作的核心。它们启用通知、基于位置的体验和音频捕获等关键功能。';
 
   @override
   String get permissionsRequiredDescription => 'Omi 需要一些权限才能正常工作。请授予权限以继续。';
@@ -8653,8 +8615,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingOfflineTranscriptWillCatchUp => '离线录音中 — 恢复联网后文字记录会自动补上。';
 
   @override
-  String get transcriptionUnavailableRecordingSaved =>
-      '转录不可用 — 录音仍在继续，你的音频已保存。';
+  String get transcriptionUnavailableRecordingSaved => '转录不可用 — 录音仍在继续，你的音频已保存。';
 
   @override
   String get capturing => '正在捕获';
@@ -8711,8 +8672,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksMarkComplete => '已标记为完成';
 
   @override
-  String get appleHealthManageNote =>
-      'Omi 通过 Apple 的 HealthKit 框架访问 Apple Health。您可以随时在 iOS 设置中撤销访问权限。';
+  String get appleHealthManageNote => 'Omi 通过 Apple 的 HealthKit 框架访问 Apple Health。您可以随时在 iOS 设置中撤销访问权限。';
 
   @override
   String get appleHealthConnectCta => '连接 Apple Health';
@@ -8733,22 +8693,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appleHealthFeatureReadOnlyTitle => '仅限读取访问';
 
   @override
-  String get appleHealthFeatureReadOnlyDesc =>
-      'Omi 永远不会写入 Apple Health 或修改您的数据。';
+  String get appleHealthFeatureReadOnlyDesc => 'Omi 永远不会写入 Apple Health 或修改您的数据。';
 
   @override
   String get appleHealthFeatureSecureTitle => '安全同步';
 
   @override
-  String get appleHealthFeatureSecureDesc =>
-      '您的 Apple Health 数据私密同步到您的 Omi 账户。';
+  String get appleHealthFeatureSecureDesc => '您的 Apple Health 数据私密同步到您的 Omi 账户。';
 
   @override
   String get appleHealthDeniedTitle => 'Apple Health 访问被拒绝';
 
   @override
-  String get appleHealthDeniedBody =>
-      'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
+  String get appleHealthDeniedBody => 'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
 
   @override
   String get deleteFlowReasonTitle => '您为何离开?';
@@ -9080,8 +9037,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteWhileProcessingTitle => '仍在处理';
 
   @override
-  String get deleteWhileProcessingMessage =>
-      '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
 
   @override
   String get syncCardAllBackedUp => '所有录音已同步';
@@ -9113,8 +9069,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro =>
-      '录音从你的设备传输到这部手机并存储在本地，然后上传到 Omi 的服务器，在那里被转录并转化为对话。';
+  String get syncFlowIntro => '录音从你的设备传输到这部手机并存储在本地，然后上传到 Omi 的服务器，在那里被转录并转化为对话。';
 
   @override
   String get syncStepUpload => '同步';
@@ -9197,8 +9152,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 
   @override
-  String get backgroundModeUnavailable =>
-      '后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。';
+  String get backgroundModeUnavailable => '后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。';
 
   @override
   String get regenerateRecap => '重新生成回顾';
@@ -9219,8 +9173,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCustomSttWarningTitle => '同步会使用 Omi 转录';
 
   @override
-  String get syncCustomSttWarningMessage =>
-      '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
+  String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
 
   @override
   String get transcribeLaterTitle => '稍后转写';
@@ -9229,8 +9182,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '现在录音，想转录时再转录。在此之前，音频保存在你的手机上。';
 
   @override
-  String get transcribeLaterNote =>
-      '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9400,8 +9352,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectRayBanMeta => '连接 Ray-Ban Meta';
 
   @override
-  String get raybanMetaSetupDescription =>
-      '将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。';
+  String get raybanMetaSetupDescription => '将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。';
 
   @override
   String get raybanMetaOpenMetaAI => '通过 Meta AI 连接';
@@ -9416,8 +9367,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get raybanMetaAllowCamera => '允许在眼镜上使用摄像头';
 
   @override
-  String get raybanMetaCameraExplanation =>
-      'Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。';
+  String get raybanMetaCameraExplanation => 'Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。';
 
   @override
   String get raybanMetaSkipForNow => '暂时跳过';
@@ -9426,8 +9376,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 纯音频模式';
 
   @override
-  String get raybanMetaAudioOnlyExplanation =>
-      '此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。';
+  String get raybanMetaAudioOnlyExplanation => '此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。';
 
   @override
   String get raybanMetaMusicPauseNote => '使用眼镜麦克风时，您手机上的音乐将暂停。';
@@ -9638,20 +9587,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rayBanMetaMicPickerTitle => '选择您的 Ray-Ban Meta 麦克风';
 
   @override
-  String get rayBanMetaMicPickerDescription =>
-      '选择眼镜的 Bluetooth 麦克风。Omi 使用麦克风时，音乐会暂停。';
+  String get rayBanMetaMicPickerDescription => '选择眼镜的 Bluetooth 麦克风。Omi 使用麦克风时，音乐会暂停。';
 
   @override
-  String get rayBanMetaMicPickerEmpty =>
-      '未找到 Bluetooth 麦克风。请在 iPhone 设置中连接眼镜，然后重试。';
+  String get rayBanMetaMicPickerEmpty => '未找到 Bluetooth 麦克风。请在 iPhone 设置中连接眼镜，然后重试。';
 
   @override
-  String get rayBanMetaMicPickerLoadError =>
-      '无法加载 Bluetooth 麦克风。请检查 Bluetooth 是否已开启，然后重试。';
+  String get rayBanMetaMicPickerLoadError => '无法加载 Bluetooth 麦克风。请检查 Bluetooth 是否已开启，然后重试。';
 
   @override
-  String get rayBanMetaMicPickerConnectError =>
-      '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
+  String get rayBanMetaMicPickerConnectError => '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
 
   @override
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
@@ -9709,19 +9654,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountCutoverUpdateRequiredTitle => '需要更新';
 
   @override
-  String get accountCutoverUpdateRequiredMessage =>
-      '请安装最新的 Omi 应用，以便在账户迁移后继续使用。';
+  String get accountCutoverUpdateRequiredMessage => '请安装最新的 Omi 应用，以便在账户迁移后继续使用。';
 
   @override
   String get accountCutoverMigrationInProgressTitle => '正在迁移';
 
   @override
-  String get accountCutoverMigrationInProgressMessage =>
-      '您的账户正在迁移。产品功能将暂停，直到迁移完成。';
+  String get accountCutoverMigrationInProgressMessage => '您的账户正在迁移。产品功能将暂停，直到迁移完成。';
 
   @override
-  String get accountCutoverMigrationRollbackMessage =>
-      '账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。';
+  String get accountCutoverMigrationRollbackMessage => '账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。';
 
   @override
   String get accountCutoverOpenStore => '打开应用商店';
@@ -9738,8 +9680,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sendRawAudioToOmi => '向 Omi 发送原始音频';
 
   @override
-  String get sendRawAudioToOmiDescription =>
-      '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
+  String get sendRawAudioToOmiDescription => '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
 
   @override
   String get findDevice => '查找';
@@ -9782,12 +9723,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get prerecordedTranscript => '预录';
 
   @override
-  String get pendantRecordingSyncBlocked =>
-      'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+  String get pendantRecordingSyncBlocked => 'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 
   @override
-  String get pendantFullSyncBlocked =>
-      'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+  String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 
   @override
   String conversationsNotCapturedCount(int count) {
@@ -9860,15 +9799,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
 
   @override
-  String get speechToTextUnavailableDesc =>
-      '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
+  String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
 
   @override
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
 
   @override
-  String get speechProfileEnrollmentPrompt =>
-      '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
+  String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 
   @override
   String get home => '首页';
@@ -9890,73 +9827,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String voiceIntroduction(String part) {
-    String _temp0 = intl.Intl.selectLogic(part, {
-      'title': 'Let Omi get to know you',
-      'intro':
-          'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
-      'hint': 'Say the whole sentence and finish it in your own words.',
-      'name': 'My name is ___, and I spend most of my time ___.',
-      'work': 'Right now, I am working on ___.',
-      'enjoy': 'Outside of that, I really enjoy ___.',
-      'food': 'My favorite food is ___.',
-      'remember': 'Something I would like help remembering is ___.',
-      'day': 'A good day for me includes ___.',
-      'another': 'Try Another Prompt',
-      'start': 'Start Speaking',
-      'skipPrompt': 'Skip Question',
-      'captured': 'Voice sample captured',
-      'silence': 'Take your time. Speak toward your phone microphone.',
-      'audio': 'Audio detected',
-      'review': 'Here is what I heard',
-      'reviewHint': 'Uncheck anything you don\'t want saved.',
-      'saveVoice': 'Save Voice Profile',
-      'savingVoice': 'Saving your voice profile…',
-      'savedVoice': 'Voice profile saved',
-      'voiceLater': 'Set Up My Voice Later',
-      'keep': 'Save Selected Answers',
-      'without': 'Continue Without Saving Answers',
-      'savedMemories': 'Your memories are saved',
-      'short':
-          'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-      'addSample': 'Add Another Sentence',
-      'uploadError':
-          'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
-      'memoryError':
-          'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-      'transcriptionError':
-          'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
-      'noMemories': 'You can tell Omi more about yourself whenever you like.',
-      'voiceOnlyHint':
-          'You can skip any personal prompt and talk about something else.',
-      'goalPrompt': 'Right now my number one goal is to ___.',
-      'savedGoal': 'Your goal is saved',
-      'goalError':
-          'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
-      'goalLong':
-          'Shorten your goal to 500 characters or fewer, then try again.',
-      'voiceUnavailable':
-          'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-      'saveFinish': 'Save and Finish',
-      'retryRemaining': 'Retry Remaining',
-      'saveHint': 'Saves your voice profile and checked answers.',
-      'savedAll': 'Your introduction is saved.',
-      'continueSaved': 'Continue With What Is Saved',
-      'reviewAnswers': 'Review Answers',
-      'originalGoal': 'Use Original Wording',
-      'savingAnswers': 'Saving your answers…',
-      'other': '',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
+        'skipPrompt': 'Skip Question',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add Another Sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
     return '$_temp0';
   }
 
   @override
   String voiceRecognitionStatus(String status) {
-    String _temp0 = intl.Intl.selectLogic(status, {
-      'ready': '声音已就绪，可用于识别',
-      'saved_sample_awaiting_embedding': '样本已保存，仍需处理声音',
-      'not_learned': '尚未学习声音',
-      'other': '声音状态未知',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '声音已就绪，可用于识别',
+        'saved_sample_awaiting_embedding': '样本已保存，仍需处理声音',
+        'not_learned': '尚未学习声音',
+        'other': '声音状态未知',
+      },
+    );
     return '$_temp0';
   }
 
@@ -9971,13 +9908,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String chatStarterPrompt(String kind) {
-    String _temp0 = intl.Intl.selectLogic(kind, {
-      'capabilities': '你能为我做些什么？',
-      'goal': '帮我设定一个目标',
-      'activity': '总结我最近的活动',
-      'improve': '我该如何改进？',
-      'other': '',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '你能为我做些什么？',
+        'goal': '帮我设定一个目标',
+        'activity': '总结我最近的活动',
+        'improve': '我该如何改进？',
+        'other': '',
+      },
+    );
     return '$_temp0';
   }
 
@@ -10444,8 +10384,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectFirmwareZip => '选择固件 ZIP 文件';
 
   @override
-  String get customFirmwareWarning =>
-      '刷写自定义固件可能导致设备无法使用。请确认这是有效的 Omi 固件版本，并且更新期间不要断开连接。';
+  String get customFirmwareWarning => '刷写自定义固件可能导致设备无法使用。请确认这是有效的 Omi 固件版本，并且更新期间不要断开连接。';
 
   @override
   String get firmwareFlashed => '固件已刷写';
@@ -10533,8 +10472,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareUpdateFailedTitle => '更新失败';
 
   @override
-  String get firmwareUpdateFailedMessage =>
-      '更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。';
+  String get firmwareUpdateFailedMessage => '更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。';
 
   @override
   String get firmwareDownloadFailedMessage => '无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。';
@@ -10614,8 +10552,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get startupFailedMessage => 'Omi 启动时出了点问题。请检查您的网络连接，然后重试。';
 
   @override
-  String get startupFailedConfigMessage =>
-      '此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。';
+  String get startupFailedConfigMessage => '此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。';
 
   @override
   String get discardRecordingTitle => '放弃录音？';
@@ -10903,8 +10840,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationDeveloperTools => '对话中的开发者工具';
 
   @override
-  String get conversationDeveloperToolsDescription =>
-      '在对话菜单中显示“复制对话 ID”和“测试提示词”';
+  String get conversationDeveloperToolsDescription => '在对话菜单中显示“复制对话 ID”和“测试提示词”';
 
   @override
   String participantsSummary(String name, int count) {
@@ -10972,8 +10908,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speakerTagPromptSaveVoicesTitle => '记住你命名的人的声音';
 
   @override
-  String get speakerTagPromptSaveVoicesBody =>
-      'Omi 会保留一小段声音样本，以便下次认出对方。你可以随时在设置中更改。';
+  String get speakerTagPromptSaveVoicesBody => 'Omi 会保留一小段声音样本，以便下次认出对方。你可以随时在设置中更改。';
 
   @override
   String get speakerTagPromptThanks => '谢谢！Omi 识别声音会越来越准。';
@@ -10994,8 +10929,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceSettingsAskToTagSubtitle => 'Omi 偶尔会问你最近的对话中是谁在说话';
 
   @override
-  String get voiceSettingsSaveOthersSubtitle =>
-      '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
+  String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
 
   @override
   String get leaveBlank => '留空';
@@ -11015,8 +10949,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
 
   @override
-  String get transcriptionUnavailableRecordingContinues =>
-      '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
+  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
   String transcriptionsPendingFraction(int pending, int total) {
@@ -11094,12 +11027,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureMicInUseElsewhere => '麦克风被其他应用占用';
 
   @override
-  String get captureMicInterruptedDetail =>
-      '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
 
   @override
-  String get captureCustomSttUnreachableDetail =>
-      '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
 
   @override
   String get captureStarting => '正在启动…';
@@ -11111,8 +11042,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureStorageAlmostFull => '存储空间即将用完';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -11155,15 +11085,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '通过手机扬声器';
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput =>
-      '通过当前音频输出';
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '通过当前音频输出';
 
   @override
   String get deviceOnboardingVoiceReplyOffDescription => '答案保留在屏幕上。什么也没说。';
 
   @override
-  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
-      '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
 
   @override
   String get deviceOnboardingVoiceReplyAlwaysDescription => '未连接耳机时使用手机扬声器。';
@@ -11177,8 +11105,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
-      '未连接耳机。 Omi 保持沉默，直到您接通一些。';
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '未连接耳机。 Omi 保持沉默，直到您接通一些。';
 
   @override
   String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
@@ -11189,19 +11116,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '通过手机扬声器大声播放。';
 
   @override
-  String deviceOnboardingVoiceReplySettingsHint(
-    String settings,
-    String voiceResponse,
-  ) {
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
     return '您可以随时在 $settings › $voiceResponse 中更改此设置';
   }
 
   @override
-  String deviceOnboardingAllSetReplayHint(
-    String settings,
-    String deviceSettings,
-    String deviceTutorial,
-  ) {
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
     return '随时重播此导览 $settings › $deviceSettings › $deviceTutorial';
   }
 
@@ -11289,8 +11209,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceDiagnosticsTicket => 'Support ticket code';
 
   @override
-  String get deviceDiagnosticsUploadFailed =>
-      'Could not send diagnostics to support. Please try again.';
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 
   @override
   String get feedbackGiveFeedback => '提供反馈';
@@ -12038,23 +11957,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String speakerLabelVoiceStatus(String state) {
-    String _temp0 = intl.Intl.selectLogic(state, {
-      'learned': '已学会声音',
-      'pending': '正在学习声音…',
-      'disabled': '声音保存已关闭',
-      'other': '尚未学会声音',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '已学会声音',
+        'pending': '正在学习声音…',
+        'disabled': '声音保存已关闭',
+        'other': '尚未学会声音',
+      },
+    );
     return '$_temp0';
   }
 
   @override
   String speakerLabelVoiceDetail(String state, String name) {
-    String _temp0 = intl.Intl.selectLogic(state, {
-      'learned': '下次 Omi 就能认出 $name。',
-      'pending': '这需要几秒钟。',
-      'disabled': '请在设置中开启声音保存，以便 Omi 能认出 $name。',
-      'other': 'Omi 需要 $name 更清晰的语音，并会继续尝试。',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '下次 Omi 就能认出 $name。',
+        'pending': '这需要几秒钟。',
+        'disabled': '请在设置中开启声音保存，以便 Omi 能认出 $name。',
+        'other': 'Omi 需要 $name 更清晰的语音，并会继续尝试。',
+      },
+    );
     return '$_temp0';
   }
 
@@ -12071,17 +11996,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String speakerLabelText(String part, String name) {
-    String _temp0 = intl.Intl.selectLogic(part, {
-      'likely': '可能',
-      'soundsLike': '听起来像 $name',
-      'notPerson': '不是 $name',
-      'carried': '仍是 $name。沿用自你的上一段对话。',
-      'change': '更改',
-      'alsoTitle': '这也是 $name 吗？',
-      'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
-      'confirmed': '你已确认此标签',
-      'other': '查看',
-    });
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '可能',
+        'soundsLike': '听起来像 $name',
+        'notPerson': '不是 $name',
+        'carried': '仍是 $name。沿用自你的上一段对话。',
+        'change': '更改',
+        'alsoTitle': '这也是 $name 吗？',
+        'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
+        'confirmed': '你已确认此标签',
+        'other': '查看',
+      },
+    );
     return '$_temp0';
   }
 
@@ -12199,8 +12127,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unresolvedSpeakersTitle => '关于说话人标签';
 
   @override
-  String get unresolvedSpeakersMessage =>
-      'Omi 无法区分录音中的其他声音。请轻点说话人标签，为正在说话的人命名。';
+  String get unresolvedSpeakersMessage => 'Omi 无法区分录音中的其他声音。请轻点说话人标签，为正在说话的人命名。';
 
   @override
   String get nameSpeakerTitle => '命名说话者';
