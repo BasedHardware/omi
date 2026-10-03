@@ -11358,5 +11358,22 @@
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
     "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
     "diagnosticsLastDuration": "Апошнія {duration}",
-    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай."
+    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
+    "reprocessingConversationProgress": "Паўторная апрацоўка размовы…",
+    "conversationReprocessed": "Размова абноўлена",
+    "loadingTranscript": "Загрузка транскрыпцыі…",
+    "transcriptLoadFailed": "Не ўдалося загрузіць транскрыпцыю.",
+    "processingConversationProgress": "Апрацоўка размовы…",
+    "conversationProcessingFailedMessage": "Не ўдалося апрацаваць гэту размову.",
+    "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка.",
+    "unnamedSpeakerLabel": "Дыктар",
+    "unresolvedSpeakersNotice": "Спікары не падзелены паміж запісамі.",
+    "unresolvedSpeakersTitle": "Пра пазнакі спікераў",
+    "unresolvedSpeakersMessage": "Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.",
+    "nameSpeakerTitle": "Назваць дыктара",
+    "playbackPreparingAudio": "Падрыхтоўка аўдыё…",
+    "playbackBackToCurrent": "Назад да бягучага",
+    "playbackAudioUnavailable": "Аўдыё недаступнае",
+    "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
+    "playbackAudioNetworkFailed": "Праверце злучэнне"
 }

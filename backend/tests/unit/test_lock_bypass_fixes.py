@@ -1197,7 +1197,8 @@ class TestScheduledDailySummaryLockFilter:
             ) as mock_gen:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
-                with patch('utils.other.notifications.send_notification'):
+                daily_summaries_db.mark_daily_summary_delivery_completed = MagicMock()
+                with patch('utils.other.notifications.send_notification_result', return_value=1):
                     import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 

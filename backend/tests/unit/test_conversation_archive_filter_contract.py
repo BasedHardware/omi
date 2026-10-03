@@ -208,6 +208,7 @@ def conversations_db():
         "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.observability.speaker_learning_jobs": AutoMockModule("utils.observability.speaker_learning_jobs"),
+        "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,

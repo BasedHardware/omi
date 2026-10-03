@@ -665,7 +665,7 @@ def get_all_people(
     budget = conversation_scan_budget(request, route='people-stats') if include_stats else None
     people = Person.deserialize_many_safe(get_people(uid))
     if include_stats and people:
-        stats = collect_people_stats(people_stats_scan(uid, budget=budget))
+        stats = collect_people_stats(people_stats_scan(uid, budget=budget), uid=uid, budget=budget)
         apply_people_stats(people, stats)
     if budget is not None:
         finish_list_budget(response, budget)

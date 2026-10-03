@@ -12330,4 +12330,56 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
+  String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';
+
+  @override
+  String get conversationReprocessed => 'Gesprek bijgewerkt';
+
+  @override
+  String get loadingTranscript => 'Transcript laden…';
+
+  @override
+  String get transcriptLoadFailed => 'Kan het transcript niet laden.';
+
+  @override
+  String get processingConversationProgress => 'Gesprek wordt verwerkt…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Dit gesprek kon niet worden verwerkt.';
+
+  @override
+  String get waitForReprocessing => 'Wacht tot het opnieuw verwerken klaar is.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Spreker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Sprekers zijn niet gescheiden over opnames heen.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Over sprekerlabels';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kon de andere stemmen niet uit elkaar houden over opnames heen. Tik op een sprekerlabel om te benoemen wie er spreekt.';
+
+  @override
+  String get nameSpeakerTitle => 'Spreker benoemen';
+
+  @override
+  String get playbackPreparingAudio => 'Audio wordt voorbereid…';
+
+  @override
+  String get playbackBackToCurrent => 'Terug naar huidige';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio niet beschikbaar';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio kon niet worden geladen';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controleer verbinding';
 }
