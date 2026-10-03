@@ -7,6 +7,9 @@ buffering, rate checks and debounce have a shared admission helper. Legacy code
 remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
 paid-only admission helper and default-on debounce; its EXP-005 shadow remains
 exclusive to legacy dispatch. V2 additionally enforces strict spine admission.
+Shared legacy formatting/admission and Cloud Tasks enqueue/OIDC helpers expose
+public Python APIs. In-tree callers migrate together; their implementation and
+legacy dispatch behavior are unchanged.
 
 `backend/config/mentor_v2.json` selects `mentor_v2.prompt_version`, initially
 `legacy-1`. Its gate/draft/critic prompt bytes match legacy. Add a prompt entry and

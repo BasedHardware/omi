@@ -230,7 +230,7 @@ def get_listen_finalization_tasks_max_attempts() -> int:
     return int(os.getenv('LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 
 
-def _enqueue_named_task(
+def enqueue_named_task(
     queue: str,
     url: str,
     task_id: str,
@@ -303,7 +303,7 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
         if queue and handler_url:
-            _enqueue_named_task(
+            enqueue_named_task(
                 queue,
                 handler_url,
                 task_id,
@@ -311,7 +311,7 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
             )
             return
-    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
 
 
 def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
@@ -320,7 +320,7 @@ def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
     if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync task handler URL is not the expected v2 route')
     wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('SYNC_TASKS_QUEUE', ''),
         wake_url,
         f'sbu-{uid_hash}-{deadline}',
@@ -352,7 +352,7 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     else:
         task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     handler_url = _audio_merge_handler_url()
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
         task_id,
@@ -372,7 +372,7 @@ def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
         raise ValueError('wipe_job_id must be non-empty')
     job_hash = hashlib.sha256(wipe_job_id.encode('utf-8')).hexdigest()[:32]
     task_id = f"account-delete-{job_hash}-{uuid.uuid4().hex}"
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
         os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
         task_id,
@@ -400,7 +400,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
     uid nor any conversation/BYOK material so Cloud Tasks diagnostics cannot
     expose user content or credentials.
     """
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
         _listen_finalization_handler_url(),
         f'listen-finalization-{job_id}-{dispatch_generation}',
@@ -410,7 +410,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
     )
 
 
-def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True) -> int:
+def verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True) -> int:
     """Verify a configured task audience and issuer; returns task retry count.
 
     Sync function on purpose — verify_oauth2_token fetches Google certs over
@@ -444,7 +444,7 @@ def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str
 
 def verify_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for sync-job task routes."""
-    return _verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
+    return verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
 
 
 def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
@@ -454,13 +454,13 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
     audience names a different service (backend-sync-backfill) can still
     mint a token the merge worker will accept.
     """
-    return _verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
+    return verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
     """Verify deletion tasks."""
     deletion_audience = _account_deletion_oidc_audience()
-    retry_count = _verify_cloud_tasks_oidc(
+    retry_count = verify_cloud_tasks_oidc(
         request,
         audience=deletion_audience,
         invoker_sa=_invoker_sa(),
@@ -471,7 +471,7 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for the isolated listen finalization task route."""
-    return _verify_cloud_tasks_oidc(
+    return verify_cloud_tasks_oidc(
         request,
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),

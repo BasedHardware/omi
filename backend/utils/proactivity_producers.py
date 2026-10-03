@@ -7,7 +7,7 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,7 @@ from utils.llm import proactive_notification as legacy
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+ModelResult = TypeVar('ModelResult', bound=BaseModel)
 
 SAME_POINT_QUESTION = (
     'Does the NEW notification make the same point or ask for the same action as any EARLIER notification? '
@@ -52,7 +53,7 @@ class FollowupCopy(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
 
 
-async def structured(item: dict, step: str, prompt: str, schema: type[BaseModel], tokens: int = 2048):
+async def structured(item: dict, step: str, prompt: str, schema: type[ModelResult], tokens: int = 2048) -> ModelResult:
     response = await spine.run_proactivity_model(
         item=item,
         step=step,
@@ -125,9 +126,9 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
             },
         )
         fields = dict(context)
-        fields['current_conversation'] = legacy._format_current_conversation(messages, fields['user_name'])
-        fields['goals_text'] = legacy._format_goals(fields.pop('goals'))
-        fields['recent_notifications'] = legacy._format_recent_notifications(fields['recent_notifications'])
+        fields['current_conversation'] = legacy.format_current_conversation(messages, fields['user_name'])
+        fields['goals_text'] = legacy.format_goals(fields.pop('goals'))
+        fields['recent_notifications'] = legacy.format_recent_notifications(fields['recent_notifications'])
         gate_prompt = prompts['gate'].format(**fields)
         if config.prefilter_threshold is not None:
             try:
@@ -154,7 +155,7 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
             await spine.close_item(item=item, state='silent', reason='model_silent')
             return None
         fields['gate_reasoning'] = gate.reasoning
-        fields['language_instruction'] = legacy._language_instruction(context['output_language'])
+        fields['language_instruction'] = legacy.language_instruction(context['output_language'])
         draft = await structured(item, 'generate', prompts['generate'].format(**fields), legacy.NotificationDraft)
         if len(draft.notification_text) < 5 or draft.confidence < threshold:
             await spine.close_item(item=item, state='silent', reason='model_silent')
@@ -162,7 +163,7 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
         fields.update(
             notification_text=draft.notification_text,
             draft_reasoning=draft.reasoning,
-            language_instruction=legacy._language_instruction(context['output_language'], for_critic=True),
+            language_instruction=legacy.language_instruction(context['output_language'], for_critic=True),
         )
         critic = await structured(item, 'critic', prompts['critic'].format(**fields), MentorCritic)
         if critic.safety_escalation and config.safety_escalation == 'suppress':
@@ -294,7 +295,7 @@ async def evaluate_mentor_event(uid: str, conversation_id: str, messages: list[d
     try:
         # Paid/flag admission precedes context reads, debounce mutation and any model work.
         await spine.ensure_admitted(uid, 'conversation_mentor_v2')
-        admission = await run_blocking(db_executor, integration._admit_mentor_evaluation, uid, messages)
+        admission = await run_blocking(db_executor, integration.admit_mentor_evaluation, uid, messages)
         if admission is None:
             return None
         frequency, threshold = admission

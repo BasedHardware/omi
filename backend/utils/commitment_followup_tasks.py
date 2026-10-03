@@ -36,7 +36,7 @@ def schedule_followup(uid: str, task_id: str, due_at: datetime | str, *, retry_o
         wake = max(now, due - timedelta(seconds=hops * hop_seconds))
         revision = due.isoformat()
         identity = hashlib.sha256(f'{uid}:{task_id}:{revision}:{hops}'.encode()).hexdigest()
-        cloud_tasks._enqueue_named_task(
+        cloud_tasks.enqueue_named_task(
             queue,
             url,
             f'commitment-{identity}',
@@ -52,7 +52,7 @@ def schedule_followup(uid: str, task_id: str, due_at: datetime | str, *, retry_o
 
 
 def verify_followup_task(request: Request) -> int:
-    return cloud_tasks._verify_cloud_tasks_oidc(
+    return cloud_tasks.verify_cloud_tasks_oidc(
         request,
         audience=os.getenv('COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL', ''),
         invoker_sa=os.getenv('COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA', ''),

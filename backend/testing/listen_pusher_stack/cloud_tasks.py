@@ -180,4 +180,4 @@ def install_loopback_task_auth() -> None:
             return 0
         return max(retry_count, 0)
 
-    cloud_tasks._verify_cloud_tasks_oidc = verify  # type: ignore[assignment]
+    cloud_tasks.verify_cloud_tasks_oidc = verify  # type: ignore[assignment]

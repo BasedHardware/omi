@@ -341,7 +341,7 @@ def test_dedupe_history_last_five_delivered_excludes_human_and_unexposed(lane):
 
 def test_due_scheduler_named_dedup_and_opaque_payload(monkeypatch):
     enqueue = MagicMock()
-    monkeypatch.setattr(scheduler.cloud_tasks, '_enqueue_named_task', enqueue)
+    monkeypatch.setattr(scheduler.cloud_tasks, 'enqueue_named_task', enqueue)
     monkeypatch.setattr(scheduler, 'enabled', lambda uid: True)
     for suffix, value in [
         ('QUEUE', 'queue'),

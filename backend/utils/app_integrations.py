@@ -675,7 +675,7 @@ def _mentor_gate_debounce_skip_reason(
     return None
 
 
-def _admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
+def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
     # 1. Get frequency setting
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
@@ -774,7 +774,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     Returns:
         The notification text if sent, None otherwise.
     """
-    admission = _admit_mentor_evaluation(uid, conversation_messages)
+    admission = admit_mentor_evaluation(uid, conversation_messages)
     if admission is None:
         return None
     frequency, base_threshold = admission
