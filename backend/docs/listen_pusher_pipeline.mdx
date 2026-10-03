@@ -267,10 +267,13 @@ therefore resolves speakers for the whole conversation before it summarizes
 (`utils/conversations/speaker_resolution.py`, called from `process_conversation`
 on every trigger). When every capture scope is a sync chunk, it embeds each
 segment of at least 1s from the stored private cloud sync audio (each chunk blob
-decoded on its own; merging chunks drifts where they overlap). Live scopes are not
-resolved yet: live `started_at` can drift minutes from the arrival-stamped chunks
-until the capture-position clock lands, and misplaced audio would merge the wrong
-voices. It caches the embeddings, encrypted, at
+decoded on its own; merging chunks drifts where they overlap). Live scopes
+resolve only under `LIVE_SPEAKER_SPAN_RESOLUTION` (default off): without it the
+legacy gate still refuses live audio because `started_at` can drift minutes
+from the arrival-stamped chunks; with it, each segment must prove placement
+through sync chunks, the v2 marker, or a validated capture span (see
+"Trusted capture-span placement and live speaker resolution" below), and
+misplaced audio would merge the wrong voices. It caches the embeddings, encrypted, at
 `audio/{uid}/{conversation_id}/speaker-embeddings.v1.enc`, so sync updates embed
 only new segments and conversation/account deletion purges the cache with the
 audio. `utils/stt/conversation_speakers.py` then clusters the embeddings
@@ -2018,6 +2021,99 @@ selection and speaker-sample extraction serve v2 conversations only from
 validated span coverage; a v1-only chunk list is a candidate, never proof.
 Playback parts stay one contiguous span per part (grouping splits at every
 real gap), preserving the released clients' strict-seek arithmetic.
+
+#### Span-bearing storage decoupled from v2 text (AUDIO_TIMELINE_SPANS)
+
+`AUDIO_TIMELINE_SPANS` (default off, read at the call boundary in
+`config/audio_timeline.py` and pinned for the recording's life) admits
+span-bearing private-cloud storage on the same eligible sessions as v2 —
+single-channel server-STT — **without** adopting v2 text projection. The
+listen side sends the existing `audio_timeline=2` capability and honors
+projected `101` starts only after the pusher acknowledges; before an ack the
+session keeps legacy byte semantics and never claims spans it cannot prove.
+Ack loss mid-recording uses the same suspend/withhold/resume lane as v2: the
+buffered run keeps its projected position until a capable socket returns, and
+text delivery is unaffected. On the pusher the negotiated protocol is the only
+signal — the pusher's own declared flag does not turn an unnegotiated legacy
+socket into spans — so a spans session's chunks carry `v2_start`/`v2_samples`/
+`v2_sample_rate` blob metadata and `AudioFile.chunk_spans` exactly as v2
+chunks do; `omi_audio_timeline_chunks_written_total{reason="with_spans"|
+"without_spans"}` counts each successful upload completion — a completion
+denominator, not a unique-object count, since an idempotent retry can
+complete the same stored object more than once. Provider
+text keeps the clock-only path end to end: provider-native `start`/`end`,
+the private `audio_capture_start`/`audio_capture_end` window, and no
+`audio_timeline` marker or `started_at` pin. v2 and spans are independent
+admissions; `AUDIO_TIMELINE_V2` on implies nothing about the spans flag and
+vice versa. For a storage-only rollout `AUDIO_TIMELINE_V2` must stay false:
+only then does the text path keep legacy provider-native semantics. The
+admission mode a session took is pinned for that recording's life, so
+mid-recording flag flips never retcon stored or projected audio.
+
+#### Trusted capture-span placement and live speaker resolution
+
+`LIVE_SPEAKER_SPAN_RESOLUTION` (default off) is the consumer half, independent
+of the storage flag. `audio_placement.locate(..., capture_spans=True)` is a
+pure function that returns the trusted reason `capture_span` only when every
+link holds: the contributor is not sync-scoped, the text window is union-
+covered by mapped segments, `audio_capture_start`/`audio_capture_end` are
+complete, finite and ordered, the implied capture window agrees with the
+segments' own offsets/durations within the strict 1 ms coverage tolerance,
+and the stored span manifest proves the whole capture interval. Manifest
+caveat: the entire `audio_files` manifest must pass the v2 validator — every
+chunk needs a finite span paired with its timestamp — before any capture
+window is trusted, and the window itself must be fully span-covered. A mixed
+manifest where some objects carry spans and some do not, a spanless legacy
+object, a coverage hiatus, or a capture window straddling an uncovered gap all
+refuse with `untrusted_clock`; nothing is ever synthesized from arrival
+timestamps. This deliberately leaves some real mixed recordings unavailable.
+Sync scopes keep their `sync` reason and the v2 marker still wins wherever it
+exists, so span-bearing mixed live+sync conversations resolve.
+
+With the consumer flag on, conversation speaker resolution embeds every
+non-Omi embeddable segment only from a `locate()` window — sync, v2, or
+trusted capture span — and refuses before the first diarizer call if any
+required segment is unplaceable. Capture-derived embeddings are cached under
+keys prefixed `capture-span:` while sync, v2 and legacy-compatible entries
+keep the bare segment id; the cache holds at most one selected key per
+segment because stale keys are pruned against the current selection, so a
+segment never carries a legacy key and a capture key simultaneously. The v1
+cache format stays readable, existing bare-id entries on own/legacy scopes
+are reused without re-embedding, and a shifted capture endpoint re-embeds
+only the affected entry. One nuance: when an own- or legacy-scope segment is
+newly placed on the capture clock but already holds a duration-matching bare
+entry — output this stage itself wrote under an earlier resolution — that
+entry is reused as cached compatibility rather than treated as a capture-
+sourced embed; live scopes never get that reuse.
+`omi_audio_placement_total{reason=...}` counts every advisory `locate` per
+embeddable segment per attempt — including with the consumer flag off, where
+the same shadow lookups run purely for measurement and cannot alter the
+legacy resolution — and
+`omi_conversation_speaker_resolution_reasons_total{outcome,reason}` breaks
+each stage outcome down by `legacy|capture_span|sync|v2|mixed|cached|none`
+or the first refusal reason.
+
+Rollback is safe in both directions. Turning the consumer flag back off after
+a resolution has written `capture-span:` cache keys does not silently re-embed
+those segments at legacy coordinates: on decode, any key with that prefix
+makes the stage return `unaligned_audio`/`capture_span` immediately — no
+pruning, no upload, no embeddings — leaving the original cache bytes intact
+for the next ON run. Kill switches compose:
+`CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables the stage entirely,
+`LIVE_SPEAKER_CAPTURE_CLOCK=false` stops new capture windows being written,
+and `AUDIO_TIMELINE_SPANS=false` stops new span-bearing uploads.
+
+Rollout sequencing: ship `AUDIO_TIMELINE_SPANS` on backend-listen and pusher
+together (the pusher honors protocol 2 for either mode, so an older pusher
+that never acks just gets legacy chunks), let recordings accumulate
+span-bearing storage, watch `omi_audio_placement_total` shadow counts for
+`capture_span` versus refused reasons on the real manifest mix, then enable
+`LIVE_SPEAKER_SPAN_RESOLUTION` on the processing services once coverage is
+acceptable. Conversation processing runs on the four Cloud Run services
+(`backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration`)
+plus the GKE listen/pusher pair; no Cloud Run *job* consumes this flag.
+Services that only process need only the consumer flag; the storage flag
+matters only on the listen/pusher pair that writes the audio.
 
 #### Live speaker ID runs on the capture clock for every server-STT session
 
