@@ -2181,9 +2181,32 @@ even when sibling segments succeeded; differing fingerprints in one batch share 
 failed-job response retains local WAL audio, and completion is never reported.
 Unknown Firestore 400s, expired transactions, contention and transport failures are
 never strikes. `sync_assignment_target` reports bounded `mismatch` tokens (`lock`
-only when lock state differs); `sync_persistence_exception` reports `firestore_error`.
-Persistence failures use provider/model `unknown` and `sync_persistence_failed`,
+only when lock state differs); `sync_persistence_exception` reports `firestore_error`
+and `firestore_doc_kind` (`conversation`, `donor`, `sync_day_index`, `sync_recent`,
+`other` or `none`, derived from the rejected document's collection segments, never
+its ids). Persistence failures use provider/model `unknown` and `sync_persistence_failed`,
 preserving STT provider attribution for STT failures only.
+
+A temporal merge only grows the canonical conversation, so a long run of adjacent
+chunks can reach Firestore's 1 MiB document limit. `assign_in_transaction` plans the
+whole write without writing, estimates the encoded canonical with Firestore's
+documented storage-size rules (`utils/firestore_document_size.py`), and when a growing write
+would exceed `SYNC_CONVERSATION_BYTE_BUDGET` (900 KiB) it re-plans in the same
+transaction with that conversation excluded: it is never the chunk's target, donor or
+bridge, every retry, deletion, provenance, receipt and smart-merge fence re-runs, and
+only the speech the full plan found new moves on, to the next eligible conversation or
+a new one (`sync_assignment_target outcome=size_rollover trigger=estimate`, one event
+per committed plan, with an `excluded` count). The decision comes only from the
+complete encoded plan, so a write that fits behaves exactly as before. Each accepted
+rollover is re-checked until it fits; a chain of full conversations costs one plan per
+row, which only an account at the ceiling pays. An
+identical retry plans the same rollover and deduplicates into it. A dedupe-only retry
+still writes in place. When no safe home exists (the new row would overwrite a
+tombstone, be empty, or break a fence) the original write stands
+(`outcome=size_rollover_unavailable`). If a commit is still rejected for size, and the
+message names a conversation (or no document), `assign_sync_conversation` retries once
+with it marked full (`outcome=size_limit_retry`, then `trigger=commit_limit`); a
+second rejection, or one naming an index document, fails as before and earns a strike.
 
 `utils/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
