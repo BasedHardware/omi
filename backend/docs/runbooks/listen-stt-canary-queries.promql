@@ -1,6 +1,9 @@
 # PR #20391 rollout watches. Grafana variable canary_pods must list escaped EXACT pod names.
 # No track label is copied by the current scrape. Control queries use a separate exact pod set.
 # Exposure windows must contain only the pinned image; missing series/exposure = HOLD.
+# Zero-event labeled counters may export TYPE but no samples. Verify registration
+# on each healthy scraped pod before interpreting an empty error query as zero;
+# never mask absent scrapes or a missing metric family with an unconditional vector(0).
 
 sum by (source,successor) (increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
 histogram_quantile(0.95,sum by (le,source,successor) (rate(omi_stt_replay_wall_seconds_bucket{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[5m])))
