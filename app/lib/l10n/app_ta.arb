@@ -11358,5 +11358,22 @@
     "diagnosticsLongestGap": "நீண்ட இடைவெளி",
     "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
     "diagnosticsLastDuration": "கடந்த {duration}",
-    "peopleStatsIncomplete": "எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்."
+    "peopleStatsIncomplete": "எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.",
+    "reprocessingConversationProgress": "உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…",
+    "conversationReprocessed": "உரையாடல் புதுப்பிக்கப்பட்டது",
+    "loadingTranscript": "டிரான்ஸ்கிரிப்ட் ஏற்றப்படுகிறது…",
+    "transcriptLoadFailed": "டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.",
+    "processingConversationProgress": "உரையாடல் செயலாக்கப்படுகிறது…",
+    "conversationProcessingFailedMessage": "இந்த உரையாடலைச் செயலாக்க முடியவில்லை.",
+    "waitForReprocessing": "மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.",
+    "unnamedSpeakerLabel": "பேச்சாளர்",
+    "unresolvedSpeakersNotice": "பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.",
+    "unresolvedSpeakersTitle": "பேச்சாளர் லேபிள்கள் பற்றி",
+    "unresolvedSpeakersMessage": "பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.",
+    "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்",
+    "playbackPreparingAudio": "ஆடியோ தயாராகிறது…",
+    "playbackBackToCurrent": "தற்போதையதற்குத் திரும்பு",
+    "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
+    "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
+    "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்"
 }

@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "最长中断",
     "diagnosticsSincePairingSummary": "配对以来：断开 {drops} 次，连接失败 {failed} 次。",
     "diagnosticsLastDuration": "最近 {duration}",
-    "peopleStatsIncomplete": "统计可能不完整。"
+    "peopleStatsIncomplete": "统计可能不完整。",
+    "reprocessingConversationProgress": "正在重新处理对话…",
+    "conversationReprocessed": "对话已更新",
+    "loadingTranscript": "正在加载转录…",
+    "transcriptLoadFailed": "无法加载转录。",
+    "processingConversationProgress": "正在处理对话…",
+    "conversationProcessingFailedMessage": "无法处理此对话。",
+    "waitForReprocessing": "请等待重新处理完成。",
+    "unnamedSpeakerLabel": "发言者",
+    "unresolvedSpeakersNotice": "说话人未在不同录音间区分开。",
+    "unresolvedSpeakersTitle": "关于说话人标签",
+    "unresolvedSpeakersMessage": "Omi 无法区分录音中的其他声音。请轻点说话人标签，为正在说话的人命名。",
+    "nameSpeakerTitle": "命名说话者",
+    "playbackPreparingAudio": "正在准备音频…",
+    "playbackBackToCurrent": "回到当前位置",
+    "playbackAudioUnavailable": "音频不可用",
+    "playbackAudioLoadFailed": "无法加载音频",
+    "playbackAudioNetworkFailed": "请检查网络连接"
 }

@@ -12282,4 +12282,56 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Antallene kan være ufuldstændige.';
+
+  @override
+  String get reprocessingConversationProgress => 'Samtalen genbehandles…';
+
+  @override
+  String get conversationReprocessed => 'Samtalen er opdateret';
+
+  @override
+  String get loadingTranscript => 'Indlæser transskription…';
+
+  @override
+  String get transcriptLoadFailed => 'Transskriptionen kunne ikke indlæses.';
+
+  @override
+  String get processingConversationProgress => 'Behandler samtalen…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Samtalen kunne ikke behandles.';
+
+  @override
+  String get waitForReprocessing => 'Vent, til genbehandlingen er færdig.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Taler';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Talerne er ikke adskilt på tværs af optagelser.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Om taler-mærker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kunne ikke skelne de andre stemmer på tværs af optagelserne. Tryk på et taler-mærke for at navngive, hvem der taler.';
+
+  @override
+  String get nameSpeakerTitle => 'Navngiv taler';
+
+  @override
+  String get playbackPreparingAudio => 'Forbereder lyd…';
+
+  @override
+  String get playbackBackToCurrent => 'Tilbage til aktuel';
+
+  @override
+  String get playbackAudioUnavailable => 'Lyd ikke tilgængelig';
+
+  @override
+  String get playbackAudioLoadFailed => 'Lyden kunne ikke indlæses';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Tjek forbindelsen';
 }

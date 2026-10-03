@@ -341,6 +341,8 @@ def _run_daily_summary_test_route(monkeypatch: pytest.MonkeyPatch, capture: Help
 
 
 def _run_mentor_notification(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    # This witness isolates the conversation query, with an entitled recipient.
+    _stub(monkeypatch, app_integrations, 'mentor_plan_allows_evaluation', lambda uid: True)
     frequency = next(key for key, value in app_integrations.FREQUENCY_TO_BASE_THRESHOLD.items() if value is not None)
     _stub(monkeypatch, app_integrations, 'get_mentor_notification_frequency', lambda uid: frequency)
     _stub(monkeypatch, app_integrations.mem_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
