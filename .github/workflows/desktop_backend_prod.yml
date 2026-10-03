@@ -242,6 +242,7 @@ jobs:
           for secret in \
             DESKTOP_GEMINI_API_KEY \
             DESKTOP_FIREBASE_API_KEY \
+            REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_HOST \
             DESKTOP_REDIS_DB_PORT \
