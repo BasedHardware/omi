@@ -232,8 +232,8 @@ Connected Device (home/device.dart) — requires BLE
 └── Device info: Product, Model, Manufacturer, Firmware, ID, Serial
 
 Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #14514)
-├── Four sentence starters, phone mic, Next / Skip per prompt
-└── Review: edit or uncheck answers, then Save and finish (voice, memories, goal)
+├── Four sentence starters, phone mic; Start Speaking or Skip (whole step), then Next / Pause / Skip Question while recording
+└── Review: edit or uncheck answers, then Save and Finish (voice, memories, goal)
 ```
 
 ### Widget Patterns

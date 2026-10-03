@@ -17,8 +17,8 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
       height: double.infinity,
       child: SafeArea(
         child: Padding(
-          // Clear of the progress dots and back button drawn over the top of every step.
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 60, OmiSpacing.xl, OmiSpacing.xl),
+          // The SafeArea already clears the progress dots and back button (OnboardingChrome).
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.md, OmiSpacing.xl, OmiSpacing.xl),
           child: Column(
             children: [
               Semantics(
