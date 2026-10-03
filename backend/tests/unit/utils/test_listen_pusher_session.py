@@ -840,3 +840,38 @@ async def test_spans_capability_loss_mid_recording_withholds_audio_then_resumes(
     audio_frames = [frame for frame in capable_again.sent if frame_type(frame) == 101]
     assert len(audio_frames) == 1
     assert struct.unpack('d', audio_frames[0][4:12])[0] == 99.9
+
+
+@pytest.mark.anyio
+async def test_replacement_socket_reannounces_conversation_before_audio():
+    """The conversation announcement is socket-local, not session-local.
+
+    A fresh pusher socket starts with no conversation bound, so the first
+    audio flush on every installed socket must re-emit opcode 103 before 101;
+    otherwise the pusher drops that audio unbound. Same-socket suppression and
+    buffered run bindings are preserved.
+    """
+    first = FakePusherWebSocket()
+    session = make_session(ws=first, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
+    await session._audio_bytes_flush()
+    session.audio_bytes_send(b'efgh', received_at=101.0, conversation_id='conv-1')
+    await session._audio_bytes_flush()
+    assert [frame_type(frame) for frame in first.sent] == [103, 101, 101]
+
+    second = FakePusherWebSocket()
+
+    async def next_connector(*args, **kwargs):
+        return second
+
+    session.deps.connect_to_pusher = next_connector
+    session.pusher_connected = False
+    await session.connect()
+
+    session.audio_bytes_send(b'ijkl', received_at=102.0, conversation_id='conv-1')
+    await session._audio_bytes_flush()
+    assert [frame_type(frame) for frame in second.sent] == [103, 101]
+    assert second.sent[0][4:].decode('utf-8') == 'conv-1'
+    assert second.sent[1][12:] == b'ijkl'

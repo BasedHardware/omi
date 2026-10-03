@@ -720,6 +720,7 @@ class ListenPusherSession:
             self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
             if self.pusher_ws is None:
                 return
+            self.last_synced_conversation_id = None
             if wants_timeline:
                 # Capability gated per socket: an explicit acknowledgment is
                 # required before any v2 audio is committed, and again on

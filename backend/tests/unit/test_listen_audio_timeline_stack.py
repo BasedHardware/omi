@@ -1126,3 +1126,56 @@ async def test_spans_callback_rejects_keep_finite_text_without_capture_window(mo
         assert stack.receiver.capture_timeline_v2 is False
     finally:
         stack.restore()
+
+
+@pytest.mark.parametrize('mode', ['legacy', 'spans'])
+async def test_reconnect_same_conversation_audio_still_persists(monkeypatch, gcs, pusher_env, telemetry, mode):
+    """Actual session -> actual pusher handler -> actual storage: a replacement
+    socket starts with no conversation bound, so audio flushed after a
+    reconnect within the same conversation must be re-announced and stored
+    byte-exact under that conversation, in legacy and spans modes alike."""
+    stack = _Stack(monkeypatch, v2=False, spans=(mode == 'spans'), conversation_id=CONV1)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.pusher_connected
+        assert stack.session.audio_timeline_active == (mode == 'spans')
+
+        phrase_a = _phrase(1, 1.0)
+        phrase_b = _phrase(2, 1.0)
+        stack.session.audio_bytes_send(
+            phrase_a, stack.clock['wall'], conversation_id=CONV1, start_wall=stack.clock['wall']
+        )
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        stack.session._mark_disconnected()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.pusher_connected
+        assert stack.session.audio_timeline_active == (mode == 'spans')
+
+        stack.session.audio_bytes_send(
+            phrase_b,
+            stack.clock['wall'] + 60,
+            conversation_id=CONV1,
+            start_wall=stack.clock['wall'] + 60,
+        )
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        assert files, 'both flushes must produce audio files bound to the same conversation'
+        chunks = storage_module.list_audio_chunks(UID, CONV1)
+        bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+        stored = b''.join(bucket.blob(chunk['path']).download_as_bytes() for chunk in chunks)
+        assert stored == phrase_a + phrase_b
+    finally:
+        reconnect_task = stack.session.reconnect_task if stack.session is not None else None
+        if reconnect_task is not None and not reconnect_task.done():
+            reconnect_task.cancel()
+        stack.restore()
