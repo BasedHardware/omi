@@ -283,7 +283,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reportMessage => 'Ziņot par ziņojumu';
 
   @override
-  String get reportMessageConfirm => 'Vai tiešām vēlaties ziņot par šo ziņojumu?';
+  String get reportMessageConfirm => 'Ziņot par šo ziņu?';
 
   @override
   String get messageReported => 'Ziņojums veiksmīgi ziņots.';
@@ -295,7 +295,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clearChat => 'Notīrīt sarunu';
 
   @override
-  String get clearChatConfirm => 'Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.';
+  String get clearChatConfirm => 'Visas šīs tērzēšanas ziņas tiks dzēstas. To nevar atsaukt.';
 
   @override
   String get maxFilesLimit => 'Vienlaikus var augšupielādēt tikai 4 failus';
@@ -1040,7 +1040,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Vai tiešām vēlaties atvienot no $appName? Jūs varat atkārtoti izveidot savienojumu jebkurā laikā.';
+    return '$appName varat atkal pievienot jebkurā laikā.';
   }
 
   @override
@@ -1984,14 +1984,14 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteActionItemTitle => 'Dzēst uzdevumu';
 
   @override
-  String get deleteActionItemMessage => 'Vai tiešām vēlaties dzēst šo uzdevumu?';
+  String get deleteActionItemMessage => 'Dzēst šo uzdevumu?';
 
   @override
   String get deleteSelectedItemsTitle => 'Dzēst atlasītos vienumus';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Vai tiešām vēlaties dzēst $count atlasītos uzdevumus$s?';
+    return 'Dzēst $count atlasītos uzdevumus$s?';
   }
 
   @override
@@ -2080,7 +2080,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clearMemoryTitle => 'Notīrīt Omi atmiņu';
 
   @override
-  String get clearMemoryMessage => 'Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt.';
+  String get clearMemoryMessage => 'Visas jūsu atmiņas tiks dzēstas. To nevar atsaukt.';
 
   @override
   String get clearMemoryButton => 'Notīrīt atmiņu';
@@ -2226,7 +2226,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Dzēst uzdevumu';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Vai tiešām vēlaties dzēst šo uzdevumu?';
+  String get deleteActionItemConfirmMessage => 'Dzēst šo uzdevumu?';
 
   @override
   String get appLanguage => 'Lietotnes valoda';
@@ -2329,7 +2329,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteMemory => 'Dzēst atmiņu';
 
   @override
-  String get thisActionCannotBeUndone => 'Šo darbību nevar atsaukt.';
+  String get thisActionCannotBeUndone => 'To nevar atsaukt.';
 
   @override
   String memoriesCount(int count) {
@@ -2764,7 +2764,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteActionItem => 'Dzēst uzdevumu';
 
   @override
-  String get deleteActionItemConfirmation => 'Vai tiešām vēlaties dzēst šo uzdevumu? Šo darbību nevar atsaukt.';
+  String get deleteActionItemConfirmation => 'Dzēst šo uzdevumu? To nevar atsaukt.';
 
   @override
   String get enterActionItemDescription => 'Ievadiet uzdevuma aprakstu';
@@ -3105,7 +3105,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Ziņojums veiksmīgi ziņots';
 
   @override
-  String get confirmReportMessage => 'Vai tiešām vēlaties ziņot par šo ziņojumu?';
+  String get confirmReportMessage => 'Ziņot par šo ziņu?';
 
   @override
   String get selectChatAssistant => 'Izvēlēties tērzēšanas asistentu';
@@ -3120,7 +3120,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clearChatTitle => 'Notīrīt tērzēšanu?';
 
   @override
-  String get confirmClearChat => 'Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.';
+  String get confirmClearChat => 'Notīrīt šo tērzēšanu? To nevar atsaukt.';
 
   @override
   String get copy => 'Kopēt';
@@ -3292,7 +3292,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get createMemory => 'Izveidot atmiņu';
 
   @override
-  String get deleteMemoryConfirmation => 'Vai tiešām vēlaties dzēst šo atmiņu? Šo darbību nevar atsaukt.';
+  String get deleteMemoryConfirmation => 'Dzēst šo atmiņu? To nevar atsaukt.';
 
   @override
   String get makePrivate => 'Padarīt privātu';
@@ -3329,7 +3329,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt un tā neatgriezeniski dzēsīs visas $count atmiņas.';
+    return 'Visas atmiņas ($count) tiks dzēstas. To nevar atsaukt.';
   }
 
   @override
@@ -3623,7 +3623,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Ļaujiet Omi automātiski izvēlēties labāko lietotni';
 
   @override
-  String get deleteConversationConfirmation => 'Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.';
+  String get deleteConversationConfirmation => 'Dzēst šo sarunu? To nevar atsaukt.';
 
   @override
   String get conversationDeleted => 'Saruna dzēsta';
@@ -3948,8 +3948,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get updateAppQuestion => 'Atjaunināt lietotni?';
 
   @override
-  String get updateAppConfirmation =>
-      'Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.';
+  String get updateAppConfirmation => 'Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.';
 
   @override
   String get updateApp => 'Atjaunināt lietotni';
@@ -4013,8 +4012,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Atcelt abonementu?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Vai tiešām vēlaties atcelt abonementu? Jums būs piekļuve līdz pašreizējā norēķinu perioda beigām.';
+  String get cancelSubscriptionConfirmation => 'Jums būs piekļuve līdz pašreizējā norēķinu perioda beigām.';
 
   @override
   String get cancelSubscriptionButton => 'Atcelt abonementu';
@@ -4200,8 +4198,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Atsaukt API atslēgu?';
 
   @override
-  String get revokeApiKeyWarning =>
-      'Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.';
+  String get revokeApiKeyWarning => 'Lietotnes, kas izmanto šo atslēgu, zaudēs piekļuvi API. To nevar atsaukt.';
 
   @override
   String get revoke => 'Atsaukt';
@@ -4258,7 +4255,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Vai tiešām vēlaties dzēst šo $item? Šo darbību nevar atsaukt.';
+    return '$item tiks dzēsta. To nevar atsaukt.';
   }
 
   @override
@@ -4266,7 +4263,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Vai tiešām vēlaties atsaukt atslēgu \"$keyName\"? Šo darbību nevar atsaukt.';
+    return 'Viss, kas izmanto \"$keyName\", zaudēs piekļuvi. To nevar atsaukt.';
   }
 
   @override
@@ -4444,7 +4441,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs zaudēsiet piekļuvi neierobežotajām funkcijām. Vai esat pārliecināts?';
+    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs zaudēsiet piekļuvi neierobežotajām funkcijām.';
   }
 
   @override
@@ -4729,8 +4726,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Dzēst visas Limitless sarunas?';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'Tas neatgriezeniski izdzēsīs visas no Limitless importētās sarunas. Šo darbību nevar atsaukt.';
+  String get deleteAllLimitlessWarning => 'Visas no Limitless importētās sarunas tiks dzēstas. To nevar atsaukt.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4771,7 +4767,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Vai tiešām vēlaties dzēst $name paraugu?';
+    return 'Personas $name balss paraugs tiks noņemts. To nevar atsaukt.';
   }
 
   @override
@@ -4779,7 +4775,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Vai tiešām vēlaties dzēst $name? Tas arī noņems visus saistītos runas paraugus.';
+    return 'Tas noņem personas $name balss paraugus, un to nevar atsaukt. Replikas iepriekšējās sarunās kļūs par bezvārda runātājiem.';
   }
 
   @override
@@ -5135,7 +5131,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get finishedConversation => 'Saruna pabeigta?';
 
   @override
-  String get stopRecordingConfirmation => 'Vai tiešām vēlaties apturēt ierakstīšanu un apkopot sarunu tagad?';
+  String get stopRecordingConfirmation => 'Apturēt ierakstīšanu un apkopot sarunu tagad?';
 
   @override
   String get conversationEndsManually => 'Saruna beigsies tikai manuāli.';
@@ -6654,7 +6650,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get shareRecording => 'Kopīgot ierakstu';
 
   @override
-  String get deleteRecordingConfirmation => 'Vai tiešām vēlaties neatgriezeniski dzēst šo ierakstu? To nevar atsaukt.';
+  String get deleteRecordingConfirmation => 'To nevar atsaukt.';
 
   @override
   String get recordingIdLabel => 'Ieraksta ID';
@@ -7026,7 +7022,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Jūs pārslēdzat savu Neierobežoto plānu uz $title. Vai tiešām vēlaties turpināt?';
+    return 'Jūs pārslēdzat savu Neierobežoto plānu uz $title.';
   }
 
   @override
@@ -9647,7 +9643,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteOnDeviceModel => 'Dzēst modeli';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Vai tiešām vēlaties dzēst šo modeli?';
+  String get deleteOnDeviceModelConfirm => 'Dzēst šo modeli?';
 
   @override
   String get onDeviceModelDownloaded => 'Lejupielādēts';

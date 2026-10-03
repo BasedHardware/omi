@@ -281,7 +281,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reportMessage => 'メッセージを報告';
 
   @override
-  String get reportMessageConfirm => 'このメッセージを報告してもよろしいですか？';
+  String get reportMessageConfirm => 'このメッセージを報告しますか？';
 
   @override
   String get messageReported => 'メッセージを報告しました。';
@@ -293,7 +293,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clearChat => 'チャットを削除';
 
   @override
-  String get clearChatConfirm => 'チャットを消去してもよろしいですか？この操作は元に戻せません。';
+  String get clearChatConfirm => 'このチャットのすべてのメッセージが削除されます。この操作は元に戻せません。';
 
   @override
   String get maxFilesLimit => '一度にアップロードできるファイルは4つまでです';
@@ -1026,7 +1026,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '$appNameとの接続を解除してもよろしいですか？いつでも再接続できます。';
+    return '$appNameはいつでも再接続できます。';
   }
 
   @override
@@ -1942,14 +1942,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteActionItemTitle => 'タスクを削除';
 
   @override
-  String get deleteActionItemMessage => 'このタスクを削除してもよろしいですか？';
+  String get deleteActionItemMessage => 'このタスクを削除しますか？';
 
   @override
   String get deleteSelectedItemsTitle => '選択したアイテムを削除';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '選択した $count 件のタスク$sを削除してもよろしいですか？';
+    return '選択した $count 件のタスク$sを削除しますか？';
   }
 
   @override
@@ -2037,7 +2037,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clearMemoryTitle => 'Omiの記憶を消去';
 
   @override
-  String get clearMemoryMessage => 'Omiの記憶を消去してもよろしいですか？この操作は取り消せません。';
+  String get clearMemoryMessage => 'すべての記憶が削除されます。この操作は元に戻せません。';
 
   @override
   String get clearMemoryButton => '記憶をクリア';
@@ -2183,7 +2183,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'タスクの削除';
 
   @override
-  String get deleteActionItemConfirmMessage => 'このタスクを削除してもよろしいですか？';
+  String get deleteActionItemConfirmMessage => 'このタスクを削除しますか？';
 
   @override
   String get appLanguage => 'アプリ言語';
@@ -2716,7 +2716,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteActionItem => 'タスクを削除';
 
   @override
-  String get deleteActionItemConfirmation => 'このタスクを削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteActionItemConfirmation => 'このタスクを削除しますか？この操作は元に戻せません。';
 
   @override
   String get enterActionItemDescription => 'タスクの説明を入力';
@@ -3047,7 +3047,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ メッセージが正常に報告されました';
 
   @override
-  String get confirmReportMessage => 'このメッセージを報告してもよろしいですか？';
+  String get confirmReportMessage => 'このメッセージを報告しますか？';
 
   @override
   String get selectChatAssistant => 'チャットアシスタントを選択';
@@ -3062,7 +3062,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clearChatTitle => 'チャットをクリア？';
 
   @override
-  String get confirmClearChat => 'チャットをクリアしてもよろしいですか？この操作は元に戻せません。';
+  String get confirmClearChat => 'このチャットを消去しますか？この操作は元に戻せません。';
 
   @override
   String get copy => 'コピー';
@@ -3233,7 +3233,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createMemory => '記憶を作成';
 
   @override
-  String get deleteMemoryConfirmation => 'この記憶を削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteMemoryConfirmation => 'この記憶を削除しますか？この操作は元に戻せません。';
 
   @override
   String get makePrivate => '非公開にする';
@@ -3270,7 +3270,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omiの記憶をクリアしてもよろしいですか？この操作は元に戻せず、すべての$count個の記憶が完全に削除されます。';
+    return '$count件の記憶がすべて削除されます。この操作は元に戻せません。';
   }
 
   @override
@@ -3555,7 +3555,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Omiに最適なアプリを自動的に選択させる';
 
   @override
-  String get deleteConversationConfirmation => 'この会話を削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteConversationConfirmation => 'この会話を削除しますか？この操作は元に戻せません。';
 
   @override
   String get conversationDeleted => '会話が削除されました';
@@ -3878,7 +3878,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get updateAppQuestion => 'アプリを更新しますか？';
 
   @override
-  String get updateAppConfirmation => 'アプリを更新してよろしいですか？変更はチームの審査後に反映されます。';
+  String get updateAppConfirmation => '変更はチームの審査後に反映されます。';
 
   @override
   String get updateApp => 'アプリを更新';
@@ -3941,7 +3941,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'サブスクリプションをキャンセルしますか？';
 
   @override
-  String get cancelSubscriptionConfirmation => 'サブスクリプションをキャンセルしてもよろしいですか？現在の請求期間の終了までアクセスできます。';
+  String get cancelSubscriptionConfirmation => '現在の請求期間の終了までアクセスできます。';
 
   @override
   String get cancelSubscriptionButton => 'サブスクリプションをキャンセル';
@@ -4122,7 +4122,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get revokeApiKeyQuestion => 'APIキーを取り消しますか?';
 
   @override
-  String get revokeApiKeyWarning => 'この操作は取り消せません。このキーを使用しているアプリケーションはAPIにアクセスできなくなります。';
+  String get revokeApiKeyWarning => 'このキーを使用しているアプリはAPIにアクセスできなくなります。この操作は元に戻せません。';
 
   @override
   String get revoke => '取り消す';
@@ -4179,7 +4179,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'この$itemを削除してもよろしいですか？この操作は元に戻せません。';
+    return 'この$itemの削除は元に戻せません。';
   }
 
   @override
@@ -4187,7 +4187,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'キー「$keyName」を取り消してもよろしいですか？この操作は元に戻せません。';
+    return '「$keyName」を使用しているものはすべてアクセスできなくなります。この操作は元に戻せません。';
   }
 
   @override
@@ -4358,7 +4358,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'プランは$dateまで有効です。その後、無制限の機能へのアクセスを失います。よろしいですか？';
+    return 'プランは$dateまで有効です。その後、無制限の機能へのアクセスを失います。';
   }
 
   @override
@@ -4638,7 +4638,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'すべてのLimitless会話を削除しますか？';
 
   @override
-  String get deleteAllLimitlessWarning => 'これにより、Limitlessからインポートされたすべての会話が完全に削除されます。この操作は元に戻せません。';
+  String get deleteAllLimitlessWarning => 'Limitlessからインポートしたすべての会話が削除されます。この操作は元に戻せません。';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4679,7 +4679,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$nameのサンプルを削除してもよろしいですか？';
+    return '$nameさんの音声サンプルが削除されます。この操作は元に戻せません。';
   }
 
   @override
@@ -4687,7 +4687,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$nameを削除してもよろしいですか？これにより、関連するすべての音声サンプルも削除されます。';
+    return '$nameさんの音声サンプルが削除され、元に戻せません。過去の会話での発言は名前のない話者になります。';
   }
 
   @override
@@ -5030,7 +5030,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finishedConversation => '会話を終了しますか？';
 
   @override
-  String get stopRecordingConfirmation => '録音を停止して会話を今すぐ要約しますか？';
+  String get stopRecordingConfirmation => '録音を停止して、今すぐ会話を要約しますか？';
 
   @override
   String get conversationEndsManually => '会話は手動でのみ終了します。';
@@ -6528,7 +6528,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shareRecording => '録音を共有';
 
   @override
-  String get deleteRecordingConfirmation => 'この録音を完全に削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteRecordingConfirmation => 'この操作は元に戻せません。';
 
   @override
   String get recordingIdLabel => '録音ID';
@@ -6896,7 +6896,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return '無制限プランを$titleに変更します。続行してもよろしいですか？';
+    return '無制限プランを$titleに変更します。';
   }
 
   @override
@@ -9467,7 +9467,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteOnDeviceModel => 'モデルを削除';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'このモデルを削除してもよろしいですか？';
+  String get deleteOnDeviceModelConfirm => 'このモデルを削除しますか？';
 
   @override
   String get onDeviceModelDownloaded => 'ダウンロード済み';

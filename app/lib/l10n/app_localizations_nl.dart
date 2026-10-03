@@ -283,7 +283,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reportMessage => 'Bericht melden';
 
   @override
-  String get reportMessageConfirm => 'Weet je zeker dat je dit bericht wilt rapporteren?';
+  String get reportMessageConfirm => 'Dit bericht melden?';
 
   @override
   String get messageReported => 'Bericht succesvol gerapporteerd.';
@@ -295,8 +295,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearChat => 'Chat wissen';
 
   @override
-  String get clearChatConfirm =>
-      'Weet je zeker dat je de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get clearChatConfirm => 'Alle berichten in deze chat worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get maxFilesLimit => 'Je kunt maximaal 4 bestanden tegelijk uploaden';
@@ -1041,7 +1040,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Weet je zeker dat je de verbinding met $appName wilt verbreken? Je kunt altijd opnieuw verbinden.';
+    return 'Je kunt $appName altijd opnieuw verbinden.';
   }
 
   @override
@@ -1985,14 +1984,14 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItemTitle => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemMessage => 'Weet u zeker dat u deze taak wilt verwijderen?';
+  String get deleteActionItemMessage => 'Deze taak verwijderen?';
 
   @override
   String get deleteSelectedItemsTitle => 'Geselecteerde items verwijderen';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Weet je zeker dat je $count geselecteerde ta(a)k(en)$s wilt verwijderen?';
+    return '$count geselecteerde ta(a)k(en)$s verwijderen?';
   }
 
   @override
@@ -2082,8 +2081,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearMemoryTitle => 'Omi\'s geheugen wissen';
 
   @override
-  String get clearMemoryMessage =>
-      'Weet je zeker dat je Omi\'s geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get clearMemoryMessage => 'Al je herinneringen worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get clearMemoryButton => 'Geheugen wissen';
@@ -2229,7 +2227,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Weet je zeker dat je deze taak wilt verwijderen?';
+  String get deleteActionItemConfirmMessage => 'Deze taak verwijderen?';
 
   @override
   String get appLanguage => 'App-taal';
@@ -2333,7 +2331,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteMemory => 'Geheugen verwijderen';
 
   @override
-  String get thisActionCannotBeUndone => 'Deze actie kan niet ongedaan worden gemaakt.';
+  String get thisActionCannotBeUndone => 'Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String memoriesCount(int count) {
@@ -2767,8 +2765,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItem => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Weet je zeker dat je deze taak wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteActionItemConfirmation => 'Deze taak verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get enterActionItemDescription => 'Voer taakbeschrijving in';
@@ -3110,7 +3107,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Bericht succesvol gemeld';
 
   @override
-  String get confirmReportMessage => 'Weet u zeker dat u dit bericht wilt melden?';
+  String get confirmReportMessage => 'Dit bericht melden?';
 
   @override
   String get selectChatAssistant => 'Selecteer chat-assistent';
@@ -3125,7 +3122,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearChatTitle => 'Chat wissen?';
 
   @override
-  String get confirmClearChat => 'Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get confirmClearChat => 'Deze chat wissen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get copy => 'Kopiëren';
@@ -3297,8 +3294,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createMemory => 'Geheugen maken';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteMemoryConfirmation => 'Deze herinnering verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get makePrivate => 'Privé maken';
@@ -3335,7 +3331,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Weet je zeker dat je Omi\'s geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt en zal alle $count herinneringen permanent verwijderen.';
+    return 'Alle $count herinneringen worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -3629,8 +3625,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Laat Omi automatisch de beste app kiezen';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Weet u zeker dat u dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteConversationConfirmation => 'Dit gesprek verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get conversationDeleted => 'Gesprek verwijderd';
@@ -3957,8 +3952,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get updateAppQuestion => 'App bijwerken?';
 
   @override
-  String get updateAppConfirmation =>
-      'Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.';
+  String get updateAppConfirmation => 'De wijzigingen worden doorgevoerd na beoordeling door ons team.';
 
   @override
   String get updateApp => 'App bijwerken';
@@ -4022,8 +4016,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Abonnement annuleren?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Weet u zeker dat u uw abonnement wilt annuleren? U behoudt toegang tot het einde van uw huidige factureringsperiode.';
+  String get cancelSubscriptionConfirmation => 'U behoudt toegang tot het einde van uw huidige factureringsperiode.';
 
   @override
   String get cancelSubscriptionButton => 'Abonnement annuleren';
@@ -4209,7 +4202,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.';
+      'Apps die deze sleutel gebruiken, verliezen toegang tot de API. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get revoke => 'Intrekken';
@@ -4266,7 +4259,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Weet u zeker dat u deze $item wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+    return '$item wordt verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4274,7 +4267,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Weet u zeker dat u de sleutel \"$keyName\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt.';
+    return 'Alles wat \"$keyName\" gebruikt, verliest toegang. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4452,7 +4445,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Uw plan blijft actief tot $date. Daarna verliest u de toegang tot uw onbeperkte functies. Weet u het zeker?';
+    return 'Uw plan blijft actief tot $date. Daarna verliest u de toegang tot uw onbeperkte functies.';
   }
 
   @override
@@ -4738,7 +4731,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Dit verwijdert permanent alle gesprekken die zijn geïmporteerd uit Limitless. Deze actie kan niet ongedaan worden gemaakt.';
+      'Alle gesprekken die uit Limitless zijn geïmporteerd, worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4779,7 +4772,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Weet u zeker dat u het voorbeeld van $name wilt verwijderen?';
+    return 'De stemsample van $name wordt verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4787,7 +4780,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Weet u zeker dat u $name wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.';
+    return 'Hiermee worden de stemsamples van $name verwijderd. Dit kan niet ongedaan worden gemaakt. De uitspraken in eerdere gesprekken worden naamloze sprekers.';
   }
 
   @override
@@ -5144,8 +5137,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finishedConversation => 'Gesprek beëindigd?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Weet je zeker dat je de opname wilt stoppen en het gesprek nu wilt samenvatten?';
+  String get stopRecordingConfirmation => 'Opname stoppen en het gesprek nu samenvatten?';
 
   @override
   String get conversationEndsManually => 'Het gesprek eindigt alleen handmatig.';
@@ -6661,8 +6653,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get shareRecording => 'Opname delen';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Weet je zeker dat je deze opname permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.';
+  String get deleteRecordingConfirmation => 'Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get recordingIdLabel => 'Opname-ID';
@@ -7033,7 +7024,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Je schakelt je Onbeperkt Plan over naar het $title. Weet je zeker dat je wilt doorgaan?';
+    return 'Je schakelt je Onbeperkt Plan over naar het $title.';
   }
 
   @override
@@ -9654,7 +9645,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Model verwijderen';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Weet je zeker dat je dit model wilt verwijderen?';
+  String get deleteOnDeviceModelConfirm => 'Dit model verwijderen?';
 
   @override
   String get onDeviceModelDownloaded => 'Gedownload';

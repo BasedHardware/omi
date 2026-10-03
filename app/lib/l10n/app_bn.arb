@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "আপনি কি নিশ্চিত যে এই বার্তাটি রিপোর্ট করতে চান?",
+    "reportMessageConfirm": "এই বার্তাটি রিপোর্ট করবেন?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "আপনি কি নিশ্চিত যে আপনি চ্যাটটি সাফ করতে চান? এই পদক্ষেপটি আনডু করা যাবে না।",
+    "clearChatConfirm": "এই চ্যাটের সব বার্তা মুছে যাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "আপনি কি নিশ্চিত যে আপনি {appName} থেকে সংযোগ বিচ্ছিন্ন করতে চান? আপনি যেকোনো সময় পুনরায় সংযুক্ত করতে পারেন।",
+    "disconnectAppMessage": "আপনি যেকোনো সময় {appName} আবার সংযুক্ত করতে পারবেন।",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "আপনি কি নিশ্চিত যে এই কাজটি মুছতে চান?",
+    "deleteActionItemMessage": "এই কাজটি মুছবেন?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "আপনি কি নিশ্চিত যে {count}টি নির্বাচিত কাজ{s} মুছতে চান?",
+    "deleteSelectedItemsMessage": "{count}টি নির্বাচিত কাজ{s} মুছবেন?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "আপনি কি নিশ্চিত যে আপনি Omi এর স্মৃতি পরিষ্কার করতে চান? এই অ্যাকশনটি পূর্বাবস্থা করা যাবে না।",
+    "clearMemoryMessage": "আপনার সব স্মৃতি মুছে যাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "আপনি কি নিশ্চিত যে এই কাজটি মুছতে চান?",
+    "deleteActionItemConfirmMessage": "এই কাজটি মুছবেন?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না।",
+    "thisActionCannotBeUndone": "এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "আপনি কি এই কাজটি মুছতে নিশ্চিত? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না।",
+    "deleteActionItemConfirmation": "এই কাজটি মুছবেন? এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "আপনি কি এই বার্তা রিপোর্ট করতে নিশ্চিত?",
+    "confirmReportMessage": "এই বার্তাটি রিপোর্ট করবেন?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "আপনি কি চ্যাট সাফ করতে নিশ্চিত? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না।",
+    "confirmClearChat": "এই চ্যাট মুছে ফেলবেন? এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "আপনি কি এই স্মৃতি মুছতে নিশ্চিত? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না।",
+    "deleteMemoryConfirmation": "এই স্মৃতিটি মুছবেন? এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "আপনি কি Omi এর স্মৃতি সাফ করতে নিশ্চিত? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না এবং সব {count} স্মৃতি স্থায়ীভাবে মুছে ফেলবে।",
+    "clearMemoryConfirmation": "সব {count}টি স্মৃতি মুছে যাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Omi কে স্বয়ংক্রিয়ভাবে সেরা অ্যাপ বেছে নিতে দিন",
-    "deleteConversationConfirmation": "আপনি কি এই কথোপকথন মুছতে চান? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যায় না।",
+    "deleteConversationConfirmation": "এই কথোপকথনটি মুছবেন? এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "conversationDeleted": "কথোপকথন মুছে ফেলা হয়েছে",
     "generatingLink": "লিঙ্ক তৈরি করা হচ্ছে…",
     "editConversation": "কথোপকথন সম্পাদনা করুন",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "আপনি কি আপনার অ্যাপ আপডেট করতে চান? আমাদের দল দ্বারা পর্যালোচনা করার পরে পরিবর্তনগুলি প্রতিফলিত হবে।",
+    "updateAppConfirmation": "আমাদের দল পর্যালোচনা করার পরে পরিবর্তনগুলি প্রকাশিত হবে।",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "আপনি কি আপনার সাবস্ক্রিপশন বাতিল করতে চান? আপনি আপনার বর্তমান বিলিং সময়ের শেষ পর্যন্ত অ্যাক্সেস চালিয়ে যাবেন।",
+    "cancelSubscriptionConfirmation": "আপনি আপনার বর্তমান বিলিং সময়ের শেষ পর্যন্ত অ্যাক্সেস চালিয়ে যাবেন।",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যায় না। এই চাবি ব্যবহার করে কোনো অ্যাপ্লিকেশন API অ্যাক্সেস করতে পারবে না।",
+    "revokeApiKeyWarning": "এই কী ব্যবহারকারী অ্যাপগুলি API-এর অ্যাক্সেস হারাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "আপনি কি এই {item} মুছতে চান? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যায় না।",
+    "deleteItemConfirmation": "এই {item} মুছে ফেলা পূর্বাবস্থায় ফেরানো যাবে না।",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "আপনি কি \"{keyName}\" চাবি প্রত্যাহার করতে চান? এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যায় না।",
+    "revokeKeyConfirmation": "\"{keyName}\" ব্যবহারকারী সবকিছু অ্যাক্সেস হারাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "আপনার পরিকল্পনা {date} পর্যন্ত সক্রিয় থাকবে। তারপর আপনি আপনার সীমাহীন বৈশিষ্ট্যের অ্যাক্সেস হারাবেন। আপনি কি নিশ্চিত?",
+    "planRemainsActiveUntil": "আপনার পরিকল্পনা {date} পর্যন্ত সক্রিয় থাকবে। তারপর আপনি আপনার সীমাহীন বৈশিষ্ট্যের অ্যাক্সেস হারাবেন।",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "এটি Limitless থেকে আমদানি করা সমস্ত কথোপকথন স্থায়ীভাবে মুছে ফেলবে। এই পদক্ষেপ পূর্বাবাস করা যায় না।",
+    "deleteAllLimitlessWarning": "Limitless থেকে আমদানি করা সব কথোপকথন মুছে যাবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "আপনি কি নিশ্চিত যে আপনি {name} এর নমুনা মুছতে চান?",
+    "deleteSampleConfirmation": "{name}-এর ভয়েস স্যাম্পল সরানো হবে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "আপনি কি নিশ্চিত যে আপনি {name} মুছতে চান? এটি সমস্ত সম্পর্কিত বক্তৃতা নমুনা সরিয়ে দেবে।",
+    "deletePersonConfirmation": "এটি {name}-এর ভয়েস স্যাম্পল সরিয়ে দেবে এবং পূর্বাবস্থায় ফেরানো যাবে না। আগের কথোপকথনে তাদের বক্তব্য নামহীন বক্তা হিসেবে থাকবে।",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "আপনি কি নিশ্চিত যে আপনি রেকর্ডিং বন্ধ করতে এবং এখনই কথোপকথন সংক্ষিপ্ত করতে চান?",
+    "stopRecordingConfirmation": "এখনই রেকর্ডিং বন্ধ করে কথোপকথনের সারাংশ তৈরি করবেন?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "আপনি কি নিশ্চিত যে এই রেকর্ডিং স্থায়ীভাবে মুছে ফেলতে চান? এটি পূর্বাবস্থায় ফিরানো যাবে না।",
+    "deleteRecordingConfirmation": "এটি পূর্বাবস্থায় ফিরিয়ে আনা যায় না।",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "আপনি আপনার আনলিমিটেড পরিকল্পনা {title} এ স্যুইচ করছেন। আপনি কি এগিয়ে যেতে চান?",
+    "planSwitchingDescriptionWithTitle": "আপনি আপনার আনলিমিটেড পরিকল্পনা {title} এ স্যুইচ করছেন।",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "ক্লাউড ট্রান্সক্রিপশন",
     "copyMessage": "বার্তা অনুলিপি করুন",
     "deleteOnDeviceModel": "মডেল মুছুন",
-    "deleteOnDeviceModelConfirm": "আপনি কি নিশ্চিত যে এই মডেলটি মুছতে চান?",
+    "deleteOnDeviceModelConfirm": "এই মডেলটি মুছবেন?",
     "downgradeAnyway": "তবুও ডাউনগ্রেড করুন",
     "downgradeLimitBattery": "৭ গুণ বেশি ব্যাটারি খরচ",
     "downgradeLimitDelay": "৫-৭ সেকেন্ড বিলম্ব",

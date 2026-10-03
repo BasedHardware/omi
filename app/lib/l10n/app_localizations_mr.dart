@@ -282,7 +282,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reportMessage => 'संदेशाचा अहवाल द्या';
 
   @override
-  String get reportMessageConfirm => 'आप हा संदेश अहवाल द्यायला निश्चित आहात?';
+  String get reportMessageConfirm => 'हा संदेश नोंदवायचा?';
 
   @override
   String get messageReported => 'संदेश यशस्वीरित्या अहवाल दिला.';
@@ -294,7 +294,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get clearChat => 'चॅट साफ करा';
 
   @override
-  String get clearChatConfirm => 'आप चॅट साफ करू इच्छिता? ही कारवाई पूर्ववत केली जाऊ शकत नाही.';
+  String get clearChatConfirm => 'या चॅटमधील सर्व संदेश हटवले जातील. हे पूर्ववत करता येणार नाही.';
 
   @override
   String get maxFilesLimit => 'आप एक वेळी केवळ 4 फाइल अपलोड करू शकता';
@@ -1039,7 +1039,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'आप $appName मधून डिस्कनेक्ट करू इच्छिता? आप कधीही पुन्हा कनेक्ट करू शकता.';
+    return 'तुम्ही $appName कधीही पुन्हा कनेक्ट करू शकता.';
   }
 
   @override
@@ -1978,14 +1978,14 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteActionItemTitle => 'कार्य हटवा';
 
   @override
-  String get deleteActionItemMessage => 'आपल्याला खरोखर हे कार्य हटवायचे आहे का?';
+  String get deleteActionItemMessage => 'हे कार्य हटवायचे?';
 
   @override
   String get deleteSelectedItemsTitle => 'निवडलेली आयटम हटवा';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'आपल्याला खरोखर $count निवडलेली कार्य$s हटवायची आहेत का?';
+    return '$count निवडलेली कार्य$s हटवायची?';
   }
 
   @override
@@ -2075,8 +2075,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get clearMemoryTitle => 'Omi ची स्मृती स्पष्ट करा';
 
   @override
-  String get clearMemoryMessage =>
-      'आपल्याला खरोखर Omi ची स्मृती स्पष्ट करायची आहे? हे क्रिया पूर्ववत् केली जाऊ शकत नाही.';
+  String get clearMemoryMessage => 'तुमच्या सर्व स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.';
 
   @override
   String get clearMemoryButton => 'स्मृती स्पष्ट करा';
@@ -2222,7 +2221,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'कार्य हटवा';
 
   @override
-  String get deleteActionItemConfirmMessage => 'आपल्याला खरोखर हे कार्य हटवायचे आहे का?';
+  String get deleteActionItemConfirmMessage => 'हे कार्य हटवायचे?';
 
   @override
   String get appLanguage => 'अॅप भाषा';
@@ -2325,7 +2324,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteMemory => 'स्मृती हटवा';
 
   @override
-  String get thisActionCannotBeUndone => 'हे कृती पूर्ववत केली जाऊ शकत नाही।';
+  String get thisActionCannotBeUndone => 'हे पूर्ववत करता येणार नाही.';
 
   @override
   String memoriesCount(int count) {
@@ -2766,8 +2765,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteActionItem => 'कार्य हटवा';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'आपल्याला खात्री आहे की आपण हे कार्य हटवू इच्छिता? ही क्रिया पूर्ववत केली जाऊ शकत नाही.';
+  String get deleteActionItemConfirmation => 'हे कार्य हटवायचे? हे पूर्ववत करता येणार नाही.';
 
   @override
   String get enterActionItemDescription => 'कार्याचे वर्णन प्रविष्ट करा';
@@ -3107,7 +3105,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ संदेश यशस्वीरित्या नोंदवला गेला';
 
   @override
-  String get confirmReportMessage => 'आप खात्रीने हा संदेश नोंदवू इच्छितात?';
+  String get confirmReportMessage => 'हा संदेश नोंदवायचा?';
 
   @override
   String get selectChatAssistant => 'चॅट सहायक निवडा';
@@ -3122,7 +3120,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get clearChatTitle => 'चॅट साफ करा?';
 
   @override
-  String get confirmClearChat => 'आप खात्रीने चॅट साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।';
+  String get confirmClearChat => 'हा चॅट साफ करायचा? हे पूर्ववत करता येणार नाही.';
 
   @override
   String get copy => 'कॉपी करा';
@@ -3294,7 +3292,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get createMemory => 'स्मृती तयार करा';
 
   @override
-  String get deleteMemoryConfirmation => 'आप खात्रीने हे स्मृती हटवू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।';
+  String get deleteMemoryConfirmation => 'ही स्मृती हटवायची? हे पूर्ववत करता येणार नाही.';
 
   @override
   String get makePrivate => 'खाजगी करा';
@@ -3331,7 +3329,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'आप खात्रीने Omi ची स्मृती साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही आणि सर्व $count स्मृती कायमचा हटवेल।';
+    return 'सर्व $count स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.';
   }
 
   @override
@@ -3622,8 +3620,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Omi ला स्वयंचलितपणे सर्वोत्तम अॅप निवडू द्या';
 
   @override
-  String get deleteConversationConfirmation =>
-      'आप हा संभाषण हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.';
+  String get deleteConversationConfirmation => 'हे संभाषण हटवायचे? हे पूर्ववत करता येणार नाही.';
 
   @override
   String get conversationDeleted => 'संभाषण हटवले';
@@ -3948,8 +3945,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get updateAppQuestion => 'अॅप अपडेट करा?';
 
   @override
-  String get updateAppConfirmation =>
-      'आप आपल्या अॅप अपडेट करण्याचे सुनिश्चित आहात? आमच्या टीम द्वारे पुनरावलोकन केल्यानंतर बदल प्रतिबिंबित होतील.';
+  String get updateAppConfirmation => 'आमच्या टीमने पुनरावलोकन केल्यानंतर बदल लागू होतील.';
 
   @override
   String get updateApp => 'अॅप अपडेट करा';
@@ -4013,8 +4009,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'सदस्यता रद्द करा?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'आप आपल्या सदस्यता रद्द करण्याचे सुनिश्चित आहात? आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.';
+  String get cancelSubscriptionConfirmation => 'आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.';
 
   @override
   String get cancelSubscriptionButton => 'सदस्यता रद्द करा';
@@ -4200,8 +4195,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get revokeApiKeyQuestion => 'API की रद्द करा?';
 
   @override
-  String get revokeApiKeyWarning =>
-      'हे क्रिया पूर्ववत् करू शकत नाही. या की वापरणारी कोणतीही अनुप्रयोग यापुढे API मध्ये प्रवेश करू शकणार नाही.';
+  String get revokeApiKeyWarning => 'ही की वापरणाऱ्या अ‍ॅप्सचा API प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.';
 
   @override
   String get revoke => 'रद्द करा';
@@ -4258,7 +4252,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'आप हा $item हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.';
+    return 'हा $item हटवणे पूर्ववत करता येणार नाही.';
   }
 
   @override
@@ -4266,7 +4260,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'आप \"$keyName\" की रद्द करण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.';
+    return '\"$keyName\" वापरणाऱ्या सर्व गोष्टींचा प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.';
   }
 
   @override
@@ -4445,7 +4439,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'आपल्या योजना $date पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल. आप सुनिश्चित आहात?';
+    return 'आपल्या योजना $date पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल.';
   }
 
   @override
@@ -4731,7 +4725,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'हे Limitless मधून आयात केलेले सर्व संभाषण स्थायीरित्या हटाईल. ही कारवाई पूर्ववत्त करता येणार नाही.';
+      'Limitless मधून आयात केलेली सर्व संभाषणे हटवली जातील. हे पूर्ववत करता येणार नाही.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4772,7 +4766,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'आप $name चा नमुना हटविण्याचा खरेच निश्चय आहे?';
+    return '$name यांचा आवाजाचा नमुना काढला जाईल. हे पूर्ववत करता येणार नाही.';
   }
 
   @override
@@ -4780,7 +4774,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'आप $name हटविण्याचा खरेच निश्चय आहे? हे सर्व संबंधित भाषण नमुने देखील काढून टाकेल.';
+    return 'यामुळे $name यांचे आवाजाचे नमुने काढले जातील आणि हे पूर्ववत करता येणार नाही. मागील संभाषणांमधील त्यांचे बोलणे नाव नसलेले वक्ते बनेल.';
   }
 
   @override
@@ -5138,7 +5132,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get finishedConversation => 'संभाषण संपली?';
 
   @override
-  String get stopRecordingConfirmation => 'आप रेकॉर्डिंग थांबवण्याचा आणि संभाषण आता सारांशित करण्याचा खरेच निश्चय आहे?';
+  String get stopRecordingConfirmation => 'रेकॉर्डिंग थांबवून आत्ताच संभाषणाचा सारांश तयार करायचा?';
 
   @override
   String get conversationEndsManually => 'संभाषण फक्त मॅन्युअल्ली संपेल.';
@@ -6650,8 +6644,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get shareRecording => 'रेकॉर्डिंग शेयर करा';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'आपण खरोखर या रेकॉर्डिंगला कायमीपणे हटवू इच्छिता का? हे पूर्ववत करता येणार नाही.';
+  String get deleteRecordingConfirmation => 'हे पूर्ववत करता येणार नाही.';
 
   @override
   String get recordingIdLabel => 'रेकॉर्डिंग आयडी';
@@ -7024,7 +7017,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'आप्पण आपल्या Unlimited योजना $title वर स्विच करत आहात. आप्पण आगे जाण्यास खरोखर इच्छुक आहात का?';
+    return 'तुम्ही तुमची Unlimited योजना $title वर स्विच करत आहात.';
   }
 
   @override
@@ -9634,7 +9627,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteOnDeviceModel => 'मॉडेल हटवा';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?';
+  String get deleteOnDeviceModelConfirm => 'हे मॉडेल हटवायचे?';
 
   @override
   String get onDeviceModelDownloaded => 'डाउनलोड केले';

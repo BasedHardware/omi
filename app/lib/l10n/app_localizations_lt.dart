@@ -282,7 +282,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reportMessage => 'Pranešti apie pranešimą';
 
   @override
-  String get reportMessageConfirm => 'Ar tikrai norite pranešti apie šią žinutę?';
+  String get reportMessageConfirm => 'Pranešti apie šią žinutę?';
 
   @override
   String get messageReported => 'Apie žinutę pranešta sėkmingai.';
@@ -294,7 +294,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get clearChat => 'Išvalyti pokalbį';
 
   @override
-  String get clearChatConfirm => 'Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.';
+  String get clearChatConfirm => 'Visos šio pokalbio žinutės bus ištrintos. Šio veiksmo negalima atšaukti.';
 
   @override
   String get maxFilesLimit => 'Galite įkelti tik 4 failus vienu metu';
@@ -1039,7 +1039,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Ar tikrai norite atsijungti nuo $appName? Galite bet kada vėl prisijungti.';
+    return '$appName galite vėl prijungti bet kada.';
   }
 
   @override
@@ -1978,14 +1978,14 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteActionItemTitle => 'Ištrinti užduotį';
 
   @override
-  String get deleteActionItemMessage => 'Ar tikrai norite ištrinti šią užduotį?';
+  String get deleteActionItemMessage => 'Ištrinti šią užduotį?';
 
   @override
   String get deleteSelectedItemsTitle => 'Ištrinti pasirinktus elementus';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Ar tikrai norite ištrinti $count pasirinktą(-s) užduotį(-is)$s?';
+    return 'Ištrinti $count pasirinktas užduotis$s?';
   }
 
   @override
@@ -2074,7 +2074,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get clearMemoryTitle => 'Išvalyti Omi atmintį';
 
   @override
-  String get clearMemoryMessage => 'Ar tikrai norite išvalyti Omi atmintį? Šio veiksmo negalima atšaukti.';
+  String get clearMemoryMessage => 'Visi jūsų prisiminimai bus ištrinti. Šio veiksmo negalima atšaukti.';
 
   @override
   String get clearMemoryButton => 'Išvalyti atmintį';
@@ -2220,7 +2220,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Ištrinti užduotį';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Ar tikrai norite ištrinti šią užduotį?';
+  String get deleteActionItemConfirmMessage => 'Ištrinti šią užduotį?';
 
   @override
   String get appLanguage => 'Programėlės kalba';
@@ -2759,7 +2759,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteActionItem => 'Ištrinti užduotį';
 
   @override
-  String get deleteActionItemConfirmation => 'Ar tikrai norite ištrinti šią užduotį? Šio veiksmo negalima atšaukti.';
+  String get deleteActionItemConfirmation => 'Ištrinti šią užduotį? Šio veiksmo negalima atšaukti.';
 
   @override
   String get enterActionItemDescription => 'Įveskite užduoties aprašymą';
@@ -3097,7 +3097,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Pranešimas sėkmingai praneštas';
 
   @override
-  String get confirmReportMessage => 'Ar tikrai norite pranešti apie šį pranešimą?';
+  String get confirmReportMessage => 'Pranešti apie šią žinutę?';
 
   @override
   String get selectChatAssistant => 'Pasirinkti pokalbio asistentą';
@@ -3112,7 +3112,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get clearChatTitle => 'Išvalyti pokalbį?';
 
   @override
-  String get confirmClearChat => 'Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.';
+  String get confirmClearChat => 'Išvalyti šį pokalbį? Šio veiksmo negalima atšaukti.';
 
   @override
   String get copy => 'Kopijuoti';
@@ -3284,7 +3284,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createMemory => 'Sukurti atminimą';
 
   @override
-  String get deleteMemoryConfirmation => 'Ar tikrai norite ištrinti šį atminimą? Šio veiksmo negalima atšaukti.';
+  String get deleteMemoryConfirmation => 'Ištrinti šį prisiminimą? Šio veiksmo negalima atšaukti.';
 
   @override
   String get makePrivate => 'Padaryti privačią';
@@ -3321,7 +3321,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Ar tikrai norite išvalyti Omi atmintį? Šio veiksmo negalima atšaukti ir bus visam laikui ištrinti visi $count atminimai.';
+    return 'Visi prisiminimai ($count) bus ištrinti. Šio veiksmo negalima atšaukti.';
   }
 
   @override
@@ -3614,7 +3614,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Leisti Omi automatiškai pasirinkti geriausią programėlę';
 
   @override
-  String get deleteConversationConfirmation => 'Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.';
+  String get deleteConversationConfirmation => 'Ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.';
 
   @override
   String get conversationDeleted => 'Pokalbis ištrintas';
@@ -3940,8 +3940,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get updateAppQuestion => 'Atnaujinti programėlę?';
 
   @override
-  String get updateAppConfirmation =>
-      'Ar tikrai norite atnaujinti savo programėlę? Pakeitimai bus matomi po mūsų komandos peržiūros.';
+  String get updateAppConfirmation => 'Pakeitimai bus matomi po mūsų komandos peržiūros.';
 
   @override
   String get updateApp => 'Atnaujinti programėlę';
@@ -4005,8 +4004,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Atšaukti prenumeratą?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Ar tikrai norite atšaukti prenumeratą? Turėsite prieigą iki dabartinio atsiskaitymo laikotarpio pabaigos.';
+  String get cancelSubscriptionConfirmation => 'Turėsite prieigą iki dabartinio atsiskaitymo laikotarpio pabaigos.';
 
   @override
   String get cancelSubscriptionButton => 'Atšaukti prenumeratą';
@@ -4192,7 +4190,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Šio veiksmo negalima atšaukti. Programos, naudojančios šį raktą, nebegalės pasiekti API.';
+      'Šį raktą naudojančios programos praras prieigą prie API. Šio veiksmo negalima atšaukti.';
 
   @override
   String get revoke => 'Atšaukti';
@@ -4249,7 +4247,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ar tikrai norite ištrinti šią $item? Šio veiksmo negalima atšaukti.';
+    return '$item bus ištrinta. Šio veiksmo negalima atšaukti.';
   }
 
   @override
@@ -4257,7 +4255,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ar tikrai norite atšaukti raktą \"$keyName\"? Šio veiksmo negalima atšaukti.';
+    return 'Viskas, kas naudoja \"$keyName\", praras prieigą. Šio veiksmo negalima atšaukti.';
   }
 
   @override
@@ -4433,7 +4431,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Jūsų planas liks aktyvus iki $date. Po to prarasite prieigą prie neribotų funkcijų. Ar tikrai?';
+    return 'Jūsų planas liks aktyvus iki $date. Po to prarasite prieigą prie neribotų funkcijų.';
   }
 
   @override
@@ -4720,7 +4718,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Tai visam laikui ištrins visus iš Limitless importuotus pokalbius. Šio veiksmo negalima atšaukti.';
+      'Visi iš Limitless importuoti pokalbiai bus ištrinti. Šio veiksmo negalima atšaukti.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4761,7 +4759,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Ar tikrai norite ištrinti $name pavyzdį?';
+    return 'Asmens $name balso pavyzdys bus pašalintas. Šio veiksmo negalima atšaukti.';
   }
 
   @override
@@ -4769,7 +4767,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Ar tikrai norite ištrinti $name? Tai taip pat pašalins visus susijusius kalbos pavyzdžius.';
+    return 'Tai pašalins asmens $name balso pavyzdžius ir to atšaukti negalima. Replikos ankstesniuose pokalbiuose taps be vardo kalbėtojais.';
   }
 
   @override
@@ -5127,7 +5125,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finishedConversation => 'Pokalbis baigtas?';
 
   @override
-  String get stopRecordingConfirmation => 'Ar tikrai norite sustabdyti įrašymą ir apibendrinti pokalbį dabar?';
+  String get stopRecordingConfirmation => 'Sustabdyti įrašymą ir apibendrinti pokalbį dabar?';
 
   @override
   String get conversationEndsManually => 'Pokalbis baigsis tik rankiniu būdu.';
@@ -6641,8 +6639,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get shareRecording => 'Bendrinti įrašą';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Ar tikrai norite visam laikui ištrinti šį įrašą? Šio veiksmo negalima atšaukti.';
+  String get deleteRecordingConfirmation => 'Šio veiksmo negalima atšaukti.';
 
   @override
   String get recordingIdLabel => 'Įrašo ID';
@@ -7015,7 +7012,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Jūs keičiate savo Neribotą planą į $title. Ar tikrai norite tęsti?';
+    return 'Jūs keičiate savo Neribotą planą į $title.';
   }
 
   @override
@@ -9639,7 +9636,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteOnDeviceModel => 'Ištrinti modelį';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Ar tikrai norite ištrinti šį modelį?';
+  String get deleteOnDeviceModelConfirm => 'Ištrinti šį modelį?';
 
   @override
   String get onDeviceModelDownloaded => 'Atsisiųsta';

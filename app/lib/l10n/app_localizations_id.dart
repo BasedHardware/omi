@@ -282,7 +282,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get reportMessage => 'Laporkan Pesan';
 
   @override
-  String get reportMessageConfirm => 'Apakah Anda yakin ingin melaporkan pesan ini?';
+  String get reportMessageConfirm => 'Laporkan pesan ini?';
 
   @override
   String get messageReported => 'Pesan berhasil dilaporkan.';
@@ -294,7 +294,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearChat => 'Hapus Obrolan';
 
   @override
-  String get clearChatConfirm => 'Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.';
+  String get clearChatConfirm => 'Semua pesan di obrolan ini akan dihapus. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get maxFilesLimit => 'Anda hanya dapat mengunggah 4 file sekaligus';
@@ -1040,7 +1040,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Apakah Anda yakin ingin memutuskan dari $appName? Anda dapat menyambung kembali kapan saja.';
+    return 'Anda dapat menghubungkan kembali $appName kapan saja.';
   }
 
   @override
@@ -1984,14 +1984,14 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteActionItemTitle => 'Hapus tugas';
 
   @override
-  String get deleteActionItemMessage => 'Apakah Anda yakin ingin menghapus tugas ini?';
+  String get deleteActionItemMessage => 'Hapus tugas ini?';
 
   @override
   String get deleteSelectedItemsTitle => 'Hapus Item yang Dipilih';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Apakah Anda yakin ingin menghapus $count tugas$s yang dipilih?';
+    return 'Hapus $count tugas$s yang dipilih?';
   }
 
   @override
@@ -2080,7 +2080,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearMemoryTitle => 'Hapus Memori Omi';
 
   @override
-  String get clearMemoryMessage => 'Apakah Anda yakin ingin menghapus memori Omi? Tindakan ini tidak dapat dibatalkan.';
+  String get clearMemoryMessage => 'Semua kenangan Anda akan dihapus. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get clearMemoryButton => 'Hapus Memori';
@@ -2226,7 +2226,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Hapus Tugas';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Apakah Anda yakin ingin menghapus tugas ini?';
+  String get deleteActionItemConfirmMessage => 'Hapus tugas ini?';
 
   @override
   String get appLanguage => 'Bahasa Aplikasi';
@@ -2764,8 +2764,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteActionItem => 'Hapus tugas';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Apakah Anda yakin ingin menghapus tugas ini? Tindakan ini tidak dapat dibatalkan.';
+  String get deleteActionItemConfirmation => 'Hapus tugas ini? Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get enterActionItemDescription => 'Masukkan deskripsi tugas';
@@ -3106,7 +3105,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Pesan berhasil dilaporkan';
 
   @override
-  String get confirmReportMessage => 'Apakah Anda yakin ingin melaporkan pesan ini?';
+  String get confirmReportMessage => 'Laporkan pesan ini?';
 
   @override
   String get selectChatAssistant => 'Pilih Asisten Obrolan';
@@ -3121,7 +3120,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearChatTitle => 'Hapus Obrolan?';
 
   @override
-  String get confirmClearChat => 'Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.';
+  String get confirmClearChat => 'Hapus obrolan ini? Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get copy => 'Salin';
@@ -3293,8 +3292,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get createMemory => 'Buat Memori';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Apakah Anda yakin ingin menghapus memori ini? Tindakan ini tidak dapat dibatalkan.';
+  String get deleteMemoryConfirmation => 'Hapus kenangan ini? Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get makePrivate => 'Jadikan Privat';
@@ -3331,7 +3329,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Apakah Anda yakin ingin menghapus memori Omi? Tindakan ini tidak dapat dibatalkan dan akan menghapus permanen semua $count memori.';
+    return 'Semua $count kenangan akan dihapus. Tindakan ini tidak dapat dibatalkan.';
   }
 
   @override
@@ -3624,8 +3622,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Biarkan Omi memilih aplikasi terbaik secara otomatis';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.';
+  String get deleteConversationConfirmation => 'Hapus percakapan ini? Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get conversationDeleted => 'Percakapan dihapus';
@@ -3950,8 +3947,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get updateAppQuestion => 'Perbarui Aplikasi?';
 
   @override
-  String get updateAppConfirmation =>
-      'Apakah Anda yakin ingin memperbarui aplikasi? Perubahan akan terlihat setelah ditinjau oleh tim kami.';
+  String get updateAppConfirmation => 'Perubahan akan tayang setelah ditinjau oleh tim kami.';
 
   @override
   String get updateApp => 'Perbarui Aplikasi';
@@ -4016,7 +4012,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Apakah Anda yakin ingin membatalkan langganan? Anda akan tetap memiliki akses hingga akhir periode penagihan saat ini.';
+      'Anda akan tetap memiliki akses hingga akhir periode penagihan saat ini.';
 
   @override
   String get cancelSubscriptionButton => 'Batalkan Langganan';
@@ -4201,7 +4197,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tindakan ini tidak dapat dibatalkan. Aplikasi apa pun yang menggunakan kunci ini tidak akan dapat mengakses API lagi.';
+      'Aplikasi yang menggunakan kunci ini kehilangan akses API. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get revoke => 'Cabut';
@@ -4258,7 +4254,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Apakah Anda yakin ingin menghapus $item ini? Tindakan ini tidak dapat dibatalkan.';
+    return '$item akan dihapus. Tindakan ini tidak dapat dibatalkan.';
   }
 
   @override
@@ -4266,7 +4262,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Apakah Anda yakin ingin mencabut kunci \"$keyName\"? Tindakan ini tidak dapat dibatalkan.';
+    return 'Semua yang menggunakan \"$keyName\" akan kehilangan akses. Tindakan ini tidak dapat dibatalkan.';
   }
 
   @override
@@ -4445,7 +4441,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Paket Anda akan tetap aktif hingga $date. Setelah itu, Anda akan kehilangan akses ke fitur tak terbatas. Apakah Anda yakin?';
+    return 'Paket Anda akan tetap aktif hingga $date. Setelah itu, Anda akan kehilangan akses ke fitur tak terbatas.';
   }
 
   @override
@@ -4733,7 +4729,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Ini akan menghapus secara permanen semua percakapan yang diimpor dari Limitless. Tindakan ini tidak dapat dibatalkan.';
+      'Semua percakapan yang diimpor dari Limitless akan dihapus. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4774,7 +4770,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Apakah Anda yakin ingin menghapus sampel $name?';
+    return 'Sampel suara $name akan dihapus. Tindakan ini tidak dapat dibatalkan.';
   }
 
   @override
@@ -4782,7 +4778,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Apakah Anda yakin ingin menghapus $name? Ini juga akan menghapus semua sampel suara terkait.';
+    return 'Tindakan ini menghapus sampel suara $name dan tidak dapat dibatalkan. Ucapannya di percakapan sebelumnya menjadi pembicara tanpa nama.';
   }
 
   @override
@@ -5139,8 +5135,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get finishedConversation => 'Percakapan selesai?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Apakah Anda yakin ingin menghentikan rekaman dan merangkum percakapan sekarang?';
+  String get stopRecordingConfirmation => 'Hentikan perekaman dan ringkas percakapan sekarang?';
 
   @override
   String get conversationEndsManually => 'Percakapan hanya akan berakhir secara manual.';
@@ -6654,8 +6649,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get shareRecording => 'Bagikan rekaman';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Apakah Anda yakin ingin menghapus rekaman ini secara permanen? Tindakan ini tidak dapat dibatalkan.';
+  String get deleteRecordingConfirmation => 'Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get recordingIdLabel => 'ID Rekaman';
@@ -9634,7 +9628,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteOnDeviceModel => 'Hapus Model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Apakah Anda yakin ingin menghapus model ini?';
+  String get deleteOnDeviceModelConfirm => 'Hapus model ini?';
 
   @override
   String get onDeviceModelDownloaded => 'Terunduh';

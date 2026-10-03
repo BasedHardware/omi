@@ -281,7 +281,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reportMessage => '举报消息';
 
   @override
-  String get reportMessageConfirm => '您确定要举报此消息吗？';
+  String get reportMessageConfirm => '举报这条消息？';
 
   @override
   String get messageReported => '消息举报成功。';
@@ -293,7 +293,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearChat => '清除聊天';
 
   @override
-  String get clearChatConfirm => '您确定要清除聊天记录吗？此操作无法撤消。';
+  String get clearChatConfirm => '此聊天中的所有消息都将被删除。此操作无法撤销。';
 
   @override
   String get maxFilesLimit => '您一次只能上传 4 个文件';
@@ -1024,7 +1024,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '您确定要断开 $appName 吗？您可以随时重新连接。';
+    return '您可以随时重新连接 $appName。';
   }
 
   @override
@@ -1938,14 +1938,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteActionItemTitle => '删除任务';
 
   @override
-  String get deleteActionItemMessage => '您确定要删除此任务吗？';
+  String get deleteActionItemMessage => '删除此任务？';
 
   @override
   String get deleteSelectedItemsTitle => '删除选中项';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '您确定要删除 $count 个选中的任务$s吗？';
+    return '删除 $count 个选中的任务$s？';
   }
 
   @override
@@ -2033,7 +2033,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearMemoryTitle => '清除 Omi 记忆？';
 
   @override
-  String get clearMemoryMessage => '您确定要清除 Omi 的记忆吗？此操作无法撤消。';
+  String get clearMemoryMessage => '您的所有记忆都将被删除。此操作无法撤销。';
 
   @override
   String get clearMemoryButton => '清除记忆';
@@ -2179,7 +2179,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteActionItemConfirmTitle => '删除任务';
 
   @override
-  String get deleteActionItemConfirmMessage => '您确定要删除此任务吗？';
+  String get deleteActionItemConfirmMessage => '删除此任务？';
 
   @override
   String get appLanguage => '应用语言';
@@ -2280,7 +2280,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteMemory => '删除记忆';
 
   @override
-  String get thisActionCannotBeUndone => '此操作无法撤消。';
+  String get thisActionCannotBeUndone => '此操作无法撤销。';
 
   @override
   String memoriesCount(int count) {
@@ -2711,7 +2711,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteActionItem => '删除任务';
 
   @override
-  String get deleteActionItemConfirmation => '您确定要删除此任务吗？此操作无法撤消。';
+  String get deleteActionItemConfirmation => '删除此任务？此操作无法撤销。';
 
   @override
   String get enterActionItemDescription => '输入任务描述';
@@ -3042,7 +3042,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ 消息举报成功';
 
   @override
-  String get confirmReportMessage => '您确定要举报此消息吗？';
+  String get confirmReportMessage => '举报这条消息？';
 
   @override
   String get selectChatAssistant => '选择聊天助手';
@@ -3057,7 +3057,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearChatTitle => '清除聊天？';
 
   @override
-  String get confirmClearChat => '您确定要清除聊天吗？此操作无法撤销。';
+  String get confirmClearChat => '清除此聊天？此操作无法撤销。';
 
   @override
   String get copy => '复制';
@@ -3228,7 +3228,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createMemory => '创建记忆';
 
   @override
-  String get deleteMemoryConfirmation => '您确定要删除此记忆吗？此操作无法撤消。';
+  String get deleteMemoryConfirmation => '删除此记忆？此操作无法撤销。';
 
   @override
   String get makePrivate => '私密';
@@ -3265,7 +3265,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return '您确定要清除 Omi 的记忆吗？此操作无法撤消，将永久删除所有 $count 条记忆。';
+    return '全部 $count 条记忆都将被删除。此操作无法撤销。';
   }
 
   @override
@@ -3550,7 +3550,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get letOmiChooseAutomatically => '让 Omi 自动选择最佳应用';
 
   @override
-  String get deleteConversationConfirmation => '您确定要删除此对话吗？此操作无法撤销。';
+  String get deleteConversationConfirmation => '删除此对话？此操作无法撤销。';
 
   @override
   String get conversationDeleted => '对话已删除';
@@ -3873,7 +3873,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateAppQuestion => '更新应用？';
 
   @override
-  String get updateAppConfirmation => '确定要更新您的应用吗？更改将在我们团队审核后生效。';
+  String get updateAppConfirmation => '更改将在我们团队审核后生效。';
 
   @override
   String get updateApp => '更新应用';
@@ -3936,7 +3936,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelSubscriptionQuestion => '取消订阅？';
 
   @override
-  String get cancelSubscriptionConfirmation => '确定要取消订阅吗？您将继续享有访问权限直到当前计费周期结束。';
+  String get cancelSubscriptionConfirmation => '您将继续享有访问权限直到当前计费周期结束。';
 
   @override
   String get cancelSubscriptionButton => '取消订阅';
@@ -4117,7 +4117,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get revokeApiKeyQuestion => '撤销API密钥?';
 
   @override
-  String get revokeApiKeyWarning => '此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。';
+  String get revokeApiKeyWarning => '使用此密钥的应用将无法再访问 API。此操作无法撤销。';
 
   @override
   String get revoke => '撤销';
@@ -4174,7 +4174,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return '您确定要删除此$item吗？此操作无法撤消。';
+    return '删除此$item后无法撤销。';
   }
 
   @override
@@ -4182,7 +4182,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '您确定要撤销密钥\"$keyName\"吗？此操作无法撤消。';
+    return '所有使用\"$keyName\"的地方都将失去访问权限。此操作无法撤销。';
   }
 
   @override
@@ -4352,7 +4352,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。您确定吗？';
+    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。';
   }
 
   @override
@@ -4631,7 +4631,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteAllLimitlessConversations => '删除所有Limitless对话？';
 
   @override
-  String get deleteAllLimitlessWarning => '这将永久删除从Limitless导入的所有对话。此操作无法撤消。';
+  String get deleteAllLimitlessWarning => '从 Limitless 导入的所有对话都将被删除。此操作无法撤销。';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4672,7 +4672,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '您确定要删除 $name 的样本吗？';
+    return '$name 的声音样本将被删除。此操作无法撤销。';
   }
 
   @override
@@ -4680,7 +4680,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '您确定要删除 $name 吗？这也将删除所有相关的语音样本。';
+    return '这将删除 $name 的声音样本，且无法撤销。其在过往对话中的发言将变为未命名的说话人。';
   }
 
   @override
@@ -5022,7 +5022,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishedConversation => '结束对话？';
 
   @override
-  String get stopRecordingConfirmation => '您确定要停止录音并立即总结对话吗？';
+  String get stopRecordingConfirmation => '停止录音并立即总结对话？';
 
   @override
   String get conversationEndsManually => '对话只能手动结束。';
@@ -6519,7 +6519,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareRecording => '分享录音';
 
   @override
-  String get deleteRecordingConfirmation => '您确定要永久删除此录音吗？此操作无法撤销。';
+  String get deleteRecordingConfirmation => '此操作无法撤销。';
 
   @override
   String get recordingIdLabel => '录音 ID';
@@ -6887,7 +6887,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return '您正在将无限版计划切换到 $title。您确定要继续吗？';
+    return '您正在将无限版计划切换到 $title。';
   }
 
   @override
@@ -9450,7 +9450,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteOnDeviceModel => '删除模型';
 
   @override
-  String get deleteOnDeviceModelConfirm => '确定要删除此模型吗？';
+  String get deleteOnDeviceModelConfirm => '删除此模型？';
 
   @override
   String get onDeviceModelDownloaded => '已下载';

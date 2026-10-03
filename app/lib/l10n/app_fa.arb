@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟",
+    "reportMessageConfirm": "این پیام گزارش شود؟",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.",
+    "clearChatConfirm": "همه پیام‌های این گفتگو حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "آیا مطمئن هستید که می‌خواهید از {appName} قطع شوید؟ شما می‌توانید هر زمان دوباره متصل شوید.",
+    "disconnectAppMessage": "می‌توانید هر زمان {appName} را دوباره متصل کنید.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟",
+    "deleteActionItemMessage": "این وظیفه حذف شود؟",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "آیا مطمئن هستید که می‌خواهید {count} وظیفه{s} انتخاب‌شده را حذف کنید؟",
+    "deleteSelectedItemsMessage": "{count} وظیفه{s} انتخاب‌شده حذف شود؟",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این اقدام قابل برگشت نیست.",
+    "clearMemoryMessage": "همه خاطرات شما حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟",
+    "deleteActionItemConfirmMessage": "این وظیفه حذف شود؟",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "این عمل قابل بازگشت نیست.",
+    "thisActionCannotBeUndone": "این کار قابل بازگشت نیست.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteActionItemConfirmation": "این وظیفه حذف شود؟ این کار قابل بازگشت نیست.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟",
+    "confirmReportMessage": "این پیام گزارش شود؟",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.",
+    "confirmClearChat": "این گفتگو پاک شود؟ این کار قابل بازگشت نیست.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "آیا مطمئن هستید که می‌خواهید این یادآوری را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteMemoryConfirmation": "این خاطره حذف شود؟ این کار قابل بازگشت نیست.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این عمل قابل بازگشت نیست و تمام {count} یادآوری را به‌طور دائمی حذف می‌کند.",
+    "clearMemoryConfirmation": "همه {count} خاطره حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "اجازه دهید Omi بهترین برنامه را به طور خودکار انتخاب کند",
-    "deleteConversationConfirmation": "آیا مطمئنید که می‌خواهید این گفتگو را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteConversationConfirmation": "این گفتگو حذف شود؟ این کار قابل بازگشت نیست.",
     "conversationDeleted": "گفتگو حذف شد",
     "generatingLink": "در حال ایجاد پیوند…",
     "editConversation": "ویرایش گفتگو",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "آیا مطمئنید که می‌خواهید برنامه خود را به‌روز کنید؟ تغییرات زمانی‌که توسط تیم ما بررسی شوند منعکس می‌شوند.",
+    "updateAppConfirmation": "تغییرات پس از بررسی تیم ما اعمال می‌شوند.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "آیا مطمئنید که می‌خواهید اشتراک خود را لغو کنید؟ تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.",
+    "cancelSubscriptionConfirmation": "تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "این عمل قابل بازگشت نیست. هر برنامه‌ای که از این کلید استفاده می‌کند دیگر نخواهد توانست API را دسترسی کند.",
+    "revokeApiKeyWarning": "برنامه‌هایی که از این کلید استفاده می‌کنند دسترسی به API را از دست می‌دهند. این کار قابل بازگشت نیست.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "آیا مطمئنید که می‌خواهید این {item} را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteItemConfirmation": "حذف این {item} قابل بازگشت نیست.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "آیا مطمئنید که می‌خواهید کلید \"{keyName}\" را لغو کنید؟ این عمل قابل بازگشت نیست.",
+    "revokeKeyConfirmation": "هر چیزی که از \"{keyName}\" استفاده می‌کند دسترسی را از دست می‌دهد. این کار قابل بازگشت نیست.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "طرح شما تا {date} فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد. آیا مطمئنید؟",
+    "planRemainsActiveUntil": "طرح شما تا {date} فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "این تمام مکالمات واردشده از Limitless را به‌طور دائم حذف خواهد کرد. این عمل برگشت‌پذیر نیست.",
+    "deleteAllLimitlessWarning": "همه گفتگوهای واردشده از Limitless حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "آیا مطمئن هستید که می‌خواهید نمونه {name} را حذف کنید؟",
+    "deleteSampleConfirmation": "نمونه صدای {name} حذف می‌شود. این کار قابل بازگشت نیست.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "آیا مطمئن هستید که می‌خواهید {name} را حذف کنید؟ این تمام نمونه‌های صوتی مرتبط را نیز حذف خواهد کرد.",
+    "deletePersonConfirmation": "این کار نمونه‌های صدای {name} را حذف می‌کند و قابل بازگشت نیست. گفته‌های او در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "آیا مطمئن هستید که می‌خواهید ضبط را متوقف کنید و مکالمه را اکنون خلاصه کنید؟",
+    "stopRecordingConfirmation": "ضبط متوقف شود و گفتگو اکنون خلاصه شود؟",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "آیا می‌خواهید این ضبط‌شده را برای همیشه حذف کنید؟ این کار قابل بازگشت نیست.",
+    "deleteRecordingConfirmation": "این کار قابل بازگشت نیست.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "شما نقشهِ نامحدود خود را به {title} تغییر می‌دهید. آیا مطمئن هستید می‌خواهید ادامه دهید؟",
+    "planSwitchingDescriptionWithTitle": "شما طرح نامحدود خود را به {title} تغییر می‌دهید.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "رونویسی ابری",
     "copyMessage": "کپی پیام",
     "deleteOnDeviceModel": "حذف مدل",
-    "deleteOnDeviceModelConfirm": "آیا مطمئن هستید که می‌خواهید این مدل را حذف کنید؟",
+    "deleteOnDeviceModelConfirm": "این مدل حذف شود؟",
     "downgradeAnyway": "با این حال تنزل بده",
     "downgradeLimitBattery": "۷ برابر مصرف باتری",
     "downgradeLimitDelay": "۵ تا ۷ ثانیه تأخیر",

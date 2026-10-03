@@ -283,7 +283,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reportMessage => 'Mesajı Bildir';
 
   @override
-  String get reportMessageConfirm => 'Bu mesajı bildirmek istediğinizden emin misiniz?';
+  String get reportMessageConfirm => 'Bu mesaj bildirilsin mi?';
 
   @override
   String get messageReported => 'Mesaj başarıyla bildirildi.';
@@ -295,7 +295,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearChat => 'Sohbeti Temizle';
 
   @override
-  String get clearChatConfirm => 'Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get clearChatConfirm => 'Bu sohbetteki tüm mesajlar silinir. Bu işlem geri alınamaz.';
 
   @override
   String get maxFilesLimit => 'Aynı anda en fazla 4 dosya yükleyebilirsiniz';
@@ -1040,7 +1040,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '$appName bağlantısını kesmek istediğinizden emin misiniz? İstediğiniz zaman tekrar bağlanabilirsiniz.';
+    return '$appName bağlantısını istediğiniz zaman yeniden kurabilirsiniz.';
   }
 
   @override
@@ -1984,14 +1984,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteActionItemTitle => 'Görevi sil';
 
   @override
-  String get deleteActionItemMessage => 'Bu görevi silmek istediğinizden emin misiniz?';
+  String get deleteActionItemMessage => 'Bu görev silinsin mi?';
 
   @override
   String get deleteSelectedItemsTitle => 'Seçili Öğeleri Sil';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '$count seçili görevi$s silmek istediğinizden emin misiniz?';
+    return '$count seçili görev$s silinsin mi?';
   }
 
   @override
@@ -2081,8 +2081,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearMemoryTitle => 'Omi\'nin Hafızasını Temizle';
 
   @override
-  String get clearMemoryMessage =>
-      'Omi\'nin hafızasını temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get clearMemoryMessage => 'Tüm anılarınız silinir. Bu işlem geri alınamaz.';
 
   @override
   String get clearMemoryButton => 'Belleği Temizle';
@@ -2228,7 +2227,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Görevi Sil';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Bu görevi silmek istediğinizden emin misiniz?';
+  String get deleteActionItemConfirmMessage => 'Bu görev silinsin mi?';
 
   @override
   String get appLanguage => 'Uygulama Dili';
@@ -2765,7 +2764,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteActionItem => 'Görevi sil';
 
   @override
-  String get deleteActionItemConfirmation => 'Bu görevi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteActionItemConfirmation => 'Bu görev silinsin mi? Bu işlem geri alınamaz.';
 
   @override
   String get enterActionItemDescription => 'Görev açıklamasını girin';
@@ -3106,7 +3105,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Mesaj başarıyla bildirildi';
 
   @override
-  String get confirmReportMessage => 'Bu mesajı bildirmek istediğinizden emin misiniz?';
+  String get confirmReportMessage => 'Bu mesaj bildirilsin mi?';
 
   @override
   String get selectChatAssistant => 'Sohbet Asistanı Seç';
@@ -3121,7 +3120,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearChatTitle => 'Sohbeti Temizle?';
 
   @override
-  String get confirmClearChat => 'Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get confirmClearChat => 'Bu sohbet temizlensin mi? Bu işlem geri alınamaz.';
 
   @override
   String get copy => 'Kopyala';
@@ -3293,7 +3292,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createMemory => 'Hafıza oluştur';
 
   @override
-  String get deleteMemoryConfirmation => 'Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteMemoryConfirmation => 'Bu anı silinsin mi? Bu işlem geri alınamaz.';
 
   @override
   String get makePrivate => 'Özel yap';
@@ -3330,7 +3329,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omi\'nin belleğini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm $count anıyı kalıcı olarak siler.';
+    return '$count anının tamamı silinir. Bu işlem geri alınamaz.';
   }
 
   @override
@@ -3625,7 +3624,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Omi\'nin en iyi uygulamayı otomatik olarak seçmesine izin verin';
 
   @override
-  String get deleteConversationConfirmation => 'Bu sohbeti silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteConversationConfirmation => 'Bu konuşma silinsin mi? Bu işlem geri alınamaz.';
 
   @override
   String get conversationDeleted => 'Sohbet silindi';
@@ -3951,8 +3950,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get updateAppQuestion => 'Uygulama güncellensin mi?';
 
   @override
-  String get updateAppConfirmation =>
-      'Uygulamanızı güncellemek istediğinizden emin misiniz? Değişiklikler ekibimiz tarafından incelendikten sonra yansıtılacaktır.';
+  String get updateAppConfirmation => 'Değişiklikler ekibimiz inceledikten sonra yayına girer.';
 
   @override
   String get updateApp => 'Uygulamayı Güncelle';
@@ -4016,8 +4014,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Aboneliği iptal et?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Aboneliğinizi iptal etmek istediğinizden emin misiniz? Mevcut fatura döneminin sonuna kadar erişiminiz devam edecektir.';
+  String get cancelSubscriptionConfirmation => 'Mevcut fatura döneminin sonuna kadar erişiminiz devam edecektir.';
 
   @override
   String get cancelSubscriptionButton => 'Aboneliği İptal Et';
@@ -4202,8 +4199,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get revokeApiKeyQuestion => 'API Anahtarını İptal Et?';
 
   @override
-  String get revokeApiKeyWarning =>
-      'Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API\'ye erişemeyecektir.';
+  String get revokeApiKeyWarning => 'Bu anahtarı kullanan uygulamalar API erişimini kaybeder. Bu işlem geri alınamaz.';
 
   @override
   String get revoke => 'İptal Et';
@@ -4260,7 +4256,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Bu $item silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+    return '$item silinir. Bu işlem geri alınamaz.';
   }
 
   @override
@@ -4268,7 +4264,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '\"$keyName\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+    return '\"$keyName\" anahtarını kullanan her şey erişimini kaybeder. Bu işlem geri alınamaz.';
   }
 
   @override
@@ -4445,7 +4441,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Planınız $date tarihine kadar aktif kalacak. Bundan sonra sınırsız özelliklerinize erişiminizi kaybedeceksiniz. Emin misiniz?';
+    return 'Planınız $date tarihine kadar aktif kalacak. Bundan sonra sınırsız özelliklerinize erişiminizi kaybedeceksiniz.';
   }
 
   @override
@@ -4732,7 +4728,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Bu, Limitless\'tan içe aktarılan tüm konuşmaları kalıcı olarak silecektir. Bu işlem geri alınamaz.';
+      'Limitless\'tan içe aktarılan tüm konuşmalar silinir. Bu işlem geri alınamaz.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4773,7 +4769,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$name örneğini silmek istediğinizden emin misiniz?';
+    return '$name adlı kişinin ses örneği kaldırılır. Bu işlem geri alınamaz.';
   }
 
   @override
@@ -4781,7 +4777,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$name kişisini silmek istediğinizden emin misiniz? Bu aynı zamanda tüm ilişkili konuşma örneklerini de kaldıracaktır.';
+    return 'Bu, $name adlı kişinin ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.';
   }
 
   @override
@@ -5137,7 +5133,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get finishedConversation => 'Konuşma bitti mi?';
 
   @override
-  String get stopRecordingConfirmation => 'Kaydı durdurmak ve konuşmayı şimdi özetlemek istediğinizden emin misiniz?';
+  String get stopRecordingConfirmation => 'Kayıt durdurulup konuşma şimdi özetlensin mi?';
 
   @override
   String get conversationEndsManually => 'Konuşma yalnızca manuel olarak sona erecektir.';
@@ -6651,8 +6647,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get shareRecording => 'Kaydı Paylaş';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Bu kaydı kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteRecordingConfirmation => 'Bu işlem geri alınamaz.';
 
   @override
   String get recordingIdLabel => 'Kayıt Kimliği';
@@ -7024,7 +7019,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Sınırsız Planınızı $title planına değiştiriyorsunuz. Devam etmek istediğinizden emin misiniz?';
+    return 'Sınırsız Planınızı $title planına değiştiriyorsunuz.';
   }
 
   @override
@@ -9637,7 +9632,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteOnDeviceModel => 'Modeli Sil';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Bu modeli silmek istediğinizden emin misiniz?';
+  String get deleteOnDeviceModelConfirm => 'Bu model silinsin mi?';
 
   @override
   String get onDeviceModelDownloaded => 'İndirildi';

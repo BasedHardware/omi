@@ -283,7 +283,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reportMessage => 'Rapporter besked';
 
   @override
-  String get reportMessageConfirm => 'Er du sikker på, at du vil rapportere denne besked?';
+  String get reportMessageConfirm => 'Rapportér denne besked?';
 
   @override
   String get messageReported => 'Besked rapporteret.';
@@ -295,7 +295,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearChat => 'Ryd chat';
 
   @override
-  String get clearChatConfirm => 'Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes.';
+  String get clearChatConfirm => 'Alle beskeder i denne chat slettes. Dette kan ikke fortrydes.';
 
   @override
   String get maxFilesLimit => 'Du kan kun uploade 4 filer ad gangen';
@@ -1039,7 +1039,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Er du sikker på, at du vil afbryde forbindelsen til $appName? Du kan genoprette forbindelsen når som helst.';
+    return 'Du kan altid forbinde $appName igen.';
   }
 
   @override
@@ -1963,14 +1963,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteActionItemTitle => 'Slet opgave';
 
   @override
-  String get deleteActionItemMessage => 'Er du sikker på, at du vil slette denne opgave?';
+  String get deleteActionItemMessage => 'Slet denne opgave?';
 
   @override
   String get deleteSelectedItemsTitle => 'Slet valgte elementer';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Er du sikker på, at du vil slette $count valgte opgave$s?';
+    return 'Slet $count valgte opgave$s?';
   }
 
   @override
@@ -2060,7 +2060,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearMemoryTitle => 'Ryd hukommelse';
 
   @override
-  String get clearMemoryMessage => 'Er du sikker på, at du vil rydde hukommelsen?';
+  String get clearMemoryMessage => 'Alle dine minder slettes. Dette kan ikke fortrydes.';
 
   @override
   String get clearMemoryButton => 'Ryd hukommelse';
@@ -2206,7 +2206,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Slet opgave';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Er du sikker på, at du vil slette denne opgave?';
+  String get deleteActionItemConfirmMessage => 'Slet denne opgave?';
 
   @override
   String get appLanguage => 'App-sprog';
@@ -2309,7 +2309,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteMemory => 'Slet hukommelse';
 
   @override
-  String get thisActionCannotBeUndone => 'Denne handling kan ikke fortrydes.';
+  String get thisActionCannotBeUndone => 'Dette kan ikke fortrydes.';
 
   @override
   String memoriesCount(int count) {
@@ -2743,8 +2743,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteActionItem => 'Slet opgave';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Er du sikker på, at du vil slette denne opgave? Denne handling kan ikke fortrydes.';
+  String get deleteActionItemConfirmation => 'Slet denne opgave? Dette kan ikke fortrydes.';
 
   @override
   String get enterActionItemDescription => 'Indtast opgavebeskrivelse';
@@ -3086,7 +3085,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Besked rapporteret';
 
   @override
-  String get confirmReportMessage => 'Er du sikker på, at du vil rapportere denne besked?';
+  String get confirmReportMessage => 'Rapportér denne besked?';
 
   @override
   String get selectChatAssistant => 'Vælg chatassistent';
@@ -3101,7 +3100,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearChatTitle => 'Ryd chat?';
 
   @override
-  String get confirmClearChat => 'Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes.';
+  String get confirmClearChat => 'Ryd denne chat? Dette kan ikke fortrydes.';
 
   @override
   String get copy => 'Kopiér';
@@ -3273,8 +3272,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get createMemory => 'Opret hukommelse';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Er du sikker på, at du vil slette denne hukommelse? Denne handling kan ikke fortrydes.';
+  String get deleteMemoryConfirmation => 'Slet dette minde? Dette kan ikke fortrydes.';
 
   @override
   String get makePrivate => 'Gør privat';
@@ -3311,7 +3309,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Er du sikker på, at du vil rydde Omis hukommelse? Denne handling kan ikke fortrydes og vil permanent slette alle $count minder.';
+    return 'Alle $count minder slettes. Dette kan ikke fortrydes.';
   }
 
   @override
@@ -3604,8 +3602,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lad Omi automatisk vælge den bedste app';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Er du sikker på, at du vil slette denne samtale? Denne handling kan ikke fortrydes.';
+  String get deleteConversationConfirmation => 'Slet denne samtale? Dette kan ikke fortrydes.';
 
   @override
   String get conversationDeleted => 'Samtale slettet';
@@ -3931,8 +3928,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get updateAppQuestion => 'Opdater app?';
 
   @override
-  String get updateAppConfirmation =>
-      'Er du sikker på, at du vil opdatere din app? Ændringerne vil blive synlige efter gennemgang af vores team.';
+  String get updateAppConfirmation => 'Ændringerne bliver synlige, når vores team har gennemgået dem.';
 
   @override
   String get updateApp => 'Opdater app';
@@ -3997,7 +3993,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Er du sikker på, at du vil annullere dit abonnement? Du vil fortsat have adgang indtil slutningen af din nuværende faktureringsperiode.';
+      'Du vil fortsat have adgang indtil slutningen af din nuværende faktureringsperiode.';
 
   @override
   String get cancelSubscriptionButton => 'Annuller abonnement';
@@ -4182,7 +4178,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Denne handling kan ikke fortrydes. Alle applikationer, der bruger denne nøgle, vil ikke længere kunne få adgang til API\'et.';
+      'Apps, der bruger denne nøgle, mister adgang til API\'et. Dette kan ikke fortrydes.';
 
   @override
   String get revoke => 'Tilbagekald';
@@ -4239,7 +4235,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Er du sikker på, at du vil slette denne $item? Denne handling kan ikke fortrydes.';
+    return 'Sletning af denne $item kan ikke fortrydes.';
   }
 
   @override
@@ -4247,7 +4243,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Er du sikker på, at du vil tilbagekalde nøglen \"$keyName\"? Denne handling kan ikke fortrydes.';
+    return 'Alt, der bruger \"$keyName\", mister adgang. Dette kan ikke fortrydes.';
   }
 
   @override
@@ -4424,7 +4420,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Dit abonnement forbliver aktivt indtil $date. Derefter mister du adgang til dine ubegrænsede funktioner. Er du sikker?';
+    return 'Dit abonnement forbliver aktivt indtil $date. Derefter mister du adgang til dine ubegrænsede funktioner.';
   }
 
   @override
@@ -4711,8 +4707,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Slet alle Limitless samtaler?';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'Dette vil permanent slette alle samtaler importeret fra Limitless. Denne handling kan ikke fortrydes.';
+  String get deleteAllLimitlessWarning => 'Alle samtaler importeret fra Limitless slettes. Dette kan ikke fortrydes.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4753,7 +4748,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Er du sikker på, at du vil slette ${name}s prøve?';
+    return '${name}s stemmeprøve fjernes. Dette kan ikke fortrydes.';
   }
 
   @override
@@ -4761,7 +4756,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Er du sikker på, at du vil slette $name? Dette vil også fjerne alle tilknyttede taleprøver.';
+    return 'Dette fjerner ${name}s stemmeprøver og kan ikke fortrydes. Replikkerne i tidligere samtaler bliver til unavngivne talere.';
   }
 
   @override
@@ -5117,7 +5112,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get finishedConversation => 'Samtale afsluttet?';
 
   @override
-  String get stopRecordingConfirmation => 'Er du sikker på, at du vil stoppe optagelsen og opsummere samtalen nu?';
+  String get stopRecordingConfirmation => 'Stop optagelsen og opsummer samtalen nu?';
 
   @override
   String get conversationEndsManually => 'Samtalen afsluttes kun manuelt.';
@@ -6627,7 +6622,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get shareRecording => 'Del optagelse';
 
   @override
-  String get deleteRecordingConfirmation => 'Er du sikker på, at du vil slette denne optagelse?';
+  String get deleteRecordingConfirmation => 'Dette kan ikke fortrydes.';
 
   @override
   String get recordingIdLabel => 'Optagelses-ID';
@@ -6998,7 +6993,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Du skifter dit Unlimited-abonnement til $title. Er du sikker på, at du vil fortsætte?';
+    return 'Du skifter dit Unlimited-abonnement til $title.';
   }
 
   @override
@@ -9614,7 +9609,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteOnDeviceModel => 'Slet model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Er du sikker på, at du vil slette denne model?';
+  String get deleteOnDeviceModelConfirm => 'Slet denne model?';
 
   @override
   String get onDeviceModelDownloaded => 'Downloadet';

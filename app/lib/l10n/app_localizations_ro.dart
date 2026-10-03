@@ -284,7 +284,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reportMessage => 'Raportați mesajul';
 
   @override
-  String get reportMessageConfirm => 'Ești sigur că vrei să raportezi acest mesaj?';
+  String get reportMessageConfirm => 'Raportezi acest mesaj?';
 
   @override
   String get messageReported => 'Mesaj raportat cu succes.';
@@ -296,7 +296,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearChat => 'Șterge conversația';
 
   @override
-  String get clearChatConfirm => 'Ești sigur că vrei să ștergi chat-ul? Această acțiune nu poate fi anulată.';
+  String get clearChatConfirm => 'Toate mesajele din acest chat vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String get maxFilesLimit => 'Poți încărca doar 4 fișiere simultan';
@@ -1043,7 +1043,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Ești sigur că vrei să te deconectezi de la $appName? Te poți reconecta oricând.';
+    return 'Poți reconecta $appName oricând.';
   }
 
   @override
@@ -1988,14 +1988,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItemTitle => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemMessage => 'Sunteți sigur că doriți să ștergeți această sarcină?';
+  String get deleteActionItemMessage => 'Ștergi această sarcină?';
 
   @override
   String get deleteSelectedItemsTitle => 'Șterge elementele selectate';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Ești sigur că vrei să ștergi $count sarcini$s selectate?';
+    return 'Ștergi $count sarcini$s selectate?';
   }
 
   @override
@@ -2085,8 +2085,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearMemoryTitle => 'Șterge memoria lui Omi';
 
   @override
-  String get clearMemoryMessage =>
-      'Sunteți sigur că doriți să ștergeți memoria lui Omi? Această acțiune nu poate fi anulată.';
+  String get clearMemoryMessage => 'Toate amintirile tale vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String get clearMemoryButton => 'Șterge memoria';
@@ -2232,7 +2231,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Ești sigur că vrei să ștergi această sarcină?';
+  String get deleteActionItemConfirmMessage => 'Ștergi această sarcină?';
 
   @override
   String get appLanguage => 'Limba aplicației';
@@ -2772,8 +2771,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItem => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Sigur doriți să ștergeți această sarcină? Această acțiune nu poate fi anulată.';
+  String get deleteActionItemConfirmation => 'Ștergi această sarcină? Această acțiune nu poate fi anulată.';
 
   @override
   String get enterActionItemDescription => 'Introduceți descrierea sarcinii';
@@ -3116,7 +3114,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Mesaj raportat cu succes';
 
   @override
-  String get confirmReportMessage => 'Sigur doriți să raportați acest mesaj?';
+  String get confirmReportMessage => 'Raportezi acest mesaj?';
 
   @override
   String get selectChatAssistant => 'Selectați asistent de chat';
@@ -3131,7 +3129,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearChatTitle => 'Ștergeți chatul?';
 
   @override
-  String get confirmClearChat => 'Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată.';
+  String get confirmClearChat => 'Golești acest chat? Această acțiune nu poate fi anulată.';
 
   @override
   String get copy => 'Copiază';
@@ -3303,8 +3301,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createMemory => 'Creează amintire';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.';
+  String get deleteMemoryConfirmation => 'Ștergi această amintire? Această acțiune nu poate fi anulată.';
 
   @override
   String get makePrivate => 'Fă privat';
@@ -3341,7 +3338,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Sigur vrei să ștergi memoria lui Omi? Această acțiune nu poate fi anulată și va șterge permanent toate cele $count amintiri.';
+    return 'Toate amintirile ($count) vor fi șterse. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -3637,8 +3634,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lăsați Omi să aleagă automat cea mai bună aplicație';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Sigur doriți să ștergeți această conversație? Această acțiune nu poate fi anulată.';
+  String get deleteConversationConfirmation => 'Ștergi această conversație? Această acțiune nu poate fi anulată.';
 
   @override
   String get conversationDeleted => 'Conversație ștearsă';
@@ -3964,8 +3960,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get updateAppQuestion => 'Actualizați aplicația?';
 
   @override
-  String get updateAppConfirmation =>
-      'Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.';
+  String get updateAppConfirmation => 'Modificările vor fi vizibile după examinarea de către echipa noastră.';
 
   @override
   String get updateApp => 'Actualizare aplicație';
@@ -4030,7 +4025,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sunteți sigur că doriți să vă anulați abonamentul? Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
+      'Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
 
   @override
   String get cancelSubscriptionButton => 'Anulare abonament';
@@ -4217,7 +4212,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.';
+      'Aplicațiile care folosesc această cheie pierd accesul la API. Această acțiune nu poate fi anulată.';
 
   @override
   String get revoke => 'Revocă';
@@ -4274,7 +4269,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ești sigur că vrei să ștergi acest $item? Această acțiune nu poate fi anulată.';
+    return '$item va fi ștearsă. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4282,7 +4277,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ești sigur că vrei să revoci cheia \"$keyName\"? Această acțiune nu poate fi anulată.';
+    return 'Tot ce folosește \"$keyName\" pierde accesul. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4460,7 +4455,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Planul dvs. va rămâne activ până la $date. După aceea, veți pierde accesul la funcțiile nelimitate. Sunteți sigur?';
+    return 'Planul dvs. va rămâne activ până la $date. După aceea, veți pierde accesul la funcțiile nelimitate.';
   }
 
   @override
@@ -4746,7 +4741,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
+      'Toate conversațiile importate din Limitless vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4787,7 +4782,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sigur doriți să ștergeți eșantionul lui $name?';
+    return 'Mostra vocală a persoanei $name va fi eliminată. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4795,7 +4790,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sigur doriți să ștergeți $name? Acest lucru va elimina și toate eșantioanele vocale asociate.';
+    return 'Aceasta elimină mostrele vocale ale persoanei $name și nu poate fi anulată. Replicile din conversațiile trecute devin vorbitori fără nume.';
   }
 
   @override
@@ -5153,7 +5148,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finishedConversation => 'Conversație terminată?';
 
   @override
-  String get stopRecordingConfirmation => 'Sigur doriți să opriți înregistrarea și să rezumați conversația acum?';
+  String get stopRecordingConfirmation => 'Oprești înregistrarea și rezumi conversația acum?';
 
   @override
   String get conversationEndsManually => 'Conversația se va încheia doar manual.';
@@ -6672,8 +6667,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get shareRecording => 'Partajează înregistrarea';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Ești sigur că vrei să ștergi definitiv această înregistrare? Această acțiune nu poate fi anulată.';
+  String get deleteRecordingConfirmation => 'Această acțiune nu poate fi anulată.';
 
   @override
   String get recordingIdLabel => 'ID înregistrare';
@@ -7045,7 +7039,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Treci de la Planul Nelimitat la $title. Ești sigur că vrei să continui?';
+    return 'Treci de la Planul Nelimitat la $title.';
   }
 
   @override
@@ -9671,7 +9665,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteOnDeviceModel => 'Șterge modelul';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Sigur doriți să ștergeți acest model?';
+  String get deleteOnDeviceModelConfirm => 'Ștergi acest model?';
 
   @override
   String get onDeviceModelDownloaded => 'Descărcat';

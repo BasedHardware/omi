@@ -283,7 +283,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reportMessage => 'Повідомити про повідомлення';
 
   @override
-  String get reportMessageConfirm => 'Ви впевнені, що хочете поскаржитись на це повідомлення?';
+  String get reportMessageConfirm => 'Поскаржитися на це повідомлення?';
 
   @override
   String get messageReported => 'Повідомлення успішно відправлено.';
@@ -295,7 +295,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearChat => 'Очистити чат';
 
   @override
-  String get clearChatConfirm => 'Ви впевнені, що хочете очистити чат? Цю дію не можна скасувати.';
+  String get clearChatConfirm => 'Усі повідомлення в цьому чаті буде видалено. Цю дію неможливо скасувати.';
 
   @override
   String get maxFilesLimit => 'Ви можете завантажити лише 4 файли за раз';
@@ -1041,7 +1041,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Ви впевнені, що хочете відключитись від $appName? Ви можете підключитись знову в будь-який час.';
+    return 'Ви можете знову підключити $appName будь-коли.';
   }
 
   @override
@@ -1983,14 +1983,14 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteActionItemTitle => 'Видалити завдання';
 
   @override
-  String get deleteActionItemMessage => 'Ви впевнені, що хочете видалити це завдання?';
+  String get deleteActionItemMessage => 'Видалити це завдання?';
 
   @override
   String get deleteSelectedItemsTitle => 'Видалити вибрані елементи';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Ви впевнені, що хочете видалити $count вибраних завдань$s?';
+    return 'Видалити вибрані завдання ($count)$s?';
   }
 
   @override
@@ -2079,7 +2079,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearMemoryTitle => 'Очистити пам\'ять Omi';
 
   @override
-  String get clearMemoryMessage => 'Ви впевнені, що хочете очистити пам\'ять Omi? Цю дію не можна скасувати.';
+  String get clearMemoryMessage => 'Усі ваші спогади буде видалено. Цю дію неможливо скасувати.';
 
   @override
   String get clearMemoryButton => 'Очистити пам\'ять';
@@ -2225,7 +2225,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Видалити завдання';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Ви впевнені, що хочете видалити це завдання?';
+  String get deleteActionItemConfirmMessage => 'Видалити це завдання?';
 
   @override
   String get appLanguage => 'Мова додатка';
@@ -2328,7 +2328,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteMemory => 'Видалити пам\'ять';
 
   @override
-  String get thisActionCannotBeUndone => 'Цю дію не можна скасувати.';
+  String get thisActionCannotBeUndone => 'Цю дію неможливо скасувати.';
 
   @override
   String memoriesCount(int count) {
@@ -2762,7 +2762,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteActionItem => 'Видалити завдання';
 
   @override
-  String get deleteActionItemConfirmation => 'Ви впевнені, що хочете видалити це завдання? Цю дію не можна скасувати.';
+  String get deleteActionItemConfirmation => 'Видалити це завдання? Цю дію неможливо скасувати.';
 
   @override
   String get enterActionItemDescription => 'Введіть опис завдання';
@@ -3103,7 +3103,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Повідомлення успішно надіслано';
 
   @override
-  String get confirmReportMessage => 'Ви впевнені, що хочете повідомити про це повідомлення?';
+  String get confirmReportMessage => 'Поскаржитися на це повідомлення?';
 
   @override
   String get selectChatAssistant => 'Вибрати чат-асистента';
@@ -3118,7 +3118,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearChatTitle => 'Очистити чат?';
 
   @override
-  String get confirmClearChat => 'Ви впевнені, що хочете очистити чат? Цю дію не можна скасувати.';
+  String get confirmClearChat => 'Очистити цей чат? Цю дію неможливо скасувати.';
 
   @override
   String get copy => 'Копіювати';
@@ -3290,7 +3290,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get createMemory => 'Створити пам\'ять';
 
   @override
-  String get deleteMemoryConfirmation => 'Ви впевнені, що хочете видалити цю пам\'ять? Цю дію не можна скасувати.';
+  String get deleteMemoryConfirmation => 'Видалити цей спогад? Цю дію неможливо скасувати.';
 
   @override
   String get makePrivate => 'Зробити приватною';
@@ -3327,7 +3327,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Ви впевнені, що хочете очистити пам\'ять Omi? Цю дію не можна скасувати, і вона назавжди видалить всі $count спогадів.';
+    return 'Усі спогади ($count) буде видалено. Цю дію неможливо скасувати.';
   }
 
   @override
@@ -3620,7 +3620,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Дозвольте Omi автоматично вибрати найкращий додаток';
 
   @override
-  String get deleteConversationConfirmation => 'Ви впевнені, що хочете видалити цю розмову? Цю дію не можна скасувати.';
+  String get deleteConversationConfirmation => 'Видалити цю розмову? Цю дію неможливо скасувати.';
 
   @override
   String get conversationDeleted => 'Розмову видалено';
@@ -3946,8 +3946,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get updateAppQuestion => 'Оновити додаток?';
 
   @override
-  String get updateAppConfirmation =>
-      'Ви впевнені, що хочете оновити свій додаток? Зміни набудуть чинності після перевірки нашою командою.';
+  String get updateAppConfirmation => 'Зміни набудуть чинності після перевірки нашою командою.';
 
   @override
   String get updateApp => 'Оновити додаток';
@@ -4011,8 +4010,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Скасувати підписку?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Ви впевнені, що хочете скасувати підписку? Ви матимете доступ до кінця поточного розрахункового періоду.';
+  String get cancelSubscriptionConfirmation => 'Ви матимете доступ до кінця поточного розрахункового періоду.';
 
   @override
   String get cancelSubscriptionButton => 'Скасувати підписку';
@@ -4196,7 +4194,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Цю дію не можна скасувати. Будь-які додатки, що використовують цей ключ, більше не зможуть отримати доступ до API.';
+      'Застосунки, що використовують цей ключ, втратять доступ до API. Цю дію неможливо скасувати.';
 
   @override
   String get revoke => 'Відкликати';
@@ -4253,7 +4251,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ви впевнені, що хочете видалити цей $item? Цю дію неможливо скасувати.';
+    return '$item буде видалено. Цю дію неможливо скасувати.';
   }
 
   @override
@@ -4261,7 +4259,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ви впевнені, що хочете відкликати ключ \"$keyName\"? Цю дію неможливо скасувати.';
+    return 'Усе, що використовує \"$keyName\", втратить доступ. Цю дію неможливо скасувати.';
   }
 
   @override
@@ -4438,7 +4436,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ваш план залишиться активним до $date. Після цього ви втратите доступ до необмежених функцій. Ви впевнені?';
+    return 'Ваш план залишиться активним до $date. Після цього ви втратите доступ до необмежених функцій.';
   }
 
   @override
@@ -4726,7 +4724,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Це назавжди видалить усі розмови, імпортовані з Limitless. Цю дію не можна скасувати.';
+      'Усі розмови, імпортовані з Limitless, буде видалено. Цю дію неможливо скасувати.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4767,7 +4765,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Ви впевнені, що хочете видалити зразок $name?';
+    return 'Зразок голосу $name буде видалено. Цю дію неможливо скасувати.';
   }
 
   @override
@@ -4775,7 +4773,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Ви впевнені, що хочете видалити $name? Це також видалить усі пов\'язані зразки мовлення.';
+    return 'Це видалить зразки голосу $name, і скасувати це не можна. Репліки в минулих розмовах стануть безіменними мовцями.';
   }
 
   @override
@@ -5132,7 +5130,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get finishedConversation => 'Завершити розмову?';
 
   @override
-  String get stopRecordingConfirmation => 'Ви впевнені, що хочете зупинити запис і підсумувати розмову зараз?';
+  String get stopRecordingConfirmation => 'Зупинити запис і підсумувати розмову зараз?';
 
   @override
   String get conversationEndsManually => 'Розмова завершиться лише вручну.';
@@ -6649,8 +6647,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get shareRecording => 'Поділитися записом';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Ви впевнені, що хочете остаточно видалити цей запис? Цю дію неможливо скасувати.';
+  String get deleteRecordingConfirmation => 'Цю дію неможливо скасувати.';
 
   @override
   String get recordingIdLabel => 'ID запису';
@@ -7021,7 +7018,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Ви переключаєте свій Безлімітний план на $title. Ви впевнені, що хочете продовжити?';
+    return 'Ви переключаєте свій Безлімітний план на $title.';
   }
 
   @override
@@ -9645,7 +9642,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteOnDeviceModel => 'Видалити модель';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Ви впевнені, що хочете видалити цю модель?';
+  String get deleteOnDeviceModelConfirm => 'Видалити цю модель?';
 
   @override
   String get onDeviceModelDownloaded => 'Завантажено';

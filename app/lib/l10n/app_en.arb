@@ -375,7 +375,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Are you sure you want to report this message?",
+    "reportMessageConfirm": "Report this message?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -391,7 +391,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Are you sure you want to clear the chat? This action cannot be undone.",
+    "clearChatConfirm": "All messages in this chat are deleted. This can't be undone.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1213,7 +1213,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Are you sure you want to disconnect from {appName}? You can reconnect anytime.",
+    "disconnectAppMessage": "You can reconnect {appName} anytime.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1969,7 +1969,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Are you sure you want to delete this task?",
+    "deleteActionItemMessage": "Delete this task?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1977,7 +1977,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Are you sure you want to delete {count} selected task{s}?",
+    "deleteSelectedItemsMessage": "Delete {count} selected task{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2112,7 +2112,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Are you sure you want to clear Omi's memory? This action cannot be undone.",
+    "clearMemoryMessage": "All your memories are deleted. This can't be undone.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2309,7 +2309,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Are you sure you want to delete this task?",
+    "deleteActionItemConfirmMessage": "Delete this task?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2446,7 +2446,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "This action cannot be undone.",
+    "thisActionCannotBeUndone": "This can't be undone.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3133,7 +3133,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Are you sure you want to delete this task? This action cannot be undone.",
+    "deleteActionItemConfirmation": "Delete this task? This can't be undone.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3582,7 +3582,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Are you sure you want to report this message?",
+    "confirmReportMessage": "Report this message?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3602,7 +3602,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Are you sure you want to clear the chat? This action cannot be undone.",
+    "confirmClearChat": "Clear this chat? This can't be undone.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3852,7 +3852,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Are you sure you want to delete this memory? This action cannot be undone.",
+    "deleteMemoryConfirmation": "Delete this memory? This can't be undone.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3903,7 +3903,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Are you sure you want to clear Omi's memory? This action cannot be undone and will permanently delete all {count} memories.",
+    "clearMemoryConfirmation": "All {count} memories are deleted. This can't be undone.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4073,7 +4073,7 @@
         }
     },
     "letOmiChooseAutomatically": "Let Omi choose the best app automatically",
-    "deleteConversationConfirmation": "Are you sure you want to delete this conversation? This action cannot be undone.",
+    "deleteConversationConfirmation": "Delete this conversation? This can't be undone.",
     "conversationDeleted": "Conversation deleted",
     "generatingLink": "Generating link…",
     "editConversation": "Edit conversation",
@@ -4433,7 +4433,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Are you sure you want to update your app? The changes will reflect once reviewed by our team.",
+    "updateAppConfirmation": "Your changes go live after our team reviews them.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4524,7 +4524,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.",
+    "cancelSubscriptionConfirmation": "You keep access until the end of your current billing period.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4784,7 +4784,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "This action cannot be undone. Any applications using this key will no longer be able to access the API.",
+    "revokeApiKeyWarning": "Apps using this key lose API access. This can't be undone.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4875,7 +4875,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Are you sure you want to delete this {item}? This action cannot be undone.",
+    "deleteItemConfirmation": "Deleting this {item} can't be undone.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4888,7 +4888,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.",
+    "revokeKeyConfirmation": "Anything using \"{keyName}\" loses access. This can't be undone.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5135,7 +5135,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?",
+    "planRemainsActiveUntil": "Your plan stays active until {date}. After that, you lose your unlimited features.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5541,7 +5541,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "This will permanently delete all conversations imported from Limitless. This action cannot be undone.",
+    "deleteAllLimitlessWarning": "All conversations imported from Limitless are deleted. This can't be undone.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5599,7 +5599,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Are you sure you want to delete {name}'s sample?",
+    "deleteSampleConfirmation": "{name}'s voice sample is removed. This can't be undone.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5612,7 +5612,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Are you sure you want to delete {name}? This will also remove all associated speech samples.",
+    "deletePersonConfirmation": "This removes {name}'s voice samples and can't be undone. Their lines in past conversations become unnamed speakers.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6076,7 +6076,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Are you sure you want to stop recording and summarize the conversation now?",
+    "stopRecordingConfirmation": "Stop recording and summarize the conversation now?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8140,7 +8140,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Are you sure you want to permanently delete this recording? This can't be undone.",
+    "deleteRecordingConfirmation": "This can't be undone.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8654,7 +8654,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}. Are you sure you want to proceed?",
+    "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -9926,7 +9926,7 @@
     "@deleteSyncedFiles": {
         "description": "Dialog title for deleting synced files"
     },
-    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This cannot be undone.",
+    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This can't be undone.",
     "@deleteSyncedFilesMessage": {
         "description": "Confirmation message for deleting synced files"
     },
@@ -9942,7 +9942,7 @@
     "@deletePendingFiles": {
         "description": "Dialog title for deleting pending files"
     },
-    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.",
+    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This can't be undone.",
     "@deletePendingFilesWarning": {
         "description": "Warning message for deleting pending files"
     },
@@ -9958,7 +9958,7 @@
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
     },
-    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.",
+    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can't be undone.",
     "@deleteAllFilesWarning": {
         "description": "Warning message for deleting all files"
     },
@@ -11371,7 +11371,7 @@
     "@deleteOnDeviceModel": {
         "description": "Action label to delete a downloaded on-device transcription model"
     },
-    "deleteOnDeviceModelConfirm": "Are you sure you want to delete this model?",
+    "deleteOnDeviceModelConfirm": "Delete this model?",
     "@deleteOnDeviceModelConfirm": {
         "description": "Confirmation prompt shown before deleting a downloaded model"
     },

@@ -281,7 +281,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reportMessage => 'Raportoi viesti';
 
   @override
-  String get reportMessageConfirm => 'Haluatko varmasti ilmoittaa tästä viestistä?';
+  String get reportMessageConfirm => 'Ilmoitetaanko tästä viestistä?';
 
   @override
   String get messageReported => 'Viesti ilmoitettu onnistuneesti.';
@@ -293,7 +293,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearChat => 'Tyhjennä keskustelu';
 
   @override
-  String get clearChatConfirm => 'Haluatko varmasti tyhjentää keskustelun? Tätä toimintoa ei voi perua.';
+  String get clearChatConfirm => 'Kaikki tämän keskustelun viestit poistetaan. Tätä ei voi perua.';
 
   @override
   String get maxFilesLimit => 'Voit ladata vain 4 tiedostoa kerrallaan';
@@ -1036,7 +1036,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Haluatko varmasti katkaista yhteyden palveluun $appName? Voit yhdistää uudelleen milloin tahansa.';
+    return 'Voit yhdistää palvelun $appName uudelleen milloin tahansa.';
   }
 
   @override
@@ -1978,14 +1978,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItemTitle => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemMessage => 'Haluatko varmasti poistaa tämän tehtävän?';
+  String get deleteActionItemMessage => 'Poistetaanko tämä tehtävä?';
 
   @override
   String get deleteSelectedItemsTitle => 'Poista valitut kohteet';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Haluatko varmasti poistaa $count valittua tehtävää$s?';
+    return 'Poistetaanko $count valittua tehtävää$s?';
   }
 
   @override
@@ -2075,7 +2075,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearMemoryTitle => 'Tyhjennä Omin muisti';
 
   @override
-  String get clearMemoryMessage => 'Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua.';
+  String get clearMemoryMessage => 'Kaikki muistosi poistetaan. Tätä ei voi perua.';
 
   @override
   String get clearMemoryButton => 'Tyhjennä muisti';
@@ -2221,7 +2221,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Haluatko varmasti poistaa tämän tehtävän?';
+  String get deleteActionItemConfirmMessage => 'Poistetaanko tämä tehtävä?';
 
   @override
   String get appLanguage => 'Sovelluksen kieli';
@@ -2324,7 +2324,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteMemory => 'Poista muisti';
 
   @override
-  String get thisActionCannotBeUndone => 'Tätä toimintoa ei voi peruuttaa.';
+  String get thisActionCannotBeUndone => 'Tätä ei voi perua.';
 
   @override
   String memoriesCount(int count) {
@@ -2758,7 +2758,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteActionItem => 'Poista tehtävä';
 
   @override
-  String get deleteActionItemConfirmation => 'Haluatko varmasti poistaa tämän tehtävän? Tätä toimintoa ei voi perua.';
+  String get deleteActionItemConfirmation => 'Poistetaanko tämä tehtävä? Tätä ei voi perua.';
 
   @override
   String get enterActionItemDescription => 'Anna tehtävän kuvaus';
@@ -3099,7 +3099,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Viesti raportoitu onnistuneesti';
 
   @override
-  String get confirmReportMessage => 'Haluatko varmasti raportoida tämän viestin?';
+  String get confirmReportMessage => 'Ilmoitetaanko tästä viestistä?';
 
   @override
   String get selectChatAssistant => 'Valitse chat-assistentti';
@@ -3114,7 +3114,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearChatTitle => 'Tyhjennä chat?';
 
   @override
-  String get confirmClearChat => 'Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa.';
+  String get confirmClearChat => 'Tyhjennetäänkö tämä keskustelu? Tätä ei voi perua.';
 
   @override
   String get copy => 'Kopioi';
@@ -3286,7 +3286,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get createMemory => 'Luo muisti';
 
   @override
-  String get deleteMemoryConfirmation => 'Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua.';
+  String get deleteMemoryConfirmation => 'Poistetaanko tämä muisto? Tätä ei voi perua.';
 
   @override
   String get makePrivate => 'Tee yksityiseksi';
@@ -3323,7 +3323,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua ja se poistaa pysyvästi kaikki $count muistoa.';
+    return 'Kaikki muistot ($count) poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -3617,8 +3617,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Anna Omin valita paras sovellus automaattisesti';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi kumota.';
+  String get deleteConversationConfirmation => 'Poistetaanko tämä keskustelu? Tätä ei voi perua.';
 
   @override
   String get conversationDeleted => 'Keskustelu poistettu';
@@ -3944,8 +3943,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get updateAppQuestion => 'Päivitä sovellus?';
 
   @override
-  String get updateAppConfirmation =>
-      'Haluatko varmasti päivittää sovelluksesi? Muutokset näkyvät tiimimme tarkistuksen jälkeen.';
+  String get updateAppConfirmation => 'Muutokset näkyvät tiimimme tarkistuksen jälkeen.';
 
   @override
   String get updateApp => 'Päivitä sovellus';
@@ -4009,8 +4007,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Peruuta tilaus?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Haluatko varmasti peruuttaa tilauksesi? Sinulla on edelleen pääsy nykyisen laskutuskauden loppuun.';
+  String get cancelSubscriptionConfirmation => 'Sinulla on edelleen pääsy nykyisen laskutuskauden loppuun.';
 
   @override
   String get cancelSubscriptionButton => 'Peruuta tilaus';
@@ -4196,7 +4193,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tätä toimintoa ei voi kumota. Tätä avainta käyttävät sovellukset eivät enää pääse API:in.';
+      'Tätä avainta käyttävät sovellukset menettävät API-käyttöoikeuden. Tätä ei voi perua.';
 
   @override
   String get revoke => 'Peruuta';
@@ -4253,7 +4250,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Haluatko varmasti poistaa tämän $item? Tätä toimintoa ei voi kumota.';
+    return '$item poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -4261,7 +4258,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Haluatko varmasti peruuttaa avaimen \"$keyName\"? Tätä toimintoa ei voi kumota.';
+    return 'Kaikki avainta \"$keyName\" käyttävät menettävät pääsyn. Tätä ei voi perua.';
   }
 
   @override
@@ -4438,7 +4435,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Tilauksesi pysyy aktiivisena $date asti. Sen jälkeen menetät pääsyn rajoittamattomiin ominaisuuksiin. Oletko varma?';
+    return 'Tilauksesi pysyy aktiivisena $date asti. Sen jälkeen menetät pääsyn rajoittamattomiin ominaisuuksiin.';
   }
 
   @override
@@ -4723,8 +4720,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Poista kaikki Limitless-keskustelut?';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'Tämä poistaa pysyvästi kaikki Limitlessistä tuodut keskustelut. Tätä toimintoa ei voi kumota.';
+  String get deleteAllLimitlessWarning => 'Kaikki Limitlessistä tuodut keskustelut poistetaan. Tätä ei voi perua.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4765,7 +4761,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Haluatko varmasti poistaa käyttäjän $name näytteen?';
+    return 'Henkilön $name ääninäyte poistetaan. Tätä ei voi perua.';
   }
 
   @override
@@ -4773,7 +4769,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Haluatko varmasti poistaa käyttäjän $name? Tämä poistaa myös kaikki liittyvät puhenäytteet.';
+    return 'Tämä poistaa henkilön $name ääninäytteet, eikä sitä voi perua. Hänen repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.';
   }
 
   @override
@@ -5129,8 +5125,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finishedConversation => 'Keskustelu päättynyt?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Haluatko varmasti lopettaa nauhoituksen ja tehdä yhteenvedon keskustelusta nyt?';
+  String get stopRecordingConfirmation => 'Lopetetaanko tallennus ja tiivistetäänkö keskustelu nyt?';
 
   @override
   String get conversationEndsManually => 'Keskustelu päättyy vain manuaalisesti.';
@@ -6644,8 +6639,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get shareRecording => 'Jaa nauhoitus';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Haluatko varmasti poistaa tämän nauhoituksen pysyvästi? Tätä ei voi perua.';
+  String get deleteRecordingConfirmation => 'Tätä ei voi perua.';
 
   @override
   String get recordingIdLabel => 'Nauhoituksen tunnus';
@@ -7016,7 +7010,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Olet vaihtamassa Rajoittamaton-pakettisi pakettiin $title. Haluatko varmasti jatkaa?';
+    return 'Olet vaihtamassa Rajoittamaton-pakettisi pakettiin $title.';
   }
 
   @override
@@ -9628,7 +9622,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteOnDeviceModel => 'Poista malli';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Haluatko varmasti poistaa tämän mallin?';
+  String get deleteOnDeviceModelConfirm => 'Poistetaanko tämä malli?';
 
   @override
   String get onDeviceModelDownloaded => 'Ladattu';

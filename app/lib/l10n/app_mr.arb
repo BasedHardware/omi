@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "आप हा संदेश अहवाल द्यायला निश्चित आहात?",
+    "reportMessageConfirm": "हा संदेश नोंदवायचा?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "आप चॅट साफ करू इच्छिता? ही कारवाई पूर्ववत केली जाऊ शकत नाही.",
+    "clearChatConfirm": "या चॅटमधील सर्व संदेश हटवले जातील. हे पूर्ववत करता येणार नाही.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "आप {appName} मधून डिस्कनेक्ट करू इच्छिता? आप कधीही पुन्हा कनेक्ट करू शकता.",
+    "disconnectAppMessage": "तुम्ही {appName} कधीही पुन्हा कनेक्ट करू शकता.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "आपल्याला खरोखर हे कार्य हटवायचे आहे का?",
+    "deleteActionItemMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "आपल्याला खरोखर {count} निवडलेली कार्य{s} हटवायची आहेत का?",
+    "deleteSelectedItemsMessage": "{count} निवडलेली कार्य{s} हटवायची?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "आपल्याला खरोखर Omi ची स्मृती स्पष्ट करायची आहे? हे क्रिया पूर्ववत् केली जाऊ शकत नाही.",
+    "clearMemoryMessage": "तुमच्या सर्व स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "आपल्याला खरोखर हे कार्य हटवायचे आहे का?",
+    "deleteActionItemConfirmMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "thisActionCannotBeUndone": "हे पूर्ववत करता येणार नाही.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "आपल्याला खात्री आहे की आपण हे कार्य हटवू इच्छिता? ही क्रिया पूर्ववत केली जाऊ शकत नाही.",
+    "deleteActionItemConfirmation": "हे कार्य हटवायचे? हे पूर्ववत करता येणार नाही.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "आप खात्रीने हा संदेश नोंदवू इच्छितात?",
+    "confirmReportMessage": "हा संदेश नोंदवायचा?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "आप खात्रीने चॅट साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "confirmClearChat": "हा चॅट साफ करायचा? हे पूर्ववत करता येणार नाही.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "आप खात्रीने हे स्मृती हटवू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "deleteMemoryConfirmation": "ही स्मृती हटवायची? हे पूर्ववत करता येणार नाही.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "आप खात्रीने Omi ची स्मृती साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही आणि सर्व {count} स्मृती कायमचा हटवेल।",
+    "clearMemoryConfirmation": "सर्व {count} स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Omi ला स्वयंचलितपणे सर्वोत्तम अॅप निवडू द्या",
-    "deleteConversationConfirmation": "आप हा संभाषण हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteConversationConfirmation": "हे संभाषण हटवायचे? हे पूर्ववत करता येणार नाही.",
     "conversationDeleted": "संभाषण हटवले",
     "generatingLink": "लिंक तयार होत आहे…",
     "editConversation": "संभाषण संपादित करा",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "आप आपल्या अॅप अपडेट करण्याचे सुनिश्चित आहात? आमच्या टीम द्वारे पुनरावलोकन केल्यानंतर बदल प्रतिबिंबित होतील.",
+    "updateAppConfirmation": "आमच्या टीमने पुनरावलोकन केल्यानंतर बदल लागू होतील.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "आप आपल्या सदस्यता रद्द करण्याचे सुनिश्चित आहात? आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
+    "cancelSubscriptionConfirmation": "आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "हे क्रिया पूर्ववत् करू शकत नाही. या की वापरणारी कोणतीही अनुप्रयोग यापुढे API मध्ये प्रवेश करू शकणार नाही.",
+    "revokeApiKeyWarning": "ही की वापरणाऱ्या अ‍ॅप्सचा API प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "आप हा {item} हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteItemConfirmation": "हा {item} हटवणे पूर्ववत करता येणार नाही.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "आप \"{keyName}\" की रद्द करण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "revokeKeyConfirmation": "\"{keyName}\" वापरणाऱ्या सर्व गोष्टींचा प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल. आप सुनिश्चित आहात?",
+    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "हे Limitless मधून आयात केलेले सर्व संभाषण स्थायीरित्या हटाईल. ही कारवाई पूर्ववत्त करता येणार नाही.",
+    "deleteAllLimitlessWarning": "Limitless मधून आयात केलेली सर्व संभाषणे हटवली जातील. हे पूर्ववत करता येणार नाही.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "आप {name} चा नमुना हटविण्याचा खरेच निश्चय आहे?",
+    "deleteSampleConfirmation": "{name} यांचा आवाजाचा नमुना काढला जाईल. हे पूर्ववत करता येणार नाही.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "आप {name} हटविण्याचा खरेच निश्चय आहे? हे सर्व संबंधित भाषण नमुने देखील काढून टाकेल.",
+    "deletePersonConfirmation": "यामुळे {name} यांचे आवाजाचे नमुने काढले जातील आणि हे पूर्ववत करता येणार नाही. मागील संभाषणांमधील त्यांचे बोलणे नाव नसलेले वक्ते बनेल.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "आप रेकॉर्डिंग थांबवण्याचा आणि संभाषण आता सारांशित करण्याचा खरेच निश्चय आहे?",
+    "stopRecordingConfirmation": "रेकॉर्डिंग थांबवून आत्ताच संभाषणाचा सारांश तयार करायचा?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "आपण खरोखर या रेकॉर्डिंगला कायमीपणे हटवू इच्छिता का? हे पूर्ववत करता येणार नाही.",
+    "deleteRecordingConfirmation": "हे पूर्ववत करता येणार नाही.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "आप्पण आपल्या Unlimited योजना {title} वर स्विच करत आहात. आप्पण आगे जाण्यास खरोखर इच्छुक आहात का?",
+    "planSwitchingDescriptionWithTitle": "तुम्ही तुमची Unlimited योजना {title} वर स्विच करत आहात.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "क्लाउड ट्रान्सक्रिप्शन",
     "copyMessage": "संदेश कॉपी करा",
     "deleteOnDeviceModel": "मॉडेल हटवा",
-    "deleteOnDeviceModelConfirm": "तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?",
+    "deleteOnDeviceModelConfirm": "हे मॉडेल हटवायचे?",
     "downgradeAnyway": "तरीही डाउनग्रेड करा",
     "downgradeLimitBattery": "७ पट जास्त बॅटरी वापर",
     "downgradeLimitDelay": "५-७ सेकंदांचा विलंब",

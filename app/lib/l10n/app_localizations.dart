@@ -720,7 +720,7 @@ abstract class AppLocalizations {
   /// Report message confirmation
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to report this message?'**
+  /// **'Report this message?'**
   String get reportMessageConfirm;
 
   /// Confirmation after reporting message
@@ -744,7 +744,7 @@ abstract class AppLocalizations {
   /// Clear chat confirmation message
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to clear the chat? This action cannot be undone.'**
+  /// **'All messages in this chat are deleted. This can\'t be undone.'**
   String get clearChatConfirm;
 
   /// Max files upload warning
@@ -2148,7 +2148,7 @@ abstract class AppLocalizations {
   /// No description provided for @disconnectAppMessage.
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to disconnect from {appName}? You can reconnect anytime.'**
+  /// **'You can reconnect {appName} anytime.'**
   String disconnectAppMessage(String appName);
 
   /// No description provided for @disconnectedFrom.
@@ -3858,7 +3858,7 @@ abstract class AppLocalizations {
   /// Dialog message for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this task?'**
+  /// **'Delete this task?'**
   String get deleteActionItemMessage;
 
   /// Title for bulk delete dialog
@@ -3870,7 +3870,7 @@ abstract class AppLocalizations {
   /// Confirmation message for bulk delete
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete {count} selected task{s}?'**
+  /// **'Delete {count} selected task{s}?'**
   String deleteSelectedItemsMessage(int count, String s);
 
   /// Snackbar message after deleting single item
@@ -4032,7 +4032,7 @@ abstract class AppLocalizations {
   /// Dialog content for clearing memory
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to clear Omi\'s memory? This action cannot be undone.'**
+  /// **'All your memories are deleted. This can\'t be undone.'**
   String get clearMemoryMessage;
 
   /// Button text to confirm clearing all memories
@@ -4320,7 +4320,7 @@ abstract class AppLocalizations {
   /// Dialog message
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this task?'**
+  /// **'Delete this task?'**
   String get deleteActionItemConfirmMessage;
 
   /// Label for app language selector
@@ -4518,7 +4518,7 @@ abstract class AppLocalizations {
   /// Warning message in delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'This action cannot be undone.'**
+  /// **'This can\'t be undone.'**
   String get thisActionCannotBeUndone;
 
   /// Count of memories in category
@@ -5352,7 +5352,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting action item
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this task? This action cannot be undone.'**
+  /// **'Delete this task? This can\'t be undone.'**
   String get deleteActionItemConfirmation;
 
   /// Placeholder text for action item description field
@@ -6006,7 +6006,7 @@ abstract class AppLocalizations {
   /// Report dialog confirmation text
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to report this message?'**
+  /// **'Report this message?'**
   String get confirmReportMessage;
 
   /// App selection modal title
@@ -6036,7 +6036,7 @@ abstract class AppLocalizations {
   /// Clear chat confirmation text
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to clear the chat? This action cannot be undone.'**
+  /// **'Clear this chat? This can\'t be undone.'**
   String get confirmClearChat;
 
   /// Button to copy message text
@@ -6366,7 +6366,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting memory
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this memory? This action cannot be undone.'**
+  /// **'Delete this memory? This can\'t be undone.'**
   String get deleteMemoryConfirmation;
 
   /// Menu option to change memory visibility to private
@@ -6438,7 +6438,7 @@ abstract class AppLocalizations {
   /// Confirmation message for clearing all memories
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to clear Omi\'s memory? This action cannot be undone and will permanently delete all {count} memories.'**
+  /// **'All {count} memories are deleted. This can\'t be undone.'**
   String clearMemoryConfirmation(int count);
 
   /// Success message after clearing all memories
@@ -6990,7 +6990,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteConversationConfirmation.
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  /// **'Delete this conversation? This can\'t be undone.'**
   String get deleteConversationConfirmation;
 
   /// No description provided for @conversationDeleted.
@@ -7608,7 +7608,7 @@ abstract class AppLocalizations {
   /// Dialog description explaining app update will be reviewed
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to update your app? The changes will reflect once reviewed by our team.'**
+  /// **'Your changes go live after our team reviews them.'**
   String get updateAppConfirmation;
 
   /// Button text to update app
@@ -7722,7 +7722,7 @@ abstract class AppLocalizations {
   /// Dialog description for cancel subscription
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.'**
+  /// **'You keep access until the end of your current billing period.'**
   String get cancelSubscriptionConfirmation;
 
   /// Button text to cancel subscription
@@ -8052,7 +8052,7 @@ abstract class AppLocalizations {
   /// Warning message about revoking API key
   ///
   /// In en, this message translates to:
-  /// **'This action cannot be undone. Any applications using this key will no longer be able to access the API.'**
+  /// **'Apps using this key lose API access. This can\'t be undone.'**
   String get revokeApiKeyWarning;
 
   /// Button text to confirm revocation
@@ -8136,7 +8136,7 @@ abstract class AppLocalizations {
   /// Dialog message explaining deletion is permanent
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this {item}? This action cannot be undone.'**
+  /// **'Deleting this {item} can\'t be undone.'**
   String deleteItemConfirmation(String item);
 
   /// Dialog title asking to confirm key revocation
@@ -8148,7 +8148,7 @@ abstract class AppLocalizations {
   /// Dialog message explaining key revocation is permanent
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.'**
+  /// **'Anything using \"{keyName}\" loses access. This can\'t be undone.'**
   String revokeKeyConfirmation(String keyName);
 
   /// Dialog title for creating a new API key
@@ -8466,7 +8466,7 @@ abstract class AppLocalizations {
   /// Message explaining plan remains active until date
   ///
   /// In en, this message translates to:
-  /// **'Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?'**
+  /// **'Your plan stays active until {date}. After that, you lose your unlimited features.'**
   String planRemainsActiveUntil(String date);
 
   /// Button text to confirm cancellation
@@ -8982,7 +8982,7 @@ abstract class AppLocalizations {
   /// Warning message in delete dialog
   ///
   /// In en, this message translates to:
-  /// **'This will permanently delete all conversations imported from Limitless. This action cannot be undone.'**
+  /// **'All conversations imported from Limitless are deleted. This can\'t be undone.'**
   String get deleteAllLimitlessWarning;
 
   /// Success message after deleting conversations
@@ -9054,7 +9054,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting a speech sample
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete {name}\'s sample?'**
+  /// **'{name}\'s voice sample is removed. This can\'t be undone.'**
   String deleteSampleConfirmation(String name);
 
   /// Dialog title for confirming deletion
@@ -9066,7 +9066,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting a person
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete {name}? This will also remove all associated speech samples.'**
+  /// **'This removes {name}\'s voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.'**
   String deletePersonConfirmation(String name);
 
   /// Help dialog title
@@ -9726,7 +9726,7 @@ abstract class AppLocalizations {
   /// Confirmation message for stopping recording and summarizing
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to stop recording and summarize the conversation now?'**
+  /// **'Stop recording and summarize the conversation now?'**
   String get stopRecordingConfirmation;
 
   /// Hint text explaining conversation only ends manually
@@ -12528,7 +12528,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting a recording
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to permanently delete this recording? This can\'t be undone.'**
+  /// **'This can\'t be undone.'**
   String get deleteRecordingConfirmation;
 
   /// Label for recording ID in details
@@ -13218,7 +13218,7 @@ abstract class AppLocalizations {
   /// Dialog description when switching from unlimited plan
   ///
   /// In en, this message translates to:
-  /// **'You\'re switching your Unlimited Plan to the {title}. Are you sure you want to proceed?'**
+  /// **'You\'re switching your Unlimited Plan to the {title}.'**
   String planSwitchingDescriptionWithTitle(String title);
 
   /// Success message when plan upgrade is scheduled
@@ -15474,7 +15474,7 @@ abstract class AppLocalizations {
   /// Confirmation message for deleting synced files
   ///
   /// In en, this message translates to:
-  /// **'These recordings have already been synced to your phone. This cannot be undone.'**
+  /// **'These recordings have already been synced to your phone. This can\'t be undone.'**
   String get deleteSyncedFilesMessage;
 
   /// Snackbar message after synced files deleted
@@ -15498,7 +15498,7 @@ abstract class AppLocalizations {
   /// Warning message for deleting pending files
   ///
   /// In en, this message translates to:
-  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.'**
+  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This can\'t be undone.'**
   String get deletePendingFilesWarning;
 
   /// Snackbar message after pending files deleted
@@ -15522,7 +15522,7 @@ abstract class AppLocalizations {
   /// Warning message for deleting all files
   ///
   /// In en, this message translates to:
-  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.'**
+  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can\'t be undone.'**
   String get deleteAllFilesWarning;
 
   /// Snackbar message after all files deleted
@@ -17928,7 +17928,7 @@ abstract class AppLocalizations {
   /// Confirmation prompt shown before deleting a downloaded model
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this model?'**
+  /// **'Delete this model?'**
   String get deleteOnDeviceModelConfirm;
 
   /// Status label indicating an on-device model has been downloaded

@@ -282,7 +282,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reportMessage => 'گزارش پیام';
 
   @override
-  String get reportMessageConfirm => 'آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟';
+  String get reportMessageConfirm => 'این پیام گزارش شود؟';
 
   @override
   String get messageReported => 'پیام با موفقیت گزارش شد.';
@@ -294,7 +294,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get clearChat => 'پاک کردن چت';
 
   @override
-  String get clearChatConfirm => 'آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.';
+  String get clearChatConfirm => 'همه پیام‌های این گفتگو حذف می‌شوند. این کار قابل بازگشت نیست.';
 
   @override
   String get maxFilesLimit => 'شما می‌توانید تنها 4 فایل را در یک‌بار آپلود کنید';
@@ -1039,7 +1039,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'آیا مطمئن هستید که می‌خواهید از $appName قطع شوید؟ شما می‌توانید هر زمان دوباره متصل شوید.';
+    return 'می‌توانید هر زمان $appName را دوباره متصل کنید.';
   }
 
   @override
@@ -1976,14 +1976,14 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteActionItemTitle => 'حذف وظیفه';
 
   @override
-  String get deleteActionItemMessage => 'آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟';
+  String get deleteActionItemMessage => 'این وظیفه حذف شود؟';
 
   @override
   String get deleteSelectedItemsTitle => 'حذف موارد انتخاب شده';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'آیا مطمئن هستید که می‌خواهید $count وظیفه$s انتخاب‌شده را حذف کنید؟';
+    return '$count وظیفه$s انتخاب‌شده حذف شود؟';
   }
 
   @override
@@ -2073,7 +2073,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get clearMemoryTitle => 'پاک کردن حافظه Omi';
 
   @override
-  String get clearMemoryMessage => 'آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این اقدام قابل برگشت نیست.';
+  String get clearMemoryMessage => 'همه خاطرات شما حذف می‌شوند. این کار قابل بازگشت نیست.';
 
   @override
   String get clearMemoryButton => 'پاک کردن حافظه';
@@ -2219,7 +2219,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'حذف وظیفه';
 
   @override
-  String get deleteActionItemConfirmMessage => 'آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟';
+  String get deleteActionItemConfirmMessage => 'این وظیفه حذف شود؟';
 
   @override
   String get appLanguage => 'زبان برنامه';
@@ -2322,7 +2322,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteMemory => 'حذف یادآوری';
 
   @override
-  String get thisActionCannotBeUndone => 'این عمل قابل بازگشت نیست.';
+  String get thisActionCannotBeUndone => 'این کار قابل بازگشت نیست.';
 
   @override
   String memoriesCount(int count) {
@@ -2763,8 +2763,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteActionItem => 'حذف وظیفه';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟ این عمل قابل بازگشت نیست.';
+  String get deleteActionItemConfirmation => 'این وظیفه حذف شود؟ این کار قابل بازگشت نیست.';
 
   @override
   String get enterActionItemDescription => 'توضیح وظیفه را وارد کنید';
@@ -3104,7 +3103,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ پیام با موفقیت گزارش شد';
 
   @override
-  String get confirmReportMessage => 'آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟';
+  String get confirmReportMessage => 'این پیام گزارش شود؟';
 
   @override
   String get selectChatAssistant => 'انتخاب دستیار چت';
@@ -3119,7 +3118,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get clearChatTitle => 'پاک کردن چت؟';
 
   @override
-  String get confirmClearChat => 'آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.';
+  String get confirmClearChat => 'این گفتگو پاک شود؟ این کار قابل بازگشت نیست.';
 
   @override
   String get copy => 'کپی';
@@ -3291,8 +3290,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get createMemory => 'ایجاد یادآوری';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'آیا مطمئن هستید که می‌خواهید این یادآوری را حذف کنید؟ این عمل قابل بازگشت نیست.';
+  String get deleteMemoryConfirmation => 'این خاطره حذف شود؟ این کار قابل بازگشت نیست.';
 
   @override
   String get makePrivate => 'خصوصی کردن';
@@ -3329,7 +3327,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این عمل قابل بازگشت نیست و تمام $count یادآوری را به‌طور دائمی حذف می‌کند.';
+    return 'همه $count خاطره حذف می‌شوند. این کار قابل بازگشت نیست.';
   }
 
   @override
@@ -3620,8 +3618,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get letOmiChooseAutomatically => 'اجازه دهید Omi بهترین برنامه را به طور خودکار انتخاب کند';
 
   @override
-  String get deleteConversationConfirmation =>
-      'آیا مطمئنید که می‌خواهید این گفتگو را حذف کنید؟ این عمل قابل بازگشت نیست.';
+  String get deleteConversationConfirmation => 'این گفتگو حذف شود؟ این کار قابل بازگشت نیست.';
 
   @override
   String get conversationDeleted => 'گفتگو حذف شد';
@@ -3946,8 +3943,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get updateAppQuestion => 'برنامه را به‌روز کنید؟';
 
   @override
-  String get updateAppConfirmation =>
-      'آیا مطمئنید که می‌خواهید برنامه خود را به‌روز کنید؟ تغییرات زمانی‌که توسط تیم ما بررسی شوند منعکس می‌شوند.';
+  String get updateAppConfirmation => 'تغییرات پس از بررسی تیم ما اعمال می‌شوند.';
 
   @override
   String get updateApp => 'به‌روزرسانی برنامه';
@@ -4010,8 +4006,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'اشتراک را لغو کنید؟';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'آیا مطمئنید که می‌خواهید اشتراک خود را لغو کنید؟ تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.';
+  String get cancelSubscriptionConfirmation => 'تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.';
 
   @override
   String get cancelSubscriptionButton => 'لغو اشتراک';
@@ -4198,7 +4193,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'این عمل قابل بازگشت نیست. هر برنامه‌ای که از این کلید استفاده می‌کند دیگر نخواهد توانست API را دسترسی کند.';
+      'برنامه‌هایی که از این کلید استفاده می‌کنند دسترسی به API را از دست می‌دهند. این کار قابل بازگشت نیست.';
 
   @override
   String get revoke => 'لغو';
@@ -4255,7 +4250,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'آیا مطمئنید که می‌خواهید این $item را حذف کنید؟ این عمل قابل بازگشت نیست.';
+    return 'حذف این $item قابل بازگشت نیست.';
   }
 
   @override
@@ -4263,7 +4258,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'آیا مطمئنید که می‌خواهید کلید \"$keyName\" را لغو کنید؟ این عمل قابل بازگشت نیست.';
+    return 'هر چیزی که از \"$keyName\" استفاده می‌کند دسترسی را از دست می‌دهد. این کار قابل بازگشت نیست.';
   }
 
   @override
@@ -4440,7 +4435,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'طرح شما تا $date فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد. آیا مطمئنید؟';
+    return 'طرح شما تا $date فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد.';
   }
 
   @override
@@ -4724,8 +4719,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'تمام مکالمات Limitless حذف شود؟';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'این تمام مکالمات واردشده از Limitless را به‌طور دائم حذف خواهد کرد. این عمل برگشت‌پذیر نیست.';
+  String get deleteAllLimitlessWarning => 'همه گفتگوهای واردشده از Limitless حذف می‌شوند. این کار قابل بازگشت نیست.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4766,7 +4760,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'آیا مطمئن هستید که می‌خواهید نمونه $name را حذف کنید؟';
+    return 'نمونه صدای $name حذف می‌شود. این کار قابل بازگشت نیست.';
   }
 
   @override
@@ -4774,7 +4768,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'آیا مطمئن هستید که می‌خواهید $name را حذف کنید؟ این تمام نمونه‌های صوتی مرتبط را نیز حذف خواهد کرد.';
+    return 'این کار نمونه‌های صدای $name را حذف می‌کند و قابل بازگشت نیست. گفته‌های او در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.';
   }
 
   @override
@@ -5130,8 +5124,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finishedConversation => 'مکالمه تکمیل شد؟';
 
   @override
-  String get stopRecordingConfirmation =>
-      'آیا مطمئن هستید که می‌خواهید ضبط را متوقف کنید و مکالمه را اکنون خلاصه کنید؟';
+  String get stopRecordingConfirmation => 'ضبط متوقف شود و گفتگو اکنون خلاصه شود؟';
 
   @override
   String get conversationEndsManually => 'مکالمه تنها به‌صورت دستی پایان خواهد یافت.';
@@ -6642,8 +6635,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get shareRecording => 'اشتراک‌گذاری ضبط‌شده';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'آیا می‌خواهید این ضبط‌شده را برای همیشه حذف کنید؟ این کار قابل بازگشت نیست.';
+  String get deleteRecordingConfirmation => 'این کار قابل بازگشت نیست.';
 
   @override
   String get recordingIdLabel => 'شناسه ضبط';
@@ -7016,7 +7008,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'شما نقشهِ نامحدود خود را به $title تغییر می‌دهید. آیا مطمئن هستید می‌خواهید ادامه دهید؟';
+    return 'شما طرح نامحدود خود را به $title تغییر می‌دهید.';
   }
 
   @override
@@ -9626,7 +9618,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deleteOnDeviceModel => 'حذف مدل';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'آیا مطمئن هستید که می‌خواهید این مدل را حذف کنید؟';
+  String get deleteOnDeviceModelConfirm => 'این مدل حذف شود؟';
 
   @override
   String get onDeviceModelDownloaded => 'دانلود شده';
