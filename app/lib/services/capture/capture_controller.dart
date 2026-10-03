@@ -116,9 +116,23 @@ class CaptureController extends ChangeNotifier
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
   String? _sourceCaptureRoot;
+  LocalWalSync? _captureEvidenceSync;
+  int? _captureEvidenceGeneration;
+  String? _captureEvidenceUid;
 
   String? get _captureEvidenceRoot {
     if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) return null;
+    final LocalWalSync sync = _wal.getSyncs().phone;
+    final generation = sync.captureEvidenceGeneration;
+    final uid = _preferences.uid;
+    if (!identical(sync, _captureEvidenceSync) ||
+        generation != _captureEvidenceGeneration ||
+        uid != _captureEvidenceUid) {
+      _sourceCaptureRoot = null;
+      _captureEvidenceSync = sync;
+      _captureEvidenceGeneration = generation;
+      _captureEvidenceUid = uid;
+    }
     return _sourceCaptureRoot ??= const Uuid().v4();
   }
 
@@ -2280,6 +2294,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _sourceCaptureRoot = null;
     segments = [];
     photos = [];
     hasTranscripts = false;
