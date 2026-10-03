@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -73,17 +74,17 @@ class _Syncs {
 /// A hermetic capture whose finish resolves when the test says so.
 class _ControlledCapture extends CaptureProvider {
   _ControlledCapture(this._finish)
-    : super(
-        walService: _WalService(),
-        connectivity: CaptureConnectivityBoundary(
-          initiallyConnected: true,
-          changes: const Stream.empty(),
-          isConnected: () => true,
-        ),
-        bleListeners: _NoopBle(),
-        inProgressConversationLoader: () async {},
-        localSegmentStore: LocalSegmentStore.disabled(),
-      );
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+            initiallyConnected: true,
+            changes: const Stream.empty(),
+            isConnected: () => true,
+          ),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
 
   final Future<void> _finish;
 
@@ -117,7 +118,9 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])..people = []),
+        ChangeNotifierProvider(
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))..people = [],
+        ),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),

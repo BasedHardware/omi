@@ -216,10 +216,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     });
 
-    final seek = searchMomentSeekFromSnippets(
-      snippets: widget.conversation.matchSnippets,
-      searchQuery: searchQuery,
-    );
+    final seek = searchMomentSeekFromSnippets(snippets: widget.conversation.matchSnippets, searchQuery: searchQuery);
 
     final resultFuture = routeToPage(
       context,
@@ -366,7 +363,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         // pops from the row's delete button.
                         confirm: (anchor) async {
                           HapticFeedback.mediumImpact();
-                          trackConversationAction(ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
+                          trackConversationAction(
+                            ConversationActionAction.delete,
+                            ConversationActionSurface.rowSwipe,
+                          );
                           return confirmConversationDelete(context, anchor: anchor);
                         },
                         onDeleted: () {
@@ -391,10 +391,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     ? Border.all(color: OmiColors.border, width: 1)
                                     : null,
                           ),
-                          child: ClipRRect(
-                            borderRadius: OmiRadius.xlAll,
-                            child: _buildCardContent(context, onTap),
-                          ),
+                          child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
                         ),
                       ),
                     ),
@@ -403,10 +400,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 // Merging overlay covering the full card
                 if (isMerging)
                   Positioned.fill(
-                    child: Padding(
-                      padding: _cardPadding,
-                      child: _buildMergingOverlay(),
-                    ),
+                    child: Padding(padding: _cardPadding, child: _buildMergingOverlay()),
                   ),
               ],
             ),
@@ -432,11 +426,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
-    return OmiLockedPreview(
-      label: context.l10n.upgradeToUnlimited,
-      onPressed: onTap,
-      child: content,
-    );
+    return OmiLockedPreview(label: context.l10n.upgradeToUnlimited, onPressed: onTap, child: content);
   }
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
@@ -449,10 +439,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           style: _metaStyle,
           maxLines: 1,
         ),
-        if (duration.isNotEmpty) ...[
-          Text(' • ', style: _metaStyle),
-          Text(duration, style: _metaStyle, maxLines: 1),
-        ],
+        if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
           Text(' • ', style: _metaStyle),
@@ -696,66 +683,71 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      _width = constraints.maxWidth;
-      return GestureDetector(
-        onHorizontalDragUpdate: widget.enabled ? _onDragUpdate : null,
-        onHorizontalDragEnd: widget.enabled ? _onDragEnd : null,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.only(end: _inset),
-                  child: AnimatedBuilder(
-                    animation: _offset,
-                    builder: (context, child) {
-                      final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
-                      return Opacity(opacity: t, child: Transform.scale(scale: 0.6 + 0.4 * t, child: child));
-                    },
-                    child: Semantics(
-                      button: true,
-                      label: context.l10n.delete,
-                      child: GestureDetector(
-                        key: _buttonKey,
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _ask,
-                        child: Container(
-                          key: const ValueKey('conversation_swipe_delete'),
-                          width: _button,
-                          height: _button,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
-                          child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _width = constraints.maxWidth;
+        return GestureDetector(
+          onHorizontalDragUpdate: widget.enabled ? _onDragUpdate : null,
+          onHorizontalDragEnd: widget.enabled ? _onDragEnd : null,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(end: _inset),
+                    child: AnimatedBuilder(
+                      animation: _offset,
+                      builder: (context, child) {
+                        final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
+                        return Opacity(
+                          opacity: t,
+                          child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
+                        );
+                      },
+                      child: Semantics(
+                        button: true,
+                        label: context.l10n.delete,
+                        child: GestureDetector(
+                          key: _buttonKey,
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _ask,
+                          child: Container(
+                            key: const ValueKey('conversation_swipe_delete'),
+                            width: _button,
+                            height: _button,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
+                            child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            AnimatedBuilder(
-              animation: _offset,
-              builder: (context, child) => Transform.translate(
-                offset: Offset(_rtl ? _offset.value : -_offset.value, 0),
-                child: Stack(
-                  children: [
-                    child!,
-                    // While open, a tap on the card closes it instead of opening the conversation.
-                    if (_offset.value > 0)
-                      Positioned.fill(
-                        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _settle(0)),
-                      ),
-                  ],
+              AnimatedBuilder(
+                animation: _offset,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(_rtl ? _offset.value : -_offset.value, 0),
+                  child: Stack(
+                    children: [
+                      child!,
+                      // While open, a tap on the card closes it instead of opening the conversation.
+                      if (_offset.value > 0)
+                        Positioned.fill(
+                          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _settle(0)),
+                        ),
+                    ],
+                  ),
                 ),
+                child: widget.child,
               ),
-              child: widget.child,
-            ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

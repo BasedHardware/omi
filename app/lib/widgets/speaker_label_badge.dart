@@ -45,8 +45,12 @@ class SpeakerLabelBadge extends StatelessWidget {
       return Semantics(
         label: l10n.speakerLabelText('confirmed', ''),
         child: ExcludeSemantics(
-          child: Icon(Icons.check_circle_outline,
-              key: const Key('speaker_label_confirmed'), size: 14, color: OmiColors.success),
+          child: Icon(
+            Icons.check_circle_outline,
+            key: const Key('speaker_label_confirmed'),
+            size: 14,
+            color: OmiColors.success,
+          ),
         ),
       );
     }
@@ -86,12 +90,7 @@ class SpeakerLikelyConfirm extends StatelessWidget {
       child: Wrap(
         spacing: OmiSpacing.xs,
         children: [
-          OmiFilterChip(
-            key: const Key('speaker_likely_yes'),
-            label: l10n.yes,
-            selected: false,
-            onSelected: onYes,
-          ),
+          OmiFilterChip(key: const Key('speaker_likely_yes'), label: l10n.yes, selected: false, onSelected: onYes),
           OmiFilterChip(
             key: const Key('speaker_likely_not'),
             label: l10n.speakerLabelText('notPerson', name),

@@ -41,9 +41,11 @@ Future<String?> exportUserDataToFile(
   final tempFile = File(tempPath);
   final abort = Completer<void>();
   if (abortTrigger != null) {
-    unawaited(abortTrigger.then((_) {
-      if (!abort.isCompleted) abort.complete();
-    }));
+    unawaited(
+      abortTrigger.then((_) {
+        if (!abort.isCompleted) abort.complete();
+      }),
+    );
   }
   StreamSubscription<int>? generationWatch;
   if (snapshot != null) {

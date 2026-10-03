@@ -12338,7 +12338,51 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Неуспешно свързване. Проверете връзката си и опитайте отново.';
+
+  @override
+  String get chatReplyServerError => 'Нещо се обърка от наша страна. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyTimeout => 'Отговорът отне твърде много време. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Не сте влезли. Влезте и опитайте отново.';
+
+  @override
+  String get chatAppsLoadFailed => 'Неуспешно зареждане на чат приложенията. Моля, опитайте отново.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Избраният от вас глас се споделя между мобилната и десктоп версията.';
+
+  @override
+  String get readChatRepliesAloud => 'Четене на отговорите в чата на глас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Говори само когато „Гласов отговор\" го позволява.';
+
+  @override
+  String get voicePreviewSample => 'Здравей, аз съм Omi. Това е моят глас.';
+
+  @override
   String get peopleStatsIncomplete => 'Бройките може да са непълни.';
+
+  @override
+  String get previousDay => 'Предишен ден';
+
+  @override
+  String get nextDay => 'Следващ ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задачи на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';

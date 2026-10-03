@@ -9,6 +9,7 @@ import 'package:path/path.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/jwt_expiry.dart';
@@ -21,6 +22,10 @@ import 'package:omi/utils/platform/platform_manager.dart';
 class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
   static const Duration requestTimeoutWrite = Duration(seconds: 300);
+
+  static const Duration streamSetupTimeout = Duration(seconds: 60);
+  static const Duration streamInactivityTimeout = Duration(seconds: 60);
+  static const Duration streamTotalTimeout = Duration(seconds: 180);
 
   static void dispose() {
     HttpPoolManager.instance.dispose();
@@ -116,10 +121,9 @@ Future<String> getAuthHeader({
       jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = storedToken.isNotEmpty;
 
-  bool isExpirationDateValid =
-      !(expiry.isBefore(DateTime.now()) ||
-          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
+      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -376,9 +380,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-      reason: AuthSessionExpirationReason.terminalTokenFailure,
-      code: code,
-    ),
+        reason: AuthSessionExpirationReason.terminalTokenFailure,
+        code: code,
+      ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -654,8 +658,14 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required Map<String, String> fields,
   required String fileFieldName,
   required String method,
+  Future<void>? abortTrigger,
 }) async {
-  var request = http.MultipartRequest(method, Uri.parse(url));
+  // Abortable when a trigger is supplied: an abandoned POST (setup deadline
+  // expired) must not keep running server-side, or a user retry submits the
+  // same turn twice. http 1.6 exposes this via AbortableMultipartRequest.
+  var request = abortTrigger == null
+      ? http.MultipartRequest(method, Uri.parse(url))
+      : http.AbortableMultipartRequest(method, Uri.parse(url), abortTrigger: abortTrigger);
   request.headers.addAll(headers);
   request.fields.addAll(fields);
 
@@ -810,75 +820,36 @@ Future<http.Response> makeMultipartApiCallUnpooled({
   }
 }
 
-Stream<String> makeStreamingApiCall({
-  required String url,
-  Map<String, String> headers = const {},
-  String body = '',
-  String method = 'POST',
-}) async* {
+class ApiStreamingSeams {
+  const ApiStreamingSeams({required this.transport, this.headers, this.auth});
+
+  final Future<http.StreamedResponse> Function(http.BaseRequest request) transport;
+  final Future<Map<String, String>> Function(ApiRequest request)? headers;
+  final AuthService? auth;
+}
+
+Stream<String> _sseBlocks(Stream<List<int>> byteStream) async* {
+  final iterator = StreamIterator(byteStream.transform(utf8.decoder));
+  final totalExpired = Completer<bool>();
+  var expired = false;
+  final totalTimer = Timer(ApiClient.streamTotalTimeout, () {
+    expired = true;
+    if (!totalExpired.isCompleted) totalExpired.complete(false);
+  });
+  // Stateful SSE parser: buffer partial data across TCP reads and only
+  // emit complete events delimited by \n\n.  The previous 1024-byte
+  // heuristic failed when TCP segments split an SSE line at arbitrary
+  // byte boundaries (see issue #6284).
+  var remainder = '';
   try {
-    final requireAuthCheck = _isRequiredAuthCheck(url);
-    var builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-      url: url,
-      method: method,
-    );
-
-    var request = http.Request(method, Uri.parse(url));
-    request.headers.addAll(builtHeaders);
-
-    if (body.isNotEmpty) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = body;
-    }
-
-    var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
-
-    if (requireAuthCheck && streamedResponse.statusCode == 401) {
-      streamedResponse = await refreshAndReplayAfter401(
-        firstResponse: streamedResponse,
-        statusCode: (value) => value.statusCode,
-        disposeUnauthorizedResponse: _drainStreamedResponse,
-        expireTerminalSession: true,
-        replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
-          request = http.Request(method, Uri.parse(url));
-          request.headers.addAll(builtHeaders);
-          if (body.isNotEmpty) {
-            request.headers['Content-Type'] = 'application/json';
-            request.body = body;
-          }
-          return HttpPoolManager.instance.sendStreaming(request);
-        },
-      );
-      if (streamedResponse.statusCode == 401) return;
-    }
-
-    if (streamedResponse.statusCode != 200) {
-      // Materialize error responses so clock-skew detection sees the JSON body;
-      // streamed responses previously bypassed _checkClockSkewResponse().
-      final errorResponse = await _materializeErrorResponse(streamedResponse);
-      _checkClockSkewResponse(errorResponse);
-      Logger.error('Streaming request failed: ${errorResponse.statusCode}');
-      if (errorResponse.statusCode == 402) {
-        try {
-          final body = errorResponse.body;
-          yield 'error:402:$body';
-        } catch (_) {
-          yield 'error:402:{}';
-        }
-      }
-      return;
-    }
-
-    // Stateful SSE parser: buffer partial data across TCP reads and only
-    // emit complete events delimited by \n\n.  The previous 1024-byte
-    // heuristic failed when TCP segments split an SSE line at arbitrary
-    // byte boundaries (see issue #6284).
-    var remainder = '';
-    await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
-      remainder += data;
+    while (true) {
+      if (expired) throw TimeoutException('stream exceeded total bound');
+      final next = iterator.moveNext().timeout(ApiClient.streamInactivityTimeout);
+      next.ignore();
+      final hasNext = await Future.any<bool>([next, totalExpired.future]);
+      if (expired) throw TimeoutException('stream exceeded total bound');
+      if (!hasNext) break;
+      remainder += iterator.current;
       var parts = remainder.split('\n\n');
       // Last element is either empty (if data ended with \n\n) or
       // an incomplete fragment — keep it in the remainder.
@@ -889,19 +860,139 @@ Stream<String> makeStreamingApiCall({
         }
       }
     }
-
     // Flush any trailing data that wasn't terminated by \n\n
     if (remainder.isNotEmpty) {
       yield remainder;
     }
+  } catch (e) {
+    throw _classifyStreamError(e);
+  } finally {
+    totalTimer.cancel();
+    await iterator.cancel();
+  }
+}
+
+ChatStreamException _classifyStreamError(Object e) {
+  if (e is TimeoutException) return const ChatStreamException(ChatStreamFailureClass.timeout);
+  // The setup-deadline abort fires exactly when the wait expired, so it is the
+  // timeout failure, not an unknown client error.
+  if (e is http.RequestAbortedException) return const ChatStreamException(ChatStreamFailureClass.timeout);
+  if (isTransientNetworkError(e)) return const ChatStreamException(ChatStreamFailureClass.offline);
+  return classifyChatStreamFailure(e);
+}
+
+Stream<String> _streamErrorOrThrow(http.StreamedResponse response) async* {
+  try {
+    // Materialize error responses so clock-skew detection sees the JSON body;
+    // streamed responses previously bypassed _checkClockSkewResponse().
+    final errorResponse = await _materializeErrorResponse(response).timeout(ApiClient.streamSetupTimeout);
+    _checkClockSkewResponse(errorResponse);
+    Logger.error('Streaming request failed: ${errorResponse.statusCode}');
+    if (errorResponse.statusCode == 401) {
+      throw const ChatStreamException(ChatStreamFailureClass.notSignedIn, statusCode: 401);
+    }
+    if (errorResponse.statusCode == 402) {
+      try {
+        yield 'error:402:${errorResponse.body}';
+      } catch (_) {
+        yield 'error:402:{}';
+      }
+      return;
+    }
+    throw ChatStreamException(ChatStreamFailureClass.server, statusCode: errorResponse.statusCode);
+  } catch (e) {
+    throw e is ChatStreamException ? e : _classifyStreamError(e);
+  }
+}
+
+Stream<String> makeStreamingApiCall({
+  required String url,
+  Map<String, String> headers = const {},
+  String body = '',
+  String method = 'POST',
+  ApiStreamingSeams? seams,
+}) async* {
+  // Setup-deadline abort (same rationale as the multipart variant): the POST
+  // must die with the wait, or a retry can submit the chat turn twice. Armed
+  // before the try so the error handlers can cancel it.
+  final setupAbort = Completer<void>();
+  final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
+  try {
+    final requireAuthCheck = _isRequiredAuthCheck(url);
+    final apiRequest = ApiRequest(url: url, method: method, headers: headers, body: body);
+    final send = seams?.transport ??
+        (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
+    Future<Map<String, String>> requestHeaders() => seams?.headers != null
+        ? seams!.headers!(apiRequest)
+        : buildHeaders(
+            requireAuthCheck: requireAuthCheck,
+            fromHeaders: headers,
+            url: url,
+            method: method,
+            authService: seams?.auth,
+          );
+
+    var builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
+
+    http.Request buildRequest() {
+      final request = http.AbortableRequest(method, Uri.parse(url), abortTrigger: setupAbort.future);
+      request.headers.addAll(builtHeaders);
+      if (body.isNotEmpty) {
+        request.headers['Content-Type'] = 'application/json';
+        request.body = body;
+      }
+      return request;
+    }
+
+    var streamedResponse = await send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+
+    AuthTokenResult? observedRefresh;
+    if (requireAuthCheck && streamedResponse.statusCode == 401) {
+      streamedResponse = await refreshAndReplayAfter401(
+        firstResponse: streamedResponse,
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: _drainStreamedResponse,
+        expireTerminalSession: true,
+        authService: seams?.auth,
+        onAuthRefresh: (refresh) => observedRefresh = refresh,
+        replay: () async {
+          builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
+          return send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+        },
+      ).timeout(ApiClient.streamSetupTimeout);
+      if (streamedResponse.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {
+        throw const ChatStreamException(ChatStreamFailureClass.offline, statusCode: 401);
+      }
+    }
+
+    if (streamedResponse.statusCode != 200) {
+      setupAbortTimer.cancel();
+      yield* _streamErrorOrThrow(streamedResponse);
+      return;
+    }
+
+    // Headers arrived: the setup deadline no longer applies. Cancel before the
+    // body streams so the abort cannot kill a healthy long-lived SSE read
+    // (inactivity/total stream timeouts govern that phase).
+    setupAbortTimer.cancel();
+    yield* _sseBlocks(streamedResponse.stream);
   } on AuthTokenUnavailableException catch (e) {
+    setupAbortTimer.cancel();
     await _handleAuthUnavailable(e, expireTerminalSession: true);
     Logger.debug('Authenticated streaming request blocked before send: ${e.result.runtimeType}');
+    throw ChatStreamException(
+      e.result is AuthTokenTransientFailure ? ChatStreamFailureClass.offline : ChatStreamFailureClass.notSignedIn,
+    );
   } catch (e, stackTrace) {
-    Logger.error('Streaming request error: $e');
-    if (!isTransientNetworkError(e)) {
+    setupAbortTimer.cancel();
+    final failure = _classifyStreamError(e);
+    Logger.error('Streaming request error: ${failure.kind} status=${failure.statusCode}');
+    if (!isTransientNetworkError(e) && e is! ChatStreamException && e is! TimeoutException) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
+    throw failure;
   }
 }
 
@@ -911,90 +1002,93 @@ Stream<String> makeMultipartStreamingApiCall({
   Map<String, String> headers = const {},
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
+  ApiStreamingSeams? seams,
 }) async* {
+  // Setup-deadline abort: without this, the timeout below abandons the wait
+  // but the POST keeps running and can still reach the server — a retry then
+  // submits the same chat turn twice. The trigger aborts the in-flight
+  // request as soon as the deadline passes. Armed before the try so the
+  // error handlers can cancel it.
+  final setupAbort = Completer<void>();
+  final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-      url: url,
-      method: 'POST',
-    );
+    final apiRequest = ApiRequest(url: url, method: 'POST', headers: headers, body: '');
+    final send = seams?.transport ??
+        (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
+    Future<Map<String, String>> requestHeaders() => seams?.headers != null
+        ? seams!.headers!(apiRequest)
+        : buildHeaders(
+            requireAuthCheck: requireAuthCheck,
+            fromHeaders: headers,
+            url: url,
+            method: 'POST',
+            authService: seams?.auth,
+          );
 
-    var request = await _buildMultipartRequest(
-      url: url,
-      files: files,
-      headers: builtHeaders,
-      fields: fields,
-      fileFieldName: fileFieldName,
-      method: 'POST',
-    );
+    Map<String, String> builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
 
-    var response = await HttpPoolManager.instance.sendStreaming(request);
+    Future<http.MultipartRequest> buildRequest() => _buildMultipartRequest(
+          url: url,
+          files: files,
+          headers: builtHeaders,
+          fields: fields,
+          fileFieldName: fileFieldName,
+          method: 'POST',
+          abortTrigger: setupAbort.future,
+        );
 
+    var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
+
+    AuthTokenResult? observedRefresh;
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
         firstResponse: response,
         statusCode: (value) => value.statusCode,
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
+        authService: seams?.auth,
+        onAuthRefresh: (refresh) => observedRefresh = refresh,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: 'POST');
-          request = await _buildMultipartRequest(
-            url: url,
-            files: files,
-            headers: builtHeaders,
-            fields: fields,
-            fileFieldName: fileFieldName,
-            method: 'POST',
-          );
-          return HttpPoolManager.instance.sendStreaming(request);
+          builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
+          return send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
         },
-      );
-      if (response.statusCode == 401) return;
+      ).timeout(ApiClient.streamSetupTimeout);
+      if (response.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {
+        throw const ChatStreamException(ChatStreamFailureClass.offline, statusCode: 401);
+      }
     }
 
     if (response.statusCode != 200) {
-      // Materialize error responses so clock-skew detection sees the JSON body;
-      // streamed responses previously bypassed _checkClockSkewResponse().
-      final errorResponse = await _materializeErrorResponse(response);
-      _checkClockSkewResponse(errorResponse);
-      Logger.error('Multipart streaming request failed: ${errorResponse.statusCode}');
-      if (errorResponse.statusCode == 402) {
-        try {
-          final body = errorResponse.body;
-          yield 'error:402:$body';
-        } catch (_) {
-          yield 'error:402:{}';
-        }
-      }
+      setupAbortTimer.cancel();
+      yield* _streamErrorOrThrow(response);
       return;
     }
 
-    // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
-    var remainder = '';
-    await for (var data in response.stream.transform(utf8.decoder)) {
-      remainder += data;
-      var parts = remainder.split('\n\n');
-      remainder = parts.removeLast();
-      for (var part in parts) {
-        if (part.isNotEmpty) {
-          yield part;
-        }
-      }
-    }
+    // Headers arrived: the setup deadline no longer applies (see
+    // makeStreamingApiCall). The inactivity/total stream timeouts govern the
+    // body phase.
+    setupAbortTimer.cancel();
 
-    if (remainder.isNotEmpty) {
-      yield remainder;
-    }
+    // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
+    yield* _sseBlocks(response.stream);
   } on AuthTokenUnavailableException catch (e) {
+    setupAbortTimer.cancel();
     await _handleAuthUnavailable(e, expireTerminalSession: true);
     Logger.debug('Authenticated multipart streaming request blocked before send: ${e.result.runtimeType}');
+    throw ChatStreamException(
+      e.result is AuthTokenTransientFailure ? ChatStreamFailureClass.offline : ChatStreamFailureClass.notSignedIn,
+    );
   } catch (e, stackTrace) {
-    Logger.error('Multipart streaming request error: $e');
-    if (!isTransientNetworkError(e)) {
+    setupAbortTimer.cancel();
+    final failure = _classifyStreamError(e);
+    Logger.error('Multipart streaming request error: ${failure.kind} status=${failure.statusCode}');
+    if (!isTransientNetworkError(e) && e is! ChatStreamException && e is! TimeoutException) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
     }
+    throw failure;
   }
 }
 

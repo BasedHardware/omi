@@ -467,12 +467,12 @@ void main() {
 
   group('bounded retained capture WALs', () {
     Wal retained(int timerStart) => Wal(
-      timerStart: timerStart,
-      codec: BleAudioCodec.opus,
-      seconds: 60,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-    );
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+        );
 
     test('the count cap warns at the boundary but never deletes pending WALs', () async {
       sync.testWals = List.generate(maxRetainedCaptureWalCount, retained);
@@ -521,14 +521,15 @@ void main() {
       required int syncedAt,
       WalStatus status = WalStatus.synced,
       WalStorage storage = WalStorage.disk,
-    }) => Wal(
-      timerStart: syncedAt - 1000,
-      codec: BleAudioCodec.opus,
-      seconds: 60,
-      storage: storage,
-      status: status,
-      syncedAt: syncedAt,
-    );
+    }) =>
+        Wal(
+          timerStart: syncedAt - 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: storage,
+          status: status,
+          syncedAt: syncedAt,
+        );
 
     test('removes synced disk copies past the retention window and keeps the rest', () async {
       SharedPreferencesUtil().autoRemoveSyncedCopies = true;
@@ -983,44 +984,43 @@ void main() {
       Future<void> Function(List<Wal>)? persist,
       SyncUploadGate? uploadGate,
       DateTime? now,
-    }) => LocalWalSyncImpl(
-      listener,
-      now: now == null ? null : () => now,
-      persistWals:
-          persist ??
-          (wals) async {
-            if (persistedSink != null) {
-              persistedSink
-                ..clear()
-                ..addAll(wals);
-            }
-          },
-      loadWals: () async => <Wal>[],
-      uploadGate: uploadGate,
-      coverageTelemetry: telemetry?.add,
-    );
+    }) =>
+        LocalWalSyncImpl(
+          listener,
+          now: now == null ? null : () => now,
+          persistWals: persist ??
+              (wals) async {
+                if (persistedSink != null) {
+                  persistedSink
+                    ..clear()
+                    ..addAll(wals);
+                }
+              },
+          loadWals: () async => <Wal>[],
+          uploadGate: uploadGate,
+          coverageTelemetry: telemetry?.add,
+        );
 
     SyncUploadGate succeedingGate({List<List<String>>? attempted, UploadFilesResult Function()? outcome}) =>
         SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                attempted?.add(files.map((f) => f.path.split(Platform.pathSeparator).last).toList());
-                return outcome?.call() ??
-                    UploadFilesResult.done(
-                      SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
-                    );
-              },
+          uploader: (
+            files, {
+            onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation,
+          }) async {
+            attempted?.add(files.map((f) => f.path.split(Platform.pathSeparator).last).toList());
+            return outcome?.call() ??
+                UploadFilesResult.done(
+                  SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
+                );
+          },
           fairUseStatusLoader: () async => null,
         );
 
@@ -1269,9 +1269,12 @@ void main() {
       expect(File('${directory.path}/$name').existsSync(), isTrue);
 
       await local.syncAll();
-      expect(attempted, [
-        [name],
-      ], reason: 'the failed-closed copy uploads on the next pass');
+      expect(
+          attempted,
+          [
+            [name],
+          ],
+          reason: 'the failed-closed copy uploads on the next pass');
       expect(covered.status, WalStatus.synced);
       expect(covered.keptForTranscriptRecovery, isFalse);
     });
@@ -1789,12 +1792,12 @@ void main() {
 
   group('walCoveredByTranscript', () {
     Wal wal(int timerStart, int seconds, {int totalFrames = 0}) => Wal(
-      timerStart: timerStart,
-      codec: BleAudioCodec.opus,
-      seconds: seconds,
-      totalFrames: totalFrames,
-      storage: WalStorage.disk,
-    );
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: seconds,
+          totalFrames: totalFrames,
+          storage: WalStorage.disk,
+        );
 
     test('a span inside the WAL does not cover it', () {
       expect(walCoveredByTranscript(wal(100, 60), [(120, 129)], 100), isFalse);
@@ -1880,16 +1883,19 @@ void main() {
 
     test('two minutes of conversation with natural pauses and long silences are covered', () {
       expect(
-        walCoveredByTranscript(wal(100, 120), [
-          (102, 110),
-          (112, 116),
-          (121, 133),
-          (135, 141),
-          (149, 154),
-          (172, 184),
-          (187, 189),
-          (214, 220),
-        ], 100),
+        walCoveredByTranscript(
+            wal(100, 120),
+            [
+              (102, 110),
+              (112, 116),
+              (121, 133),
+              (135, 141),
+              (149, 154),
+              (172, 184),
+              (187, 189),
+              (214, 220),
+            ],
+            100),
         isTrue,
       );
     });

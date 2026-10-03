@@ -135,7 +135,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final self = personId == 'user';
     final person = self ? null : personId;
     final before = {
-      for (final segment in selected) segment: (segment.isUser, segment.personId, segment.speakerLabelSource)
+      for (final segment in selected) segment: (segment.isUser, segment.personId, segment.speakerLabelSource),
     };
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     final generation = ++_speakerEditGeneration;

@@ -12083,7 +12083,51 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => '无法连接。请检查您的连接并重试。';
+
+  @override
+  String get chatReplyServerError => '我们这边出了点问题。请重试。';
+
+  @override
+  String get chatReplyTimeout => '响应耗时过长。请重试。';
+
+  @override
+  String get chatReplyNotSignedIn => '你尚未登录。请登录后重试。';
+
+  @override
+  String get chatAppsLoadFailed => '无法加载聊天应用。请重试。';
+
+  @override
+  String get assistantVoiceSettingsTitle => '语音';
+
+  @override
+  String get assistantVoice => '助手语音';
+
+  @override
+  String get voiceSharedAcrossDevices => '你选择的语音将在移动端和桌面端共享。';
+
+  @override
+  String get readChatRepliesAloud => '朗读聊天回复';
+
+  @override
+  String get readChatRepliesAloudDescription => '仅在“语音回复”允许时才会朗读。';
+
+  @override
+  String get voicePreviewSample => '嗨，我是 Omi。这是我的声音。';
+
+  @override
   String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
+  String get previousDay => '前一天';
+
+  @override
+  String get nextDay => '后一天';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date 没有任务';
+  }
 
   @override
   String get reprocessingConversationProgress => '正在重新处理对话…';

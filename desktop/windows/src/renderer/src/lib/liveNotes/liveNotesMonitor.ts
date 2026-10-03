@@ -21,6 +21,7 @@
 import type { LiveNote, TranscriptLine } from '../../../../shared/types'
 import { liveConversation, type LiveStatus } from '../liveConversation'
 import { generate as geminiGenerate } from '../geminiClient'
+import { GeminiLane } from '../../../../shared/geminiAttribution'
 import { trackEvent } from '../analytics'
 import { LiveNotesAccumulator, type LiveNotesGenerationRequest } from './liveNotesAccumulator'
 
@@ -78,6 +79,8 @@ const defaultGenerator: LiveNoteGenerator = (prompt, systemPrompt) =>
   geminiGenerate({
     model: NOTE_MODEL,
     parts: [{ text: prompt }],
+    lane: GeminiLane.liveNotes,
+    workload: 'extraction',
     systemPrompt,
     thinkingBudget: 0
   })

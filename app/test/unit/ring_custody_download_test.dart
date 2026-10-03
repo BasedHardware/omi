@@ -154,16 +154,16 @@ List<int> _done(int status, int nextSeq) {
 }
 
 RingInfo _info({int readSeq = 5, int writeSeq = 6, int caps = 0, int? ringId}) => RingInfo(
-  readSeq: readSeq,
-  writeSeq: writeSeq,
-  capacityPackets: 100,
-  droppedPackets: 0,
-  packetSize: 444,
-  advertisedCaps: caps,
-  contractVersion: caps == 0 ? 0 : 1,
-  ringId: ringId,
-  infoBytes: caps == 0 ? 31 : 41,
-);
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 100,
+      droppedPackets: 0,
+      packetSize: 444,
+      advertisedCaps: caps,
+      contractVersion: caps == 0 ? 0 : 1,
+      ringId: ringId,
+      infoBytes: caps == 0 ? 31 : 41,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -207,14 +207,14 @@ void main() {
   }
 
   Wal ringWal({int records = 1}) => Wal(
-    timerStart: 1000,
-    codec: BleAudioCodec.opus,
-    seconds: 60,
-    status: WalStatus.miss,
-    storage: WalStorage.sdcard,
-    device: 'devkit-1',
-    storageTotalBytes: records * 444,
-  );
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'devkit-1',
+        storageTotalBytes: records * 444,
+      );
 
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {
     final card = _FakeRingDevice(ringInfo: _info());

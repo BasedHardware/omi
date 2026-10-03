@@ -382,9 +382,12 @@ is the sole repeat grant. A typed `LiveChainExhausted` latches exhaustion so
 concurrent send/monitor races cannot redial.
 
 Recovery legs opt into per-leg writer pacing at the transport, not just
-admission: each write starts no earlier than `previous_start + audio_duration`
-(sustained ≤1x, no catch-up credit on a stalled-then-resumed transport), with
-each `ws.send` bounded by `min(2s, episode remaining)`. The observable burst
+admission: the armed slot advances from the previously armed slot, so
+sub-frame timer oversleep is compensated against the accumulated slot instead
+of drifting, while a stall of one frame or longer rebases on the clock and
+discards missed-slot credit (sustained ≤1x, no catch-up burst on a
+stalled-then-resumed transport), with each `ws.send` bounded by `min(2s,
+episode remaining)`. The observable burst
 allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
 bound never grows. Prefix delivery — replay enqueues plus the frozen transport
 writes they owed — must complete inside the **20s prefix wall**, not just the

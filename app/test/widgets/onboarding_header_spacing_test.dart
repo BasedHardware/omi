@@ -23,23 +23,25 @@ void main() {
         final flow = GuidedVoiceController(FakeVoiceIO());
         addTearDown(flow.dispose);
         var backs = 0;
-        await tester.pumpWidget(MaterialApp(
-          theme: buildOmiTheme().copyWith(platform: platform),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: OnboardingStepLayout(
-              reserveHeader: true,
-              onBack: () => backs++,
-              progress: const OnboardingProgressDots(current: 4, total: 6),
-              child: SpeechProfileWidget(controller: flow, goNext: () {}, onSkip: () {}),
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildOmiTheme().copyWith(platform: platform),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: OnboardingStepLayout(
+                reserveHeader: true,
+                onBack: () => backs++,
+                progress: const OnboardingProgressDots(current: 4, total: 6),
+                child: SpeechProfileWidget(controller: flow, goNext: () {}, onSkip: () {}),
+              ),
             ),
           ),
-        ));
+        );
         await tester.pumpAndSettle();
         final back = find.byKey(const Key('onboarding_back'));
         final title = find.text('Let Omi get to know you');
@@ -61,15 +63,17 @@ void main() {
   }
 
   testWidgets('bottom-card steps retain their full-screen content and floating navigation', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: OnboardingStepLayout(
-          reserveHeader: false,
-          onBack: () {},
-          child: const SizedBox.expand(key: Key('step_content')),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: OnboardingStepLayout(
+            reserveHeader: false,
+            onBack: () {},
+            child: const SizedBox.expand(key: Key('step_content')),
+          ),
         ),
       ),
-    ));
+    );
     expect(tester.getRect(find.byKey(const Key('step_content'))), tester.getRect(find.byType(Scaffold)));
   });
 }

@@ -18,13 +18,21 @@ from typing import Any, Callable, Dict, cast
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-
-from database import redis_db
-from models.tts import DEFAULT_MODEL_ID, TtsSynthesizeRequest
+from config.assistant_voices import ASSISTANT_VOICES, DEFAULT_ASSISTANT_VOICE
+from database import redis_db, voice_preferences
+from models.tts import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_VOICE_ID,
+    AssistantVoicePreference,
+    AssistantVoicePreferenceUpdate,
+    TtsSynthesizeRequest,
+    TtsVoice,
+    TtsVoiceCatalog,
+)
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
-from utils.executors import run_blocking, critical_executor
+from utils.executors import db_executor, run_blocking, critical_executor
 from utils.tts import (
     TtsConfigurationError,
     TtsRequestLog,
@@ -52,6 +60,26 @@ _TTS_REQUEST_CHAR_LIMIT = 5_000
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 
+@router.get('/v1/tts/voices', tags=['tts'], response_model=TtsVoiceCatalog)
+def list_tts_voices(uid: str = Depends(auth.get_current_user_uid)) -> TtsVoiceCatalog:
+    return TtsVoiceCatalog(
+        voices=[TtsVoice(id=voice_id, name=voice_id) for voice_id in ASSISTANT_VOICES],
+        default_voice_id=DEFAULT_ASSISTANT_VOICE,
+    )
+
+
+@router.get('/v1/users/voice', tags=['tts'], response_model=AssistantVoicePreference)
+def get_user_voice(uid: str = Depends(auth.get_current_user_uid)) -> AssistantVoicePreference:
+    return AssistantVoicePreference(voice_id=voice_preferences.get_assistant_voice(uid))
+
+
+@router.patch('/v1/users/voice', tags=['tts'], response_model=AssistantVoicePreference)
+def update_user_voice(
+    req: AssistantVoicePreferenceUpdate, uid: str = Depends(auth.get_current_user_uid)
+) -> AssistantVoicePreference:
+    return AssistantVoicePreference(voice_id=voice_preferences.set_assistant_voice(uid, req.voice_id))
+
+
 def _is_valid_voice_id(voice_id: str) -> bool:
     """Alphanumeric only, 1-128 chars. Prevents path traversal against the
     ElevenLabs URL template (e.g. `../../history` retargeting `xi-api-key`).
@@ -77,7 +105,11 @@ async def tts_synthesize(
     ),
 ):
     """Synthesize MP3 speech through Gemini, with a legacy rollback path."""
-    if not _is_valid_voice_id(req.voice_id):
+    if 'voice_id' in req.model_fields_set:
+        voice_id = req.voice_id
+    else:
+        voice_id = await run_blocking(db_executor, voice_preferences.get_assistant_voice, uid)
+    if not _is_valid_voice_id(voice_id):
         raise HTTPException(status_code=400, detail="invalid voice_id")
 
     text = req.text.strip()
@@ -125,7 +157,7 @@ async def tts_synthesize(
         try:
             audio_stream = await open_gemini_mp3_stream(
                 text=text,
-                voice_id=req.voice_id,
+                voice_id=voice_id,
                 client='mobile',
             )
         except TtsConfigurationError as exc:
@@ -154,7 +186,7 @@ async def tts_synthesize(
     if req.voice_settings is not None:
         body["voice_settings"] = req.voice_settings.model_dump(exclude_none=True)
 
-    url = _ELEVENLABS_URL.format(voice_id=req.voice_id)
+    url = _ELEVENLABS_URL.format(voice_id=DEFAULT_VOICE_ID)
     headers = {
         "Content-Type": "application/json",
         "Accept": "audio/mpeg",

@@ -56,15 +56,15 @@ void main() {
   }
 
   TranscriptSegment segment(String conversationId, int index, (double, double) span) => TranscriptSegment(
-    id: '$conversationId-s$index',
-    text: 'words',
-    speaker: 'SPEAKER_00',
-    isUser: false,
-    personId: null,
-    start: span.$1,
-    end: span.$2,
-    translations: [],
-  );
+        id: '$conversationId-s$index',
+        text: 'words',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: span.$1,
+        end: span.$2,
+        translations: [],
+      );
 
   /// A conversation whose saved transcript has one segment per [spans] entry, in seconds from [startedAt].
   ServerConversation conversation(
@@ -73,13 +73,14 @@ void main() {
     List<(double, double)> spans, {
     DateTime? createdAt,
     bool hasStart = true,
-  }) => ServerConversation(
-    id: id,
-    createdAt: createdAt ?? startedAt,
-    startedAt: hasStart ? startedAt : null,
-    structured: Structured('fixture', 'fixture'),
-    transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
-  );
+  }) =>
+      ServerConversation(
+        id: id,
+        createdAt: createdAt ?? startedAt,
+        startedAt: hasStart ? startedAt : null,
+        structured: Structured('fixture', 'fixture'),
+        transcriptSegments: [for (final (i, span) in spans.indexed) segment(id, i, span)],
+      );
 
   /// Streams the pendant for [seconds] while the server sends [spans] as live segments of conversation
   /// [id], each two seconds after it ends, as transcription does. When [anchorEstimates] is given it
@@ -171,14 +172,14 @@ void main() {
 
   /// Names of the audio files physically on disk.
   Set<String> audioFilesOnDisk() => {
-    for (final entity in directory.listSync())
-      if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
-  };
+        for (final entity in directory.listSync())
+          if (entity is File && entity.path.endsWith('.bin')) entity.uri.pathSegments.last,
+      };
 
   /// WAL statuses persisted in the durable index, by WAL id.
   Future<Map<String, WalStatus>> persistedStatuses() async => {
-    for (final wal in await WalFileManager.loadWals()) wal.id: wal.status,
-  };
+        for (final wal in await WalFileManager.loadWals()) wal.id: wal.status,
+      };
 
   /// Waits until every stamped WAL is judged, then splits them: covered copies
   /// retained-synced vs uncovered copies still miss and marked for repair.
@@ -308,10 +309,13 @@ void main() {
       ),
     );
     final (covered, hole) = await judgedWals();
-    expect(offsetsOf(hole, origin), [
-      70,
-      150,
-    ], reason: 'silence-only 10s chunks inside tolerated pauses stay miss on every anchor');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          70,
+          150,
+        ],
+        reason: 'silence-only 10s chunks inside tolerated pauses stay miss on every anchor');
     return (origin, covered, hole);
   }
 
@@ -380,10 +384,13 @@ void main() {
     // Pendant drains on the 10s custody cadence: chunks at 60 and 140/150 lie
     // wholly inside the 60..78 and 139..164 silences — no span overlap, so they
     // fail closed and repair-upload rather than inferring silence.
-    expect(offsetsOf(hole, origin), [
-      70,
-      150,
-    ], reason: 'chunks with zero transcript overlap stay miss — no overlap is not proven silence');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          70,
+          150,
+        ],
+        reason: 'chunks with zero transcript overlap stay miss — no overlap is not proven silence');
     expect(offsetsOf(covered, origin), [
       for (var t = 0; t <= 200; t += 10)
         if (t != 70 && t != 150) t,
@@ -398,9 +405,12 @@ void main() {
     );
     await expectRecoveryUploads('c1', hole);
     expect(audioFilesOnDisk(), retainedNames);
-    expect(await persistedStatuses(), {
-      for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees every judged copy is synced');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
+        },
+        reason: 'the durable index agrees every judged copy is synced');
     await telemetryReaches(() => world.coverageEvents.any((event) => event['phase'] == 'confirmation'));
     final confirmation = world.coverageEvents.lastWhere((event) => event['phase'] == 'confirmation');
     expect(confirmation['retained_covered_count'], covered.length);
@@ -417,14 +427,17 @@ void main() {
     );
     // The 86..131 hole keeps chunks 90–120 miss; chunks fully inside the 60..78
     // and 139..164 silences also stay miss (no overlap), tolerated only at edges.
-    expect(offsetsOf(hole, origin), [
-      70,
-      90,
-      100,
-      110,
-      120,
-      150,
-    ], reason: 'the 10s chunks with no transcript overlap stay miss');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          70,
+          90,
+          100,
+          110,
+          120,
+          150,
+        ],
+        reason: 'the 10s chunks with no transcript overlap stay miss');
     expect(offsetsOf(covered, origin), [
       for (var t = 0; t <= 200; t += 10)
         if (t != 70 && (t < 90 || t > 120) && t != 150) t,
@@ -435,21 +448,27 @@ void main() {
       reason: 'covered copies are retained, not deleted; hole copies stay for repair',
     );
     await expectRecoveryUploads('c1', hole);
-    expect(await persistedStatuses(), {
-      for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
-    }, reason: 'the durable index agrees');
+    expect(
+        await persistedStatuses(),
+        {
+          for (final wal in [...covered, ...hole]) wal.id: WalStatus.synced,
+        },
+        reason: 'the durable index agrees');
   });
 
   test('pendant: a transcript missing the opening keeps the opening and uploads it', () async {
     // The saved transcript never mentions the opening; its first anchored utterance lands 36 s in — past the pause tolerance.
     final (origin, covered, hole) = await judgedReplay(202, fullSpans.where((span) => span.$1 >= 34).toList());
-    expect(offsetsOf(hole, origin), [
-      0,
-      10,
-      20,
-      70,
-      150,
-    ], reason: 'the missing opening and every silence-only chunk are kept for repair');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          0,
+          10,
+          20,
+          70,
+          150,
+        ],
+        reason: 'the missing opening and every silence-only chunk are kept for repair');
     expect(offsetsOf(covered, origin), [
       for (var t = 30; t <= 200; t += 10)
         if (t != 70 && t != 150) t,
@@ -460,18 +479,21 @@ void main() {
   test('pendant: a transcript that loses the tail keeps the tail and uploads it', () async {
     // The saved transcript stops after the last utterance at second 86 while 90 s of audio keep streaming.
     final (origin, covered, hole) = await judgedReplay(176, fullSpans.where((span) => span.$2 <= 86).toList());
-    expect(offsetsOf(hole, origin), [
-      70,
-      90,
-      100,
-      110,
-      120,
-      130,
-      140,
-      150,
-      160,
-      170,
-    ], reason: 'the tail chunks and the silence-only chunk at 60 stay miss');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          70,
+          90,
+          100,
+          110,
+          120,
+          130,
+          140,
+          150,
+          160,
+          170,
+        ],
+        reason: 'the tail chunks and the silence-only chunk at 60 stay miss');
     expect(offsetsOf(covered, origin), [
       for (var t = 0; t <= 80; t += 10)
         if (t != 70) t,
@@ -532,14 +554,20 @@ void main() {
     // cadence the chunks overlapping that text are proven covered; every
     // later chunk fails closed and uploads for repair.
     final (origin, covered, hole) = await judgedReplay(200, const [(1, 20)]);
-    expect(offsetsOf(covered, origin), [
-      0,
-      10,
-      20,
-    ], reason: 'the chunks overlapping the saved 20s (anchored via server start) are covered');
-    expect(offsetsOf(hole, origin), [
-      for (var t = 30; t <= 190; t += 10) t,
-    ], reason: 'everything after the saved text fails closed');
+    expect(
+        offsetsOf(covered, origin),
+        [
+          0,
+          10,
+          20,
+        ],
+        reason: 'the chunks overlapping the saved 20s (anchored via server start) are covered');
+    expect(
+        offsetsOf(hole, origin),
+        [
+          for (var t = 30; t <= 190; t += 10) t,
+        ],
+        reason: 'everything after the saved text fails closed');
     await expectRecoveryUploads('c1', hole);
   });
 
@@ -573,9 +601,12 @@ void main() {
   test('pendant: a conversation with no live arrivals and no start time still covers via the session start', () async {
     // An old row without started_at and no live anchor; the session-start fallback anchors the
     // spans, and their five-second pauses fall inside the tolerance.
-    final (_, covered, hole) = await plainJudgedReplay(140, [
-      for (var t = 1.0; t < 130; t += 20) (t, t + 15),
-    ], hasStart: false);
+    final (_, covered, hole) = await plainJudgedReplay(
+        140,
+        [
+          for (var t = 1.0; t < 130; t += 20) (t, t + 15),
+        ],
+        hasStart: false);
     expect(hole, isEmpty);
     expect(covered, isNotEmpty);
     await expectRecoveryUploads('c1', hole);

@@ -762,7 +762,9 @@ capture-positioned PCM ring. Delivered window segments advance its finalized
 sample boundary. If the socket dies after accepting audio, the receiver starts
 the replacement provider epoch at the first unfinished sample and replays that
 audio before sending the current unsent chunk. Replay uses 1x audio-time pacing,
-a 20-second prefix budget, and a 5-second setup bound. A longer unanswered ring
+a 20-second prefix budget, and a 5-second setup bound. Its armed audio slot
+absorbs sub-frame timer oversleep without accumulating drift; a slip of one
+frame or longer discards missed-slot credit instead of bursting. A longer unanswered ring
 is cut to its newest 20 seconds with a bounded skipped-seconds metric; this
 explicit cut is not an emitted-text safe trim. Live ingestion continues into a
 bounded 26-second ordered PCM tail, which drains before EOS on departure;

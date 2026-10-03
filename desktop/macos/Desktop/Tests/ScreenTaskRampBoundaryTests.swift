@@ -474,7 +474,8 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
                   .utf8), response
             )
           })
-        let client = try GeminiClient(workload: .extraction, toolLoopTransport: transport)
+        let client = try GeminiClient(
+          lane: .taskExtraction, workload: .extraction, toolLoopTransport: transport)
         do {
           _ = try await ScreenTaskWorkAuthority.$validate.withValue({ try state.frameValid() }) {
             try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [])

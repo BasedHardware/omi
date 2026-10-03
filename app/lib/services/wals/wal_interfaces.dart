@@ -71,6 +71,8 @@ abstract class LocalWalSync implements IWalSync {
   /// admission and pass to [addExternalWal]; do not re-read after an await.
   int get sessionGeneration;
 
+  int get captureEvidenceGeneration;
+
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
 

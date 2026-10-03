@@ -17,6 +17,7 @@ from models.tts import (
     DEFAULT_VOICE_ID,
     TtsSynthesizeRequest,
 )
+from database import voice_preferences
 from routers import tts as tts_router
 from utils.tts import TtsUpstreamError
 
@@ -104,7 +105,9 @@ async def _audio_chunks():
     yield b'mp3'
 
 
-async def _allow_rate_limit(*_args, **_kwargs):
+async def _allow_rate_limit(_executor, function, *_args, **_kwargs):
+    if function is voice_preferences.get_assistant_voice:
+        return 'Charon'
     return 0, None
 
 

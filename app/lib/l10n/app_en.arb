@@ -14676,7 +14676,66 @@
             }
         }
     },
+    "chatReplyOffline": "Unable to connect. Check your connection and try again.",
+    "@chatReplyOffline": {
+        "description": "Shown when a chat reply fails because the device has no connectivity"
+    },
+    "chatReplyServerError": "Something went wrong on our side. Please try again.",
+    "@chatReplyServerError": {
+        "description": "Shown when a chat reply fails with a server error"
+    },
+    "chatReplyTimeout": "The response took too long. Please try again.",
+    "@chatReplyTimeout": {
+        "description": "Shown when a chat reply times out"
+    },
+    "chatReplyNotSignedIn": "You're not signed in. Sign in and try again.",
+    "@chatReplyNotSignedIn": {
+        "description": "Shown when a chat reply fails because the user is not signed in"
+    },
+    "chatAppsLoadFailed": "Couldn't load chat apps. Please try again.",
+    "@chatAppsLoadFailed": {
+        "description": "Shown in the chat apps drawer when loading installed chat apps fails"
+    },
+    "assistantVoiceSettingsTitle": "Voice",
+    "@assistantVoiceSettingsTitle": {
+        "description": "Settings section title for assistant voice"
+    },
+    "assistantVoice": "Assistant Voice",
+    "@assistantVoice": {
+        "description": "Row label for the assistant voice picker"
+    },
+    "voiceSharedAcrossDevices": "Your voice choice is shared across mobile and desktop.",
+    "@voiceSharedAcrossDevices": {
+        "description": "Support line under the assistant voice picker"
+    },
+    "readChatRepliesAloud": "Read chat replies aloud",
+    "@readChatRepliesAloud": {
+        "description": "Toggle label for reading chat replies aloud"
+    },
+    "readChatRepliesAloudDescription": "Only speaks when Voice response allows it.",
+    "@readChatRepliesAloudDescription": {
+        "description": "Toggle helper text explaining replies are only spoken when Voice response mode allows it"
+    },
+    "voicePreviewSample": "Hi, I'm Omi. This is my voice.",
+    "@voicePreviewSample": {
+        "description": "Sample text synthesized when previewing an assistant voice"
+    },
     "peopleStatsIncomplete": "Counts may be incomplete.",
+    "previousDay": "Previous day",
+    "@previousDay": {
+        "description": "Day page navigation: go to the day before"
+    },
+    "nextDay": "Next day",
+    "@nextDay": {
+        "description": "Day page navigation: go to the day after"
+    },
+    "noTasksOnDate": "No tasks on {date}",
+    "@noTasksOnDate": {
+        "description": "Empty state on the single-day tasks page",
+        "placeholders": {
+            "date": {}
+        }
+    },
     "reprocessingConversationProgress": "Reprocessing conversation…",
     "@reprocessingConversationProgress": {
         "description": "Shown with a progress bar while the open conversation is reprocessed."
