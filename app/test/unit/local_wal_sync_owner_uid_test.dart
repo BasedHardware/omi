@@ -128,6 +128,7 @@ void main() {
     await SharedPreferencesUtil.init();
     final syncA = LocalWalSyncImpl(
       _FakeListener(),
+      freeDiskBytes: () async => 64 << 30,
       persistWals: (wals) async => persisted = List<Wal>.from(wals),
       loadWals: () async => <Wal>[],
     );
@@ -145,9 +146,9 @@ void main() {
     expect(persisted.where((wal) => wal.ownerUid == 'account-a'), hasLength(400),
         reason: 'retired-account WALs are retained, not trimmed to fit the cap');
 
-    // New durable admissions past the cap are refused instead.
+    // Past the count threshold new audio is still admitted; the cap only warns.
     final admitted = await syncA.ensureStorageAdmission(bytes: 1024, admittedGeneration: syncA.sessionGeneration);
-    expect(admitted, isFalse);
+    expect(admitted, isTrue);
     expect(syncA.retentionRisk?.reason, 'count_cap');
 
     SharedPreferences.setMockInitialValues({'uid': 'account-c'});

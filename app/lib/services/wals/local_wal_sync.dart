@@ -37,10 +37,11 @@ const _kBackendBusyErrorHint = 'background worker likely died';
 const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
 /// Phone-local safety copies include 10-second pendant chunks. The 720-file
-/// admission threshold spans every account bucket and represents about two
-/// hours when every pendant chunk remains unacknowledged. At the cap,
-/// admission refuses new audio rather than evicting a pending copy; the
-/// pressure is surfaced through [WalRetentionRisk] and capture-recovery UI.
+/// threshold spans every account bucket and represents about two hours when
+/// every pendant chunk remains unacknowledged. It is a warning only: pending
+/// copies are never evicted and new audio is never refused for count — on
+/// legacy firmware the pendant has already freed it. Only the free-disk
+/// reserve ([minFreeDiskReserveBytes]) refuses admission.
 const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
@@ -1072,8 +1073,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       .length;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
-  /// Pending (unsynced) copies are never evicted; the pressure blocks new
-  /// admissions until durable backlog drains.
+  /// Pending (unsynced) copies are never evicted and admission is not refused
+  /// for count; only the disk reserve refuses new audio.
   ///
   /// Synced WALs are excluded because their lifecycle is governed by the
   /// user's local-storage preference; this policy specifically bounds audio
@@ -1178,22 +1179,18 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final retained = _pendingDiskWalCount + _admissionReservations.length;
     String? blockReason;
     var unknownSpaceDiagnostic = false;
-    if (retained >= maxRetainedCaptureWalCount) {
-      blockReason = 'count_cap';
-    } else {
-      final free = await _freeDiskBytes();
-      if (!_isCurrent(admittedGeneration)) return false;
-      if (free == null) {
-        if (failClosedOnUnknownSpace) {
-          blockReason = 'disk_space_unknown';
-        } else {
-          unknownSpaceDiagnostic = true;
-        }
+    final free = await _freeDiskBytes();
+    if (!_isCurrent(admittedGeneration)) return false;
+    if (free == null) {
+      if (failClosedOnUnknownSpace) {
+        blockReason = 'disk_space_unknown';
       } else {
-        final reserved = _admissionReservations.fold<int>(0, (a, b) => a + b);
-        if (free - reserved - bytes < minFreeDiskReserveBytes) {
-          blockReason = 'disk_reserve';
-        }
+        unknownSpaceDiagnostic = true;
+      }
+    } else {
+      final reserved = _admissionReservations.fold<int>(0, (a, b) => a + b);
+      if (free - reserved - bytes < minFreeDiskReserveBytes) {
+        blockReason = 'disk_reserve';
       }
     }
     if (blockReason == null) {

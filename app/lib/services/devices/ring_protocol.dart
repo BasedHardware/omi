@@ -161,10 +161,16 @@ class RingProtocol {
     return cmd.buffer.asUint8List();
   }
 
-  /// Read the 4-byte big-endian timestamp prefix of a ring record.
+  /// Bit 31 of a record timestamp marks seconds since device boot, not epoch UTC
+  /// (custody firmware writes it when the RTC is unset). Legacy firmware never sets it.
+  static const int recordTimestampUptimeFlag = 0x80000000;
+
+  /// Read the 4-byte big-endian timestamp prefix of a ring record as epoch seconds,
+  /// or 0 (no usable time) when the record carries the uptime flag.
   /// Caller is responsible for supplying a buffer of at least 4 bytes.
   static int readRecordTimestamp(List<int> record) {
-    return (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
+    final raw = (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
+    return raw & recordTimestampUptimeFlag != 0 ? 0 : raw;
   }
 
   /// Parse the 440-byte audio payload of a ring record into opus frames.

@@ -467,7 +467,8 @@ void main() {
       expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount);
     });
 
-    test('dead-backend accumulation never deletes; new admissions are refused instead', () async {
+    test('dead-backend accumulation never deletes and never refuses new audio for count', () async {
+      final sync = LocalWalSyncImpl(listener, freeDiskBytes: () async => 64 << 30);
       sync.testWals = List.generate(maxRetainedCaptureWalCount + 3, retained);
 
       final excess = await sync.enforceRetentionPolicyForTesting();
@@ -476,12 +477,11 @@ void main() {
       // No eviction: every pending WAL stays on disk/index.
       expect(sync.testWals, hasLength(maxRetainedCaptureWalCount + 3));
       expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount + 3);
-      // New durable admissions are refused while over cap.
+      // Over the count threshold is a warning only: with disk to spare, new audio is still admitted.
       expect(
         await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration),
-        isFalse,
+        isTrue,
       );
-      expect(sync.retentionRisk?.blockedCount, 1);
       expect(sync.retentionRisk?.reason, 'count_cap');
     });
 
