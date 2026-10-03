@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn, formatNotificationTimestamp } from '@/lib/utils';
 import type { OmiNotification, NotificationType } from '@/types/notification';
+import { t } from '@/lib/i18n';
 
 interface NotificationItemProps {
   notification: OmiNotification;
@@ -152,7 +153,7 @@ export function NotificationItem({
       {!notification.read && (
         <div
           className="w-2 h-2 rounded-full bg-text-primary flex-shrink-0 mt-2"
-          title="Unread"
+          title={t('Unread')}
         />
       )}
 
@@ -169,7 +170,7 @@ export function NotificationItem({
           <button
             onClick={handleMarkAsRead}
             className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
-            title="Mark as read"
+            title={t('Mark as read')}
           >
             <Clock className="w-3.5 h-3.5 text-text-quaternary" />
           </button>
@@ -177,7 +178,7 @@ export function NotificationItem({
         <button
           onClick={handleClear}
           className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
-          title="Remove"
+          title={t('Remove')}
         >
           <X className="w-3.5 h-3.5 text-text-quaternary" />
         </button>

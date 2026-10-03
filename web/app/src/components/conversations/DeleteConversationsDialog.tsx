@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t, tn } from '@/lib/i18n';
 
 interface DeleteConversationsDialogProps {
   isOpen: boolean;
@@ -123,7 +124,7 @@ export function DeleteConversationsDialog({
               id="delete-dialog-title"
               className="text-lg font-semibold text-text-primary mb-2"
             >
-              Delete {count} conversation{count !== 1 ? 's' : ''}?
+              {tn(count, 'Delete {count} conversation?', 'Delete {count} conversations?')}
             </h2>
 
             {/* Description */}
@@ -131,8 +132,11 @@ export function DeleteConversationsDialog({
               id="delete-dialog-description"
               className="text-sm text-text-secondary mb-6"
             >
-              This will permanently delete the selected conversation
-              {count !== 1 ? 's' : ''}. This action cannot be undone.
+              {tn(
+                count,
+                'This will permanently delete the selected conversation. This action cannot be undone.',
+                'This will permanently delete the selected conversations. This action cannot be undone.',
+              )}
             </p>
 
             {/* Actions */}
@@ -149,7 +153,7 @@ export function DeleteConversationsDialog({
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={onConfirm}
@@ -164,7 +168,7 @@ export function DeleteConversationsDialog({
                 )}
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                <span>{isLoading ? 'Deleting...' : 'Delete'}</span>
+                <span>{isLoading ? t('Deleting...') : t('Delete')}</span>
               </button>
             </div>
           </motion.div>

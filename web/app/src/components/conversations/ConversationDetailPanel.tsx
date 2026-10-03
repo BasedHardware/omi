@@ -65,6 +65,7 @@ import {
   selectConversationSummary,
   type SummarySection,
 } from '@/lib/conversationSummarySelection';
+import { t as i18n, tn, formatLocale } from '@/lib/i18n';
 
 // Code-split the location preview out of the conversation panel bundle
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
@@ -106,7 +107,7 @@ interface Tab {
 function formatDate(dateString: string | null): string {
   if (!dateString) return '';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -258,12 +259,12 @@ export function SummaryTab({
                     {isExpanded ? (
                       <>
                         <ChevronUp className="h-4 w-4" />
-                        <span>Show less</span>
+                        <span>{i18n('Show less')}</span>
                       </>
                     ) : (
                       <>
                         <ChevronDown className="h-4 w-4" />
-                        <span>Show more</span>
+                        <span>{i18n('Show more')}</span>
                       </>
                     )}
                   </button>
@@ -310,7 +311,9 @@ export function SummaryTab({
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-text-primary" />
-            <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
+            <h3 className="text-sm font-medium text-text-primary">
+              {i18n('Summary Templates')}
+            </h3>
           </div>
           <GenerateSummaryButton
             conversationId={conversationId}
@@ -335,8 +338,9 @@ export function SummaryTab({
         {/* Empty state for templates */}
         {!hasAppSummaries && (
           <p className="mt-2 text-sm text-text-tertiary">
-            No summaries yet. Click Templates above to generate one or create a custom
-            template.
+            {i18n(
+              'No summaries yet. Click Templates above to generate one or create a custom template.',
+            )}
           </p>
         )}
       </div>
@@ -801,20 +805,20 @@ export function ConversationDetailPanel({
   const tabs: Tab[] = [
     {
       id: 'summary',
-      label: 'Summary',
+      label: i18n('Summary'),
       icon: <FileText className="h-4 w-4" />,
       disabled: summarySelection.kind === 'empty',
     },
     {
       id: 'actions',
-      label: 'Actions',
+      label: i18n('Actions'),
       icon: <CheckSquare className="h-4 w-4" />,
       count: actionItems.length,
       disabled: !hasActionItems,
     },
     {
       id: 'transcript',
-      label: 'Transcript',
+      label: i18n('Transcript'),
       icon: <MessageSquare className="h-4 w-4" />,
       count: transcript_segments?.length || 0,
       disabled: !hasTranscript,
@@ -842,7 +846,7 @@ export function ConversationDetailPanel({
             <button
               onClick={onBack}
               className="-ml-2 rounded-lg p-2 transition-colors hover:bg-bg-tertiary lg:hidden"
-              aria-label="Back to list"
+              aria-label={i18n('Back to list')}
             >
               <ArrowLeft className="h-5 w-5 text-text-secondary" />
             </button>
@@ -857,7 +861,7 @@ export function ConversationDetailPanel({
             {/* Editable Title */}
             <EditableTitle
               conversationId={conversationId}
-              title={structured.title || 'Untitled Conversation'}
+              title={structured.title || i18n('Untitled Conversation')}
               onTitleChange={handleTitleChange}
               className="mb-2 line-clamp-2 font-display text-xl font-semibold text-text-primary"
             />
@@ -890,7 +894,7 @@ export function ConversationDetailPanel({
               {conversation.starred && (
                 <div className="flex items-center gap-1.5 text-warning">
                   <Star className="h-4 w-4 fill-current" />
-                  <span>Starred</span>
+                  <span>{i18n('Starred')}</span>
                 </div>
               )}
             </div>
@@ -916,7 +920,7 @@ export function ConversationDetailPanel({
         <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
           <ConversationScreenFrameBanner
             frame={screenFrames.frameSet.banner}
-            title={structured.title || 'Untitled Conversation'}
+            title={structured.title || i18n('Untitled Conversation')}
             dateLabel={
               conversation.started_at ? formatDate(conversation.started_at) : undefined
             }
@@ -1016,7 +1020,7 @@ export function ConversationDetailPanel({
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/90">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     </div>
-                    <span>Loading audio...</span>
+                    <span>{i18n('Loading audio...')}</span>
                   </div>
                 )}
                 {/* Save-queue progress: edits persist one at a time (serialized) */}
@@ -1024,7 +1028,8 @@ export function ConversationDetailPanel({
                   <div className="flex items-center gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3 text-sm text-text-secondary">
                     <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-text-quaternary border-t-transparent" />
                     <span>
-                      Saving edit {Math.min(saveBatch.done + 1, saveBatch.total)} of{' '}
+                      {i18n('Saving edit')}{' '}
+                      {Math.min(saveBatch.done + 1, saveBatch.total)} {i18n('of')}{' '}
                       {saveBatch.total}…
                     </span>
                   </div>
@@ -1033,9 +1038,11 @@ export function ConversationDetailPanel({
                 {!isSavingSegments && saveBatch.failed > 0 && (
                   <div className="flex items-center gap-2 rounded-xl border border-error/20 bg-error/10 p-3 text-sm text-error">
                     <span>
-                      Couldn&apos;t save {saveBatch.failed} edit
-                      {saveBatch.failed > 1 ? 's' : ''} — reverted to the saved text.
-                      Please try again.
+                      {tn(
+                        saveBatch.failed,
+                        "Couldn't save {count} edit — reverted to the saved text. Please try again.",
+                        "Couldn't save {count} edits — reverted to the saved text. Please try again.",
+                      )}
                     </span>
                   </div>
                 )}
@@ -1043,7 +1050,9 @@ export function ConversationDetailPanel({
                 {reprocessFailed && !isReprocessing && !conversation.discarded && (
                   <div className="flex items-center justify-between gap-3 rounded-xl border border-error/20 bg-error/10 p-3">
                     <span className="text-sm text-error">
-                      Reprocessing failed — the summary and search may be out of date.
+                      {i18n(
+                        'Reprocessing failed — the summary and search may be out of date.',
+                      )}
                     </span>
                     <button
                       onClick={handleReprocessAfterEdit}
@@ -1053,7 +1062,7 @@ export function ConversationDetailPanel({
                       )}
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
-                      <span>Retry</span>
+                      <span>{i18n('Retry')}</span>
                     </button>
                   </div>
                 )}
@@ -1067,7 +1076,9 @@ export function ConversationDetailPanel({
                       <div className="flex items-center gap-2 text-sm text-text-secondary">
                         <Sparkles className="h-4 w-4 flex-shrink-0 text-text-secondary" />
                         <span>
-                          Transcript edited. Reprocess to update the summary and search.
+                          {i18n(
+                            'Transcript edited. Reprocess to update the summary and search.',
+                          )}
                         </span>
                       </div>
                       <button
@@ -1082,7 +1093,9 @@ export function ConversationDetailPanel({
                         <RefreshCw
                           className={cn('h-3.5 w-3.5', isReprocessing && 'animate-spin')}
                         />
-                        <span>{isReprocessing ? 'Reprocessing…' : 'Reprocess'}</span>
+                        <span>
+                          {isReprocessing ? i18n('Reprocessing…') : i18n('Reprocess')}
+                        </span>
                       </button>
                     </div>
                   )}
@@ -1163,15 +1176,17 @@ export function ConversationDetailPanel({
         }}
         title={
           pendingFrameDelete?.kind === 'all'
-            ? 'Delete all screenshots?'
-            : 'Delete screenshot?'
+            ? i18n('Delete all screenshots?')
+            : i18n('Delete screenshot?')
         }
         description={
           pendingFrameDelete?.kind === 'all'
-            ? "This removes every screenshot from this conversation. This can't be undone."
-            : "This screenshot will be permanently removed. This can't be undone."
+            ? i18n(
+                "This removes every screenshot from this conversation. This can't be undone.",
+              )
+            : i18n("This screenshot will be permanently removed. This can't be undone.")
         }
-        confirmLabel="Delete"
+        confirmLabel={i18n('Delete')}
         variant="danger"
         onConfirm={() => {
           void confirmPendingFrameDelete();

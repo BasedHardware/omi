@@ -10,6 +10,7 @@ import {
 } from '@/lib/api';
 import { summarizeIntegrations } from '@/lib/connectors';
 import type { Integration } from '@/types/user';
+import { t } from '@/lib/i18n';
 
 function Toggle({
   enabled,
@@ -212,9 +213,14 @@ export function ConnectedServices() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-text-primary">External services</h2>
+        <h2 className="text-lg font-medium text-text-primary">
+          {t('External services')}
+        </h2>
         <p className="mt-1 text-sm text-text-tertiary">
-          {summary.connected} of {summary.available} connected
+          {t('{connected} of {available} connected', {
+            connected: summary.connected,
+            available: summary.available,
+          })}
         </p>
       </div>
       {error && <p className="text-sm text-error">{error}</p>}
@@ -246,12 +252,12 @@ export function ConnectedServices() {
                     <h3 className="font-medium text-text-primary">{integration.name}</h3>
                     {integration.coming_soon && (
                       <span className="rounded-chip bg-bg-quaternary px-2 py-0.5 text-xs text-text-tertiary">
-                        Soon
+                        {t('Soon')}
                       </span>
                     )}
                     {integration.connected && !integration.coming_soon && (
                       <span className="rounded-chip bg-white/10 px-2 py-0.5 text-xs text-text-primary">
-                        Connected
+                        {t('Connected')}
                       </span>
                     )}
                   </div>
@@ -265,7 +271,7 @@ export function ConnectedServices() {
                   ) : (
                     <Toggle
                       enabled={integration.connected}
-                      label={`${integration.name} integration`}
+                      label={t('{name} integration', { name: integration.name })}
                       onChange={() => handleToggle(integration)}
                     />
                   ))}
@@ -280,17 +286,19 @@ export function ConnectedServices() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="mx-4 max-w-md rounded-card border border-stroke bg-bg-secondary p-6 shadow-xl">
             <h3 className="mb-2 text-lg font-semibold text-text-primary">
-              Disconnect {integrations.find((i) => i.id === showDisconnectConfirm)?.name}?
+              {t('Disconnect {name}?', {
+                name: integrations.find((i) => i.id === showDisconnectConfirm)?.name,
+              })}
             </h3>
             <p className="mb-6 text-text-secondary">
-              This will remove the connection. You can reconnect anytime.
+              {t('This will remove the connection. You can reconnect anytime.')}
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowDisconnectConfirm(null)}
                 className="rounded-control bg-bg-tertiary px-4 py-2 text-text-primary transition-colors hover:bg-bg-quaternary"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={() => {
@@ -301,7 +309,7 @@ export function ConnectedServices() {
                 }}
                 className="rounded-control bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600"
               >
-                Disconnect
+                {t('Disconnect')}
               </button>
             </div>
           </div>

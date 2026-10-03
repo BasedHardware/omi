@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { X, Merge, Loader2, FolderInput, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t, tn } from '@/lib/i18n';
 
 interface MergeActionBarProps {
   selectedCount: number;
@@ -63,7 +64,7 @@ export function MergeActionBar({
         )}
       >
         <X className="w-4 h-4" />
-        <span>Cancel</span>
+        <span>{t('Cancel')}</span>
       </button>
 
       {/* Selection count badge */}
@@ -74,8 +75,8 @@ export function MergeActionBar({
           'text-sm font-medium',
         )}
       >
-        {selectedCount} selected
-      </div>
+        {tn(selectedCount, '{count} selected', '{count} selected')}
+          </div>
 
       {/* Move to Folder button */}
       {onMoveToFolder && (
@@ -93,7 +94,7 @@ export function MergeActionBar({
           )}
         >
           <FolderInput className="w-4 h-4" />
-          <span>Move</span>
+          <span>{t('Move')}</span>
         </button>
       )}
 
@@ -113,7 +114,7 @@ export function MergeActionBar({
           )}
         >
           <Trash2 className="w-4 h-4" />
-          <span>Delete</span>
+          <span>{t('Delete')}</span>
         </button>
       )}
 
@@ -136,7 +137,7 @@ export function MergeActionBar({
         ) : (
           <Merge className="w-4 h-4" />
         )}
-        <span>Merge</span>
+        <span>{t('Merge')}</span>
       </button>
     </motion.div>
   );

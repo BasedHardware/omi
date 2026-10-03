@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Plus, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface MemoryQuickAddProps {
   onAdd: (content: string, visibility?: MemoryVisibility) => Promise<Memory | null>;
@@ -71,7 +72,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         )}
       >
         <Plus className="w-4 h-4" />
-        <span className="text-sm">Add a memory...</span>
+        <span className="text-sm">{t('Add a memory...')}</span>
       </button>
     );
   }
@@ -92,7 +93,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         value={content}
         onChange={(e) => setContent(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="What would you like to remember?"
+        placeholder={t('What would you like to remember?')}
         disabled={isSubmitting}
         className={cn(
           'w-full bg-transparent',
@@ -119,13 +120,11 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
           {visibility === 'public' ? (
             <>
               <Eye className="w-3 h-3" />
-              Public
-            </>
+              {t('Public')}</>
           ) : (
             <>
               <EyeOff className="w-3 h-3" />
-              Private
-            </>
+              {t('Private')}</>
           )}
         </button>
 
@@ -141,7 +140,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
               'transition-colors',
             )}
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             type="submit"
@@ -154,14 +153,14 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
-            {isSubmitting ? 'Adding...' : 'Add Memory'}
+            {isSubmitting ? t('Adding...') : t('Add Memory')}
           </button>
         </div>
       </div>
 
       {/* Hint */}
       <p className="text-[10px] text-text-quaternary">
-        Press Enter to add, Escape to cancel
+        {t('Press Enter to add, Escape to cancel')}
       </p>
     </motion.form>
   );

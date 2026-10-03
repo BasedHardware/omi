@@ -3,6 +3,7 @@
 import { GanttChartSquare } from 'lucide-react';
 import { ConversationGallerySkeleton } from '@/components/conversations/ConversationGallery';
 import { FolderTabsSkeleton } from '@/components/conversations/FolderTabs';
+import { t } from '@/lib/i18n';
 
 export default function ConversationsLoading() {
   return (
@@ -10,7 +11,7 @@ export default function ConversationsLoading() {
       {/* Page Header */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-stroke bg-bg-secondary">
         <GanttChartSquare className="w-6 h-6 text-text-secondary" />
-        <h1 className="text-2xl font-bold text-text-primary">Conversations</h1>
+        <h1 className="text-2xl font-bold text-text-primary">{t('Conversations')}</h1>
       </div>
 
       {/* Toolbar */}

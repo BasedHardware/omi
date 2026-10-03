@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 /**
  * The settings sections, in nav order.
  *
@@ -11,21 +12,39 @@
 export const SETTINGS_SECTIONS = [
   {
     id: 'account',
-    label: 'Account',
-    title: 'Account',
-    description: 'Profile, language, notifications, plan, and usage',
+    get label() {
+      return t('Account');
+    },
+    get title() {
+      return t('Account');
+    },
+    get description() {
+      return t('Profile, language, notifications, plan, and usage');
+    },
   },
   {
     id: 'privacy',
-    label: 'Privacy',
-    title: 'Privacy',
-    description: 'Data permissions and training settings',
+    get label() {
+      return t('Privacy');
+    },
+    get title() {
+      return t('Privacy');
+    },
+    get description() {
+      return t('Data permissions and training settings');
+    },
   },
   {
     id: 'developer',
-    label: 'Developer',
-    title: 'Developer',
-    description: 'API keys, webhooks, and data export',
+    get label() {
+      return t('Developer');
+    },
+    get title() {
+      return t('Developer');
+    },
+    get description() {
+      return t('API keys, webhooks, and data export');
+    },
   },
 ] as const;
 
@@ -38,8 +57,20 @@ export const CLAUDE_CONNECTOR_OAUTH = {
 
 export const SIGNED_OUT_DESTINATION = '/login';
 
+// Getters, not copies: the labels are translated, and this module loads before the
+// UI catalog does, so reading them here would freeze the English text.
 export const SECTION_INFO = Object.fromEntries(
-  SETTINGS_SECTIONS.map(({ id, title, description }) => [id, { title, description }]),
+  SETTINGS_SECTIONS.map((section) => [
+    section.id,
+    {
+      get title() {
+        return section.title;
+      },
+      get description() {
+        return section.description;
+      },
+    },
+  ]),
 ) as Record<SettingsSectionId, { title: string; description: string }>;
 
 export function isSettingsSectionId(value: string): value is SettingsSectionId {

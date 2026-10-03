@@ -7,6 +7,7 @@ import { AppForm } from '@/components/apps/AppForm';
 import { getApp } from '@/lib/api';
 import type { App } from '@/types/apps';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t } from '@/lib/i18n';
 
 export default function EditAppPage() {
   const params = useParams();
@@ -24,7 +25,7 @@ export default function EditAppPage() {
         setApp(appData);
       } catch (err) {
         console.error('Failed to load app:', err);
-        setError('Failed to load app');
+        setError(t('Failed to load app'));
       } finally {
         setIsLoading(false);
       }
@@ -44,9 +45,9 @@ export default function EditAppPage() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error || 'App not found'}</p>
+          <p className="text-red-400 mb-4">{error || t('App not found')}</p>
           <Link href="/connectors" className="text-accent-primary hover:underline">
-            Back to Apps
+            {t('Back to Apps')}
           </Link>
         </div>
       </div>

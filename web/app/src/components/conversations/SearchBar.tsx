@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 interface SearchBarProps {
   value: string;
@@ -143,7 +144,7 @@ export function SearchBar({
                 'text-text-quaternary hover:text-text-secondary',
                 'hover:bg-bg-tertiary transition-colors',
               )}
-              aria-label="Clear search"
+              aria-label={t('Clear search')}
             >
               <X className="w-3.5 h-3.5" />
             </motion.button>
@@ -160,7 +161,7 @@ export function SearchBar({
                 'bg-bg-tertiary text-text-quaternary text-xs',
               )}
             >
-              <kbd className="font-sans">{isMac ? '⌘' : 'Ctrl'}</kbd>
+              <kbd className="font-sans">{isMac ? '⌘' : t('Ctrl')}</kbd>
               <kbd className="font-sans">K</kbd>
             </motion.div>
           )}

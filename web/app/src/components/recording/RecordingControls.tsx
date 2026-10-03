@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Pause, Play, Square, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { RecordingState, AudioMode } from './RecordingContext';
+import { t } from '@/lib/i18n';
 
 interface RecordingControlsProps {
   state: RecordingState;
@@ -143,9 +144,9 @@ export function RecordingControls({
       {/* Level meters */}
       {(isRecording || isPaused) && (
         <div className="w-full max-w-xs space-y-2">
-          <LevelMeter level={micLevel} label="Mic" />
+          <LevelMeter level={micLevel} label={t('Mic')} />
           {audioMode === 'mic-and-system' && (
-            <LevelMeter level={systemLevel} label="System" />
+            <LevelMeter level={systemLevel} label={t('System')} />
           )}
         </div>
       )}

@@ -15,6 +15,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 export interface CategoryMetadata {
   id: string;
@@ -34,8 +35,12 @@ export interface CategoryTheme {
 export const categoryMetadata: Record<string, CategoryMetadata> = {
   'productivity-and-organization': {
     id: 'productivity-and-organization',
-    displayName: 'Productivity',
-    description: 'Tools to enhance your productivity and organization',
+    get displayName() {
+      return t('Productivity');
+    },
+    get description() {
+      return t('Tools to enhance your productivity and organization');
+    },
     icon: Briefcase,
     theme: {
       primary: 'text-amber-500',
@@ -46,8 +51,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'conversation-analysis': {
     id: 'conversation-analysis',
-    displayName: 'Conversation Insights',
-    description: 'Analyze and improve your conversations',
+    get displayName() {
+      return t('Conversation Insights');
+    },
+    get description() {
+      return t('Analyze and improve your conversations');
+    },
     icon: MessageSquare,
     theme: {
       primary: 'text-teal-500',
@@ -58,8 +67,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'education-and-learning': {
     id: 'education-and-learning',
-    displayName: 'Learning & Education',
-    description: 'Enhance your learning experience',
+    get displayName() {
+      return t('Learning & Education');
+    },
+    get description() {
+      return t('Enhance your learning experience');
+    },
     icon: GraduationCap,
     theme: {
       primary: 'text-blue-500',
@@ -70,8 +83,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'utilities-and-tools': {
     id: 'utilities-and-tools',
-    displayName: 'Utilities & Tools',
-    description: 'Useful tools and utilities',
+    get displayName() {
+      return t('Utilities & Tools');
+    },
+    get description() {
+      return t('Useful tools and utilities');
+    },
     icon: Wrench,
     theme: {
       primary: 'text-sky-500',
@@ -82,8 +99,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'health-and-wellness': {
     id: 'health-and-wellness',
-    displayName: 'Health & Fitness',
-    description: 'Monitor and improve your health',
+    get displayName() {
+      return t('Health & Fitness');
+    },
+    get description() {
+      return t('Monitor and improve your health');
+    },
     icon: Heart,
     theme: {
       primary: 'text-rose-500',
@@ -94,8 +115,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'safety-and-security': {
     id: 'safety-and-security',
-    displayName: 'Security & Safety',
-    description: 'Protect and secure your data',
+    get displayName() {
+      return t('Security & Safety');
+    },
+    get description() {
+      return t('Protect and secure your data');
+    },
     icon: Shield,
     theme: {
       primary: 'text-emerald-500',
@@ -106,8 +131,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'social-and-relationships': {
     id: 'social-and-relationships',
-    displayName: 'Social & Relationships',
-    description: 'Enhance your social interactions',
+    get displayName() {
+      return t('Social & Relationships');
+    },
+    get description() {
+      return t('Enhance your social interactions');
+    },
     icon: Users,
     theme: {
       primary: 'text-pink-500',
@@ -118,8 +147,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   financial: {
     id: 'financial',
-    displayName: 'Finance',
-    description: 'Manage your finances',
+    get displayName() {
+      return t('Finance');
+    },
+    get description() {
+      return t('Manage your finances');
+    },
     icon: DollarSign,
     theme: {
       primary: 'text-green-500',
@@ -130,8 +163,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'entertainment-and-fun': {
     id: 'entertainment-and-fun',
-    displayName: 'Entertainment & Games',
-    description: 'Have fun and stay entertained',
+    get displayName() {
+      return t('Entertainment & Games');
+    },
+    get description() {
+      return t('Have fun and stay entertained');
+    },
     icon: Gamepad2,
     theme: {
       primary: 'text-orange-500',
@@ -142,8 +179,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'communication-improvement': {
     id: 'communication-improvement',
-    displayName: 'Communication',
-    description: 'Improve your communication skills',
+    get displayName() {
+      return t('Communication');
+    },
+    get description() {
+      return t('Improve your communication skills');
+    },
     icon: MessageSquare,
     theme: {
       primary: 'text-cyan-500',
@@ -154,8 +195,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   'emotional-and-mental-support': {
     id: 'emotional-and-mental-support',
-    displayName: 'Mental Wellness',
-    description: 'Support for emotional and mental health',
+    get displayName() {
+      return t('Mental Wellness');
+    },
+    get description() {
+      return t('Support for emotional and mental health');
+    },
     icon: Heart,
     theme: {
       primary: 'text-text-primary',
@@ -166,8 +211,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   integration: {
     id: 'integration',
-    displayName: 'Integration Apps',
-    description: 'Connect with external services',
+    get displayName() {
+      return t('Integration Apps');
+    },
+    get description() {
+      return t('Connect with external services');
+    },
     icon: Globe,
     theme: {
       primary: 'text-cyan-500',
@@ -178,8 +227,12 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   },
   other: {
     id: 'other',
-    displayName: 'General',
-    description: 'Other useful applications',
+    get displayName() {
+      return t('General');
+    },
+    get description() {
+      return t('Other useful applications');
+    },
     icon: Sparkles,
     theme: {
       primary: 'text-text-primary',

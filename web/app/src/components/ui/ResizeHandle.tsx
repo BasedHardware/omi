@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 interface ResizeHandleProps {
   onResize: (delta: number) => void;
@@ -76,7 +77,7 @@ export function ResizeHandle({
       )}
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize panel"
+      aria-label={t('Resize panel')}
     >
       {/* Wider hit area */}
       <div className="absolute inset-y-0 -left-1.5 -right-1.5" />

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, AlertCircle, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { t, tn } from '@/lib/i18n';
 
 interface NoDueDatePromptProps {
   items: ActionItem[];
@@ -52,7 +53,7 @@ export function NoDueDatePrompt({
       <button
         onClick={() => setDismissed(true)}
         className="absolute top-2 right-2 p-1 rounded text-text-quaternary hover:text-text-secondary hover:bg-white/10 transition-colors"
-        aria-label="Dismiss"
+        aria-label={t('Dismiss')}
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -64,10 +65,10 @@ export function NoDueDatePrompt({
         </div>
         <div>
           <h3 className="text-sm font-medium text-text-primary">
-            {count} task{count !== 1 ? 's' : ''} need{count === 1 ? 's' : ''} a date
+            {tn(count, '{count} task needs a date', '{count} tasks need a date')}
           </h3>
           <p className="text-xs text-text-tertiary mt-0.5">
-            Set due dates to stay organized
+            {t('Set due dates to stay organized')}
           </p>
         </div>
       </div>
@@ -83,7 +84,7 @@ export function NoDueDatePrompt({
           )}
         >
           <Calendar className="w-3.5 h-3.5" />
-          Set all to Today
+          {t('Set all to Today')}
         </button>
         <button
           onClick={onSetAllTomorrow}
@@ -93,7 +94,7 @@ export function NoDueDatePrompt({
             'hover:bg-bg-quaternary transition-colors',
           )}
         >
-          Tomorrow
+          {t('Tomorrow')}
         </button>
         <div className="relative">
           <button
@@ -104,7 +105,7 @@ export function NoDueDatePrompt({
               'hover:bg-bg-quaternary transition-colors',
             )}
           >
-            Pick date...
+            {t('Pick date...')}
           </button>
 
           <AnimatePresence>
@@ -143,8 +144,7 @@ export function NoDueDatePrompt({
           'hover:text-white transition-colors',
         )}
       >
-        View these tasks
-        <ChevronRight className="w-3 h-3" />
+        {t('View these tasks')}<ChevronRight className="w-3 h-3" />
       </button>
 
       {/* Task previews */}
@@ -161,8 +161,8 @@ export function NoDueDatePrompt({
             ))}
             {items.length > 3 && (
               <div className="text-xs text-text-quaternary pl-2">
-                +{items.length - 3} more
-              </div>
+                {t('+{count} more', { count: items.length - 3 })}
+            </div>
             )}
           </div>
         </div>

@@ -1,3 +1,5 @@
+import { formatLocale } from '@/lib/i18n';
+
 /**
  * Format large numbers into human-readable strings
  * @example formatInstalls(1500) => "1.5K"
@@ -8,7 +10,7 @@ export const formatInstalls = (num: number): string => {
     return num.toString();
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(formatLocale(), {
     notation: 'compact',
     compactDisplay: 'short',
   }).format(num);

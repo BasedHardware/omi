@@ -3,6 +3,7 @@
 import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TopicHighlight } from '@/types/recap';
+import { t } from '@/lib/i18n';
 
 interface HighlightsSectionProps {
   highlights: TopicHighlight[];
@@ -80,7 +81,11 @@ function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCard
               'text-text-quaternary hover:text-text-primary',
               'hover:bg-white/[0.14] transition-colors',
             )}
-            title={`${highlight.conversation_ids!.length} conversation${highlight.conversation_ids!.length > 1 ? 's' : ''}`}
+            title={
+              highlight.conversation_ids!.length === 1
+                ? t('{count} conversation', { count: 1 })
+                : t('{count} conversations', { count: highlight.conversation_ids!.length })
+            }
           >
             <MessageSquare className="w-3.5 h-3.5" />
           </button>

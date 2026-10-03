@@ -9,6 +9,7 @@ import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { cn } from '@/lib/utils';
 import type { OmiNotification } from '@/types/notification';
 import { PanelReveal } from '@/components/ui/PanelReveal';
+import { t } from '@/lib/i18n';
 
 /**
  * Group notifications by date (Today, Yesterday, Earlier)
@@ -19,9 +20,9 @@ function groupNotificationsByDate(notifications: OmiNotification[]) {
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
   const groups: { label: string; notifications: OmiNotification[] }[] = [
-    { label: 'Today', notifications: [] },
-    { label: 'Yesterday', notifications: [] },
-    { label: 'Earlier', notifications: [] },
+    { label: t('Today'), notifications: [] },
+    { label: t('Yesterday'), notifications: [] },
+    { label: t('Earlier'), notifications: [] },
   ];
 
   notifications.forEach((notification) => {
@@ -103,9 +104,9 @@ export function NotificationCenter() {
                     <Bell className="w-4 h-4 text-text-primary" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-text-primary">Notifications</h2>
+                    <h2 className="font-semibold text-text-primary">{t('Notifications')}</h2>
                     {unreadCount > 0 && (
-                      <p className="text-xs text-text-tertiary">{unreadCount} unread</p>
+                      <p className="text-xs text-text-tertiary">{t('{count} unread', { count: unreadCount })}</p>
                     )}
                   </div>
                 </div>
@@ -114,8 +115,8 @@ export function NotificationCenter() {
                     <button
                       onClick={markAllAsRead}
                       className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Mark all as read"
-                      title="Mark all as read"
+                      aria-label={t('Mark all as read')}
+                      title={t('Mark all as read')}
                     >
                       <CheckCheck className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
                     </button>
@@ -124,8 +125,8 @@ export function NotificationCenter() {
                     <button
                       onClick={clearAllNotifications}
                       className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Clear all notifications"
-                      title="Clear all notifications"
+                      aria-label={t('Clear all notifications')}
+                      title={t('Clear all notifications')}
                     >
                       <Trash2 className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
                     </button>
@@ -133,7 +134,7 @@ export function NotificationCenter() {
                   <button
                     onClick={closeNotificationCenter}
                     className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                    aria-label="Close notifications"
+                    aria-label={t('Close notifications')}
                   >
                     <X className="w-5 h-5 text-text-secondary" />
                   </button>
@@ -151,10 +152,10 @@ export function NotificationCenter() {
                       <Bell className="w-8 h-8 text-text-quaternary" />
                     </div>
                     <p className="text-text-secondary font-medium mb-1">
-                      No notifications yet
+                      {t('No notifications yet')}
                     </p>
                     <p className="text-sm text-text-quaternary">
-                      When you receive notifications, they&apos;ll appear here
+                      {t('When you receive notifications, they\'ll appear here')}
                     </p>
                   </div>
                 ) : (

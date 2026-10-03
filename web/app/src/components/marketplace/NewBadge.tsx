@@ -1,6 +1,7 @@
 'use client';
 
 import { type Plugin } from './types';
+import { t } from '@/lib/i18n';
 
 // Utility function to check if an app is new (within 7 days)
 export function isNewApp(plugin: Plugin): boolean {
@@ -40,7 +41,7 @@ export function NewBadge({ plugin, className = '' }: NewBadgeProps) {
     <span
       className={`inline-flex items-center rounded-full bg-[#6C8EEF]/15 px-2 py-0.5 text-xs font-medium text-[#6C8EEF] ${className}`}
     >
-      NEW
+      {t('NEW')}
     </span>
   );
 }

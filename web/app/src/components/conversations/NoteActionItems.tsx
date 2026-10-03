@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import type { StructuredActionItem } from '@/types/conversation';
 import { noteAvatarToneIndex, noteParticipantInitials } from '@/lib/meetingNotes';
+import { t, uiLocale } from '@/lib/i18n';
 
 const AVATAR_TONES = [
   'bg-blue-500/15 text-blue-300',
@@ -21,7 +22,9 @@ export function ActionItemRow({ item }: { item: StructuredActionItem }) {
   const context = typeof item.context === 'string' ? item.context.trim() : '';
   const dueDate = item.due_at ? new Date(item.due_at) : null;
   const dueLabel =
-    dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString() : '';
+    dueDate && !Number.isNaN(dueDate.getTime())
+      ? dueDate.toLocaleDateString(uiLocale())
+      : '';
 
   return (
     <li
@@ -74,7 +77,11 @@ export function ActionItemRow({ item }: { item: StructuredActionItem }) {
               </span>
             )}
             {context && <span className="max-w-full truncate">{context}</span>}
-            {dueLabel && <span>Due: {dueLabel}</span>}
+            {dueLabel && (
+              <span>
+                {t('Due:')} {dueLabel}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -87,7 +94,7 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
 
   return (
     <section className="mt-8">
-      <h2 className="mb-2 text-lg font-semibold text-text-primary">Next steps</h2>
+      <h2 className="mb-2 text-lg font-semibold text-text-primary">{t('Next steps')}</h2>
       <ul className="divide-y divide-bg-quaternary/50">
         {items.map((item, index) => {
           const owner = typeof item.owner_name === 'string' ? item.owner_name.trim() : '';
@@ -95,7 +102,7 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
           const dueDate = item.due_at ? new Date(item.due_at) : null;
           const dueLabel =
             dueDate && !Number.isNaN(dueDate.getTime())
-              ? dueDate.toLocaleDateString()
+              ? dueDate.toLocaleDateString(uiLocale())
               : '';
           return (
             <li key={index} className="flex items-start gap-3 py-2.5">
@@ -121,7 +128,7 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
                 )}
               </span>
               <span className="sr-only">
-                {item.completed ? 'Completed' : 'Not completed'}
+                {item.completed ? t('Completed') : t('Not completed')}
               </span>
               <div className="min-w-0 flex-1">
                 <span
@@ -151,7 +158,11 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
                       </span>
                     )}
                     {context && <span className="max-w-full truncate">{context}</span>}
-                    {dueLabel && <span>Due: {dueLabel}</span>}
+                    {dueLabel && (
+                      <span>
+                        {t('Due:')} {dueLabel}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -182,7 +193,10 @@ export function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
           </div>
         </div>
         <span className="text-sm text-text-tertiary">
-          {completedCount}/{items.length} completed
+          {t('{completed}/{total} completed', {
+            completed: completedCount,
+            total: items.length,
+          })}
         </span>
       </div>
 

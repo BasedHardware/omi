@@ -1,6 +1,7 @@
 'use client';
 
 import { LayoutGrid } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 function AppCardSkeleton() {
   return (
@@ -32,7 +33,7 @@ export default function AppsLoading() {
               <LayoutGrid className="w-5 h-5 text-text-secondary" />
             </div>
             <h1 className="text-xl font-semibold text-text-primary font-display">
-              Connectors
+              {t('Connectors')}
             </h1>
           </div>
         </div>

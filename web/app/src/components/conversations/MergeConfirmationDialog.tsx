@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Merge, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Conversation } from '@/types/conversation';
+import { t, tn } from '@/lib/i18n';
 
 interface MergeConfirmationDialogProps {
   isOpen: boolean;
@@ -44,7 +45,11 @@ function detectTimeGaps(conversations: Conversation[]): string | null {
   }
 
   if (maxGapHours > 0) {
-    return `These conversations have gaps of up to ${maxGapHours} hour${maxGapHours > 1 ? 's' : ''} between them.`;
+    return tn(
+      maxGapHours,
+      'These conversations have gaps of up to {count} hour between them.',
+      'These conversations have gaps of up to {count} hours between them.',
+    );
   }
 
   return null;
@@ -111,13 +116,12 @@ export function MergeConfirmationDialog({
 
             {/* Title */}
             <h2 className="text-lg font-semibold text-text-primary mb-2">
-              Merge {conversations.length} conversations?
-            </h2>
+              {t('Merge {count} conversations?', { count: conversations.length })}
+          </h2>
 
             {/* Description */}
             <p className="text-sm text-text-secondary mb-4">
-              The selected conversations will be combined into a single conversation. This
-              action is processed in the background.
+              {t('The selected conversations will be combined into a single conversation. This action is processed in the background.')}
             </p>
 
             {/* Time gap warning */}
@@ -145,7 +149,7 @@ export function MergeConfirmationDialog({
                 >
                   <span className="text-lg">{conv.structured.emoji || '💬'}</span>
                   <span className="text-sm text-text-primary truncate flex-1">
-                    {conv.structured.title || 'Untitled'}
+                    {conv.structured.title || t('Untitled')}
                   </span>
                 </div>
               ))}
@@ -164,7 +168,7 @@ export function MergeConfirmationDialog({
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={onConfirm}
@@ -183,7 +187,7 @@ export function MergeConfirmationDialog({
                 ) : (
                   <Merge className="w-4 h-4" />
                 )}
-                <span>{isLoading ? 'Merging...' : 'Merge'}</span>
+                <span>{isLoading ? t('Merging...') : t('Merge')}</span>
               </button>
             </div>
           </motion.div>

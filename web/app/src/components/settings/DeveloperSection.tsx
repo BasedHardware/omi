@@ -19,6 +19,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t, tc, uiLocale, tn } from '@/lib/i18n';
 import type { DeveloperApiKey, McpApiKey, DeveloperWebhooks } from '@/types/user';
 import { Toggle } from './SettingsToggle';
 import { Card } from './SettingsCard';
@@ -109,15 +110,15 @@ function CreateApiKeyDialog({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">
-                  API Key Created
+                  {t('API Key Created')}
                 </h3>
                 <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
+                  {t("Save this key now - you won't see it again!")}
                 </p>
               </div>
             </div>
             <div className="mb-4 rounded-xl bg-bg-tertiary p-4">
-              <p className="mb-2 text-xs text-text-tertiary">Your API Key</p>
+              <p className="mb-2 text-xs text-text-tertiary">{t('Your API Key')}</p>
               <code className="break-all font-mono text-sm text-text-primary">
                 {createdKey.key}
               </code>
@@ -133,20 +134,22 @@ function CreateApiKeyDialog({
                 )}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
+                {copied ? t('Copied!') : t('Copy Key')}
               </button>
               <button
                 onClick={handleClose}
                 className="rounded-xl bg-bg-tertiary px-4 py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
               >
-                Done
+                {t('Done')}
               </button>
             </div>
           </div>
         ) : (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-primary">Create API Key</h3>
+              <h3 className="text-lg font-semibold text-text-primary">
+                {t('Create API Key')}
+              </h3>
               <button
                 onClick={handleClose}
                 className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
@@ -158,13 +161,13 @@ function CreateApiKeyDialog({
             <div className="space-y-6">
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                  Key Name
+                  {t('Key Name')}
                 </label>
                 <input
                   type="text"
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., My App Integration"
+                  placeholder={t('e.g., My App Integration')}
                   className="w-full rounded-xl border border-white/[0.06] bg-bg-tertiary px-4 py-3 text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
                 />
               </div>
@@ -172,7 +175,7 @@ function CreateApiKeyDialog({
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <label className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                    Permissions
+                    {t('Permissions')}
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -184,7 +187,7 @@ function CreateApiKeyDialog({
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
-                      Read Only
+                      {t('Read Only')}
                     </button>
                     <button
                       onClick={selectFullAccess}
@@ -195,7 +198,7 @@ function CreateApiKeyDialog({
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
-                      Full Access
+                      {t('Full Access')}
                     </button>
                   </div>
                 </div>
@@ -209,14 +212,16 @@ function CreateApiKeyDialog({
                         key={resource}
                         className="flex items-center justify-between rounded-xl bg-bg-tertiary p-3"
                       >
-                        <span className="text-sm text-text-primary">{resource}</span>
+                        <span className="text-sm text-text-primary">{t(resource)}</span>
                         <div className="flex overflow-hidden rounded-lg bg-bg-quaternary">
                           <button
                             onClick={() =>
                               setScopes({ ...scopes, [readKey]: !scopes[readKey] })
                             }
                             aria-pressed={scopes[readKey]}
-                            aria-label={`${resource} read permission`}
+                            aria-label={t('{resource} read permission', {
+                              resource: t(resource),
+                            })}
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[readKey]
@@ -224,14 +229,16 @@ function CreateApiKeyDialog({
                                 : 'text-text-quaternary hover:text-text-secondary',
                             )}
                           >
-                            R
+                            {tc('scope', 'R')}
                           </button>
                           <button
                             onClick={() =>
                               setScopes({ ...scopes, [writeKey]: !scopes[writeKey] })
                             }
                             aria-pressed={scopes[writeKey]}
-                            aria-label={`${resource} write permission`}
+                            aria-label={t('{resource} write permission', {
+                              resource: t(resource),
+                            })}
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[writeKey]
@@ -239,7 +246,7 @@ function CreateApiKeyDialog({
                                 : 'text-text-quaternary hover:text-text-secondary',
                             )}
                           >
-                            W
+                            {tc('scope', 'W')}
                           </button>
                         </div>
                       </div>
@@ -247,7 +254,9 @@ function CreateApiKeyDialog({
                   })}
                 </div>
                 <p className="mt-2 text-xs text-text-quaternary">
-                  R = Read, W = Write. Select at least one permission to create a key.
+                  {t(
+                    'R = Read, W = Write. Select at least one permission to create a key.',
+                  )}
                 </p>
               </div>
 
@@ -261,7 +270,7 @@ function CreateApiKeyDialog({
                     : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
                 )}
               >
-                {isCreating ? 'Creating...' : 'Create Key'}
+                {isCreating ? t('Creating...') : t('Create Key')}
               </button>
             </div>
           </div>
@@ -342,27 +351,27 @@ export function DeveloperSection({
   const webhookTypes = [
     {
       id: 'memory_created',
-      label: 'Conversation Events',
-      description: 'New conversation created',
+      label: t('Conversation Events'),
+      description: t('New conversation created'),
       icon: MessageSquare,
     },
     {
       id: 'transcript_received',
-      label: 'Real-time Transcript',
-      description: 'Transcript received',
+      label: t('Real-time Transcript'),
+      description: t('Transcript received'),
       icon: FileText,
     },
     {
       id: 'audio_bytes',
-      label: 'Audio Bytes',
-      description: 'Audio data received',
+      label: t('Audio Bytes'),
+      description: t('Audio data received'),
       icon: Radio,
       hasDelay: true,
     },
     {
       id: 'day_summary',
-      label: 'Day Summary',
-      description: 'Summary generated',
+      label: t('Day Summary'),
+      description: t('Summary generated'),
       icon: Calendar,
     },
   ];
@@ -373,14 +382,14 @@ export function DeveloperSection({
       <div id="api-keys" className="scroll-mt-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            Developer API Keys
+            {t('Developer API Keys')}
           </h3>
           <button
             onClick={() => setShowApiKeyDialog(true)}
             className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-white/[0.14]"
           >
             <Plus className="h-3 w-3" />
-            Create Key
+            {t('Create Key')}
           </button>
         </div>
         <Card>
@@ -401,20 +410,24 @@ export function DeveloperSection({
                       </code>
                       {apiKey.scopes && apiKey.scopes.length > 0 && (
                         <span className="rounded bg-white/[0.08] px-2 py-0.5 text-xs text-text-secondary">
-                          {apiKey.scopes.length} scopes
+                          {tn(apiKey.scopes.length, '{count} scope', '{count} scopes')}
                         </span>
                       )}
                     </div>
                     <p className="mt-1 text-xs text-text-quaternary">
-                      Created {new Date(apiKey.created_at).toLocaleDateString()}
+                      {t('Created {date}', {
+                        date: new Date(apiKey.created_at).toLocaleDateString(uiLocale()),
+                      })}
                       {apiKey.last_used_at &&
-                        ` • Last used ${new Date(
-                          apiKey.last_used_at,
-                        ).toLocaleDateString()}`}
+                        ` • ${t('Last used {date}', {
+                          date: new Date(apiKey.last_used_at).toLocaleDateString(
+                            uiLocale(),
+                          ),
+                        })}`}
                     </p>
                   </div>
                   <button
-                    aria-label={`Delete API key ${apiKey.name}`}
+                    aria-label={t('Delete API key {name}', { name: apiKey.name })}
                     onClick={() => onDeleteApiKey(apiKey.id)}
                     className="rounded-lg p-2 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-400"
                   >
@@ -428,17 +441,17 @@ export function DeveloperSection({
               role="alert"
               className="space-y-3 py-6 text-center text-sm text-text-secondary"
             >
-              <p>Failed to load API keys. Please try again.</p>
+              <p>{t('Failed to load API keys. Please try again.')}</p>
               <button
                 onClick={onRetryApiKeys}
                 className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
               >
-                Retry
+                {t('Retry')}
               </button>
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-text-quaternary">
-              No API keys created yet
+              {t('No API keys created yet')}
             </p>
           )}
         </Card>
@@ -457,7 +470,7 @@ export function DeveloperSection({
       <div id="webhooks" className="scroll-mt-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            Webhooks
+            {t('Webhooks')}
           </h3>
           <a
             href="https://docs.omi.me/doc/developer/apps/Introduction"
@@ -465,7 +478,7 @@ export function DeveloperSection({
             rel="noopener noreferrer"
             className="text-xs text-text-secondary transition-colors hover:text-text-secondary"
           >
-            Docs ↗
+            {t('Docs ↗')}
           </a>
         </div>
         <Card>
@@ -495,7 +508,7 @@ export function DeveloperSection({
                       </div>
                       <Toggle
                         enabled={isEnabled}
-                        label={`${webhook.label} webhook`}
+                        label={t('{label} webhook', { label: webhook.label })}
                         onChange={(enabled) =>
                           onWebhookChange(
                             webhook.id,
@@ -541,7 +554,7 @@ export function DeveloperSection({
                                 audioBytesDelay,
                               )
                             }
-                            placeholder="Interval (seconds)"
+                            placeholder={t('Interval (seconds)')}
                             className="w-full rounded-lg border border-white/[0.06] bg-bg-tertiary px-3 py-2 text-sm text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
                           />
                         )}
@@ -558,7 +571,7 @@ export function DeveloperSection({
       {/* Data Management */}
       <div id="data-management" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-          Data Management
+          {t('Data Management')}
         </h3>
         <Card>
           <button
@@ -580,12 +593,12 @@ export function DeveloperSection({
             </div>
             <div className="flex-1 text-left">
               <p className="font-medium">
-                {isExporting ? 'Exporting...' : 'Export All Data'}
+                {isExporting ? t('Exporting...') : t('Export All Data')}
               </p>
               <p className="text-xs text-text-tertiary">
                 {isExporting
-                  ? 'This may take a moment'
-                  : 'Export conversations to a JSON file'}
+                  ? t('This may take a moment')
+                  : t('Export conversations to a JSON file')}
               </p>
             </div>
             {!isExporting && <ExternalLink className="h-4 w-4 text-text-quaternary" />}
@@ -600,9 +613,9 @@ export function DeveloperSection({
               <Network className="h-5 w-5 text-red-400" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-medium">Delete Knowledge Graph</p>
+              <p className="font-medium">{t('Delete Knowledge Graph')}</p>
               <p className="text-xs text-text-tertiary">
-                Clear all nodes and connections
+                {t('Clear all nodes and connections')}
               </p>
             </div>
             <Trash2 className="h-4 w-4 text-text-quaternary" />
@@ -620,7 +633,7 @@ export function DeveloperSection({
         >
           <div className="flex items-center gap-3">
             <BookOpen className="h-5 w-5 text-text-tertiary" />
-            <span>API Documentation</span>
+            <span>{t('API Documentation')}</span>
           </div>
           <ExternalLink className="h-4 w-4" />
         </a>
@@ -648,20 +661,20 @@ export function DeveloperSection({
                 <AlertTriangle className="h-6 w-6 text-red-400" />
               </div>
               <h3 className="text-lg font-semibold text-text-primary">
-                Delete Knowledge Graph?
+                {t('Delete Knowledge Graph?')}
               </h3>
             </div>
             <p className="mb-6 text-sm text-text-secondary">
-              This will delete all derived knowledge graph data (nodes and connections).
-              Your original memories will remain safe. The graph will be rebuilt over
-              time.
+              {t(
+                'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time.',
+              )}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteGraphDialog(false)}
                 className="flex-1 rounded-xl bg-bg-tertiary py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={() => {
@@ -670,7 +683,7 @@ export function DeveloperSection({
                 }}
                 className="flex-1 rounded-xl bg-red-500 py-3 text-white transition-colors hover:bg-red-600"
               >
-                Delete
+                {t('Delete')}
               </button>
             </div>
           </div>

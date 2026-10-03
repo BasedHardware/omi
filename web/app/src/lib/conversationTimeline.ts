@@ -2,6 +2,7 @@ import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 import { dayKeyOf, parseLocalDay } from '@/lib/localDay';
+import { t, formatLocale } from '@/lib/i18n';
 
 /**
  * A single tile in the Timeline gallery. Conversations and daily recaps share
@@ -45,10 +46,10 @@ export function dayLabel(date: Date, now: Date): string {
   const dayMs = 24 * 60 * 60 * 1000;
   const delta = Math.round((today.getTime() - subject.getTime()) / dayMs);
 
-  if (delta === 0) return 'Today';
-  if (delta === 1) return 'Yesterday';
+  if (delta === 0) return t('Today');
+  if (delta === 1) return t('Yesterday');
 
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

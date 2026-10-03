@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckSquare } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 function TaskCardSkeleton() {
   return (
@@ -41,7 +42,7 @@ export default function TasksLoading() {
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <CheckSquare className="w-5 h-5 text-text-secondary" />
           </div>
-          <h1 className="text-xl font-semibold text-text-primary font-display">Tasks</h1>
+          <h1 className="text-xl font-semibold text-text-primary font-display">{t('Tasks')}</h1>
         </div>
       </div>
 
@@ -82,12 +83,12 @@ export default function TasksLoading() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <TaskGroupSkeleton title="Overdue" count={2} />
-          <TaskGroupSkeleton title="Today" count={3} />
-          <TaskGroupSkeleton title="Tomorrow" count={2} />
-          <TaskGroupSkeleton title="This Week" count={4} />
-          <TaskGroupSkeleton title="Later" count={3} />
-          <TaskGroupSkeleton title="No Date" count={2} />
+          <TaskGroupSkeleton title={t('Overdue')} count={2} />
+          <TaskGroupSkeleton title={t('Today')} count={3} />
+          <TaskGroupSkeleton title={t('Tomorrow')} count={2} />
+          <TaskGroupSkeleton title={t('This Week')} count={4} />
+          <TaskGroupSkeleton title={t('Later')} count={3} />
+          <TaskGroupSkeleton title={t('No Date')} count={2} />
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { hostedMcpConfigJson, hostedMcpUrl } from '@/lib/mcpConfig';
 import { CLAUDE_CONNECTOR_OAUTH } from '@/lib/settingsSections';
 import type { McpApiKey } from '@/types/user';
 import { Card } from './SettingsCard';
+import { t, uiLocale } from '@/lib/i18n';
 
 // Create MCP Key Dialog
 function CreateMcpKeyDialog({
@@ -67,15 +68,15 @@ function CreateMcpKeyDialog({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">
-                  MCP Key Created
+                  {t('MCP Key Created')}
                 </h3>
                 <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
+                  {t("Save this key now - you won't see it again!")}
                 </p>
               </div>
             </div>
             <div className="mb-4 rounded-xl bg-bg-tertiary p-4">
-              <p className="mb-2 text-xs text-text-tertiary">Your MCP Key</p>
+              <p className="mb-2 text-xs text-text-tertiary">{t('Your MCP Key')}</p>
               <code className="break-all font-mono text-sm text-text-primary">
                 {createdKey.key}
               </code>
@@ -91,20 +92,22 @@ function CreateMcpKeyDialog({
                 )}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
+                {copied ? t('Copied!') : t('Copy Key')}
               </button>
               <button
                 onClick={handleClose}
                 className="rounded-xl bg-bg-tertiary px-4 py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
               >
-                Done
+                {t('Done')}
               </button>
             </div>
           </div>
         ) : (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-primary">Create MCP Key</h3>
+              <h3 className="text-lg font-semibold text-text-primary">
+                {t('Create MCP Key')}
+              </h3>
               <button
                 onClick={handleClose}
                 className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
@@ -115,13 +118,13 @@ function CreateMcpKeyDialog({
             <div className="space-y-4">
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                  Key Name
+                  {t('Key Name')}
                 </label>
                 <input
                   type="text"
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., Claude Code"
+                  placeholder={t('e.g., Claude Code')}
                   className="w-full rounded-xl border border-white/[0.06] bg-bg-tertiary px-4 py-3 text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
                 />
               </div>
@@ -135,7 +138,7 @@ function CreateMcpKeyDialog({
                     : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
                 )}
               >
-                {isCreating ? 'Creating...' : 'Create Key'}
+                {isCreating ? t('Creating...') : t('Create Key')}
               </button>
             </div>
           </div>
@@ -195,7 +198,7 @@ export function McpSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            MCP
+            {t('MCP')}
           </h3>
           <a
             href="https://docs.omi.me/doc/developer/MCP"
@@ -203,7 +206,7 @@ export function McpSection({
             rel="noopener noreferrer"
             className="text-xs text-text-secondary transition-colors hover:text-text-secondary"
           >
-            Docs ↗
+            {t('Docs ↗')}
           </a>
         </div>
         <button
@@ -211,7 +214,7 @@ export function McpSection({
           className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-white/[0.14]"
         >
           <Plus className="h-3 w-3" />
-          Create Key
+          {t('Create Key')}
         </button>
       </div>
 
@@ -234,13 +237,17 @@ export function McpSection({
                     </code>
                   </div>
                   <p className="mt-1 text-xs text-text-quaternary">
-                    Created {new Date(key.created_at).toLocaleDateString()}
+                    {t('Created {date}', {
+                      date: new Date(key.created_at).toLocaleDateString(uiLocale()),
+                    })}
                     {key.last_used_at &&
-                      ` • Last used ${new Date(key.last_used_at).toLocaleDateString()}`}
+                      ` • ${t('Last used {date}', {
+                        date: new Date(key.last_used_at).toLocaleDateString(uiLocale()),
+                      })}`}
                   </p>
                 </div>
                 <button
-                  aria-label={`Delete MCP key ${key.name}`}
+                  aria-label={t('Delete MCP key {name}', { name: key.name })}
                   onClick={() => onDeleteMcpKey(key.id)}
                   className="rounded-lg p-2 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-400"
                 >
@@ -254,17 +261,17 @@ export function McpSection({
             role="alert"
             className="space-y-3 py-6 text-center text-sm text-text-secondary"
           >
-            <p>Failed to load MCP keys. Please try again.</p>
+            <p>{t('Failed to load MCP keys. Please try again.')}</p>
             <button
               onClick={onRetry}
               className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
             >
-              Retry
+              {t('Retry')}
             </button>
           </div>
         ) : (
           <p className="py-6 text-center text-sm text-text-quaternary">
-            No MCP keys created yet
+            {t('No MCP keys created yet')}
           </p>
         )}
       </Card>
@@ -276,8 +283,8 @@ export function McpSection({
             <Terminal className="h-5 w-5 text-text-tertiary" />
           </div>
           <div>
-            <p className="font-medium text-text-primary">Claude Code</p>
-            <p className="text-xs text-text-tertiary">Add to ~/.claude.json</p>
+            <p className="font-medium text-text-primary">{t('Claude Code')}</p>
+            <p className="text-xs text-text-tertiary">{t('Add to ~/.claude.json')}</p>
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-[#0d0d0d] p-4 font-mono text-xs">
@@ -293,7 +300,7 @@ export function McpSection({
           )}
         >
           {copiedConfig ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          {copiedConfig ? 'Copied!' : 'Copy Config'}
+          {copiedConfig ? t('Copied!') : t('Copy Config')}
         </button>
       </Card>
 
@@ -304,9 +311,9 @@ export function McpSection({
             <Server className="h-5 w-5 text-text-tertiary" />
           </div>
           <div>
-            <p className="font-medium text-text-primary">MCP Server</p>
+            <p className="font-medium text-text-primary">{t('MCP Server')}</p>
             <p className="text-xs text-text-tertiary">
-              Connect ChatGPT, Codex, Claude, or any MCP client to your data
+              {t('Connect ChatGPT, Codex, Claude, or any MCP client to your data')}
             </p>
           </div>
         </div>
@@ -314,7 +321,7 @@ export function McpSection({
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-              Server URL
+              {t('Server URL')}
             </p>
             <button
               onClick={copyUrl}
@@ -333,10 +340,10 @@ export function McpSection({
 
           <div className="border-t border-white/[0.06] pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-              API Key Auth
+              {t('API Key Auth')}
             </p>
             <div className="flex items-center gap-4 text-sm">
-              <span className="text-text-tertiary">Header</span>
+              <span className="text-text-tertiary">{t('Header')}</span>
               <code className="font-mono text-xs text-text-quaternary">
                 Authorization: Bearer &lt;key&gt;
               </code>
@@ -345,23 +352,25 @@ export function McpSection({
 
           <div className="border-t border-white/[0.06] pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-              OAuth
+              {t('OAuth')}
             </p>
             <p className="mb-2 text-xs text-text-tertiary">
-              On claude.ai, add a custom connector and paste the server URL. If Claude
-              asks for an advanced OAuth Client ID, use the value below and leave the
-              secret blank — never use your MCP API key as an OAuth secret.
+              {t(
+                'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.',
+              )}
             </p>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-4">
-                <span className="w-24 text-text-tertiary">Client ID</span>
+                <span className="w-24 text-text-tertiary">{t('Client ID')}</span>
                 <code className="font-mono text-text-primary">
                   {CLAUDE_CONNECTOR_OAUTH.clientId}
                 </code>
               </div>
               <div className="flex items-center gap-4">
-                <span className="w-24 text-text-tertiary">Client Secret</span>
-                <span className="text-xs italic text-text-quaternary">Leave blank</span>
+                <span className="w-24 text-text-tertiary">{t('Client Secret')}</span>
+                <span className="text-xs italic text-text-quaternary">
+                  {t('Leave blank')}
+                </span>
               </div>
             </div>
           </div>
@@ -375,27 +384,25 @@ export function McpSection({
             <span className="text-lg font-semibold text-orange-400">C</span>
           </div>
           <div>
-            <p className="font-medium text-text-primary">Claude Desktop</p>
-            <p className="text-xs text-text-tertiary">Live MCP or memory pack</p>
+            <p className="font-medium text-text-primary">{t('Claude Desktop')}</p>
+            <p className="text-xs text-text-tertiary">{t('Live MCP or memory pack')}</p>
           </div>
         </div>
 
         <p className="mb-4 text-sm text-text-secondary">
-          Connect over MCP so Claude reads your memories live, or copy a memory pack. Each
-          field below maps to Claude&rsquo;s{' '}
-          <span className="text-text-tertiary">
-            Settings → Connectors → Add custom connector
-          </span>{' '}
-          form.
+          {t(
+            'Connect over MCP so Claude reads your memories live, or copy a memory pack. Each field below maps to Claude’s {path} form.',
+            { path: t('Settings → Connectors → Add custom connector') },
+          )}
         </p>
 
         <div className="space-y-3">
           {/* Field 1: Name → pastes into Claude's "Name" input */}
           <div>
             <p className="mb-1.5 text-xs font-medium text-text-tertiary">
-              1. Name{' '}
+              {t('1. Name')}{' '}
               <span className="font-normal text-text-secondary">
-                → Claude &quot;Name&quot;
+                {t('→ Claude "Name"')}
               </span>
             </p>
             <button
@@ -420,9 +427,9 @@ export function McpSection({
           {/* Field 2: Server URL → pastes into Claude's "Remote MCP server URL" input */}
           <div>
             <p className="mb-1.5 text-xs font-medium text-text-tertiary">
-              2. Remote MCP server URL{' '}
+              {t('2. Remote MCP server URL')}{' '}
               <span className="font-normal text-text-secondary">
-                → Claude &quot;Remote MCP server URL&quot;
+                {t('→ Claude "Remote MCP server URL"')}
               </span>
             </p>
             <button
@@ -447,9 +454,9 @@ export function McpSection({
           {/* Field 3: OAuth Client ID → pastes into Claude's Advanced "OAuth Client ID" */}
           <div>
             <p className="mb-1.5 text-xs font-medium text-text-tertiary">
-              3. OAuth Client ID{' '}
+              {t('3. OAuth Client ID')}{' '}
               <span className="font-normal text-text-secondary">
-                → Claude Advanced &quot;OAuth Client ID&quot;
+                {t('→ Claude Advanced "OAuth Client ID"')}
               </span>
             </p>
             <button
@@ -474,9 +481,9 @@ export function McpSection({
           {/* Field 4: OAuth Client Secret → pastes into Claude's Advanced "OAuth Client Secret" */}
           <div>
             <p className="mb-1.5 text-xs font-medium text-text-tertiary">
-              4. OAuth Client Secret{' '}
+              {t('4. OAuth Client Secret')}{' '}
               <span className="font-normal text-text-secondary">
-                → Claude Advanced &quot;OAuth Client Secret&quot;
+                {t('→ Claude Advanced "OAuth Client Secret"')}
               </span>
             </p>
             {claudeConnectorSecret ? (
@@ -499,7 +506,9 @@ export function McpSection({
               </button>
             ) : (
               <div className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-[#0d0d0d] p-3 opacity-60">
-                <span className="text-sm italic text-text-quaternary">Leave blank</span>
+                <span className="text-sm italic text-text-quaternary">
+                  {t('Leave blank')}
+                </span>
               </div>
             )}
           </div>
@@ -508,22 +517,25 @@ export function McpSection({
         <div className="mt-4 border-t border-white/[0.06] pt-4">
           <ol className="list-inside list-decimal space-y-1.5 text-xs text-text-tertiary">
             <li>
-              Open{' '}
+              {t('Open')}{' '}
               <span className="text-text-secondary">
-                claude.ai → Settings → Connectors → Add custom connector
+                {t('claude.ai → Settings → Connectors → Add custom connector')}
               </span>
             </li>
             <li>
-              Click each <span className="text-text-secondary">Copy</span> button above
-              and paste into the matching field
+              {t('Click each')} <span className="text-text-secondary">{t('Copy')}</span>{' '}
+              {t('button above and paste into the matching field')}
             </li>
             <li>
-              Under <span className="text-text-secondary">Advanced settings</span>, paste
-              OAuth Client ID + Secret
+              {t('Under')}{' '}
+              <span className="text-text-secondary">{t('Advanced settings')}</span>
+              {t(', paste OAuth Client ID + Secret')}
             </li>
             <li>
-              Click <span className="text-text-secondary">Add</span>, then{' '}
-              <span className="text-text-secondary">Connect</span>
+              {t('Click')} <span className="text-text-secondary">{t('Add')}
+            </span>
+              {t(', then')} <span className="text-text-secondary">{t('Connect')}
+            </span>
             </li>
           </ol>
         </div>

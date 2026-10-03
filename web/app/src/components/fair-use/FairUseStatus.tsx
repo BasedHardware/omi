@@ -6,25 +6,32 @@ import { ArrowLeft, RefreshCw, Loader2, Info, Copy, Check } from 'lucide-react';
 import { getFairUseStatus } from '@/lib/api';
 import type { FairUseStatus as FairUseStatusType } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 const STAGE_META: Record<
   string,
   { label: string; dot: string; text: string; bg: string }
 > = {
   warning: {
-    label: 'Warning',
+    get label() {
+      return t('Warning');
+    },
     dot: 'bg-amber-400',
     text: 'text-amber-400',
     bg: 'bg-amber-500/[0.08]',
   },
   throttle: {
-    label: 'Throttled',
+    get label() {
+      return t('Throttled');
+    },
     dot: 'bg-orange-400',
     text: 'text-orange-400',
     bg: 'bg-orange-500/[0.08]',
   },
   restrict: {
-    label: 'Restricted',
+    get label() {
+      return t('Restricted');
+    },
     dot: 'bg-red-400',
     text: 'text-red-400',
     bg: 'bg-red-500/[0.08]',
@@ -119,16 +126,16 @@ export function FairUseStatus() {
           >
             <ArrowLeft className="w-5 h-5 text-text-secondary" />
           </button>
-          <h1 className="text-xl font-semibold text-text-primary">Fair Use</h1>
+          <h1 className="text-xl font-semibold text-text-primary">{t('Fair Use')}</h1>
         </div>
         <div className="text-center py-8">
-          <p className="text-text-tertiary mb-4">Unable to load fair use status.</p>
+          <p className="text-text-tertiary mb-4">{t('Unable to load fair use status.')}</p>
           <button
             onClick={loadStatus}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.08] text-text-secondary hover:bg-white/[0.14] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
-            Retry
+            {t('Retry')}
           </button>
         </div>
       </div>
@@ -150,12 +157,12 @@ export function FairUseStatus() {
           >
             <ArrowLeft className="w-5 h-5 text-text-secondary" />
           </button>
-          <h1 className="text-xl font-semibold text-text-primary">Fair Use</h1>
+          <h1 className="text-xl font-semibold text-text-primary">{t('Fair Use')}</h1>
         </div>
         <button
           onClick={loadStatus}
           className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-          title="Refresh"
+          title={t('Refresh')}
         >
           <RefreshCw className="w-4 h-4 text-text-tertiary" />
         </button>
@@ -197,23 +204,23 @@ export function FairUseStatus() {
           )}
         >
           <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-4">
-            Speech Usage
+            {t('Speech Usage')}
           </h3>
           <div className="space-y-4">
             <UsageBar
-              label="Today"
+              label={t('Today')}
               hours={status.speech_hours_today}
               limit={status.limits.daily_hours}
               pct={status.usage_pct.daily}
             />
             <UsageBar
-              label="3-Day Rolling"
+              label={t('3-Day Rolling')}
               hours={status.speech_hours_3day}
               limit={status.limits.three_day_hours}
               pct={status.usage_pct.three_day}
             />
             <UsageBar
-              label="Weekly Rolling"
+              label={t('Weekly Rolling')}
               hours={status.speech_hours_weekly}
               limit={status.limits.weekly_hours}
               pct={status.usage_pct.weekly}
@@ -257,7 +264,7 @@ export function FairUseStatus() {
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
-                  Daily Transcription
+                  {t('Daily Transcription')}
                 </span>
                 <span className="text-sm font-medium text-text-primary">
                   {usedMin}m / {limitMin}m
@@ -271,7 +278,7 @@ export function FairUseStatus() {
               </div>
               {exhausted && (
                 <p className="text-xs font-medium text-red-400 mt-2">
-                  Budget exhausted — transcription paused
+                  {t('Budget exhausted — transcription paused')}
                 </p>
               )}
               {resetLabel && (
@@ -291,12 +298,9 @@ export function FairUseStatus() {
 
       {/* About footnote */}
       <div className="px-1 pt-2">
-        <h4 className="text-xs font-medium text-text-quaternary mb-1">About Fair Use</h4>
+        <h4 className="text-xs font-medium text-text-quaternary mb-1">{t('About Fair Use')}</h4>
         <p className="text-xs text-text-quaternary/70 leading-relaxed">
-          Omi is designed for personal conversations, meetings, and live interactions.
-          Usage is measured by real speech time detected, not connection time. If usage
-          significantly exceeds normal patterns for non-personal content, adjustments may
-          apply.
+          {t('Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.')}
         </p>
       </div>
     </div>

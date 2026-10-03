@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface MonthCalendarProps {
   items: ActionItem[];
@@ -79,7 +80,7 @@ export function MonthCalendar({
     return days;
   }, [currentMonth]);
 
-  const monthName = currentMonth.toLocaleDateString('en-US', {
+  const monthName = currentMonth.toLocaleDateString(formatLocale(), {
     month: 'long',
     year: 'numeric',
   });
@@ -130,7 +131,7 @@ export function MonthCalendar({
               'transition-colors',
             )}
           >
-            Today
+            {t('Today')}
           </button>
           <button
             onClick={goToPreviousMonth}

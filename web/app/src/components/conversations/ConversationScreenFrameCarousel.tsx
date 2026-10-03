@@ -4,6 +4,7 @@ import Image from '@tschk/moonshine-next/image';
 import { Image as ImageIcon, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationScreenFrame } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface ConversationScreenFrameCarouselProps {
   frames: ConversationScreenFrame[];
@@ -36,7 +37,7 @@ export function ConversationScreenFrameCarousel({
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <ImageIcon className="h-4 w-4 text-text-primary" />
-          <h3 className="text-sm font-medium text-text-primary">Screenshots</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('Screenshots')}</h3>
           <span className="text-xs text-text-quaternary">{frames.length}</span>
         </div>
         {onRequestDeleteAll && (
@@ -45,7 +46,7 @@ export function ConversationScreenFrameCarousel({
             onClick={onRequestDeleteAll}
             className="text-xs text-text-quaternary transition-colors hover:text-error"
           >
-            Clear all
+            {t('Clear all')}
           </button>
         )}
       </div>
@@ -65,7 +66,9 @@ export function ConversationScreenFrameCarousel({
                 type="button"
                 onClick={() => onFrameClick(index)}
                 className="absolute inset-0"
-                aria-label={frame.caption || `Screenshot ${index + 1}`}
+                aria-label={
+                  frame.caption || t('Screenshot {value}', { value: index + 1 })
+                }
               >
                 <Image
                   src={frame.thumbnail_url}
@@ -86,7 +89,7 @@ export function ConversationScreenFrameCarousel({
                     event.stopPropagation();
                     onRequestDeleteFrame(frame.id);
                   }}
-                  aria-label="Delete screenshot"
+                  aria-label={t('Delete screenshot')}
                   className={cn(
                     'absolute -right-1 -top-1 h-5 w-5 rounded-full',
                     'border border-bg-tertiary bg-bg-primary',

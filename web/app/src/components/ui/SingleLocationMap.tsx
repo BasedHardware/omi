@@ -4,6 +4,7 @@ import { ExternalLink } from 'lucide-react';
 import { StaticMapPreview } from '@/components/ui/StaticMapPreview';
 import { googleMapsUrl } from '@/lib/staticMap';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 interface SingleLocationMapProps {
   latitude: number;
@@ -26,7 +27,9 @@ export default function SingleLocationMap({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={
-        address ? `Open ${address} in Google Maps` : 'Open location in Google Maps'
+        address
+          ? t('Open {address} in Google Maps', { address })
+          : t('Open location in Google Maps')
       }
       className={cn('group relative block', className)}
       style={{
@@ -37,7 +40,7 @@ export default function SingleLocationMap({
       <StaticMapPreview pins={[{ latitude, longitude }]} alt="" />
       <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-bg-secondary/90 px-2 py-1 text-xs text-text-secondary backdrop-blur-sm transition-colors group-hover:text-text-primary">
         <ExternalLink className="h-3 w-3" />
-        <span>Open in maps</span>
+        <span>{t('Open in maps')}</span>
       </span>
     </a>
   );
