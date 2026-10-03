@@ -128,6 +128,8 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
     app.include_router(desktop_task_gate.router)
+    # V2 feed/outcome routes and producers belong to main.py. This companion
+    # service has only retired proactivity routes and needs no v2 Redis binding.
     app.include_router(retired_desktop_proactivity.router)
     app.include_router(desktop_experiments.router)
     app.include_router(jit_ledger_snapshot.router)

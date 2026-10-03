@@ -542,7 +542,6 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
             '\nREDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest'
             '\nREDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest'
             '\nREDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest'
-            '\nPROACTIVITY_REDIS_PASSWORD=REDIS_DB_PASSWORD:latest'
         )
     assert _MODULE['_render_secrets'](desktop['secrets']) == expected_secrets
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
@@ -737,14 +736,15 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
 
 
-def test_phase_a_v2_redis_is_explicit_on_all_hosts_and_preserves_reservation_bindings():
+def test_phase_a_v2_redis_is_explicit_on_producer_hosts_and_preserves_reservation_bindings():
     prod = _MANIFEST['environments']['prod']
     gke = [prod['llm_gateway'], prod['gke']['backend-listen'], prod['gke']['pusher']]
-    run = [prod['desktop_backend'], *prod['cloud_run']['services'].values()]
-    for host in gke + run:
+    run = list(prod['cloud_run']['services'].values())
+    for host in gke + run + [prod['desktop_backend']]:
         assert host['env']['MENTOR_PIPELINE']['value'] == 'cohort'
-        assert host['env']['PROACTIVITY_REDIS_PORT']['value'] == '13151'
         assert not any(k.startswith('COMMITMENT_FOLLOWUP_TASKS_') for k in host['env'])
+    for host in gke + run:
+        assert host['env']['PROACTIVITY_REDIS_PORT']['value'] == '13151'
     for host in gke:
         assert host['env']['PROACTIVITY_REDIS_HOST']['config_map'] == {
             'name': 'prod-omi-backend-config',
@@ -760,6 +760,8 @@ def test_phase_a_v2_redis_is_explicit_on_all_hosts_and_preserves_reservation_bin
         )
         assert host['secrets']['PROACTIVITY_REDIS_PASSWORD'] == {'secret': 'REDIS_DB_PASSWORD', 'version': 'latest'}
     desktop = prod['desktop_backend']
+    for block in ('env', 'secrets'):
+        assert not any(key.startswith('PROACTIVITY_REDIS_') for key in desktop[block])
     for key in ('HOST', 'PORT', 'PASSWORD'):
         assert desktop['secrets'][f'REDIS_DB_{key}'] == {'secret': f'DESKTOP_REDIS_DB_{key}', 'version': 'latest'}
         assert f'REDIS_DB_{key}' not in desktop['env']

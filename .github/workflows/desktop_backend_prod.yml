@@ -242,7 +242,6 @@ jobs:
           for secret in \
             DESKTOP_GEMINI_API_KEY \
             DESKTOP_FIREBASE_API_KEY \
-            REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_HOST \
             DESKTOP_REDIS_DB_PORT \
@@ -380,8 +379,6 @@ jobs:
             MENTOR_PIPELINE=cohort
             POSTHOG_HOST=https://us.posthog.com
             OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
-            PROACTIVITY_REDIS_HOST=redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
-            PROACTIVITY_REDIS_PORT=13151
           secrets: |
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
@@ -389,7 +386,6 @@ jobs:
             REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
             REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
             REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
-            PROACTIVITY_REDIS_PASSWORD=REDIS_DB_PASSWORD:latest
             FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest

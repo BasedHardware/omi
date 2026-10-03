@@ -385,12 +385,6 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
-      PROACTIVITY_REDIS_PORT:
-        value: '13151'
-        category: service_discovery
-      PROACTIVITY_REDIS_HOST:
-        value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
-        category: service_discovery
       OMI_CUSTOMER_DATA_PROJECT:
         value: based-hardware
         category: service_discovery
@@ -423,9 +417,6 @@ overlay:
         version: latest
       REDIS_DB_PASSWORD:
         secret: DESKTOP_REDIS_DB_PASSWORD
-        version: latest
-      PROACTIVITY_REDIS_PASSWORD:
-        secret: REDIS_DB_PASSWORD
         version: latest
       GEMINI_API_KEY:
         secret: DESKTOP_GEMINI_API_KEY
