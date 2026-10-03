@@ -252,3 +252,93 @@ def test_module_entry_point_honors_json_parser_error_contract(tmp_path) -> None:
     payload = json.loads(result.stderr)
     assert "error" in payload
     assert "Missing argument 'QUESTION'" in payload["error"]
+
+
+def test_timeout_flag_custom_value_reaches_client(config_path, cli_runner, monkeypatch, respx_mock) -> None:
+    """Issue #13218 / #13225: --timeout SECONDS forwards httpx.Timeout(t, connect=min(t, 10.0)) to OmiClient."""
+    import httpx
+
+    from omi_cli.client import OmiClient
+    from tests.conftest import FAKE_API_BASE
+
+    captured_timeouts = []
+    original_init = OmiClient.__init__
+
+    def mock_init(self, *args, **kwargs):
+        captured_timeouts.append(kwargs.get("timeout"))
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(OmiClient, "__init__", mock_init)
+    monkeypatch.setenv("OMI_API_KEY", "omi_dev_" + ("a" * 32))
+    monkeypatch.setenv("OMI_API_BASE", FAKE_API_BASE)
+    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+
+    result = cli_runner.invoke(app, ["--timeout", "5.5", "--json", "memory", "list"])
+    assert result.exit_code == 0
+    assert len(captured_timeouts) == 1
+    t = captured_timeouts[0]
+    assert isinstance(t, httpx.Timeout)
+    assert t.read == 5.5
+    assert t.write == 5.5
+    assert t.pool == 5.5
+    assert t.connect == 5.5
+
+
+def test_timeout_flag_connect_timeout_capped_at_ten(config_path, cli_runner, monkeypatch, respx_mock) -> None:
+    """When --timeout > 10s, connect timeout is clamped to min(timeout, 10.0)."""
+    import httpx
+
+    from omi_cli.client import OmiClient
+    from tests.conftest import FAKE_API_BASE
+
+    captured_timeouts = []
+    original_init = OmiClient.__init__
+
+    def mock_init(self, *args, **kwargs):
+        captured_timeouts.append(kwargs.get("timeout"))
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(OmiClient, "__init__", mock_init)
+    monkeypatch.setenv("OMI_API_KEY", "omi_dev_" + ("a" * 32))
+    monkeypatch.setenv("OMI_API_BASE", FAKE_API_BASE)
+    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+
+    result = cli_runner.invoke(app, ["--timeout", "45", "--json", "memory", "list"])
+    assert result.exit_code == 0
+    assert len(captured_timeouts) == 1
+    t = captured_timeouts[0]
+    assert isinstance(t, httpx.Timeout)
+    assert t.read == 45.0
+    assert t.write == 45.0
+    assert t.connect == 10.0
+
+
+def test_timeout_flag_default_omitted_leaves_timeout_none(config_path, cli_runner, monkeypatch, respx_mock) -> None:
+    """When --timeout is omitted, timeout=None is passed so OmiClient uses DEFAULT_TIMEOUT."""
+    from omi_cli.client import OmiClient
+    from tests.conftest import FAKE_API_BASE
+
+    captured_timeouts = []
+    original_init = OmiClient.__init__
+
+    def mock_init(self, *args, **kwargs):
+        captured_timeouts.append(kwargs.get("timeout"))
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(OmiClient, "__init__", mock_init)
+    monkeypatch.setenv("OMI_API_KEY", "omi_dev_" + ("a" * 32))
+    monkeypatch.setenv("OMI_API_BASE", FAKE_API_BASE)
+    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+
+    result = cli_runner.invoke(app, ["--json", "memory", "list"])
+    assert result.exit_code == 0
+    assert len(captured_timeouts) == 1
+    assert captured_timeouts[0] is None
+
+
+@pytest.mark.parametrize("bad_val", ["0", "-1", "-0.5"])
+def test_timeout_flag_invalid_value_rejected(config_path, cli_runner, bad_val) -> None:
+    """Non-positive timeout values must be rejected at option parsing time with exit code 2."""
+    result = cli_runner.invoke(app, ["--timeout", bad_val, "memory", "list"])
+    assert result.exit_code == 2
+    assert "Invalid value for '--timeout'" in result.output or "smaller than the minimum" in result.output
