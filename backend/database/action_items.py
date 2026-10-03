@@ -1173,6 +1173,12 @@ def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = 
 # *****************************
 
 
+def _purge_proactivity_source(uid: str, item_id: str) -> None:
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='action_item', source_id=item_id, firestore_client=db)
+
+
 def delete_action_item(uid: str, action_item_id: str) -> bool:
     """
     Delete an action item.
@@ -1189,10 +1195,12 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Check if exists
     if not action_item_ref.get().exists:
+        _purge_proactivity_source(uid, action_item_id)
         return False
 
     # Delete the document
     action_item_ref.delete()
+    _purge_proactivity_source(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1226,6 +1234,8 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    for item_id in action_item_ids:
+        _purge_proactivity_source(uid, item_id)
     bump_action_items_list_version(uid)
     return list(action_item_ids)
 
@@ -1250,9 +1260,11 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
 
     for doc in docs:
         batch.delete(doc.reference)
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1263,6 +1275,8 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     if count > 0:
         batch.commit()
 
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
 
@@ -1288,6 +1302,7 @@ def retire_action_items_for_conversation(
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1304,6 +1319,7 @@ def retire_action_items_for_conversation(
                 'updated_at': now,
             },
         )
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1312,6 +1328,8 @@ def retire_action_items_for_conversation(
             count = 0
     if count > 0:
         batch.commit()
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
     return total

@@ -34,6 +34,27 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'proactivity_feed_state_created',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_producer_cohort',
+        'proactivity_items',
+        'COLLECTION_GROUP',
+        (
+            _asc('producer'),
+            _asc('created_at'),
+            _asc('acted_count'),
+            _asc('charged_micro_usd'),
+            _asc('delivered_count'),
+            _asc('negative_count'),
+            _asc('unknown_count'),
+            _asc('__name__'),
+        ),
+    ),
     # I024: database.conversations.get_conversations_count; macOS
     # LiveConversationRemoteDataSource.count builds folder + starred + day bounds
     # on GET /v1/conversations/count. Reachability report 871737adf7e87104.

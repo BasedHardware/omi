@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from llm_gateway.gateway.proactivity_budget import current_attempt, execute_budgeted_provider
 from llm_gateway.gateway.accounting import (
     AttemptTrace,
     ProviderResponseMetadata,
@@ -116,6 +117,8 @@ async def execute_chat_completion(
     attempt_trace: AttemptTrace | None = None,
     max_provider_attempts: int | None = None,
 ) -> ExecutorResult:
+    if current_attempt() is not None:
+        max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
@@ -277,6 +280,19 @@ async def execute_systemone(
 
     validated = resolved_route.validated_request
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            raise GatewayInvalidRequestError('proactivity attempt already consumed')
+        response = await execute_budgeted_provider(
+            request=request,
+            provider_ref=provider_ref,
+            route=route,
+            credentials=credential_context,
+            provider_call=create_systemone,
+            timeout_ms=route.timeouts.request_ms,
+            attempt_trace=attempt_trace,
+        )
+        return dict(response.response)
     try:
         # The provider timeout bounds per-phase httpx inactivity, not total
         # elapsed time: a trickled response body can hold the lane's worker
@@ -587,6 +603,23 @@ async def _attempt_provider(
     Returns ``(response, None)`` on success, or ``(None, error)`` if all
     attempts fail.
     """
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            return None, GatewayInvalidRequestError('proactivity attempt already consumed')
+        request = _provider_request(resolved_route, provider_ref, route=route)
+        try:
+            response = await execute_budgeted_provider(
+                request=request,
+                provider_ref=provider_ref,
+                route=route,
+                credentials=credential_context,
+                provider_call=provider.create_chat_completion,
+                timeout_ms=int((deadline_monotonic - monotonic()) * 1000),
+                attempt_trace=attempt_trace,
+            )
+            return response, None
+        except GatewayError as exc:
+            return None, exc
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):

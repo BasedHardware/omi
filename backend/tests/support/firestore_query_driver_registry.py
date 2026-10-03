@@ -124,6 +124,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.proactivity.cohort_query': 'b14c1c6f3a2f47db38dd468da1bf6b51054d27e6418d813a614cc5b9e1a7a698',
+    'database.proactivity.feed_query': '9426ea3253186857c638371d1bcebb7007b92a9430aaad1db5e49e96465ddb84',
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
@@ -2442,5 +2444,52 @@ _add(
         domains={'donor_id': [None, 'donor-1']},
         setup=_refresh_seed,
         patchers=(_redis_noop('database.action_item_refresh.bump_action_items_list_version'),),
+    )
+)
+
+# Proactivity v2: real serving builders, empty owner-safe page and mature cohort.
+_add(
+    DriverEntry(
+        'database.proactivity.list_feed',
+        base={'uid': UID},
+        neutrals={
+            'limit': _LIMIT,
+            'cursor': ('', 'first page; keyset does not alter index shape'),
+            'now': (T0, 'fixed UTC observation time'),
+        },
+        setup=_seed(f'users/{UID}', {'subscription': {'plan': 'basic'}}),
+    )
+)
+_add(
+    DriverEntry(
+        'database.proactivity.refresh_health',
+        base={'name': 'commitment_followup'},
+        neutrals={'now': (T0, 'fixed UTC cohort boundary')},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.proactivity.feed_query',
+        covered_by=('database.proactivity.list_feed',),
+        reason='Query builder consumed by the serving parent',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.proactivity.feed_query'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.proactivity.cohort_query',
+        covered_by=('database.proactivity.refresh_health',),
+        reason='Query builder consumed by the serving parent',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.proactivity.cohort_query'],
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'database.proactivity.purge_source_items',
+        base={'uid': UID, 'source_kind': 'action_item', 'source_id': 'item-1'},
     )
 )

@@ -24,6 +24,7 @@ from llm_gateway.gateway.accounting import (
     jit_gateway_receipt_sse_frame,
     openai_usage_from_sse_payload,
 )
+from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
@@ -110,7 +111,10 @@ async def create_chat_completion(
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
         )
+        proactivity = context_from_request(request, caller, accounting_context)
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
+        if proactivity is not None and is_streaming:
+            raise GatewayInvalidRequestError('proactivity requires a nonstreaming exclusive budget')
         if is_streaming:
             return await _streaming_response(
                 resolved_route,
@@ -121,12 +125,13 @@ async def create_chat_completion(
                 accounting_context=accounting_context,
                 attempt_trace=attempt_trace,
             )
-        result = await execute_chat_completion(
-            resolved_route,
-            credentials,
-            provider_registry,
-            attempt_trace=attempt_trace,
-        )
+        with attempt_scope(proactivity):
+            result = await execute_chat_completion(
+                resolved_route,
+                credentials,
+                provider_registry,
+                attempt_trace=attempt_trace,
+            )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
             lambda: observe_success(

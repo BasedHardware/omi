@@ -29,6 +29,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    proactivity,
     chat,
     firmware,
     static_map,
@@ -209,6 +210,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(proactivity.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)

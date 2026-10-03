@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 3,
+  "catalog_revision": 4,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -709,5 +709,17 @@
       "product_id": "prod_Uu6nrHIKWnnTWL",
       "plan_id": "unlimited_v2"
     }
-  ]
+  ],
+  "proactivity_v2_budget": {
+    "fraction_basis_points": 1000,
+    "days_per_month": 30,
+    "monthly_reference_cents": {
+      "basic": 0,
+      "operator": 4900,
+      "architect": 19900,
+      "unlimited_v2": 2999,
+      "unlimited": 2000,
+      "plus": 2000
+    }
+  }
 }

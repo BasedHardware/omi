@@ -99,6 +99,13 @@ class _FakeCollectionReference:
     def limit(self, count: int) -> _FakeQuery:
         return _FakeQuery(self, count)
 
+    def where(self, *, filter):
+        assert filter.field_path == 'source_id' and filter.op_string == '=='
+        # This cascade fixture has no proactive items; the live query is covered
+        # by the proactivity emulator proof, including matching-item purges.
+        assert self.path.endswith('/proactivity_items') and not self.documents
+        return _FakeQuery(self)
+
     def stream(self):
         return _FakeQuery(self).stream()
 
