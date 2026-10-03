@@ -75,6 +75,22 @@ class _Syncs {
   final phone = _PhoneSync();
 }
 
+class _QuietCapture extends CaptureProvider {
+  _QuietCapture()
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+              initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  bool get pendantCaptureVerified => false;
+}
+
 CaptureProvider _hermeticCapture() {
   return CaptureProvider(
     walService: _WalService(),
@@ -208,6 +224,32 @@ void main() {
     // repeats the same sentence instead of the stale Listening placeholder.
     expect(find.textContaining('recording continues on device and will process later'), findsNWidgets(2));
     expect(find.textContaining('a transcript will appear here'), findsNothing);
+  });
+
+  testWidgets('quiet unverified pendant retains live page transcript and Pause with a neutral header', (tester) async {
+    final capture = _QuietCapture();
+    addTearDown(capture.dispose);
+    capture.segments = [
+      TranscriptSegment(
+          id: 'quiet-segment',
+          text: 'Keep this transcript.',
+          speaker: 'SPEAKER_0',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 3,
+          translations: []),
+    ];
+    await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
+    expect(find.textContaining('Keep this transcript.', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('capture_pause_button')), findsOneWidget);
+    expect(find.textContaining('Listening'), findsNothing);
+    expect(find.text('Pendant'), findsOneWidget);
+    await tester.pump(const Duration(minutes: 1));
+    expect(find.textContaining('Keep this transcript.', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('capture_pause_button')), findsOneWidget);
+    expect(find.textContaining('Listening'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('a healthy session keeps the Listening placeholder', (tester) async {
