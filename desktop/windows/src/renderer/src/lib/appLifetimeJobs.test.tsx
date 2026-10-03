@@ -10,6 +10,13 @@ import { render, cleanup, act } from '@testing-library/react'
 // would silently stop them in production. This test fails the moment the app shell
 // stops starting them.
 
+const startAiProfileHost = vi.fn()
+const startRewindEmbedHost = vi.fn()
+const startPiMonoAuthHost = vi.fn()
+vi.mock('./aiProfileHost', () => ({ startAiProfileHost: () => startAiProfileHost() }))
+vi.mock('./rewindEmbedHost', () => ({ startRewindEmbedHost: () => startRewindEmbedHost() }))
+vi.mock('./piMonoAuthHost', () => ({ startPiMonoAuthHost: () => startPiMonoAuthHost() }))
+
 const maybeBuildLocalGraph = vi.fn()
 const maybeStartScreenSynthesis = vi.fn()
 const maybeStartRetentionSweep = vi.fn()
@@ -41,6 +48,13 @@ describe('useAppLifetimeJobs — the shell owns the background engines', () => {
     render(<Shell />)
     expect(maybeStartScreenSynthesis).toHaveBeenCalledTimes(1)
     expect(maybeStartRetentionSweep).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts retained profile, Rewind embedding and managed-chat token relays without Insight', () => {
+    render(<Shell />)
+    expect(startAiProfileHost).toHaveBeenCalledTimes(1)
+    expect(startRewindEmbedHost).toHaveBeenCalledTimes(1)
+    expect(startPiMonoAuthHost).toHaveBeenCalledTimes(1)
   })
 
   it('defers the knowledge-graph build past the entrance animations (1800ms)', () => {

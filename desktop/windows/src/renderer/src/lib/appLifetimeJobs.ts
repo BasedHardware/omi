@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+import { startAiProfileHost } from './aiProfileHost'
+import { startRewindEmbedHost } from './rewindEmbedHost'
+import { startPiMonoAuthHost } from './piMonoAuthHost'
 import { maybeBuildLocalGraph } from './kgSynthesis'
 import { maybeStartScreenSynthesis } from './screenSynthesis'
 import { maybeStartRetentionSweep } from './retentionSweep'
@@ -20,6 +23,11 @@ const GRAPH_BUILD_DELAY_MS = 1800
 export function useAppLifetimeJobs(): void {
   useEffect(() => {
     const t = setTimeout(() => void maybeBuildLocalGraph(), GRAPH_BUILD_DELAY_MS)
+    // These KEEP services used to bootstrap through the misnamed Insight engine.
+    // Their idempotent token relays belong to the signed-in shell independently.
+    startAiProfileHost()
+    startRewindEmbedHost()
+    startPiMonoAuthHost()
     maybeStartScreenSynthesis()
     maybeStartRetentionSweep()
     return () => clearTimeout(t)
