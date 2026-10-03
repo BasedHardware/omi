@@ -71,13 +71,13 @@ extension BLEScanner : CBCentralManagerDelegate {
          Discovered 5A7F01CA-CD35-37C4-38DA-0B6464CD94FA - nil
          Adv data: ["kCBAdvDataServiceUUIDs": <__NSArrayM 0x301c2c390>(
          Device Information,
-         19B10000-E8F2-537E-4F6C-D104768A1214
+         814B9B7C-25FD-4ACD-8604-D28877BEEE6D
          )
          , "kCBAdvDataRxSecondaryPHY": 0, "kCBAdvDataRxPrimaryPHY": 129, "kCBAdvDataIsConnectable": 1, "kCBAdvDataTimestamp": 742038261.889917]
          Discovered 5A7F01CA-CD35-37C4-38DA-0B6464CD94FA - Optional("Friend")
          Adv data: ["kCBAdvDataIsConnectable": 1, "kCBAdvDataLocalName": Friend, "kCBAdvDataRxPrimaryPHY": 129, "kCBAdvDataTimestamp": 742038261.891065, "kCBAdvDataServiceUUIDs": <__NSArrayM 0x301c2a580>(
          Device Information,
-         19B10000-E8F2-537E-4F6C-D104768A1214
+         814B9B7C-25FD-4ACD-8604-D28877BEEE6D
          )
          , "kCBAdvDataRxSecondaryPHY": 0]
          */

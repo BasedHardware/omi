@@ -8,7 +8,7 @@ enum DeviceUUIDs {
 
   enum Omi {
     // Main service
-    static let mainService = CBUUID(string: "19B10000-E8F2-537E-4F6C-D104768A1214")
+    static let mainService = CBUUID(string: "814B9B7C-25FD-4ACD-8604-D28877BEEE6D")
     static let audioDataStream = CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214")
     static let audioCodec = CBUUID(string: "19B10002-E8F2-537E-4F6C-D104768A1214")
     static let imageDataStream = CBUUID(string: "19B10005-E8F2-537E-4F6C-D104768A1214")

@@ -11,4 +11,4 @@ def test_ble_module_importable_without_adapter():
     from omi.constants import AUDIO_DATA_UUID, OMI_SERVICE_UUID
 
     assert AUDIO_DATA_UUID.startswith("19b10001")
-    assert OMI_SERVICE_UUID.startswith("19b10000")
+    assert OMI_SERVICE_UUID.startswith("814b9b7c")

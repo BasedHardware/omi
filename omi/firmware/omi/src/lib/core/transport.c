@@ -126,14 +126,12 @@ K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
 //
 // Service and Characteristic
 //
-// Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
+// Audio service with UUID 814B9B7C-25FD-4ACD-8604-D28877BEEE6D
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
 // - Audio codec (UUID 19B10002-E8F2-537E-4F6C-D104768A1214) to send audio codec type (read)
-// TODO: The current audio service UUID seems to come from old Intel sample code,
-// we should change it to UUID 814b9b7c-25fd-4acd-8604-d28877beee6d
 static struct bt_uuid_128 audio_service_uuid =
-    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x814B9B7C, 0x25FD, 0x4ACD, 0x8604, 0xD28877BEEE6D));
 static struct bt_uuid_128 audio_characteristic_data_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid =

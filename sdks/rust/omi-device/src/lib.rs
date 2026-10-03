@@ -2,7 +2,7 @@
 
 use std::{error::Error, fmt};
 
-pub const OMI_SERVICE: &str = "19b10000-e8f2-537e-4f6c-d104768a1214";
+pub const OMI_SERVICE: &str = "814b9b7c-25fd-4acd-8604-d28877beee6d";
 pub const AUDIO_DATA_CHARACTERISTIC: &str = "19b10001-e8f2-537e-4f6c-d104768a1214";
 pub const AUDIO_CODEC_CHARACTERISTIC: &str = "19b10002-e8f2-537e-4f6c-d104768a1214";
 pub const BUTTON_SERVICE: &str = "23ba7924-0000-1000-7450-346eac492e92";

@@ -1,6 +1,6 @@
 /** Omi device BLE protocol helpers. See sdks/device/PROTOCOL.md */
 
-export const OMI_SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
+export const OMI_SERVICE_UUID = '814b9b7c-25fd-4acd-8604-d28877beee6d';
 export const AUDIO_DATA_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
 export const AUDIO_CODEC_UUID = '19b10002-e8f2-537e-4f6c-d104768a1214';
 export const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb';

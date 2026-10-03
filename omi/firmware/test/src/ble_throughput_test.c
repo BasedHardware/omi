@@ -43,7 +43,7 @@ static struct k_thread logger_thread_data;
 
 // Use the same UUIDs as transport.c for compatibility with clients
 static struct bt_uuid_128 test_audio_service_uuid =
-    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x814B9B7C, 0x25FD, 0x4ACD, 0x8604, 0xD28877BEEE6D));
 static struct bt_uuid_128 test_audio_characteristic_data_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 

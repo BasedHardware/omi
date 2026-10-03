@@ -6,7 +6,7 @@
 #[cfg(feature = "ble")]
 pub mod ble;
 
-pub const SERVICE_UUID: &str = "19b10000-e8f2-537e-4f6c-d104768a1214";
+pub const SERVICE_UUID: &str = "814b9b7c-25fd-4acd-8604-d28877beee6d";
 pub const AUDIO_DATA_UUID: &str = "19b10001-e8f2-537e-4f6c-d104768a1214";
 pub const AUDIO_CODEC_UUID: &str = "19b10002-e8f2-537e-4f6c-d104768a1214";
 pub const BATTERY_SERVICE_UUID: &str = "0000180f-0000-1000-8000-00805f9b34fb";
