@@ -126,3 +126,20 @@ different ring generation that the phone never received. The fix:
 
 Server-side "stored" receipts and repair; phone-mic capture; Limitless firmware. The app may still fix
 Limitless's app-side ACK ordering (ACK only after fsync). No live packet format change.
+
+## 5. Clarifications from the firmware implementation (draft #20450)
+
+- **Opt-in ACK:** `CMD_CUSTODY_ENABLE` succeeds with `[0x01, 0x00, requested_caps & 0x0F]`. Only bit
+  0x02 is a per-connection grant. Connect, disconnect and transport shutdown revoke it. INFO reports
+  supported capabilities, not the current grant.
+- **`live_index` counts BLE fragments, not Opus frames.** The live audio header is
+  `[packet_index u16 LE][fragment_index u8][bytes]`; `packet_index` increments per fragment, and
+  `fragment_index` restarts at each frame. A mark's `live_index` is the exclusive next fragment counter
+  after the last fragment of the last complete frame in the committed prefix, modulo 65536. The app
+  fails closed: no advance on a counter gap, an ambiguous wrap, or a fragmented frame.
+- **Marks are suppressed, not continuous.** The firmware emits marks only for a contiguous,
+  successfully queued live prefix on the current grant. Offline, unsubscribed, failed-live or dropped
+  records break the run, and marks stay suppressed until READ plus a durable ADVANCE covers the earlier
+  non-live records. A missing mark means retain and re-download. Do not assume a fixed mark cadence.
+- **Uptime-flagged timestamps:** bit 31 (`0x80000000`) of a record timestamp means the low 31 bits are
+  seconds since boot (RTC unset), not epoch UTC. The app reads such records as "no usable time".
