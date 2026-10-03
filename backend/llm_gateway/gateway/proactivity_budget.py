@@ -212,6 +212,11 @@ async def execute_budgeted_provider(
         outcome='success',
         error_class='none',
         metadata=response.accounting,
+        usage_status=(
+            UsageStatus.CONFIRMED
+            if response.accounting.usage is not None and response.accounting.billable_usage_complete
+            else UsageStatus.INDETERMINATE
+        ),
     )
     event = build_accounting_event(context.accounting, attempt)
     try:

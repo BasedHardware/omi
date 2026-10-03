@@ -14,7 +14,7 @@ Adding a producer means a registration row and its event-driven caller.
 
 All v2 generation and delivery require server-resolved `proactivity_v2=true`.
 Model-driven work is paid-only in practice: free/basic has a zero-dollar cap.
-Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=v2`.
+Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=v2` or `cohort` (server-side per-user selection).
 Daily recap generation, scheduling, storage and routes remain outside this budget;
 interesting-memory review remains unchanged. Neither becomes a v2 model producer
 in this build. Task follow-ups never create, complete or modify a task themselves.
@@ -502,7 +502,7 @@ or enablement require explicit coordinator action with new version/evidence.
 | Control | Authority / default |
 | --- | --- |
 | `proactivity_v2` | Server PostHog exposure flag; absent/unknown/error = off for generation and push; no UID bypass. |
-| `MENTOR_PIPELINE` | Server env `legacy|v2`, default legacy; invalid denies mentor invocation. Mentor owner implements exclusive dispatch; v2 failure never falls back to legacy automatically. |
+| `MENTOR_PIPELINE` | Server env `legacy|v2|cohort`, default legacy; cohort resolves the same server-side `proactivity_v2` flag/client/cache as admission: true selects v2, false/unknown/error selects unchanged legacy; invalid denies mentor invocation. Mentor owner implements exclusive dispatch; v2 failure never falls back to legacy automatically. |
 | Producer registration / health | Provisional targets permit enablement; durable kill overrides registry enabled. |
 | User producer preference | Explicit false wins every admission/publication/push check. |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Must be true for v2; existing sink semantics unchanged for other traffic. |
@@ -569,9 +569,9 @@ revisions cannot publish a follow-up. Missing queue bindings keep scheduling off
 | Host / role | Required bindings before cohort enablement |
 | --- | --- |
 | Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; `POSTHOG_PROJECT_API_KEY` (or `POSTHOG_API_KEY`) and matching `POSTHOG_HOST`; integrated routes and registry. |
-| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=v2` only on the explicitly selected rollout; working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
+| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` for a per-user rollout (true `proactivity_v2` selects v2; false/unknown/error retains legacy), or `v2` only for a host whose mentor users are all enabled; working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
 | Task create/update/reminder hosts and commitment callback worker | All five queue/project/location bindings above, plus the same PostHog, customer-data and gateway bindings on the worker. Propagate enqueue bindings to every host that invokes reminder scheduling, not just the callback host. |
-| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **`MENTOR_PIPELINE=v2` for mentor admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
+| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` (or host-wide `v2`) selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
 | Mobile, macOS, Windows | Updated generated clients and consumers, ordinary authenticated backend routing, existing notification preferences/permissions. No local flag or UID bypass grants server admission. Live listen sockets carry identity-only v2 wakeups; all desktop content is fetched through the feed. Offline sockets catch up through foreground/active polling. |
 
 Create the PostHog **`proactivity_v2`** boolean flag in the same project used by
@@ -800,3 +800,13 @@ Producer history/outcomes use three declared serving indexes. The existing
 client-local reminder scheduling boundary also enqueues one-shot Cloud Tasks due
 wakes; no polling cron is added. Producer details and remaining coordinator decisions are in `PRODUCERS.md`;
 the integrated deployment checklist is the Enablement prerequisites section above.
+
+Final review accounting/delivery/recovery contract: v2 settlement requires complete raw
+billable input and output counts, non-negative integers, valid cache/reasoning
+subsets and consistent totals when reported. Incomplete/invalid receipts keep the
+full reservation as unknown and reject publication; legacy accounting stays unchanged.
+Mentor replies require a confirmed persisted chat-message/item association or prior
+confirmed exposure, never feed availability or FCM acceptance alone. Follow-up
+pre-claim infrastructure failures return 503; five-minute abandoned claims may
+resume only without a durable attempt, otherwise reconcile failed with money retained
+and no provider replay. See PRODUCERS.md for callback recovery and cohort selection.

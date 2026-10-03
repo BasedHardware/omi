@@ -22,6 +22,7 @@ from llm_gateway.gateway.accounting import (
     cache_requested_for_anthropic_request,
     cache_write_ttl_for_anthropic_request,
     cache_requested_for_openai_request,
+    complete_openai_billable_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -333,6 +334,7 @@ class OpenAICompatibleChatCompletionProvider:
         return ProviderResponse(
             response=parsed,
             accounting=ProviderResponseMetadata(
+                billable_usage_complete=complete_openai_billable_usage(usage_raw),
                 usage=(
                     ProviderUsage(
                         prompt_tokens=input_tokens,
@@ -342,7 +344,7 @@ class OpenAICompatibleChatCompletionProvider:
                     )
                     if isinstance(raw_input, int) and not isinstance(raw_input, bool) and raw_input >= 0
                     else None
-                )
+                ),
             ),
         )
 

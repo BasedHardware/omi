@@ -20,7 +20,15 @@ def query_for(store, item):
 def test_first_mentor_thread_reply_within_24h_credited_once(store, monkeypatch):
     item = ready(store, producer='conversation_mentor_v2')
     row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
-    row['push_accepted_at'] = NOW
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
     monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
     monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
     mapping.record_mentor_reply('u', firestore_client=store)
@@ -34,7 +42,15 @@ def test_first_mentor_thread_reply_within_24h_credited_once(store, monkeypatch):
 def test_mentor_reply_after_24h_no_credit(store, monkeypatch):
     item = ready(store, producer='conversation_mentor_v2')
     row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
-    row['push_accepted_at'] = NOW
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
     monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(hours=24, seconds=1))
     monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
     mapping.record_mentor_reply('u', firestore_client=store)
@@ -114,9 +130,26 @@ def test_canonical_task_completion_observation_is_post_commit(monkeypatch):
 def test_mentor_reply_can_prove_exposure_when_push_was_denied(store, monkeypatch):
     item = ready(store, producer='conversation_mentor_v2')
     row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
-    row['feed_available_at'] = NOW
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
     monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
     monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
     mapping.record_mentor_reply('u', firestore_client=store)
     row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
     assert row['delivered'] and row['acted_24h']
+
+
+def test_server_reducer_refuses_reply_without_persisted_chat_or_exposure(store):
+    import pytest
+    from config.proactivity_v2 import ProactivityDenied
+
+    item = ready(store, producer='conversation_mentor_v2')
+    with pytest.raises(ProactivityDenied, match='chat_unconfirmed'):
+        ledger.record_server_outcome(item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW)

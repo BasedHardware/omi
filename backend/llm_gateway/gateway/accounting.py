@@ -83,6 +83,8 @@ class ProviderResponseMetadata:
     provider_response_id: str | None = None
     actual_model_version: str | None = None
     traffic_type: str | None = None
+    # Raw receipt validity is consumed only by v2; legacy normalization is unchanged.
+    billable_usage_complete: bool = False
 
 
 @dataclass(frozen=True)
@@ -392,6 +394,7 @@ def openai_usage_from_response(
     usage = _openai_usage(raw_usage, cache_requested=cache_requested)
     return ProviderResponseMetadata(
         usage=usage,
+        billable_usage_complete=complete_openai_billable_usage(raw_usage),
         provider_response_id=_string_or_none(response.get('id')),
         actual_model_version=_string_or_none(response.get('model')),
         traffic_type=service_tier,
@@ -784,6 +787,35 @@ def jit_gateway_receipt_sse_frame(receipt: JITGatewayReceipt) -> bytes:
     """Frame the same receipt as a terminal SSE event before ``[DONE]``."""
     payload = json.dumps({'omi_jit_receipt': receipt.as_dict()}, separators=(',', ':'), sort_keys=True)
     return f'event: omi_jit_receipt\ndata: {payload}\n\n'.encode('utf-8')
+
+
+def complete_openai_billable_usage(raw: Mapping[str, Any]) -> bool:
+    """Validate raw components before permissive legacy normalization loses evidence."""
+    input_count = raw.get('prompt_tokens', raw.get('input_tokens'))
+    output_count = raw.get('completion_tokens', raw.get('output_tokens'))
+    if any(type(value) is not int or value < 0 for value in (input_count, output_count)):
+        return False
+    # Aliases, when both reported, must agree; an omitted total can be derived.
+    for names, count in (
+        (('prompt_tokens', 'input_tokens'), input_count),
+        (('completion_tokens', 'output_tokens'), output_count),
+    ):
+        for name in names:
+            if name in raw and (type(raw[name]) is not int or raw[name] != count):
+                return False
+    if 'total_tokens' in raw and (
+        type(raw['total_tokens']) is not int or raw['total_tokens'] != input_count + output_count
+    ):
+        return False
+    details = raw.get('prompt_tokens_details', raw.get('input_tokens_details', {}))
+    output_details = raw.get('completion_tokens_details', raw.get('output_tokens_details', {}))
+    if not isinstance(details, Mapping) or not isinstance(output_details, Mapping):
+        return False
+    cached, written = details.get('cached_tokens', 0), details.get('cache_write_tokens', 0)
+    reasoning = output_details.get('reasoning_tokens', 0)
+    if any(type(value) is not int or value < 0 for value in (cached, written, reasoning)):
+        return False
+    return cached + written <= input_count and reasoning <= output_count
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:

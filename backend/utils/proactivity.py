@@ -44,6 +44,25 @@ def enabled(uid: str) -> bool:
     return flags.get('proactivity_v2') is True
 
 
+def mentor_pipeline(uid: str) -> str:
+    """Resolve one exclusive mentor lane using the admission flag client/cache."""
+    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
+    if pipeline != 'cohort':
+        return pipeline
+    try:
+        return 'v2' if enabled(uid) else 'legacy'
+    except Exception:
+        record_fallback(
+            component='other',
+            from_mode='mentor_cohort',
+            to_mode='legacy',
+            reason='other',
+            outcome='recovered',
+            log=logger,
+        )
+        return 'legacy'
+
+
 def _admit(uid: str, producer: str) -> None:
     producer_for(producer)
     if not enabled(uid):
@@ -51,7 +70,7 @@ def _admit(uid: str, producer: str) -> None:
     client = ledger.client_or_default()
     user, _ = ledger.read_owner(client, uid)
     if producer == 'conversation_mentor_v2':
-        if os.getenv('MENTOR_PIPELINE', 'legacy') != 'v2' or user.get('mentor_notification_frequency', 0) <= 0:
+        if mentor_pipeline(uid) != 'v2' or user.get('mentor_notification_frequency', 0) <= 0:
             raise ProactivityDenied('disabled')
     cap, pending = daily_cap(active_plan(user, utc_now()))
     if pending:
@@ -140,6 +159,18 @@ async def publish_item(
         source_guard=source_guard,
     )
     logger.info('proactivity_v2_item_terminal producer=%s state=ready', item['producer'])
+
+
+async def record_mentor_chat(*, item: dict[str, Any], status: str, message_id: str = '') -> None:
+    await run_blocking(
+        db_executor,
+        ledger.record_mentor_chat,
+        uid=item['uid'],
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status=status,
+        message_id=message_id,
+    )
 
 
 async def record_usefulness_score(*, item: dict[str, Any], score: float) -> None:
