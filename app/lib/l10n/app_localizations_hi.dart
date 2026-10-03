@@ -12329,4 +12329,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'कनेक्शन जाँचें';
+
+  @override
+  String get forYou => 'आपके लिए';
+
+  @override
+  String get stopThese => 'इन्हें रोकें';
+
+  @override
+  String get dismiss => 'हटाएँ';
 }

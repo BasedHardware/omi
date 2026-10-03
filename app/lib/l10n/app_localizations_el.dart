@@ -12426,4 +12426,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Ελέγξτε τη σύνδεση';
+
+  @override
+  String get forYou => 'Για εσάς';
+
+  @override
+  String get stopThese => 'Διακοπή αυτών';
+
+  @override
+  String get dismiss => 'Απόρριψη';
 }

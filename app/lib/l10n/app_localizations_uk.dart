@@ -12374,4 +12374,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Вимкнути такі';
+
+  @override
+  String get dismiss => 'Приховати';
 }

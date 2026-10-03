@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Înapoi la curent",
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
-    "playbackAudioNetworkFailed": "Verificați conexiunea"
+    "playbackAudioNetworkFailed": "Verificați conexiunea",
+    "forYou": "Pentru tine",
+    "stopThese": "Oprește acestea",
+    "dismiss": "Ascunde"
 }

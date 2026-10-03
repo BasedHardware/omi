@@ -12280,4 +12280,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
+
+  @override
+  String get forYou => 'สำหรับคุณ';
+
+  @override
+  String get stopThese => 'หยุดรายการแบบนี้';
+
+  @override
+  String get dismiss => 'ปิด';
 }

@@ -12346,4 +12346,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'সংযোগ পরীক্ষা করুন';
+
+  @override
+  String get forYou => 'আপনার জন্য';
+
+  @override
+  String get stopThese => 'এগুলো বন্ধ করুন';
+
+  @override
+  String get dismiss => 'সরিয়ে দিন';
 }

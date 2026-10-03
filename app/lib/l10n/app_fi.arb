@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Takaisin nykyiseen",
     "playbackAudioUnavailable": "Ääni ei saatavilla",
     "playbackAudioLoadFailed": "Ääntä ei voitu ladata",
-    "playbackAudioNetworkFailed": "Tarkista yhteys"
+    "playbackAudioNetworkFailed": "Tarkista yhteys",
+    "forYou": "Sinulle",
+    "stopThese": "Lopeta nämä",
+    "dismiss": "Hylkää"
 }

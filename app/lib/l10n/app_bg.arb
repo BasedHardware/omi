@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Обратно към текущото",
     "playbackAudioUnavailable": "Аудиото е недостъпно",
     "playbackAudioLoadFailed": "Аудиото не можа да се зареди",
-    "playbackAudioNetworkFailed": "Проверете връзката"
+    "playbackAudioNetworkFailed": "Проверете връзката",
+    "forYou": "За вас",
+    "stopThese": "Спри тези",
+    "dismiss": "Скрий"
 }

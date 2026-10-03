@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Atpakaļ uz pašreizējo",
     "playbackAudioUnavailable": "Audio nav pieejams",
     "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
-    "playbackAudioNetworkFailed": "Pārbaudiet savienojumu"
+    "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
+    "forYou": "Jums",
+    "stopThese": "Apturēt šos",
+    "dismiss": "Paslēpt"
 }

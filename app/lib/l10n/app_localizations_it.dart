@@ -12415,4 +12415,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Controlla la connessione';
+
+  @override
+  String get forYou => 'Per te';
+
+  @override
+  String get stopThese => 'Interrompi questi';
+
+  @override
+  String get dismiss => 'Ignora';
 }

@@ -3853,5 +3853,8 @@
     "playbackBackToCurrent": "Geçerliye Dön",
     "playbackAudioUnavailable": "Ses Kullanılamıyor",
     "playbackAudioLoadFailed": "Ses Yüklenemedi",
-    "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin"
+    "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
+    "forYou": "Sizin İçin",
+    "stopThese": "Bunları Durdur",
+    "dismiss": "Gizle"
 }

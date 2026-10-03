@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Kembali ke Semasa",
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
-    "playbackAudioNetworkFailed": "Semak Sambungan"
+    "playbackAudioNetworkFailed": "Semak Sambungan",
+    "forYou": "Untuk Anda",
+    "stopThese": "Hentikan Ini",
+    "dismiss": "Tutup"
 }

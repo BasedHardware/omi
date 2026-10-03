@@ -12430,4 +12430,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'இணைப்பைச் சரிபார்க்கவும்';
+
+  @override
+  String get forYou => 'உங்களுக்காக';
+
+  @override
+  String get stopThese => 'இவற்றை நிறுத்து';
+
+  @override
+  String get dismiss => 'மறை';
 }

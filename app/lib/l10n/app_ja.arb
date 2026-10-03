@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "現在の位置に戻る",
     "playbackAudioUnavailable": "音声を利用できません",
     "playbackAudioLoadFailed": "音声を読み込めませんでした",
-    "playbackAudioNetworkFailed": "接続を確認してください"
+    "playbackAudioNetworkFailed": "接続を確認してください",
+    "forYou": "あなたへのおすすめ",
+    "stopThese": "この種類を停止",
+    "dismiss": "非表示"
 }

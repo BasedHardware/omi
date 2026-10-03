@@ -12350,4 +12350,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Zkontrolujte připojení';
+
+  @override
+  String get forYou => 'Pro vás';
+
+  @override
+  String get stopThese => 'Zastavit tyto';
+
+  @override
+  String get dismiss => 'Skrýt';
 }

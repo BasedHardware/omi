@@ -3853,5 +3853,8 @@
     "playbackBackToCurrent": "Kembali ke Saat Ini",
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuat",
-    "playbackAudioNetworkFailed": "Periksa Koneksi"
+    "playbackAudioNetworkFailed": "Periksa Koneksi",
+    "forYou": "Untuk Anda",
+    "stopThese": "Hentikan Ini",
+    "dismiss": "Tutup"
 }

@@ -12340,4 +12340,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
+
+  @override
+  String get forYou => 'Sulle';
+
+  @override
+  String get stopThese => 'Peata need';
+
+  @override
+  String get dismiss => 'Peida';
 }

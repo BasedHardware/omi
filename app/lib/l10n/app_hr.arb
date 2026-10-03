@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "Natrag na trenutno",
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
-    "playbackAudioNetworkFailed": "Provjerite vezu"
+    "playbackAudioNetworkFailed": "Provjerite vezu",
+    "forYou": "Za vas",
+    "stopThese": "Zaustavi ovo",
+    "dismiss": "Sakrij"
 }

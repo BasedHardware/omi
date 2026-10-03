@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "தற்போதையதற்குத் திரும்பு",
     "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
     "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
-    "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்"
+    "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
+    "forYou": "உங்களுக்காக",
+    "stopThese": "இவற்றை நிறுத்து",
+    "dismiss": "மறை"
 }

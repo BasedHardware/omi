@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "Назад да бягучага",
     "playbackAudioUnavailable": "Аўдыё недаступнае",
     "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
-    "playbackAudioNetworkFailed": "Праверце злучэнне"
+    "playbackAudioNetworkFailed": "Праверце злучэнне",
+    "forYou": "Для вас",
+    "stopThese": "Спыніць гэта",
+    "dismiss": "Схаваць"
 }

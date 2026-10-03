@@ -12378,4 +12378,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Праверце злучэнне';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Спыніць гэта';
+
+  @override
+  String get dismiss => 'Схаваць';
 }

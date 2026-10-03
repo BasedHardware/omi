@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "العودة إلى الحالي",
     "playbackAudioUnavailable": "الصوت غير متوفر",
     "playbackAudioLoadFailed": "تعذر تحميل الصوت",
-    "playbackAudioNetworkFailed": "تحقق من الاتصال"
+    "playbackAudioNetworkFailed": "تحقق من الاتصال",
+    "forYou": "من أجلك",
+    "stopThese": "إيقاف هذه",
+    "dismiss": "تجاهل"
 }

@@ -12401,4 +12401,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verificați conexiunea';
+
+  @override
+  String get forYou => 'Pentru tine';
+
+  @override
+  String get stopThese => 'Oprește acestea';
+
+  @override
+  String get dismiss => 'Ascunde';
 }

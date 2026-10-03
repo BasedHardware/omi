@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "वर्तमान पर वापस जाएँ",
     "playbackAudioUnavailable": "ऑडियो उपलब्ध नहीं है",
     "playbackAudioLoadFailed": "ऑडियो लोड नहीं हो सका",
-    "playbackAudioNetworkFailed": "कनेक्शन जाँचें"
+    "playbackAudioNetworkFailed": "कनेक्शन जाँचें",
+    "forYou": "आपके लिए",
+    "stopThese": "इन्हें रोकें",
+    "dismiss": "हटाएँ"
 }

@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "वर्तमानावर परत जा",
     "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
     "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
-    "playbackAudioNetworkFailed": "कनेक्शन तपासा"
+    "playbackAudioNetworkFailed": "कनेक्शन तपासा",
+    "forYou": "तुमच्यासाठी",
+    "stopThese": "हे थांबवा",
+    "dismiss": "लपवा"
 }

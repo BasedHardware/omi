@@ -3818,5 +3818,8 @@
     "playbackBackToCurrent": "Zpět na aktuální",
     "playbackAudioUnavailable": "Zvuk není k dispozici",
     "playbackAudioLoadFailed": "Zvuk se nepodařilo načíst",
-    "playbackAudioNetworkFailed": "Zkontrolujte připojení"
+    "playbackAudioNetworkFailed": "Zkontrolujte připojení",
+    "forYou": "Pro vás",
+    "stopThese": "Zastavit tyto",
+    "dismiss": "Skrýt"
 }

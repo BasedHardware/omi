@@ -12156,4 +12156,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '接続を確認してください';
+
+  @override
+  String get forYou => 'あなたへのおすすめ';
+
+  @override
+  String get stopThese => 'この種類を停止';
+
+  @override
+  String get dismiss => '非表示';
 }

@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "بازگشت به مورد فعلی",
     "playbackAudioUnavailable": "صدا در دسترس نیست",
     "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
-    "playbackAudioNetworkFailed": "اتصال را بررسی کنید"
+    "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
+    "forYou": "برای شما",
+    "stopThese": "توقف این موارد",
+    "dismiss": "رد کردن"
 }

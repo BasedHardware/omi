@@ -11375,5 +11375,8 @@
     "playbackBackToCurrent": "ಪ್ರಸ್ತುತಕ್ಕೆ ಹಿಂತಿರುಗಿ",
     "playbackAudioUnavailable": "ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ",
     "playbackAudioLoadFailed": "ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
-    "playbackAudioNetworkFailed": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ"
+    "playbackAudioNetworkFailed": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ",
+    "forYou": "ನಿಮಗಾಗಿ",
+    "stopThese": "ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ",
+    "dismiss": "ಮರೆಮಾಡಿ"
 }

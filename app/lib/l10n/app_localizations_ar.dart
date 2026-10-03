@@ -12275,4 +12275,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'تحقق من الاتصال';
+
+  @override
+  String get forYou => 'من أجلك';
+
+  @override
+  String get stopThese => 'إيقاف هذه';
+
+  @override
+  String get dismiss => 'تجاهل';
 }

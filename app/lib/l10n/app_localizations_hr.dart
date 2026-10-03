@@ -12382,4 +12382,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Provjerite vezu';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Zaustavi ovo';
+
+  @override
+  String get dismiss => 'Sakrij';
 }
