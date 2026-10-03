@@ -146,7 +146,7 @@ def test_extract_after_oversize_write_with_nonzero_start(write_mode):
     assert buf.write_pos == 3
     assert buf.total_bytes_written == 33
     assert bytes(buf.buffer) == bytes(list(range(22, 25)) + list(range(15, 22)))
-    assert buf.get_time_range() == pytest.approx((3.5, 4.5))
+    assert buf.get_time_range() == (3.5, 4.5)
     assert buf.extract(3.5, 4.5) == bytes(range(15, 25))
     assert buf.extract(4.0, 4.4) == bytes(range(19, 23))
     assert buf.extract(2.0, 3.0) is None
@@ -167,7 +167,7 @@ def test_ring_buffer_single_large_write_performance(write_mode):
     assert buf.capacity == 4_320_000
     assert buf.total_bytes_written == 4_320_002
     assert buf.write_pos == 2
-    assert buf.get_time_range() == pytest.approx((10.0, 145.0))
+    assert buf.get_time_range() == (10.0, 145.0)
     assert buf.extract(10.0, 145.0) == payload
 
 
@@ -187,7 +187,7 @@ def test_ring_buffer_live_packet_writes_performance(write_mode):
     assert buf.total_bytes_written == 4_320_000
     assert buf.write_pos == 0
     assert bytes(buf.buffer) == packet * 4500
-    assert buf.get_time_range() == pytest.approx((0.0, 135.0))
+    assert buf.get_time_range() == (0.0, 135.0)
     out = buf.extract(0.0, 135.0)
     assert out is not None
     assert out[:960] == packet
