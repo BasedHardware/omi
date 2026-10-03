@@ -333,19 +333,18 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
             raise
         if item is None:
             return  # Terminal policy denial or duplicate terminal event.
-        if item is not None:
-            try:
-                changed = isinstance(exc, ProactivityDenied) and exc.reason == 'source_changed'
-                await spine.close_item(
-                    item=item,
-                    state='suppressed' if changed else 'failed',
-                    reason='source_changed' if changed else 'generation_failed',
-                )
-            except Exception:
-                # Retry reconciliation. claim_item waits five minutes, then reclaims
-                # only a no-attempt item or closes it with all existing money retained.
-                logger.info('proactivity_v2 terminal_write_unavailable')
-                raise
+        try:
+            changed = exc.reason == 'source_changed'
+            await spine.close_item(
+                item=item,
+                state='suppressed' if changed else 'failed',
+                reason='source_changed' if changed else 'generation_failed',
+            )
+        except Exception:
+            # Retry reconciliation. claim_item waits five minutes, then reclaims
+            # only a no-attempt item or closes it with all existing money retained.
+            logger.info('proactivity_v2 terminal_write_unavailable')
+            raise
         logger.info('commitment_followup evaluation_denied_or_failed')
 
 
