@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
+import 'package:omi/backend/schema/conversation.dart' show CreateConversationResponse, SyncLocalFilesResponse;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -285,6 +285,9 @@ class CaptureReplayWorld {
 
   /// Runs when the controller asks the server to process the in-progress conversation.
   void Function()? onProcessInProgress;
+
+  /// The server's answer to that request. Unset, it answers null, as a failed request does.
+  Future<CreateConversationResponse?> Function()? processResponse;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -389,7 +392,7 @@ class CaptureReplayWorld {
       processInProgressConversation: () async {
         processCalls++;
         onProcessInProgress?.call();
-        return null;
+        return processResponse?.call();
       },
       audioCodecLoader: (deviceId) async => pendantCodec,
       microphonePermissionRequester: () async => allowMic,

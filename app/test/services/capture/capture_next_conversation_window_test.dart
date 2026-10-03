@@ -1,6 +1,7 @@
 // A pendant socket stays open across the conversations the server closes on silence (#20365). These
 // scenarios drive the real CaptureController and LocalWalSyncImpl over the replay world and check
 // that every conversation's safety copy is stamped and released, not only the first one's.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -229,6 +230,25 @@ void main() {
     await walsReach('c2 released by its own event', (wals) => wals.every((wal) => wal.timerStart < secondSeconds));
   });
 
+  test('pendant: closes that come back to back stamp in close order', () async {
+    final link = await connectPendant();
+    final firstStart = world.clock.now();
+    await streamPendant(link, 140);
+    await expectCopies('c1 streamed into a copy before it closed');
+
+    // c2 closes before c1's stamp is on disk. c2's drain has nothing to write, so it finishes first, and
+    // every copy of c1, under the same recording id, is also among the WALs at c2's close.
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', firstStart, 140)));
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c2', world.clock.now(), 0)));
+
+    await walsReach(
+      "c1's copies stamped with c1, not with the close after it",
+      (wals) => wals.isNotEmpty && wals.every((wal) => wal.conversationId == 'c1'),
+    );
+  });
+
   test('pendant: windows that open in the same second name different conversations', () async {
     final link = await connectPendant();
     await streamPendant(link, 140);
@@ -270,6 +290,32 @@ void main() {
     );
   });
 
+  test('pendant: a close during Process now stamps after the conversation Process now made', () async {
+    final processed = Completer<CreateConversationResponse?>();
+    world.processResponse = () => processed.future;
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    await world.controller.forceProcessingCurrentConversation();
+    await settleFiles();
+    final beforeProcessNow = await world.wal.syncs.phone.getAllWals();
+    expect(beforeProcessNow, isNotEmpty, reason: 'the audio before Process now is in a copy');
+
+    // The server is slow to answer, and the next conversation closes first. Every copy from before
+    // Process now, under the same recording id, is also among the WALs at that close.
+    final secondStart = world.clock.now();
+    final secondSeconds = secondStart.millisecondsSinceEpoch ~/ 1000;
+    await streamPendant(link, 140);
+    await expectCopies('c2 streamed into a copy before it closed', fromSeconds: secondSeconds);
+    await serverCloses(conversation('c2', secondStart, 140));
+    processed.complete(CreateConversationResponse(messages: [], conversation: conversation('p1', origin, 140)));
+
+    await walsReach(
+        "c2's copies released by its own event", (wals) => wals.every((wal) => wal.timerStart < secondSeconds));
+    expect(beforeProcessNow.map((wal) => wal.conversationId), everyElement('p1'),
+        reason: 'the audio before Process now goes with the conversation it made, not the close after it');
+  });
+
   test('phone mic: a conversation closed during a call opens the window the resumed audio needs', () async {
     final origin = world.clock.now();
     await world.startLiveCapture();
@@ -289,7 +335,18 @@ void main() {
 
     world.emitNativeState(PhoneMicCaptureState.running);
     await world.settle();
-    expect(world.controller.activeCaptureSessionId, next);
+    final sockets = world.sockets.length;
+    final transport = world.sockets.last.transport;
+    final sentBeforeResume = transport.sentBinary.length + transport.sentText.length;
+    for (var s = 30; s < 60; s++) {
+      world.injectAudioFrames(100, sessionId: session, firstFrameIndex: s * 100);
+      await world.elapse(const Duration(seconds: 1));
+    }
+
+    expect(world.sockets, hasLength(sockets), reason: 'the resumed audio needs no new socket');
+    expect(transport.sentBinary.length + transport.sentText.length, greaterThan(sentBeforeResume),
+        reason: 'the resumed audio streams on the socket that outlived c1');
+    expect(world.controller.activeCaptureSessionId, next, reason: "it streams into the window opened at c1's close");
   });
 
   test('phone mic: a conversation closed after the user stopped opens no new window', () async {
