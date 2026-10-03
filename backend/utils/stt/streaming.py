@@ -1208,7 +1208,7 @@ def connect_to_deepgram(
             logger.info("Connection Open")
 
         def on_metadata(self: Any, metadata: Any, **kwargs: Any) -> None:
-            logger.info('Metadata: %s', sanitize_provider_error(metadata))
+            pass
 
         def on_speech_started(self: Any, speech_started: Any, **kwargs: Any) -> None:
             logger.info("Speech Started")

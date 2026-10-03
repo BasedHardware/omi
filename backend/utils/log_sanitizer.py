@@ -94,12 +94,39 @@ _PROVIDER_DIAGNOSTIC_PHRASES = (
     'timeout',
     'timed out',
     'connection closed',
+    'bounded connect retry window',
 )
 
 _PROVIDER_CODE_KEYS = ('error_code', 'status_code', 'code')
+_PROVIDER_RESPONSE_CODE_KEYS = ('status_code', 'code', 'status')
 _PROVIDER_DIAGNOSTIC_KEYS = ('message', 'error_message', 'error', 'description')
 _PROVIDER_ERROR_MAX_LENGTH = 160
 _PROVIDER_TEXT_SCAN_LENGTH = 2000
+
+_PROVIDER_EXCEPTION_TYPE_NAMES = frozenset(
+    {
+        'RuntimeError',
+        'ValueError',
+        'TypeError',
+        'KeyError',
+        'IndexError',
+        'AssertionError',
+        'TimeoutError',
+        'OSError',
+        'ConnectionError',
+        'HTTPStatusError',
+        'ConnectError',
+        'ReadError',
+        'WriteError',
+        'PoolTimeout',
+        'ConnectTimeout',
+        'ReadTimeout',
+        'WriteTimeout',
+        'ConnectionClosed',
+        'ConnectionClosedError',
+        'ConnectionClosedOK',
+    }
+)
 
 
 def _provider_code(candidate: object) -> str:
@@ -117,34 +144,46 @@ def _provider_code(candidate: object) -> str:
     return ''
 
 
-def _provider_code_candidate(value: object) -> object:
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[str, object], value)
-        for key in _PROVIDER_CODE_KEYS:
-            candidate = mapping.get(key)
-            if candidate is not None:
-                return candidate
+def _provider_field(value: object, key: str) -> object:
+    try:
+        if isinstance(value, Mapping):
+            return cast(Mapping[str, object], value).get(key)
+        return getattr(value, key, None)
+    except Exception:
         return None
-    candidate = getattr(value, 'status_code', None)
-    if candidate is not None:
-        return candidate
-    response = getattr(value, 'response', None)
-    return getattr(response, 'status_code', None)
+
+
+def _provider_code_candidate(value: object) -> object:
+    for key in _PROVIDER_CODE_KEYS:
+        candidate = _provider_field(value, key)
+        if _provider_code(candidate):
+            return candidate
+    response = _provider_field(value, 'response')
+    if response is not None:
+        for key in _PROVIDER_RESPONSE_CODE_KEYS:
+            candidate = _provider_field(response, key)
+            if _provider_code(candidate):
+                return candidate
+    return None
 
 
 def _provider_diagnostic_text(value: object) -> str:
     if isinstance(value, str):
         return value
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[str, object], value)
-        for key in _PROVIDER_DIAGNOSTIC_KEYS:
-            candidate = mapping.get(key)
-            if isinstance(candidate, str):
-                return candidate
-        return ''
+    for key in _PROVIDER_DIAGNOSTIC_KEYS:
+        candidate = _provider_field(value, key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
     if isinstance(value, BaseException):
-        return str(value)
+        try:
+            return str(value)
+        except Exception:
+            return ''
     return ''
+
+
+def _provider_normalized_text(text: str) -> str:
+    return ' '.join(text.lower().replace('_', ' ').split())
 
 
 def sanitize_provider_error(value: object, *, code: object = None) -> str:
@@ -152,15 +191,24 @@ def sanitize_provider_error(value: object, *, code: object = None) -> str:
 
     Provider and user payloads can carry secrets, paths, or transcript text even
     when purely alphabetic, so nothing from ``value`` is copied to the output.
-    Only a canonical diagnostic phrase matched against the provider text and a
-    validated numeric status code are emitted; anything else is redacted.
+    Only a canonical diagnostic phrase matched against the provider text, a
+    validated numeric status code, and a closed-set exception type name are
+    emitted; anything else is redacted.
     """
     if code is None:
-        code = _provider_code_candidate(value)
-    code_text = _provider_code(code) or 'unknown'
-    text = _provider_diagnostic_text(value)[:_PROVIDER_TEXT_SCAN_LENGTH].lower()
-    diagnostic = next((phrase for phrase in _PROVIDER_DIAGNOSTIC_PHRASES if phrase in text), '[redacted]')
-    return sanitize(f'code={code_text} diagnostic={diagnostic}')[:_PROVIDER_ERROR_MAX_LENGTH]
+        code_text = _provider_code(_provider_code_candidate(value)) or 'unknown'
+    else:
+        code_text = _provider_code(code) or 'unknown'
+    text = _provider_normalized_text(_provider_diagnostic_text(value)[:_PROVIDER_TEXT_SCAN_LENGTH])
+    diagnostic = next(
+        (phrase for phrase in _PROVIDER_DIAGNOSTIC_PHRASES if _provider_normalized_text(phrase) in text),
+        '[redacted]',
+    )
+    result = f'code={code_text} diagnostic={diagnostic}'
+    if isinstance(value, BaseException):
+        name = type(value).__name__
+        result += f' exception_type={name if name in _PROVIDER_EXCEPTION_TYPE_NAMES else "other"}'
+    return sanitize(result)[:_PROVIDER_ERROR_MAX_LENGTH]
 
 
 def _mask_email(match: re.Match[str]) -> str:

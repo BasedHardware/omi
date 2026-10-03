@@ -329,13 +329,13 @@ class TestSanitizeProviderError:
 
     def test_exception_uses_str_for_matching_only(self):
         result = sanitize_provider_error(RuntimeError('connection timed out: victim@example.com'))
-        assert result == 'code=unknown diagnostic=timed out'
+        assert result == 'code=unknown diagnostic=timed out exception_type=RuntimeError'
 
     def test_exception_status_code_attribute(self):
         class ProviderError(Exception):
             status_code = 503
 
-        assert sanitize_provider_error(ProviderError('opaque')).startswith('code=503 ')
+        assert sanitize_provider_error(ProviderError('opaque')) == 'code=503 diagnostic=[redacted] exception_type=other'
 
     def test_exception_response_status_code_attribute(self):
         class Response:
@@ -345,6 +345,111 @@ class TestSanitizeProviderError:
             response = Response()
 
         assert sanitize_provider_error(HttpError('opaque')).startswith('code=502 ')
+
+    def test_mapping_code_walk_skips_unusable_fields(self):
+        result = sanitize_provider_error(
+            {'error_code': 'bad-private', 'status_code': 503, 'code': 429, 'message': 'opaque'}
+        )
+        assert result == 'code=503 diagnostic=[redacted]'
+
+    def test_mapping_code_walk_skips_bool_and_empty(self):
+        result = sanitize_provider_error({'error_code': True, 'status_code': '', 'code': '404', 'message': 'opaque'})
+        assert result == 'code=404 diagnostic=[redacted]'
+
+    def test_object_code_and_description_fields(self):
+        class Frame:
+            code = 502
+            description = 'Internal server error for victim@sentinel-domain.example'
+
+        result = sanitize_provider_error(Frame())
+        assert result == 'code=502 diagnostic=internal server error'
+        assert 'victim@sentinel-domain.example' not in result
+
+    def test_object_blank_message_falls_through_to_description(self):
+        class Frame:
+            code = 502
+            message = ''
+            description = 'Internal server error for victim@sentinel-domain.example'
+
+        result = sanitize_provider_error(Frame())
+        assert result == 'code=502 diagnostic=internal server error'
+        assert 'victim@sentinel-domain.example' not in result
+
+    def test_mapping_blank_message_falls_through_to_error(self):
+        result = sanitize_provider_error(
+            {'code': 503, 'message': '   ', 'error': 'Unable to complete the request victim@sentinel-domain.example'}
+        )
+        assert result == 'code=503 diagnostic=unable to complete the request'
+        assert 'victim@sentinel-domain.example' not in result
+
+    def test_object_response_fallback_code(self):
+        class Response:
+            status_code = 429
+
+        class Reply:
+            response = Response()
+
+        assert sanitize_provider_error(Reply()).startswith('code=429 ')
+
+    def test_raising_property_is_ignored(self):
+        class Frame:
+            @property
+            def status_code(self):
+                raise RuntimeError('getter exploded')
+
+            code = 503
+
+        result = sanitize_provider_error(Frame())
+        assert result == 'code=503 diagnostic=[redacted]'
+
+    def test_explicit_invalid_code_stays_unknown(self):
+        result = sanitize_provider_error({'status_code': 503, 'message': 'opaque'}, code='nope')
+        assert result == 'code=unknown diagnostic=[redacted]'
+
+    def test_object_str_and_repr_never_used(self):
+        class Hostile:
+            def __str__(self):
+                raise RuntimeError('no')
+
+            def __repr__(self):
+                raise RuntimeError('no')
+
+        assert sanitize_provider_error(Hostile()) == 'code=unknown diagnostic=[redacted]'
+
+    @pytest.mark.parametrize(
+        'text',
+        [
+            'rate_limit_exceeded',
+            'Rate Limit Exceeded',
+            'rate   limit\nexceeded',
+        ],
+    )
+    def test_canonical_phrase_variants_match_same_constant(self, text):
+        assert sanitize_provider_error(text) == 'code=unknown diagnostic=rate_limit_exceeded'
+
+    def test_bounded_connect_retry_window_phrase(self):
+        result = sanitize_provider_error('429 responses continued through the bounded connect retry window', code=429)
+        assert result == 'code=429 diagnostic=bounded connect retry window'
+
+    def test_phrase_beyond_scan_window_stays_redacted(self):
+        result = sanitize_provider_error('x' * 2001 + ' timeout', code=503)
+        assert result == 'code=503 diagnostic=[redacted]'
+
+    def test_distinct_closed_exception_types(self):
+        assert (
+            sanitize_provider_error(TimeoutError(''))
+            == 'code=unknown diagnostic=[redacted] exception_type=TimeoutError'
+        )
+        assert (
+            sanitize_provider_error(OSError('private')) == 'code=unknown diagnostic=[redacted] exception_type=OSError'
+        )
+
+    def test_unknown_exception_type_maps_other(self):
+        VictimError = type('VictimPrivateError', (Exception,), {})
+        result = sanitize_provider_error(VictimError('internal server error victim@sentinel-domain.example'))
+        assert result == 'code=unknown diagnostic=internal server error exception_type=other'
+        assert 'VictimPrivateError' not in result
+        assert 'victim@sentinel-domain.example' not in result
 
     def test_canonical_phrase_never_carries_surrounding_text(self):
         result = sanitize_provider_error(
@@ -473,7 +578,9 @@ async def test_soniox_warning_path_redacts_payload(caplog):
 
 
 @pytest.mark.asyncio
-async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(caplog):
+@pytest.mark.parametrize('resilient,expected_reason', [('false', 'connection_lost'), ('true', 'provider_5xx')])
+async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(monkeypatch, caplog, resilient, expected_reason):
+    monkeypatch.setenv('STT_RESILIENT_RECONNECT', resilient)
     frame = {
         'error_code': 500,
         'error_type': f'unexpected_vendor_shape {SENTINEL}',
@@ -481,7 +588,7 @@ async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(caplog):
     }
     with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
         sock = await _drive(soniox.SafeSonioxSocket, [frame])
-    assert sock.typed_death_reason == 'connection_lost'
+    assert sock.typed_death_reason == expected_reason
     warnings = [r for r in caplog.records if 'Soniox stream closed:' in r.getMessage()]
     assert warnings
     assert 'code=500' in warnings[0].getMessage()
@@ -538,6 +645,8 @@ def test_safe_deepgram_send_exception_redacts_payload(caplog):
             assert sock.send(b'\x00' * 960) is False
         warnings = [r for r in caplog.records if 'DG send exception' in r.getMessage()]
         assert warnings
+        assert 'exception_type=RuntimeError' in warnings[0].getMessage()
+        assert warnings[0].exc_info is None
         assert SENTINEL not in _caplog_text(caplog)
         assert SENTINEL_URL not in _caplog_text(caplog)
     finally:
@@ -554,6 +663,8 @@ def test_safe_deepgram_finalize_exception_redacts_payload(caplog):
                 sock.finalize()
         warnings = [r for r in caplog.records if 'DG finalize exception' in r.getMessage()]
         assert warnings
+        assert 'exception_type=RuntimeError' in warnings[0].getMessage()
+        assert warnings[0].exc_info is None
         assert SENTINEL not in _caplog_text(caplog)
     finally:
         sock.finish()
@@ -597,6 +708,21 @@ async def test_deepgram_owned_callbacks_log_safely_and_latch_close(caplog):
     assert SENTINEL_URL not in text
 
 
+def test_deepgram_metadata_callback_emits_no_log(monkeypatch, caplog):
+    mock_dg_conn = MagicMock()
+    client = MagicMock()
+    client.listen.websocket.v.return_value = mock_dg_conn
+    monkeypatch.setattr(streaming, '_deepgram_client_for_request', lambda: client)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
+    streaming.connect_to_deepgram(MagicMock(), MagicMock(), 'en', 16000, 1, 'nova-3')
+    registered = {call[0][0]: call[0][1] for call in mock_dg_conn.on.call_args_list}
+    with caplog.at_level(logging.INFO, logger='utils.stt.streaming'):
+        registered[streaming.LiveTranscriptionEvents.Metadata](None, f'MetadataResponse {SENTINEL} {SENTINEL_URL}')
+    assert not [r for r in caplog.records if 'Metadata' in r.getMessage()]
+    assert SENTINEL not in _caplog_text(caplog)
+    assert SENTINEL_URL not in _caplog_text(caplog)
+
+
 @pytest.mark.asyncio
 async def test_parakeet_transcribe_failure_redacts_payload(monkeypatch, caplog):
     class FailingClient:
@@ -614,9 +740,55 @@ async def test_parakeet_transcribe_failure_redacts_payload(monkeypatch, caplog):
         assert await sock._transcribe_chunk(b'\x00\x00' * 1600, 0.0, 0.1) == []
     errors = [r for r in caplog.records if 'Parakeet transcribe failed' in r.getMessage()]
     assert errors
+    assert 'exception_type=RuntimeError' in errors[0].getMessage()
+    assert errors[0].exc_info is None
     assert SENTINEL not in _caplog_text(caplog)
     assert SENTINEL_EMAIL not in _caplog_text(caplog)
     assert SENTINEL_URL not in _caplog_text(caplog)
+
+
+@pytest.mark.asyncio
+async def test_parakeet_pump_loop_error_redacts_payload(monkeypatch, caplog):
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds):
+        await real_sleep(0)
+
+    async def boom(force):
+        raise TypeError(f'flush exploded {SENTINEL}')
+
+    sock = streaming.ParakeetStreamingSocket(lambda _segs: None, 'http://fake', 16000)
+    monkeypatch.setattr(asyncio, 'sleep', fast_sleep)
+    monkeypatch.setattr(sock, '_flush', boom)
+    with caplog.at_level(logging.WARNING, logger='utils.stt.streaming'):
+        await sock._pump()
+    errors = [r for r in caplog.records if 'Parakeet pump loop error' in r.getMessage()]
+    assert errors
+    assert 'exception_type=TypeError' in errors[0].getMessage()
+    assert errors[0].exc_info is None
+    assert SENTINEL not in _caplog_text(caplog)
+    assert sock._dead
+    assert SENTINEL in sock._dead_reason
+
+
+@pytest.mark.asyncio
+async def test_parakeet_drain_pump_await_error_redacts_payload(monkeypatch, caplog):
+    async def boom():
+        raise ValueError(f'pump died {SENTINEL}')
+
+    async def no_flush(force):
+        return None
+
+    sock = streaming.ParakeetStreamingSocket(lambda _segs: None, 'http://fake', 16000)
+    sock._pump_task = asyncio.create_task(boom())
+    monkeypatch.setattr(sock, '_flush', no_flush)
+    with caplog.at_level(logging.WARNING, logger='utils.stt.streaming'):
+        await sock.drain_and_close()
+    errors = [r for r in caplog.records if 'Parakeet pump await error during drain' in r.getMessage()]
+    assert errors
+    assert 'exception_type=ValueError' in errors[0].getMessage()
+    assert errors[0].exc_info is None
+    assert SENTINEL not in _caplog_text(caplog)
 
 
 @pytest.mark.asyncio
