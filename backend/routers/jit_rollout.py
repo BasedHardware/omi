@@ -123,7 +123,7 @@ async def get_jit_rollout_decision(
 
 
 @router.get(_TRIGGER_SNAPSHOT_PATH, response_model=JITTriggerSnapshotEnvelope)
-async def get_jit_trigger_snapshot(
+def get_jit_trigger_snapshot(
     response: Response,
     uid: str = Depends(get_current_user_uid),
 ) -> JITTriggerSnapshotEnvelope:
@@ -133,12 +133,12 @@ async def get_jit_trigger_snapshot(
 
 
 @router.post(_TRIGGER_FEEDBACK_PATH, status_code=410, openapi_extra=TRIGGER_FEEDBACK_OPENAPI)
-async def post_jit_trigger_feedback() -> JSONResponse:
+def post_jit_trigger_feedback() -> JSONResponse:
     return _retired_proactivity_response()
 
 
 @router.post(_PROACTIVITY_RESERVATION_PATH, status_code=410, openapi_extra=PROACTIVITY_RESERVATION_OPENAPI)
-async def reserve_jit_proactivity() -> JSONResponse:
+def reserve_jit_proactivity() -> JSONResponse:
     return _retired_proactivity_response()
 
 

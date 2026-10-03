@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.post('/v1/desktop/proactivity/completions', status_code=429)
-async def retired_desktop_proactivity() -> JSONResponse:
+def retired_desktop_proactivity() -> JSONResponse:
     # Released clients only arm their bounded cooldown on 429. No request
     # model or dependency: even stale credentials and malformed bodies are cheap.
     return JSONResponse(
