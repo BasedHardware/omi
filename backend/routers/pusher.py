@@ -317,6 +317,7 @@ async def _websocket_util_trigger(
                     uid,
                     conv_id,
                     cast(str, cached_protection_level),
+                    sample_rate=sample_rate,
                 )
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'

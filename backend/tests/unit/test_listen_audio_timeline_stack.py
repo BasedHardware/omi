@@ -35,6 +35,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from fastapi.websockets import WebSocketDisconnect
+from google.api_core.exceptions import PreconditionFailed
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
@@ -97,9 +98,10 @@ def _slice(pcm: bytes, start_s: float, end_s: float) -> bytes:
 # In-memory GCS double: blobs carry metadata (the v2 span contract).
 # ---------------------------------------------------------------------------
 class _Writer:
-    def __init__(self, blob):
+    def __init__(self, blob, if_generation_match=None):
         self.blob = blob
         self.buf = bytearray()
+        self.if_generation_match = if_generation_match
 
     def write(self, data):
         self.buf.extend(data)
@@ -108,7 +110,7 @@ class _Writer:
         return self
 
     def __exit__(self, *exc):
-        self.blob._store(bytes(self.buf))
+        self.blob._store(bytes(self.buf), if_generation_match=self.if_generation_match)
 
 
 class FakeBlob:
@@ -117,25 +119,35 @@ class FakeBlob:
         self.name = name
         self._data = None
         self.metadata = None
+        self.generation = None
 
     @property
     def size(self):
         return len(self._data) if self._data is not None else None
 
-    def _store(self, data):
+    def _store(self, data, if_generation_match=None):
+        committed = self.bucket.blobs.get(self.name)
+        committed_generation = committed.generation if committed is not None else 0
+        if if_generation_match is not None and committed_generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
         self._data = data
+        self.generation = self.bucket.next_generation()
         self.bucket.blobs[self.name] = self
 
     def exists(self):
         return self._data is not None
 
-    def open(self, mode, content_type=None):
+    def open(self, mode, content_type=None, if_generation_match=None):
         assert mode == 'wb'
-        return _Writer(self)
+        return _Writer(self, if_generation_match=if_generation_match)
 
-    def download_as_bytes(self):
+    def download_as_bytes(self, if_generation_match=None, end=None, **kwargs):
         if self._data is None:
             raise FileNotFoundError(self.name)
+        if if_generation_match is not None and self.generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
+        if end is not None:
+            return self._data[: end + 1]
         return self._data
 
     def delete(self):
@@ -145,11 +157,16 @@ class FakeBlob:
 class FakeBucket:
     def __init__(self):
         self.blobs = {}
+        self._generation = 0
+
+    def next_generation(self):
+        self._generation += 1
+        return self._generation
 
     def blob(self, name):
         return self.blobs.get(name) or FakeBlob(self, name)
 
-    def list_blobs(self, prefix=None):
+    def list_blobs(self, prefix=None, **_kwargs):
         return [self.blobs[name] for name in sorted(self.blobs) if name.startswith(prefix)]
 
 
@@ -433,10 +450,12 @@ class _Stack:
         except asyncio.TimeoutError:
             return False
 
-    def start_pusher_server(self):
+    def start_pusher_server(self, peer=None):
         self.server_ws = FakeServerWebSocket()
         self.server_task = asyncio.create_task(
-            pusher._websocket_util_trigger(self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None)
+            (peer or pusher)._websocket_util_trigger(
+                self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None
+            )
         )
 
     async def stop_pusher_server(self):

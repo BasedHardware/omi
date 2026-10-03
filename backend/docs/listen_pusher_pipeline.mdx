@@ -2105,6 +2105,32 @@ at actual uncovered ends or overlaps; `AudioFile.chunk_spans` exposes
 validated contiguous coverage (absent on legacy files) and joins the artifact
 fingerprint.
 
+Ambiguous sends are reconciled before replay. A run's identity fields are
+fixed into an envelope — resolved conversation, exact opcode-101 header
+timestamp, PCM and projected start — before its first send attempt; the only
+mutation it ever undergoes is trimming a verified committed prefix, it is
+not a literally frozen value. A send that raises marks only that envelope
+uncertain; it is replayed verbatim, in order, and is never recombined with
+newer audio or retimed, so the legacy header arithmetic stays identical for
+unambiguous sends. Before resending, the producer verifies how many leading
+bytes are already committed through `storage.reconcile_audio_chunk_prefix`
+(a bounded plaintext compare that decrypts enhanced-protection objects
+first): for spans it walks adjacent committed spans across rebatching, for
+legacy storage only the same rounded timestamp anchor plus a byte-equal
+prefix counts. Verified bytes are skipped and the retained tail keeps its
+position shifted by exactly the trimmed samples; any unverifiable or raced
+evidence resends the whole envelope verbatim — zero proof is never
+permission to discard, so a concurrent old-socket commit landing after a
+zero-proof query can still double-store. The uploader runs the same
+reconciliation independently, so a rebatch or an old producer's `A+B` resend
+stores only the genuinely new tail; span objects are written create-only
+(`if_generation_match=0`) with precondition races re-reconciled within
+bounded attempts, while legacy writes are not atomic. The stable timestamp
+plus verified payload is bounded occurrence identity, not a universal
+producer id: an old listener that recomputes its retry timestamp, an anchor
+obscured by earlier batching, or a span session resending to an old pusher
+that never acked cannot be proven and can still double-store.
+
 Consumers. `segment_wall_window` / `covered_window` / `coverage_outcome`
 (`utils/audio_timeline.py`) are the one coordinate conversion and the
 metadata-backed coverage check with the outcome vocabulary
@@ -2194,8 +2220,12 @@ with contiguous or overlapping absolute windows; a one-sided, inconsistent
 or gapped merge clears it rather than lending one side's proof to the other.
 The marker's reach is strictly additive: it is only ever stamped while a live
 `sync:` scope is visible, so rows resolved before it existed carry none —
-nothing back-fills or re-infers them, and after cache loss they cannot
-re-embed until a fresh sync supplies scope again. Nor does the marker prove
+nothing back-fills or re-infers them. After cache loss a resolved segment
+that also carries live capture fields may rebuild its embedding under the
+consumer-OFF arithmetic only while the marker validates against the current
+origin and the segment stays placed, finite and ordered — retimed, malformed,
+non-sync and genuinely capture-derived histories still refuse. Nor does the
+marker prove
 the bytes there belong to one upload: a manifest whose spans overlap the
 saved window still refuses.
 
@@ -2235,6 +2265,24 @@ newly placed on the capture clock but already holds a duration-matching bare
 entry — output this stage itself wrote under an earlier resolution — that
 entry is reused as cached compatibility rather than treated as a capture-
 sourced embed; live scopes never get that reuse.
+Before the first diarizer call the consumer takes one bounded actual blob
+inventory — after placement, before any embedding or cache upload — and
+proves it end to end: every listed object must carry a positive generation
+and correspond to a manifest timestamp/span pair in strict whole-manifest
+correspondence (including objects outside the requested windows — a
+conservative refusal that accepts an availability cost), and every pending
+trusted window must map onto unambiguous actual coverage. All listed objects
+are then prefetched within the session budget (at most 32 downloads, 64 MiB,
+30 seconds) with each download pinned to its listed generation and decoded
+to PCM before a single embedding call: a span's declared duration must match
+the decoded duration, a spanless object's extent is its actual decoded end,
+and any positive overlap between distinct objects — including identical
+extents — refuses. A late-arriving chunk, a missing or extra object, a
+duplicate, a malformed entry, missing generation (as on storage providers
+that do not expose one), or a span whose decoded sample count mismatches all
+refuse the whole read with `unverified_inventory`/`unaligned_audio` before
+any embedding or cache upload; a generation that changes between listing and
+download fails the pinned fetch rather than substituting replacement PCM.
 `omi_audio_placement_total{reason=...}` counts every advisory `locate` per
 attempt — including with the consumer flag off, where the bounded shadow
 lookups run purely for measurement and cannot alter the legacy resolution —

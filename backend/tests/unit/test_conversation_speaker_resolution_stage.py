@@ -22,6 +22,7 @@ from utils.conversations import speaker_resolution as stage
 from utils.conversations.audio_placement import prepare_audio_coverage
 from utils.conversations.smart_merge_policy import rebase_donor_segments
 from utils.metrics import OMI_AUDIO_PLACEMENT_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL
+from utils.other.audio_chunks import AudioChunkReadSession
 
 SR = 16000
 STARTED = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
@@ -75,7 +76,7 @@ class FakeAudio:
         ]
         self.downloads = 0
 
-    def __call__(self, uid, conversation_id, wanted, sample_rate=SR):
+    def __call__(self, uid, conversation_id, wanted, sample_rate=SR, **_kwargs):
         for index, (start, pcm) in enumerate(self.chunks):
             following = self.chunks[index + 1][0] if index + 1 < len(self.chunks) else None
             if wanted(start, following):
@@ -191,9 +192,14 @@ def round3_stage(monkeypatch, env):
     return old_stage, old_placement
 
 
+def _admit_any_inventory(uid, conversation, *args, **kwargs):
+    return AudioChunkReadSession(uid, conversation.id, SR)
+
+
 def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
     audio = FakeAudio(plan, seconds=seconds, offset=offset)
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', audio)
+    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
     return audio
 
 
@@ -583,11 +589,12 @@ def test_span_resolution_mixed_sync_and_capture_scopes_resolve(env, stage_overri
     sync_audio = FakeAudio(plan[:4])
     live_audio = FakeAudio(plan[4:], offset=196.0)
 
-    def combined(uid, conversation_id, wanted, sample_rate=SR):
+    def combined(uid, conversation_id, wanted, sample_rate=SR, **_kwargs):
         yield from sync_audio(uid, conversation_id, wanted, sample_rate=sample_rate)
         yield from live_audio(uid, conversation_id, wanted, sample_rate=sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', combined)
+    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
     conversation = _capture_shifted_conversation(plan, manifest=False)
     origin = STARTED.timestamp()
     for segment in conversation.transcript_segments[:4]:
@@ -1121,11 +1128,12 @@ def test_rebased_donor_segments_resolve_exact_pcm_windows(env, monkeypatch, roun
         private_cloud_sync_enabled=True,
     )
 
-    def all_audio(uid, cid, wanted, sample_rate=SR):
+    def all_audio(uid, cid, wanted, sample_rate=SR, **_kwargs):
         yield from survivor_audio(uid, cid, wanted, sample_rate)
         yield from donor_audio(uid, cid, wanted, sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', all_audio)
+    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
     store.clear()
     _span_flags(monkeypatch)
     stage.resolve_speakers_for_processing('u1', merged)

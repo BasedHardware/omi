@@ -295,7 +295,7 @@ def _union_covers(contributors: Sequence[Mapping[str, Any]], start: float, end: 
     return False
 
 
-def _saved_sync_window(segment: Mapping[str, Any], origin: float) -> bool:
+def saved_sync_window(segment: Mapping[str, Any], origin: float) -> bool:
     """A stored ``audio_source`` marker that still matches this segment's position.
 
     Proof only while it describes exactly where the segment sits now: finite
@@ -381,7 +381,7 @@ def locate(
     for segment in contributors:
         scope = segment.get('speaker_id_scope')
         is_sync_scope = isinstance(scope, str) and scope.startswith('sync:') and len(scope) > len('sync:')
-        if not is_sync_scope and not _saved_sync_window(segment, origin):
+        if not is_sync_scope and not saved_sync_window(segment, origin):
             all_sync = False
             break
     if all_sync:

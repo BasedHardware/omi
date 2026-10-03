@@ -110,7 +110,7 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
 
-    def upload(chunks, uid, cid, level=None):
+    def upload(chunks, uid, cid, level=None, **_kwargs):
         uploads.extend((cid, chunk) for chunk in chunks)
         return [f'chunks/{uid}/{cid}/{chunk["timestamp"]:.3f}.batch.bin' for chunk in chunks]
 
@@ -305,7 +305,7 @@ async def test_batch_dropped_after_retries_leaves_no_digest_entry(env, monkeypat
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.05)
     attempts = []
 
-    def failing_upload(chunks, uid, cid, level=None):
+    def failing_upload(chunks, uid, cid, level=None, **_kwargs):
         attempts.append(cid)
         raise RuntimeError('gcs down')
 
@@ -408,7 +408,7 @@ async def test_failed_upload_retries_on_a_later_process_tick(env, monkeypatch):
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', interval)
     attempts: list[float] = []
 
-    def flaky_upload(chunks, uid, cid, level=None):
+    def flaky_upload(chunks, uid, cid, level=None, **_kwargs):
         attempts.append(time.monotonic())
         if len(attempts) == 1:
             raise RuntimeError('transient gcs error')

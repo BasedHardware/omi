@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 else:
     WebSocketClientProtocol = Any
 
+from utils.executors import run_blocking, storage_executor
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
+from utils.other.storage import reconcile_audio_chunk_prefix
 from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
@@ -97,12 +99,20 @@ class AudioRun:
 
     The conversation binding and the projected start of the run's first sample
     are captured at acceptance time and travel with the bytes through replays
-    and reconnects; they are never recomputed from a later arrival.
+    and reconnects; they are never recomputed from a later arrival. A run that
+    has been framed for a first send attempt freezes into an immutable
+    envelope: ``header_timestamp`` pins the exact opcode-101 wire timestamp,
+    the conversation binding is resolved, and ``uncertain`` marks a send that
+    raised after the frame may have been delivered — such an envelope is
+    reconciled against committed storage before any resend instead of being
+    recombined with newer audio or retimed.
     """
 
     conversation_id: Optional[str]
     start_wall: Optional[float]
     data: bytes
+    header_timestamp: Optional[float] = None
+    uncertain: bool = False
 
 
 @dataclass
@@ -315,7 +325,8 @@ class ListenPusherSession:
             pending_total_size = self.audio_total_size
             self.audio_runs = deque()
             self.audio_total_size = 0
-            sent_runs = 0
+            sent_envelopes = 0
+            envelopes: List[AudioRun] = []
             try:
                 effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
                 # Send one 101 frame per contiguous same-conversation run.
@@ -328,16 +339,11 @@ class ListenPusherSession:
                 # header timestamp is the run's retained projected start when
                 # the capture timeline supplied one, and the legacy
                 # last-arrival-minus-duration estimate otherwise.
-                group: List[AudioRun] = []
-                group_conversation: Optional[str] = None
-
                 honor_projection = self.config.audio_timeline_v2 or self.audio_timeline_active
-
-                def frame_header_time(runs: List[AudioRun]) -> Optional[float]:
-                    if honor_projection and runs and runs[0].start_wall is not None:
-                        return runs[0].start_wall
+                legacy_header = None
+                if not honor_projection:
                     duration = pending_total_size / (effective_rate * 2)
-                    return (self.audio_buffer_last_received or self.deps.now()) - duration
+                    legacy_header = (self.audio_buffer_last_received or self.deps.now()) - duration
 
                 def runs_are_contiguous(prev: AudioRun, nxt: AudioRun) -> bool:
                     # Legacy runs carry no projection; keep the legacy
@@ -347,34 +353,79 @@ class ListenPusherSession:
                     projected_prev_end = prev.start_wall + len(prev.data) / (effective_rate * 2)
                     return abs(nxt.start_wall - projected_prev_end) <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
 
-                async def send_group(runs: List[AudioRun]) -> None:
-                    nonlocal sent_runs
-                    if not runs:
+                group: List[AudioRun] = []
+                group_conversation: Optional[str] = None
+
+                def close_group() -> None:
+                    if not group:
                         return
-                    conversation = runs[0].conversation_id or current_conversation_id
+                    envelope = AudioRun(
+                        conversation_id=group_conversation,
+                        start_wall=group[0].start_wall,
+                        data=b''.join(run.data for run in group),
+                    )
+                    envelope.header_timestamp = (
+                        envelope.start_wall if honor_projection and envelope.start_wall is not None else legacy_header
+                    )
+                    envelopes.append(envelope)
+                    group.clear()
+
+                for run in pending_runs:
+                    if run.header_timestamp is not None:
+                        close_group()
+                        envelopes.append(run)
+                        continue
+                    run_conversation = run.conversation_id or current_conversation_id
+                    if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
+                        close_group()
+                    group.append(run)
+                    group_conversation = run_conversation
+                close_group()
+
+                for envelope in envelopes:
+                    if envelope.uncertain and envelope.conversation_id and envelope.header_timestamp is not None:
+                        try:
+                            verified, _committed = await run_blocking(
+                                storage_executor,
+                                reconcile_audio_chunk_prefix,
+                                self.uid,
+                                envelope.conversation_id,
+                                envelope.header_timestamp,
+                                envelope.data,
+                                effective_rate,
+                                require_spans=self.audio_timeline_active,
+                            )
+                        except Exception as error:
+                            logger.info(
+                                f"Uncertain audio envelope reconcile failed, resending whole: {error} {self.uid} {self.session_id}"
+                            )
+                            verified = 0
+                        if verified >= len(envelope.data):
+                            sent_envelopes += 1
+                            continue
+                        if verified > 0:
+                            envelope.data = envelope.data[verified:]
+                            shift = verified / (effective_rate * 2)
+                            envelope.header_timestamp = envelope.header_timestamp + shift
+                            if envelope.start_wall is not None:
+                                envelope.start_wall += shift
+                    conversation = envelope.conversation_id
                     if conversation and conversation != self.last_synced_conversation_id:
                         header = bytearray()
                         header.extend(struct.pack("I", 103))
                         header.extend(bytes(conversation, "utf-8"))
                         await pusher_ws.send(cast(bytes, header))
                         self.last_synced_conversation_id = conversation
-                    audio_data = b''.join(run.data for run in runs)
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
-                    data.extend(struct.pack("d", frame_header_time(runs)))
-                    data.extend(audio_data)
-                    del audio_data
-                    await pusher_ws.send(cast(bytes, data))
-                    sent_runs += len(runs)
-
-                for run in pending_runs:
-                    run_conversation = run.conversation_id or current_conversation_id
-                    if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
-                        await send_group(group)
-                        group = []
-                    group.append(run)
-                    group_conversation = run_conversation
-                await send_group(group)
+                    data.extend(struct.pack("d", cast(float, envelope.header_timestamp)))
+                    data.extend(envelope.data)
+                    try:
+                        await pusher_ws.send(cast(bytes, data))
+                    except (asyncio.CancelledError, Exception):
+                        envelope.uncertain = True
+                        raise
+                    sent_envelopes += 1
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
                     # Standalone announcement when no run carried the current
                     # conversation yet (legacy sessions with no buffered audio,
@@ -385,7 +436,7 @@ class ListenPusherSession:
                     await pusher_ws.send(cast(bytes, data))
                     self.last_synced_conversation_id = current_conversation_id
             except (asyncio.CancelledError, Exception) as e:
-                unsent = list(pending_runs)[sent_runs:]
+                unsent = envelopes[sent_envelopes:]
                 self.audio_runs.extendleft(reversed(unsent))
                 self.audio_total_size += sum(len(run.data) for run in unsent)
                 while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:

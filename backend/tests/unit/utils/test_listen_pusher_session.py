@@ -302,7 +302,8 @@ async def test_failed_transcript_send_retains_buffer_for_retry():
 
 
 @pytest.mark.anyio
-async def test_failed_audio_send_retains_buffer_for_retry():
+async def test_failed_audio_send_retains_buffer_for_retry(monkeypatch):
+    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', lambda *args, **kwargs: (0, []))
     ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed"), None])
     session = make_session(ws=ws)
     await session.connect()
