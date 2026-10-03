@@ -155,6 +155,22 @@ def test_identical_retry_and_later_chunks_land_in_the_rollover(monkeypatch, capl
     assert len(conversations(store)) == 2
 
 
+def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch, caplog):
+    store = _full_store(monkeypatch)
+    ids = ['a']
+    for i, start in enumerate(range(1060, 1060 + 60 * 7, 60)):
+        cid = f'full-{i}'
+        result, created, _ = intake(store, chunk(cid, start, text=_LONG + str(i)))
+        assert result['id'] == cid and created
+        ids.append(cid)
+    frozen = {cid: deepcopy(_row(store, cid)) for cid in ids}
+    result, created, survivors = intake(store, chunk('tail', 1060 + 60 * 7, text='The last short sentence.'))
+    assert result['id'] == 'tail' and created and len(survivors) == 1
+    assert {cid: _row(store, cid) for cid in ids} == frozen
+    assert len(conversations(store)) == len(ids) + 1
+    assert not [m for m in _events(caplog) if 'size_rollover_unavailable' in m]
+
+
 def test_speech_already_in_the_full_conversation_is_not_duplicated(monkeypatch):
     store = _full_store(monkeypatch)
     overlap = chunk('b', 1000, text=_LONG)

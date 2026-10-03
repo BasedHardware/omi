@@ -43,9 +43,6 @@ _T = TypeVar('_T')
 # (the document name in test doubles, SDK sentinels) and the few bytes a later
 # dedupe-only retry adds without needing a rollover.
 SYNC_CONVERSATION_BYTE_BUDGET = FIRESTORE_MAX_DOCUMENT_BYTES - 124 * 1024  # 900 KiB
-# Each rollover excludes at least one more conversation; this only bounds a
-# pathological day where several adjacent conversations are all full.
-_MAX_SIZE_ROLLOVERS = 4
 
 
 def capture_mismatch(left: dict, right: dict) -> str:
@@ -433,10 +430,13 @@ def assign_in_transaction(
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
-    # assignment re-planned inside the same transaction before any write.
+    # assignment re-planned inside the same transaction before any write. Each
+    # accepted rollover is itself re-checked. The loop terminates: a plan never
+    # matches or targets an excluded row, so every pass excludes at least one
+    # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
     chosen = plan(excluded, tuple(range(len(incoming['transcript_segments']))))
-    for _ in range(_MAX_SIZE_ROLLOVERS):
+    while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
         if chosen.grows and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
             drop.add(chosen.canonical)
