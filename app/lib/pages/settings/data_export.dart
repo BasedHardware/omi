@@ -18,12 +18,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/preferences.dart';
 
-typedef ExportDownload = Future<String?> Function(
-  String filePath, {
-  void Function(int bytesReceived)? onProgress,
-  Future<void>? abortTrigger,
-  AuthSessionSnapshot? authorizationSnapshot,
-});
+typedef ExportDownload =
+    Future<String?> Function(
+      String filePath, {
+      void Function(int bytesReceived)? onProgress,
+      Future<void>? abortTrigger,
+      AuthSessionSnapshot? authorizationSnapshot,
+    });
 
 typedef ShareLeaseTouch = Future<void> Function(Directory directory);
 
@@ -69,8 +70,9 @@ class DataExport {
     final readOwner = ownerId ?? () => SharedPreferencesUtil().uid;
     final service = authService ?? AuthService.instance;
     final ownerAtStart = readOwner();
-    final snapshot =
-        ownerAtStart == null || ownerAtStart.isEmpty ? null : service.captureSessionSnapshot(expectedUid: ownerAtStart);
+    final snapshot = ownerAtStart == null || ownerAtStart.isEmpty
+        ? null
+        : service.captureSessionSnapshot(expectedUid: ownerAtStart);
     final abort = Completer<void>();
     final bytesReceived = ValueNotifier<int>(0);
     var bytesDisposed = false;
@@ -95,20 +97,21 @@ class DataExport {
           context,
           failed,
           actionLabel: l10n.tryAgain,
-          onAction: retry ??
+          onAction:
+              retry ??
               () => run(
-                    context,
-                    shareOrigin: shareOrigin,
-                    exportDirectory: exportDirectory,
-                    cleanupDirectory: cleanupDirectory,
-                    download: download,
-                    share: share,
-                    ownerId: ownerId,
-                    onExported: onExported,
-                    authService: authService,
-                    sweepStaleExports: sweepStaleExports,
-                    shareLease: shareLease,
-                  ),
+                context,
+                shareOrigin: shareOrigin,
+                exportDirectory: exportDirectory,
+                cleanupDirectory: cleanupDirectory,
+                download: download,
+                share: share,
+                ownerId: ownerId,
+                onExported: onExported,
+                authService: authService,
+                sweepStaleExports: sweepStaleExports,
+                shareLease: shareLease,
+              ),
         );
       }
     }
@@ -143,10 +146,7 @@ class DataExport {
       }
       try {
         final routeCompleted = sheetRoute?.completed;
-        await Future.wait<dynamic>([
-          sheetDone,
-          if (routeCompleted != null) routeCompleted,
-        ]);
+        await Future.wait<dynamic>([sheetDone, if (routeCompleted != null) routeCompleted]);
       } catch (_) {}
       disposeBytes();
     }
@@ -172,12 +172,14 @@ class DataExport {
         );
       },
     );
-    unawaited(sheetDone.then((_) {
-      if (!sheetClosed && !downloadDone && !abort.isCompleted) {
-        cancelled = true;
-        abort.complete();
-      }
-    }));
+    unawaited(
+      sheetDone.then((_) {
+        if (!sheetClosed && !downloadDone && !abort.isCompleted) {
+          cancelled = true;
+          abort.complete();
+        }
+      }),
+    );
 
     Future<void> cleanup() async {
       final dir = exportDir;
@@ -218,8 +220,9 @@ class DataExport {
           if (retainedShareNeedsSweepProtection) retainedShare!.directory.path,
         },
       );
-      exportDir =
-          exportDirectory != null ? await exportDirectory() : await _newExportDir(await getTemporaryDirectory());
+      exportDir = exportDirectory != null
+          ? await exportDirectory()
+          : await _newExportDir(await getTemporaryDirectory());
       final filePath = '${exportDir!.path}/omi-export.json';
       final exportedPath = await (download ?? exportUserDataToFile)(
         filePath,
@@ -249,31 +252,27 @@ class DataExport {
       final touchLease = shareLease ?? touchExportShareLease;
       _RetainedExportShare? retained;
       void retainForRetry() {
-        retained = _RetainedExportShare(
-          filePath: exportedPath,
-          directory: exportDir!,
-          snapshot: snapshot,
-        );
+        retained = _RetainedExportShare(filePath: exportedPath, directory: exportDir!, snapshot: snapshot);
         _retainedShare = retained;
         exportDir = null;
       }
 
       void reportShareError() => reportError(
-            retry: () => _retryShare(
-              context,
-              retained!,
-              shareOrigin: shareOrigin,
-              share: share,
-              onExported: onExported,
-              authService: service,
-              exportDirectory: exportDirectory,
-              cleanupDirectory: cleanupDirectory,
-              download: download,
-              ownerId: ownerId,
-              sweepStaleExports: sweepStaleExports,
-              shareLease: shareLease,
-            ),
-          );
+        retry: () => _retryShare(
+          context,
+          retained!,
+          shareOrigin: shareOrigin,
+          share: share,
+          onExported: onExported,
+          authService: service,
+          exportDirectory: exportDirectory,
+          cleanupDirectory: cleanupDirectory,
+          download: download,
+          ownerId: ownerId,
+          sweepStaleExports: sweepStaleExports,
+          shareLease: shareLease,
+        ),
+      );
 
       ShareResult result;
       try {
@@ -357,37 +356,37 @@ class DataExport {
       }
 
       void reportRetryError() => showRetryError(
-            () => _retryShare(
-              context,
-              retained,
-              shareOrigin: shareOrigin,
-              share: share,
-              onExported: onExported,
-              authService: authService,
-              exportDirectory: exportDirectory,
-              cleanupDirectory: cleanupDirectory,
-              download: download,
-              ownerId: ownerId,
-              sweepStaleExports: sweepStaleExports,
-              shareLease: shareLease,
-            ),
-          );
+        () => _retryShare(
+          context,
+          retained,
+          shareOrigin: shareOrigin,
+          share: share,
+          onExported: onExported,
+          authService: authService,
+          exportDirectory: exportDirectory,
+          cleanupDirectory: cleanupDirectory,
+          download: download,
+          ownerId: ownerId,
+          sweepStaleExports: sweepStaleExports,
+          shareLease: shareLease,
+        ),
+      );
 
       void offerFreshExport() => showRetryError(
-            () => run(
-              context,
-              shareOrigin: shareOrigin,
-              exportDirectory: exportDirectory,
-              cleanupDirectory: cleanupDirectory,
-              download: download,
-              share: share,
-              ownerId: ownerId,
-              onExported: onExported,
-              authService: authService,
-              sweepStaleExports: sweepStaleExports,
-              shareLease: shareLease,
-            ),
-          );
+        () => run(
+          context,
+          shareOrigin: shareOrigin,
+          exportDirectory: exportDirectory,
+          cleanupDirectory: cleanupDirectory,
+          download: download,
+          share: share,
+          ownerId: ownerId,
+          onExported: onExported,
+          authService: authService,
+          sweepStaleExports: sweepStaleExports,
+          shareLease: shareLease,
+        ),
+      );
 
       if (!authService.isSessionSnapshotCurrent(retained.snapshot)) {
         if (identical(_retainedShare, retained)) _retainedShare = null;
@@ -479,11 +478,7 @@ class DataExport {
 }
 
 class _RetainedExportShare {
-  const _RetainedExportShare({
-    required this.filePath,
-    required this.directory,
-    required this.snapshot,
-  });
+  const _RetainedExportShare({required this.filePath, required this.directory, required this.snapshot});
 
   final String filePath;
   final Directory directory;
@@ -514,7 +509,9 @@ class _ExportProgressContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: OmiSpacing.lg),
-        Center(child: OmiButton.secondary(label: l10n.cancel, onPressed: onCancel)),
+        Center(
+          child: OmiButton.secondary(label: l10n.cancel, onPressed: onCancel),
+        ),
       ],
     );
   }

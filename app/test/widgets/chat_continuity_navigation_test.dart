@@ -42,26 +42,27 @@ class _HistoryServer {
   int readStatus = 200;
 
   http.Response transcript(String id) => http.Response(
-      jsonEncode([
-        {
-          'id': '$id-question',
-          'text': 'Question from $id',
-          'sender': 'human',
-          'created_at': '2026-09-29T01:00:00Z',
-          'type': 'text',
-        },
-        {
-          'id': '$id-answer',
-          'text': 'Answer from $id',
-          'sender': 'ai',
-          'created_at': '2026-09-29T01:01:00Z',
-          'type': 'text',
-          'content_blocks': [
-            {'type': 'followUp', 'text': 'What should I do next?'}
-          ],
-        },
-      ]),
-      readStatus);
+    jsonEncode([
+      {
+        'id': '$id-question',
+        'text': 'Question from $id',
+        'sender': 'human',
+        'created_at': '2026-09-29T01:00:00Z',
+        'type': 'text',
+      },
+      {
+        'id': '$id-answer',
+        'text': 'Answer from $id',
+        'sender': 'ai',
+        'created_at': '2026-09-29T01:01:00Z',
+        'type': 'text',
+        'content_blocks': [
+          {'type': 'followUp', 'text': 'What should I do next?'},
+        ],
+      },
+    ]),
+    readStatus,
+  );
 
   Future<http.Response> send(ApiRequest request) async {
     requests.add(request);
@@ -69,11 +70,12 @@ class _HistoryServer {
     if (request.method != 'GET') throw StateError('Opening history must be read-only: ${request.method}');
     if (uri.path == '/v2/chat-sessions') {
       return http.Response(
-          jsonEncode([
-            for (final id in ['first', 'second'])
-              {'id': id, 'title': 'Saved $id', 'message_count': 2, 'updated_at': '2026-09-29T01:01:00Z'},
-          ]),
-          200);
+        jsonEncode([
+          for (final id in ['first', 'second'])
+            {'id': id, 'title': 'Saved $id', 'message_count': 2, 'updated_at': '2026-09-29T01:01:00Z'},
+        ]),
+        200,
+      );
     }
     if (uri.path == '/v2/messages') {
       return transcript(uri.queryParameters['chat_session_id']!);
@@ -93,36 +95,53 @@ void main() {
   Future<_Messages> pumpChat(WidgetTester tester, _HistoryServer server, {String? draft, bool empty = false}) async {
     final provider = _Messages(ChatSessionsApi(baseUrl: 'https://example.invalid/', send: server.send))
       ..messages = [
-        ServerMessage('current', DateTime.utc(2026), 'Current conversation', MessageSender.human, MessageType.text,
-            null, false, [], [], []),
+        ServerMessage(
+          'current',
+          DateTime.utc(2026),
+          'Current conversation',
+          MessageSender.human,
+          MessageType.text,
+          null,
+          false,
+          [],
+          [],
+          [],
+        ),
       ];
     if (empty) provider.messages.clear();
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<MessageProvider>(create: (_) => provider),
-        ChangeNotifierProvider(create: (_) => AppProvider()),
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (_) => HomeProvider()),
-        ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
-        ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => false)),
-        ChangeNotifierProvider(
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<MessageProvider>(create: (_) => provider),
+          ChangeNotifierProvider(create: (_) => AppProvider()),
+          ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (_) => HomeProvider()),
+          ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => false)),
+          ChangeNotifierProvider(
             create: (_) => IntegrationProvider(
-                fetchStatus: (_) async => null,
-                saveStatus: (_, __) async => false,
-                deleteStatus: (_) async => false,
-                persistPref: (_, __) async {})),
-      ],
-      child: MaterialApp(
-        theme: ThemeData.dark(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: const [Locale('en')],
-        home: Builder(
+              fetchStatus: (_) async => null,
+              saveStatus: (_, __) async => false,
+              deleteStatus: (_) async => false,
+              persistPref: (_, __) async {},
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Builder(
             builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => openChatSheet<void>(context, ChatPage(initialDraft: draft)),
-                    child: const Text('Open chat')))),
+              body: TextButton(
+                onPressed: () => openChatSheet<void>(context, ChatPage(initialDraft: draft)),
+                child: const Text('Open chat'),
+              ),
+            ),
+          ),
+        ),
       ),
-    ));
+    );
     await tester.tap(find.text('Open chat'));
     await tester.pumpAndSettle();
     return provider;
@@ -161,8 +180,10 @@ void main() {
     expect(find.byKey(const Key('chat_history')), findsNothing);
     expect(find.text('Past chats'), findsNothing);
     expect(find.text('New Chat'), findsNothing);
-    expect(tester.getCenter(find.byKey(const Key('chat_drag_handle'))).dx,
-        closeTo(tester.getCenter(find.byType(ChatPage)).dx, 1));
+    expect(
+      tester.getCenter(find.byKey(const Key('chat_drag_handle'))).dx,
+      closeTo(tester.getCenter(find.byType(ChatPage)).dx, 1),
+    );
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -213,17 +234,70 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('tapping a follow-up sends it once in the continuous chat and retains the previous messages',
-      (tester) async {
+  testWidgets('Send stays enabled while history is still loading and reaches the streamer', (tester) async {
+    final provider = await pumpChat(tester, _HistoryServer());
+    provider.isLoadingMessages = true;
+    provider.notifyListeners();
+    await tester.pump();
+
+    final sends = <String>[];
+    provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+      sends.add(text);
+      yield ServerMessageChunk(
+        'answer',
+        'Done',
+        MessageChunkType.done,
+        message: ServerMessage(
+          'answer',
+          DateTime.utc(2026, 9, 29, 2),
+          'Done',
+          MessageSender.ai,
+          MessageType.text,
+          null,
+          false,
+          [],
+          [],
+          [],
+        ),
+      );
+    };
+    await tester.enterText(find.byKey(const ValueKey('omi.chat.input')), 'hello while loading');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
+    await tester.pumpAndSettle();
+
+    expect(sends, ['hello while loading']);
+    expect(provider.isLoadingMessages, isFalse);
+    expect(provider.messages.last.text, 'Done');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('tapping a follow-up sends it once in the continuous chat and retains the previous messages', (
+    tester,
+  ) async {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
     await seedReply(tester);
     final sends = <(String, String?)>[];
     provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
       sends.add((text, chatSessionId));
-      yield ServerMessageChunk('followup-answer', 'Next step reply', MessageChunkType.done,
-          message: ServerMessage('followup-answer', DateTime.utc(2026, 9, 29, 2), 'Next step reply', MessageSender.ai,
-              MessageType.text, null, false, [], [], []));
+      yield ServerMessageChunk(
+        'followup-answer',
+        'Next step reply',
+        MessageChunkType.done,
+        message: ServerMessage(
+          'followup-answer',
+          DateTime.utc(2026, 9, 29, 2),
+          'Next step reply',
+          MessageSender.ai,
+          MessageType.text,
+          null,
+          false,
+          [],
+          [],
+          [],
+        ),
+      );
     };
     await tester.ensureVisible(find.byKey(const Key('chat_followup_chip')));
     await tester.tap(find.byKey(const Key('chat_followup_chip')));
@@ -236,14 +310,18 @@ void main() {
       'Next step reply',
     ]);
     expect(provider.sendingMessage, isFalse);
-    expect(find.byKey(const Key('chat_followup_chip')), findsNothing,
-        reason: 'The used suggestion disappears when a newer answer has no follow-up');
+    expect(
+      find.byKey(const Key('chat_followup_chip')),
+      findsNothing,
+      reason: 'The used suggestion disappears when a newer answer has no follow-up',
+    );
     expect(server.requests.every((r) => r.method == 'GET'), isTrue);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('only the latest reply suggests a question above the composer, including with the keyboard open',
-      (tester) async {
+  testWidgets('only the latest reply suggests a question above the composer, including with the keyboard open', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -251,35 +329,53 @@ void main() {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
     await seedReply(tester);
-    final older = ServerMessage('older-reply', DateTime.utc(2026), 'An earlier answer', MessageSender.ai,
-        MessageType.text, null, false, [], [], [],
-        contentBlocks: [
-          {'type': 'followUp', 'text': 'An outdated suggestion?'},
-        ]);
+    final older = ServerMessage(
+      'older-reply',
+      DateTime.utc(2026),
+      'An earlier answer',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+      [],
+      [],
+      contentBlocks: [
+        {'type': 'followUp', 'text': 'An outdated suggestion?'},
+      ],
+    );
     provider.messages.insert(0, older);
     provider.notifyListeners();
     await tester.pumpAndSettle();
     final chip = find.byKey(const Key('chat_followup_chip'));
     expect(chip, findsOneWidget);
     expect(find.text('An outdated suggestion?'), findsNothing);
-    expect(find.descendant(of: find.byType(AIMessage), matching: chip), findsNothing,
-        reason: 'Suggestions belong to the composer, never to historical message rows');
-    expect(tester.getBottomLeft(chip).dy,
-        lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('omi.chat.input'))).dy));
+    expect(
+      find.descendant(of: find.byType(AIMessage), matching: chip),
+      findsNothing,
+      reason: 'Suggestions belong to the composer, never to historical message rows',
+    );
+    expect(
+      tester.getBottomLeft(chip).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('omi.chat.input'))).dy),
+    );
     await tester.tap(find.byKey(const ValueKey('omi.chat.input')));
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
     addTearDown(tester.view.resetViewInsets);
     await tester.pumpAndSettle();
     expect(chip.hitTestable(), findsOneWidget);
-    expect(tester.getBottomLeft(chip).dy,
-        lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('omi.chat.input'))).dy));
+    expect(
+      tester.getBottomLeft(chip).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('omi.chat.input'))).dy),
+    );
     expect(older.followUpQuestion, 'An outdated suggestion?', reason: 'Saved message data is preserved');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a new turn hides the old suggestion while streaming and replaces it only after completion',
-      (tester) async {
+  testWidgets('a new turn hides the old suggestion while streaming and replaces it only after completion', (
+    tester,
+  ) async {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
     await seedReply(tester);
@@ -287,11 +383,21 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('chat_followup_chip')), findsNothing);
     provider.addMessageLocally('My next question');
-    final next = ServerMessage('next-answer', DateTime.utc(2026, 9, 29, 2), 'A newer answer', MessageSender.ai,
-        MessageType.text, null, false, [], [], [],
-        contentBlocks: [
-          {'type': 'followUp', 'text': 'A new suggestion?'},
-        ]);
+    final next = ServerMessage(
+      'next-answer',
+      DateTime.utc(2026, 9, 29, 2),
+      'A newer answer',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+      [],
+      [],
+      contentBlocks: [
+        {'type': 'followUp', 'text': 'A new suggestion?'},
+      ],
+    );
     provider.addMessage(next);
     provider.setShowTypingIndicator(true);
     provider.setSendingMessage(false);
@@ -303,8 +409,11 @@ void main() {
     expect(find.text('What should I do next?'), findsNothing);
     provider.addMessageLocally('Another question');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('chat_followup_chip')), findsNothing,
-        reason: 'A trailing user message must never revive the previous suggestion');
+    expect(
+      find.byKey(const Key('chat_followup_chip')),
+      findsNothing,
+      reason: 'A trailing user message must never revive the previous suggestion',
+    );
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -320,20 +429,47 @@ void main() {
     await seedReply(tester);
     await tester.tap(find.byKey(const ValueKey('omi.chat.input')));
     tester.view.viewInsets = const FakeViewPadding(bottom: 220);
-    const question = 'What was still undecided about the apps and\n\n'
+    const question =
+        'What was still undecided about the apps and\n\n'
         'integrations experience and the next review?';
     final sends = <(String, String?)>[];
     provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
       sends.add((text, chatSessionId));
-      yield ServerMessageChunk('next-answer', 'Next answer', MessageChunkType.done,
-          message: ServerMessage('next-answer', DateTime.utc(2026, 9, 29, 3), 'Next answer', MessageSender.ai,
-              MessageType.text, null, false, [], [], []));
+      yield ServerMessageChunk(
+        'next-answer',
+        'Next answer',
+        MessageChunkType.done,
+        message: ServerMessage(
+          'next-answer',
+          DateTime.utc(2026, 9, 29, 3),
+          'Next answer',
+          MessageSender.ai,
+          MessageType.text,
+          null,
+          false,
+          [],
+          [],
+          [],
+        ),
+      );
     };
-    provider.addMessage(ServerMessage('long-answer', DateTime.utc(2026, 9, 29, 2), 'Here is the answer',
-        MessageSender.ai, MessageType.text, null, false, [], [], [],
+    provider.addMessage(
+      ServerMessage(
+        'long-answer',
+        DateTime.utc(2026, 9, 29, 2),
+        'Here is the answer',
+        MessageSender.ai,
+        MessageType.text,
+        null,
+        false,
+        [],
+        [],
+        [],
         contentBlocks: [
           {'type': 'followUp', 'text': question},
-        ]));
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     final chip = find.byKey(const Key('chat_followup_chip'));
     expect(chip, findsOneWidget);
@@ -393,8 +529,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a cancelled pointer restores the popup and a committed pull continues from its release position',
-      (tester) async {
+  testWidgets('a cancelled pointer restores the popup and a committed pull continues from its release position', (
+    tester,
+  ) async {
     await pumpChat(tester, _HistoryServer());
     final page = find.byType(ChatPage);
     final navigator = Navigator.of(tester.element(page));

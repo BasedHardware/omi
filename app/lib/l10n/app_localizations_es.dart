@@ -12329,7 +12329,51 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'No se puede conectar. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get chatReplyServerError => 'Algo salió mal de nuestra parte. Inténtalo de nuevo.';
+
+  @override
+  String get chatReplyTimeout => 'La respuesta tardó demasiado. Inténtalo de nuevo.';
+
+  @override
+  String get chatReplyNotSignedIn => 'No has iniciado sesión. Inicia sesión e inténtalo de nuevo.';
+
+  @override
+  String get chatAppsLoadFailed => 'No se pudieron cargar las apps de chat. Inténtalo de nuevo.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voz';
+
+  @override
+  String get assistantVoice => 'Voz del asistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Tu elección de voz se comparte entre el móvil y el escritorio.';
+
+  @override
+  String get readChatRepliesAloud => 'Leer las respuestas del chat en voz alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Solo habla cuando la respuesta de voz lo permite.';
+
+  @override
+  String get voicePreviewSample => 'Hola, soy Omi. Esta es mi voz.';
+
+  @override
   String get peopleStatsIncomplete => 'Los recuentos pueden estar incompletos.';
+
+  @override
+  String get previousDay => 'Día anterior';
+
+  @override
+  String get nextDay => 'Día siguiente';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'No hay tareas el $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Reprocesando la conversación…';

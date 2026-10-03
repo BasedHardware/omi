@@ -12293,7 +12293,51 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'সংযোগ করা যাচ্ছে না। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyServerError => 'আমাদের দিক থেকে কিছু ভুল হয়েছে। আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyTimeout => 'উত্তরটি আসতে বেশি সময় নিয়েছে। আবার চেষ্টা করুন।';
+
+  @override
+  String get chatReplyNotSignedIn => 'আপনি সাইন ইন করেননি। সাইন ইন করে আবার চেষ্টা করুন।';
+
+  @override
+  String get chatAppsLoadFailed => 'চ্যাট অ্যাপ লোড করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'ভয়েস';
+
+  @override
+  String get assistantVoice => 'অ্যাসিস্ট্যান্টের ভয়েস';
+
+  @override
+  String get voiceSharedAcrossDevices => 'আপনার নির্বাচিত ভয়েস মোবাইল ও ডেস্কটপে শেয়ার করা হয়।';
+
+  @override
+  String get readChatRepliesAloud => 'চ্যাটের উত্তরগুলো জোরে পড়ুন';
+
+  @override
+  String get readChatRepliesAloudDescription => 'শুধুমাত্র \"ভয়েস রেসপন্স\" অনুমতি দিলেই কথা বলে।';
+
+  @override
+  String get voicePreviewSample => 'হাই, আমি Omi। এটাই আমার ভয়েস।';
+
+  @override
   String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
+  String get previousDay => 'আগের দিন';
+
+  @override
+  String get nextDay => 'পরের দিন';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date-এ কোনো কাজ নেই';
+  }
 
   @override
   String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';

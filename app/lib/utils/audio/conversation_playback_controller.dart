@@ -7,11 +7,8 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 /// Performs a wall-clock seek on the detail player. [strict] selects the
 /// no-gap-snap mapping (a transcript line tap); a scrub or reader reposition
 /// snaps into the nearest captured span. [play] starts playback after the seek.
-typedef ConversationPlaybackSeekHandler = Future<void> Function(
-  double wallSeconds, {
-  required bool play,
-  required bool strict,
-});
+typedef ConversationPlaybackSeekHandler =
+    Future<void> Function(double wallSeconds, {required bool play, required bool strict});
 
 /// Playback state shared by the detail page's audio bar and its transcript.
 ///

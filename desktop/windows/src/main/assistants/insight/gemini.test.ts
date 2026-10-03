@@ -12,6 +12,7 @@ vi.mock('electron', () => ({ net: { fetch: h.fetch } }))
 vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
 
 import { runTwoPhasePipeline } from './gemini'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 import type { BackendSession } from '../core/session'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
@@ -142,6 +143,22 @@ describe('runTwoPhasePipeline', () => {
     expect(d.loadScreenshot).not.toHaveBeenCalled()
     // one iteration only
     expect(h.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits the bounded attribution headers on the proxy request', async () => {
+    queueResponses([fc('no_advice', { context_summary: 'c', current_activity: 'a' })])
+    await runTwoPhasePipeline(deps())
+    const [url, init] = h.fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/v1/proxy/gemini/models/')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'insight',
+      'X-Omi-Workload': 'extraction'
+    })
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe(
+      geminiClientPlatform(process.platform)
+    )
   })
 
   it('Phase 1 TOLERATES an unknown tool (continues); Phase 2 still reachable', async () => {

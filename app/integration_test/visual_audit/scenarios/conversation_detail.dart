@@ -27,32 +27,36 @@ const _summaryTab = ConversationTab.summary;
 const _transcriptTab = ConversationTab.transcript;
 
 List<SingleChildWidget> _detailProviders(ServerConversation conversation, {ConversationProvider? provider}) => [
-      ChangeNotifierProvider<ConversationProvider>.value(
-          value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation])),
-      ChangeNotifierProvider(
-          create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt)),
-    ];
+  ChangeNotifierProvider<ConversationProvider>.value(
+    value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation]),
+  ),
+  ChangeNotifierProvider(
+    create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt),
+  ),
+];
 
-Future<void> _pumpDetail(AuditRun a, ServerConversation conversation, {ConversationTab tab = _summaryTab}) =>
-    a.pump(ConversationDetailPage(conversation: conversation, initialTab: tab),
-        providers: _detailProviders(conversation));
+Future<void> _pumpDetail(AuditRun a, ServerConversation conversation, {ConversationTab tab = _summaryTab}) => a.pump(
+  ConversationDetailPage(conversation: conversation, initialTab: tab),
+  providers: _detailProviders(conversation),
+);
 
 TranscriptSegment _segment(String id, String text, String speaker, {bool isUser = false, String? personId}) {
   final start = double.parse(id) * 3;
   return TranscriptSegment(
-      id: id,
-      text: text,
-      speaker: speaker,
-      isUser: isUser,
-      personId: personId,
-      start: start,
-      end: start + 3,
-      translations: []);
+    id: id,
+    text: text,
+    speaker: speaker,
+    isUser: isUser,
+    personId: personId,
+    start: start,
+    end: start + 3,
+    translations: [],
+  );
 }
 
 final _david = Person(id: 'person-1', name: 'David', createdAt: DateTime(2026, 1, 1), updatedAt: DateTime(2026, 1, 1));
 final _cachedDavid = {
-  'cachedPeople': [jsonEncode(_david.toJson())]
+  'cachedPeople': [jsonEncode(_david.toJson())],
 };
 
 /// The Omi v8 mock's conversation (#20037): today 12:40 PM, 14 minutes, filed under Work, a
@@ -62,14 +66,15 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
   final now = DateTime.now();
   final startedAt = DateTime(now.year, now.month, now.day, 12, 40);
   TranscriptSegment line(String id, int minute, double until, String text, {bool mine = false}) => TranscriptSegment(
-      id: id,
-      text: text,
-      speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
-      isUser: mine,
-      personId: null,
-      start: minute * 60.0,
-      end: until * 60,
-      translations: []);
+    id: id,
+    text: text,
+    speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
+    isUser: mine,
+    personId: null,
+    start: minute * 60.0,
+    end: until * 60,
+    translations: [],
+  );
   final conversation = ServerConversation(
     id: 'audit-design',
     createdAt: startedAt,
@@ -78,14 +83,15 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
     folderId: 'folder-work',
     status: ConversationStatus.completed,
     structured: Structured(
-        'Ship the widgets without waiting for chat',
-        '## Widgets\n'
-            '- Ship them on their own, not bundled with the homepage chat.\n'
-            '- Priya would rather see them land now and fix the chat separately.\n\n'
-            '## How Priya wants updates\n'
-            '- In writing. She said it twice: message, don’t call.',
-        emoji: '\u{1F4AC}',
-        category: 'work'),
+      'Ship the widgets without waiting for chat',
+      '## Widgets\n'
+          '- Ship them on their own, not bundled with the homepage chat.\n'
+          '- Priya would rather see them land now and fix the chat separately.\n\n'
+          '## How Priya wants updates\n'
+          '- In writing. She said it twice: message, don’t call.',
+      emoji: '\u{1F4AC}',
+      category: 'work',
+    ),
     transcriptSegments: [
       line('0', 0, 1, 'So, the widgets. Do we wait for the chat?'),
       line('1', 1, 3, 'I’d rather not. They’re done.', mine: true),
@@ -95,14 +101,15 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
       line('5', 12, 13, 'Will do. Sam’s still waiting on me too.', mine: true),
       line('6', 13, 13.5, 'Ha. Call him.'),
       TranscriptSegment(
-          id: '7',
-          text: 'Tomorrow morning, first thing.',
-          speaker: 'SPEAKER_0',
-          isUser: true,
-          personId: null,
-          start: 13 * 60.0 + 30,
-          end: 14 * 60.0,
-          translations: []),
+        id: '7',
+        text: 'Tomorrow morning, first thing.',
+        speaker: 'SPEAKER_0',
+        isUser: true,
+        personId: null,
+        start: 13 * 60.0 + 30,
+        end: 14 * 60.0,
+        translations: [],
+      ),
     ],
     speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [1]),
     audioFiles: [
@@ -110,24 +117,29 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
     ],
   );
   final folders = FolderProvider(
-      foldersFetcher: () async => [
-            Folder(
-                id: 'folder-work',
-                name: 'Work',
-                color: '#6B7280',
-                icon: '📁',
-                createdAt: startedAt,
-                updatedAt: startedAt,
-                order: 0,
-                isDefault: false,
-                isSystem: false,
-                conversationCount: 1),
-          ]);
+    foldersFetcher: () async => [
+      Folder(
+        id: 'folder-work',
+        name: 'Work',
+        color: '#6B7280',
+        icon: '📁',
+        createdAt: startedAt,
+        updatedAt: startedAt,
+        order: 0,
+        isDefault: false,
+        isSystem: false,
+        conversationCount: 1,
+      ),
+    ],
+  );
   await a.tester.runAsync(folders.loadFolders);
-  await a.pump(ConversationDetailPage(conversation: conversation), providers: [
-    ..._detailProviders(conversation),
-    ChangeNotifierProvider<FolderProvider>.value(value: folders),
-  ]);
+  await a.pump(
+    ConversationDetailPage(conversation: conversation),
+    providers: [
+      ..._detailProviders(conversation),
+      ChangeNotifierProvider<FolderProvider>.value(value: folders),
+    ],
+  );
 }
 
 final conversationDetailScenarios = <AuditScenario>[
@@ -135,7 +147,8 @@ final conversationDetailScenarios = <AuditScenario>[
     id: 'conversation-detail-design',
     title: 'The Omi v8 conversation: title, chips, Summary | Transcript, one bottom bar',
     page: _page,
-    state: 'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
+    state:
+        'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
         'a 14 min recording)',
     run: (a) async {
       await _pumpDesignConversation(a);
@@ -153,19 +166,23 @@ final conversationDetailScenarios = <AuditScenario>[
     state: 'One ungrouped conversation served by the fixture backend and loaded into ConversationProvider',
     run: (a) async {
       final conversation = ServerConversation(
-          id: 'audit-conversation',
-          createdAt: DateTime(2026, 9, 20, 10),
-          structured: Structured(
-              'Design catch-up with Alex',
-              'We agreed to simplify the first recording experience, make saved memories easier to find, and send '
-                  'the revised design notes on Friday.',
-              emoji: '💬',
-              category: 'work'));
+        id: 'audit-conversation',
+        createdAt: DateTime(2026, 9, 20, 10),
+        structured: Structured(
+          'Design catch-up with Alex',
+          'We agreed to simplify the first recording experience, make saved memories easier to find, and send '
+              'the revised design notes on Friday.',
+          emoji: '💬',
+          category: 'work',
+        ),
+      );
       a.server.conversations.add(conversation.toJson());
       final provider = ConversationProvider(isSignedIn: () => true);
       await a.tester.runAsync(provider.forceRefreshConversations);
-      await a.pump(ConversationDetailPage(conversation: conversation),
-          providers: _detailProviders(conversation, provider: provider));
+      await a.pump(
+        ConversationDetailPage(conversation: conversation),
+        providers: _detailProviders(conversation, provider: provider),
+      );
       await a.shot('Open an ungrouped conversation: Ask Omi, Star, Share and the overflow button', step: 'summary');
       await a.tap(find.byKey(const Key('conversation_more')));
       await a.shot('Open the overflow menu', step: 'overflow');
@@ -182,26 +199,55 @@ final conversationDetailScenarios = <AuditScenario>[
       a.server.images.addAll(images!);
       final base = a.server.baseUrl;
       final conversation = ServerConversation(
-          id: 'audit-meeting',
-          createdAt: DateTime(2026, 9, 30, 10),
-          structured: Structured(
-              'Weekly product sync',
-              'Maya walked through the Q4 onboarding roadmap. The team agreed to simplify the first recording, '
-                  'make saved memories easier to find, and roll the launch out at 10% before widening it.',
-              emoji: '\u{1F4C5}',
-              category: 'work'));
+        id: 'audit-meeting',
+        createdAt: DateTime(2026, 9, 30, 10),
+        structured: Structured(
+          'Weekly product sync',
+          'Maya walked through the Q4 onboarding roadmap. The team agreed to simplify the first recording, '
+              'make saved memories easier to find, and roll the launch out at 10% before widening it.',
+          emoji: '\u{1F4C5}',
+          category: 'work',
+        ),
+      );
       a.server.conversations.add(conversation.toJson());
       a.server.screenFrameSets['audit-meeting'] = {
         'revision': 1,
-        'banner': screenFrameJson(base, 'f-call', 'call.png',
-            role: 'banner', rank: 0, caption: 'Weekly product sync on a video call'),
+        'banner': screenFrameJson(
+          base,
+          'f-call',
+          'call.png',
+          role: 'banner',
+          rank: 0,
+          caption: 'Weekly product sync on a video call',
+        ),
         'strip': [
-          screenFrameJson(base, 'f-slide', 'slide.png',
-              role: 'strip', rank: 1, caption: 'Q4 onboarding roadmap slide', badge: 'slides'),
-          screenFrameJson(base, 'f-editor', 'editor.png',
-              role: 'strip', rank: 2, caption: 'Onboarding flow code in the editor', badge: 'code'),
-          screenFrameJson(base, 'f-doc', 'doc.png',
-              role: 'strip', rank: 3, caption: 'Launch checklist document', badge: 'document'),
+          screenFrameJson(
+            base,
+            'f-slide',
+            'slide.png',
+            role: 'strip',
+            rank: 1,
+            caption: 'Q4 onboarding roadmap slide',
+            badge: 'slides',
+          ),
+          screenFrameJson(
+            base,
+            'f-editor',
+            'editor.png',
+            role: 'strip',
+            rank: 2,
+            caption: 'Onboarding flow code in the editor',
+            badge: 'code',
+          ),
+          screenFrameJson(
+            base,
+            'f-doc',
+            'doc.png',
+            role: 'strip',
+            rank: 3,
+            caption: 'Launch checklist document',
+            badge: 'document',
+          ),
         ],
       };
       await _pumpDetail(a, conversation);
@@ -232,10 +278,14 @@ final conversationDetailScenarios = <AuditScenario>[
     page: _page,
     state: 'One ungrouped conversation with two transcript segments from two unnamed speakers',
     run: (a) async {
-      final conversation = auditConversation('audit-transcript', title: 'Design catch-up with Alex', segments: [
-        _segment('0', 'Let’s simplify the first recording experience.', 'SPEAKER_0'),
-        _segment('1', 'Agreed — and make saved memories easier to find.', 'SPEAKER_1'),
-      ]);
+      final conversation = auditConversation(
+        'audit-transcript',
+        title: 'Design catch-up with Alex',
+        segments: [
+          _segment('0', 'Let’s simplify the first recording experience.', 'SPEAKER_0'),
+          _segment('1', 'Agreed — and make saved memories easier to find.', 'SPEAKER_1'),
+        ],
+      );
       await _pumpDetail(a, conversation, tab: _transcriptTab);
       await a.shot('Open the Transcript tab');
     },
@@ -246,10 +296,14 @@ final conversationDetailScenarios = <AuditScenario>[
     page: _page,
     state: 'One conversation whose capture group has a desktop and a pendant recording',
     run: (a) async {
-      const group = CaptureGroup(id: 'group-2', primaryId: 'grouped-b', members: [
-        CaptureGroupMember(id: 'grouped-b', source: 'desktop'),
-        CaptureGroupMember(id: 'grouped-b-omi', source: 'omi'),
-      ]);
+      const group = CaptureGroup(
+        id: 'group-2',
+        primaryId: 'grouped-b',
+        members: [
+          CaptureGroupMember(id: 'grouped-b', source: 'desktop'),
+          CaptureGroupMember(id: 'grouped-b-omi', source: 'omi'),
+        ],
+      );
       final grouped = auditConversation('grouped-b', title: 'Design catch-up with Alex', captureGroup: group);
       await _pumpDetail(a, grouped);
       await a.shot('Grouped conversation: header with the recordings chip, top bar', step: 'summary');
@@ -270,10 +324,14 @@ final conversationDetailScenarios = <AuditScenario>[
     state: 'Segments from the owner and from one cached, named person (David)',
     prefs: _cachedDavid,
     run: (a) async {
-      final conversation = auditConversation('people-a', title: 'Design catch-up', segments: [
-        _segment('0', "Let's ship Friday.", 'SPEAKER_0', isUser: true),
-        _segment('1', 'Sounds good to me.', 'SPEAKER_1', personId: 'person-1'),
-      ]);
+      final conversation = auditConversation(
+        'people-a',
+        title: 'Design catch-up',
+        segments: [
+          _segment('0', "Let's ship Friday.", 'SPEAKER_0', isUser: true),
+          _segment('1', 'Sounds good to me.', 'SPEAKER_1', personId: 'person-1'),
+        ],
+      );
       await _pumpDetail(a, conversation);
       await a.shot('The people chip reads "You + 1 other"');
     },
@@ -285,12 +343,16 @@ final conversationDetailScenarios = <AuditScenario>[
     state: 'Segments from one cached, named person (David) and three unnamed speakers',
     prefs: _cachedDavid,
     run: (a) async {
-      final conversation = auditConversation('people-b', title: 'Team standup', segments: [
-        _segment('0', 'Kicking off.', 'SPEAKER_0', personId: 'person-1'),
-        _segment('1', 'On it.', 'SPEAKER_1'),
-        _segment('2', 'Same here.', 'SPEAKER_2'),
-        _segment('3', 'Agreed.', 'SPEAKER_3'),
-      ]);
+      final conversation = auditConversation(
+        'people-b',
+        title: 'Team standup',
+        segments: [
+          _segment('0', 'Kicking off.', 'SPEAKER_0', personId: 'person-1'),
+          _segment('1', 'On it.', 'SPEAKER_1'),
+          _segment('2', 'Same here.', 'SPEAKER_2'),
+          _segment('3', 'Agreed.', 'SPEAKER_3'),
+        ],
+      );
       await _pumpDetail(a, conversation);
       await a.shot('The people chip reads "David + 3 others"');
     },
@@ -301,10 +363,11 @@ final conversationDetailScenarios = <AuditScenario>[
     page: _page,
     state: 'Segments from two unnamed speakers, none of them the owner',
     run: (a) async {
-      final conversation = auditConversation('people-c', title: 'Anonymous huddle', segments: [
-        _segment('0', 'Hello.', 'SPEAKER_0'),
-        _segment('1', 'Hi there.', 'SPEAKER_1'),
-      ]);
+      final conversation = auditConversation(
+        'people-c',
+        title: 'Anonymous huddle',
+        segments: [_segment('0', 'Hello.', 'SPEAKER_0'), _segment('1', 'Hi there.', 'SPEAKER_1')],
+      );
       await _pumpDetail(a, conversation);
       await a.shot('No people chip is shown');
     },

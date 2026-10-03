@@ -143,8 +143,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         title: searching
             ? l10n.noMemoriesFound
             : filtered
-                ? l10n.noMemoriesInCategories
-                : l10n.noMemoriesYet,
+            ? l10n.noMemoriesInCategories
+            : l10n.noMemoriesYet,
         action: OmiButton(
           key: const Key('memories_empty_action'),
           variant: searching || filtered ? OmiButtonVariant.secondary : OmiButtonVariant.primary,
@@ -152,8 +152,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           label: searching
               ? l10n.clearSearch
               : filtered
-                  ? l10n.resetFilters
-                  : l10n.addFirstMemory,
+              ? l10n.resetFilters
+              : l10n.addFirstMemory,
           onPressed: () {
             if (searching) {
               _searchController.clear();
@@ -178,10 +178,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       builder: (context, provider, _) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.memories),
-          ),
+          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
           body: Stack(
             children: [
               RefreshIndicator(
@@ -205,6 +202,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                           if (widget.showMindMap && provider.searchQuery.isEmpty && provider.memories.isNotEmpty)
                             SliverToBoxAdapter(child: MemoryMindMapPreview(loadGraph: widget.loadGraph)),
                           SliverToBoxAdapter(child: _buildHeader(provider, loading: false)),
+                          if (provider.showPartialLoadError)
+                            SliverToBoxAdapter(
+                              child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
+                            ),
                           if (provider.memoryBeliefEnabled &&
                               provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
@@ -237,9 +238,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     provider: provider,
                                     onTap:
                                         (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                      PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
-                                      _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                    },
+                                          PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
+                                          _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                        },
                                   );
                                 }, childCount: provider.filteredMemories.length),
                               ),
@@ -290,10 +291,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             child: Container(
               margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
               height: 88, // Approximate height of a memory item
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.mdAll,
-              ),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
           );
         },

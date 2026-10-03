@@ -38,13 +38,17 @@ final chatScenarios = <AuditScenario>[
       // A real saved assistant reply. (The fixture used to read "Your existing conversation", which
       // looked like a header but is an ordinary answer, so it rightly carries message actions.)
       final saved = ServerMessage(
-          'saved-answer',
-          DateTime.utc(2026, 9, 29),
-          'You agreed to send Alex the revised design notes on Friday.',
-          MessageSender.ai,
-          MessageType.text,
-          null,
-          false, [], [], []);
+        'saved-answer',
+        DateTime.utc(2026, 9, 29),
+        'You agreed to send Alex the revised design notes on Friday.',
+        MessageSender.ai,
+        MessageType.text,
+        null,
+        false,
+        [],
+        [],
+        [],
+      );
       final body = jsonEncode([saved.toJson()]);
       a.server.failNext('GET', '/v2/messages', status: 200, body: body);
       await a.pump(const ChatPage());
@@ -107,10 +111,7 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       final memories = MemoriesProvider();
       await a.tester.runAsync(() => memories.createMemory('I prefer morning meetings.', MemoryVisibility.private));
-      await a.pump(
-        const ChatPage(),
-        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
-      );
+      await a.pump(const ChatPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
       expect(find.text('What did I decide today?'), findsOneWidget);
       expect(find.text('What do I still owe people?'), findsOneWidget);
       expect(find.text('What did Omi notice?'), findsOneWidget);
@@ -155,27 +156,33 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       SharedPreferencesUtil().givenName = 'Alex';
       await a.pump(
-        Stack(children: [
-          Positioned.fill(
-            child: ColoredBox(
-              color: const Color(0xFFF2F2F7),
-              child: ListView(padding: const EdgeInsets.fromLTRB(16, 80, 16, 0), children: [
-                for (final title in ['Device Connection Troubleshooting', 'Trying to Identify a Place', 'Weekly sync'])
-                  Container(
-                    height: 96,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22)),
-                    child: Text(title, style: const TextStyle(fontSize: 17)),
-                  ),
-              ]),
+        Stack(
+          children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0xFFF2F2F7),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 80, 16, 0),
+                  children: [
+                    for (final title in [
+                      'Device Connection Troubleshooting',
+                      'Trying to Identify a Place',
+                      'Weekly sync',
+                    ])
+                      Container(
+                        height: 96,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22)),
+                        child: Text(title, style: const TextStyle(fontSize: 17)),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const ChatSheetTransition(
-            animation: AlwaysStoppedAnimation(0.7),
-            child: ChatPage(),
-          ),
-        ]),
+            const ChatSheetTransition(animation: AlwaysStoppedAnimation(0.7), child: ChatPage()),
+          ],
+        ),
         scaffold: false,
       );
       await a.shot('Tap Ask Omi: the page blurs and the chat sheet rises');
@@ -188,31 +195,45 @@ final chatScenarios = <AuditScenario>[
     state: 'One reply mid-stream with three steps; one finished reply with the same steps',
     run: (a) async {
       ServerMessage reply(String id, String text) => ServerMessage(
-          id, DateTime(2026, 9, 29, 10, 5), text, MessageSender.ai, MessageType.text, null, false, [], [], [],
-          askForNps: false)
-        ..thinkings.addAll(['Searching conversations', 'Loaded calendar', 'Searching memories']);
+        id,
+        DateTime(2026, 9, 29, 10, 5),
+        text,
+        MessageSender.ai,
+        MessageType.text,
+        null,
+        false,
+        [],
+        [],
+        [],
+        askForNps: false,
+      )..thinkings.addAll(['Searching conversations', 'Loaded calendar', 'Searching memories']);
       Widget message(ServerMessage m, {required bool working}) => AIMessage(
-            message: m,
-            sendMessage: (_) {},
-            displayOptions: false,
-            updateConversation: (_) {},
-            setMessageNps: (_, {reason}) {},
-            showTypingIndicator: working,
-          );
+        message: m,
+        sendMessage: (_) {},
+        displayOptions: false,
+        updateConversation: (_) {},
+        setMessageNps: (_, {reason}) {},
+        showTypingIndicator: working,
+      );
       await a.pump(
-        ListView(padding: const EdgeInsets.all(18), children: [
-          const Align(alignment: Alignment.centerRight, child: Text('What did I do today?')),
-          const SizedBox(height: 16),
-          message(reply('working', ''), working: true),
-          const SizedBox(height: 32),
-          const Align(alignment: Alignment.centerRight, child: Text('What did I do yesterday?')),
-          const SizedBox(height: 16),
-          message(
-            reply('done',
-                'Yesterday you had:\n\n- **9:12 AM** troubleshooting the pendant\'s Bluetooth level\n- **10:18 PM** trying to identify a place on a walk'),
-            working: false,
-          ),
-        ]),
+        ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            const Align(alignment: Alignment.centerRight, child: Text('What did I do today?')),
+            const SizedBox(height: 16),
+            message(reply('working', ''), working: true),
+            const SizedBox(height: 32),
+            const Align(alignment: Alignment.centerRight, child: Text('What did I do yesterday?')),
+            const SizedBox(height: 16),
+            message(
+              reply(
+                'done',
+                'Yesterday you had:\n\n- **9:12 AM** troubleshooting the pendant\'s Bluetooth level\n- **10:18 PM** trying to identify a place on a walk',
+              ),
+              working: false,
+            ),
+          ],
+        ),
       );
       await a.shot('A reply works through its steps; a finished reply keeps one line', step: 'lines');
       await a.tap(find.byKey(const ValueKey('chat_activity_summary')));

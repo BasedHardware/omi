@@ -99,6 +99,9 @@ environment_shared:
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: 'off'
           category: rollout

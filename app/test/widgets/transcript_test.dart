@@ -52,21 +52,26 @@ void main() {
   testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
     await setupSharedPreferences();
     var loaded = <Person>[];
-    final people =
-        PeopleProvider(loadPeople: () async => PeopleListResponse(people: loaded), renamePerson: (_, __) async => true);
+    final people = PeopleProvider(
+      loadPeople: () async => PeopleListResponse(people: loaded),
+      renamePerson: (_, __) async => true,
+    );
     final segment = segmentFor('reactive', 2)..personId = 'later';
-    await tester.pumpWidget(ChangeNotifierProvider.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
         value: people,
         child: MaterialApp(
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate
+            GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
-        )));
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
     expect(find.text('Speaker 1'), findsOneWidget);
@@ -184,9 +189,7 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
-          ),
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: true)),
         ),
       );
       await tester.pumpAndSettle();
@@ -278,23 +281,23 @@ void main() {
     testWidgets('a long saved transcript opens at its first line and stays there when it changes', (tester) async {
       await setupSharedPreferences();
       List<TranscriptSegment> lines(int count) => [
-            for (var i = 0; i < count; i++)
-              TranscriptSegment(
-                id: 'line-$i',
-                text: 'Line number $i of the conversation.',
-                speaker: 'SPEAKER_0${i % 2}',
-                isUser: i.isEven,
-                personId: null,
-                start: i * 10.0,
-                end: i * 10.0 + 5,
-                translations: [],
-              ),
-          ];
+        for (var i = 0; i < count; i++)
+          TranscriptSegment(
+            id: 'line-$i',
+            text: 'Line number $i of the conversation.',
+            speaker: 'SPEAKER_0${i % 2}',
+            isUser: i.isEven,
+            personId: null,
+            start: i * 10.0,
+            end: i * 10.0 + 5,
+            translations: [],
+          ),
+      ];
       Widget page(List<TranscriptSegment> segments) => MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
-          );
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
+      );
 
       await tester.pumpWidget(page(lines(60)));
       await tester.pumpAndSettle();
@@ -719,30 +722,28 @@ void main() {
       bool isUser = false,
       String? personId,
       String? source,
-    }) =>
-        TranscriptSegment(
-          id: id,
-          text: text,
-          speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-          speakerId: speakerId,
-          isUser: isUser,
-          personId: personId,
-          start: start,
-          end: start + 5,
-          translations: const [],
-          speakerLabelSource: source,
-        );
+    }) => TranscriptSegment(
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: start,
+      end: start + 5,
+      translations: const [],
+      speakerLabelSource: source,
+    );
 
     List<TranscriptSegment> voicesFixture() => [
-          line('a1', 3, 'First thing they said.', 0),
-          line('a2', 3, 'Still the same voice.', 10),
-          line('b1', 4, 'Another voice replies.', 20),
-          line('a3', 3, 'The first voice again.', 30),
-        ];
+      line('a1', 3, 'First thing they said.', 0),
+      line('a2', 3, 'Still the same voice.', 10),
+      line('b1', 4, 'Another voice replies.', 20),
+      line('a3', 3, 'The first voice again.', 30),
+    ];
 
-    Finder speakerNameLabels() => find.byWidgetPredicate(
-          (widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''),
-        );
+    Finder speakerNameLabels() =>
+        find.byWidgetPredicate((widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''));
 
     Future<void> pumpDetail(
       WidgetTester tester,
@@ -754,26 +755,25 @@ void main() {
       void Function(String, int)? editSegment,
       void Function(TranscriptSegment)? onConfirmSpeakerLabel,
       void Function(TranscriptSegment)? onRejectSpeakerLabel,
-    }) =>
-        tester.pumpWidget(
-          MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
-              body: TranscriptWidget(
-                segments: segments,
-                isConversationDetail: true,
-                unresolvedSpeakers: unresolved,
-                taggingSegmentIds: tagging,
-                onSegmentTap: onSegmentTap,
-                onEditSegmentText: onEditSegmentText,
-                editSegment: editSegment,
-                onConfirmSpeakerLabel: onConfirmSpeakerLabel,
-                onRejectSpeakerLabel: onRejectSpeakerLabel,
-              ),
-            ),
+    }) => tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: TranscriptWidget(
+            segments: segments,
+            isConversationDetail: true,
+            unresolvedSpeakers: unresolved,
+            taggingSegmentIds: tagging,
+            onSegmentTap: onSegmentTap,
+            onEditSegmentText: onEditSegmentText,
+            editSegment: editSegment,
+            onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+            onRejectSpeakerLabel: onRejectSpeakerLabel,
           ),
-        );
+        ),
+      ),
+    );
 
     group('unresolved', () {
       testWidgets('render a name row once per turn, not once per line', (tester) async {
@@ -810,13 +810,7 @@ void main() {
         final segments = voicesFixture();
         final played = <TranscriptSegment>[];
         final edited = <int>[];
-        await pumpDetail(
-          tester,
-          segments,
-          unresolved: true,
-          onSegmentTap: played.add,
-          onEditSegmentText: edited.add,
-        );
+        await pumpDetail(tester, segments, unresolved: true, onSegmentTap: played.add, onEditSegmentText: edited.add);
         await tester.pumpAndSettle();
 
         for (final segment in segments) {
@@ -943,10 +937,7 @@ void main() {
             },
           ],
         );
-        await pumpDetail(tester, [
-          line('own', 0, 'Mine.', 0, isUser: true),
-          line('same-id-other', 0, 'Not me.', 10),
-        ]);
+        await pumpDetail(tester, [line('own', 0, 'Mine.', 0, isUser: true), line('same-id-other', 0, 'Not me.', 10)]);
         await tester.pumpAndSettle();
         expect(find.text('You'), findsOneWidget);
         expect(find.text('Speaker 1'), findsOneWidget);
@@ -1060,9 +1051,7 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: TranscriptWidget(
-              segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)],
-            ),
+            body: TranscriptWidget(segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)]),
           ),
         ),
       );

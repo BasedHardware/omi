@@ -35,7 +35,7 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
 ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-    buildStorageClearActions({
+buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
   required Future<void> Function() clearAll,
@@ -222,7 +222,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
       final counts = p.offlineServerProcessingCounts;
-      progressText = SyncCardProgressLine.serverProcessingSubtitle(
+      progressText =
+          SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (processed, total) => l.processingProgress(processed, total),
@@ -254,10 +255,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (showSpinner) ...[
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(width: 12),
-          ],
+          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,10 +897,7 @@ class _ManageStorageSheet extends StatelessWidget {
             clearLabel: context.l10n.clear,
           ),
           const SizedBox(height: 12),
-          _AutoRemoveRow(
-            initialValue: autoRemoveOn,
-            onChanged: onToggleAutoRemove,
-          ),
+          _AutoRemoveRow(initialValue: autoRemoveOn, onChanged: onToggleAutoRemove),
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
@@ -983,10 +978,7 @@ class _StorageRow extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: OmiRadius.mdAll,
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
             child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
@@ -1003,14 +995,8 @@ class _StorageRow extends StatelessWidget {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface3,
-                        borderRadius: OmiRadius.smAll,
-                      ),
-                      child: Text(
-                        '$count',
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                      ),
+                      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                      child: Text('$count', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ),
                   ],
                 ),
@@ -1024,10 +1010,7 @@ class _StorageRow extends StatelessWidget {
               onTap: onClear,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: OmiColors.dangerSurface,
-                  borderRadius: OmiRadius.pillAll,
-                ),
+                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.pillAll),
                 child: Text(
                   clearLabel,
                   style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),

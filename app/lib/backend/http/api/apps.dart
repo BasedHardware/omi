@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -107,7 +108,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -179,6 +180,27 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
   }
 }
 
+Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
+  int offset = 0,
+  int limit = 100,
+  ApiSend? send,
+}) {
+  return executeApi<wire.GeneratedAppSearchResponse>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
+      method: 'GET',
+    ),
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
+    },
+    send: send,
+  );
+}
+
 Future<List<App>> retrievePopularApps() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/popular', headers: {}, body: '', method: 'GET');
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
@@ -225,7 +247,7 @@ Future<(bool, String)> reEnableAppServer(String appId) async {
       files: [],
       fileFieldName: 'file',
       fields: {
-        'app_data': jsonEncode({'id': appId, 'disabled': false})
+        'app_data': jsonEncode({'id': appId, 'disabled': false}),
       },
       method: 'PATCH',
     );
@@ -381,8 +403,10 @@ String appSetupUrlWithUid(String url, String uid) {
   final uidParam = 'uid=${Uri.encodeQueryComponent(uid)}';
   final queryIndex = head.indexOf('?');
   if (queryIndex < 0) return '$head?$uidParam$fragment';
-  final kept =
-      head.substring(queryIndex + 1).split('&').where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
+  final kept = head
+      .substring(queryIndex + 1)
+      .split('&')
+      .where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
   return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
 }
 

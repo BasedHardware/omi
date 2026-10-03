@@ -12373,7 +12373,51 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Δεν είναι δυνατή η σύνδεση. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyServerError => 'Κάτι πήγε στραβά από την πλευρά μας. Δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyTimeout => 'Η απάντηση καθυστέρησε πολύ. Δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Δεν έχετε συνδεθεί. Συνδεθείτε και δοκιμάστε ξανά.';
+
+  @override
+  String get chatAppsLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των εφαρμογών συνομιλίας. Δοκιμάστε ξανά.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Φωνή';
+
+  @override
+  String get assistantVoice => 'Φωνή βοηθού';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Η επιλογή φωνής σας είναι κοινή σε κινητό και υπολογιστή.';
+
+  @override
+  String get readChatRepliesAloud => 'Ανάγνωση απαντήσεων συνομιλίας δυνατά';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Μιλά μόνο όταν το επιτρέπει η \"Φωνητική απάντηση\".';
+
+  @override
+  String get voicePreviewSample => 'Γεια, είμαι ο Omi. Αυτή είναι η φωνή μου.';
+
+  @override
   String get peopleStatsIncomplete => 'Οι μετρήσεις μπορεί να είναι ελλιπείς.';
+
+  @override
+  String get previousDay => 'Προηγούμενη ημέρα';
+
+  @override
+  String get nextDay => 'Επόμενη ημέρα';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Δεν υπάρχουν εργασίες στις $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Γίνεται επανεπεξεργασία της συνομιλίας…';

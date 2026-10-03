@@ -6796,7 +6796,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Tietosi on suojattu asetuksillasi';
+    return 'Tietosi on nyt suojattu uusilla $level-asetuksilla.';
   }
 
   @override
@@ -12297,7 +12297,51 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Yhteyttä ei voitu muodostaa. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String get chatReplyServerError => 'Jotain meni pieleen meidän puolellamme. Yritä uudelleen.';
+
+  @override
+  String get chatReplyTimeout => 'Vastaus kesti liian kauan. Yritä uudelleen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Et ole kirjautunut sisään. Kirjaudu sisään ja yritä uudelleen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-sovelluksia ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Ääni';
+
+  @override
+  String get assistantVoice => 'Avustajan ääni';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Äänivalintasi on yhteinen mobiilissa ja työpöydällä.';
+
+  @override
+  String get readChatRepliesAloud => 'Lue chat-vastaukset ääneen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Puhuu vain, kun Äänivastaus sen sallii.';
+
+  @override
+  String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
+
+  @override
   String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
+  String get previousDay => 'Edellinen päivä';
+
+  @override
+  String get nextDay => 'Seuraava päivä';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ei tehtäviä $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';

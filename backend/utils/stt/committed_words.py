@@ -11,7 +11,7 @@ segment that cannot supply valid disjoint word intervals abstains entirely.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 
 from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 
@@ -83,8 +83,8 @@ def project_provider_words(segment: Dict[str, Any], send_map: Any, rate: int) ->
     if abstain or not raw or not isinstance(raw, (list, tuple)) or len(raw) > MAX_WORD_RANGES:
         return ()
     try:
-        segment_start = float(segment.get('start'))
-        segment_end = float(segment.get('end'))
+        segment_start = float(cast(Any, segment.get('start')))
+        segment_end = float(cast(Any, segment.get('end')))
     except (TypeError, ValueError):
         return ()
     if not (math.isfinite(segment_start) and math.isfinite(segment_end)):

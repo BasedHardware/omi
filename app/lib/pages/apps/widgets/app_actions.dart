@@ -23,6 +23,10 @@ bool appNeedsDetailToEnable(App app) {
   if (app.isPaid && !app.isUserPaid) return true;
   final integration = app.externalIntegration;
   if (integration == null) return false;
+  // `setupCompletedUrl` alone must NOT route to the detail page: the detail view
+  // probes that developer URL with the user's UID on arrival (before the data-access
+  // consent dialog), and without auth steps or instructions it shows no setup UI —
+  // only a dead end. The backend enable gate returns the honest failure instead.
   return integration.authSteps.isNotEmpty || (integration.setupInstructionsFilePath?.isNotEmpty ?? false);
 }
 
@@ -57,11 +61,7 @@ Future<bool> disableAppWithUndo(
   final provider = context.read<AppProvider>();
   provider.pendingDisables.add(app.id);
   onHidden?.call();
-  final undone = await OmiFeedback.undo(
-    context,
-    context.l10n.appDisabledNamed(app.name.decodeString),
-    onUndo: () {},
-  );
+  final undone = await OmiFeedback.undo(context, context.l10n.appDisabledNamed(app.name.decodeString), onUndo: () {});
   // Enabled again inside the Undo window (e.g. the detail page's Enable): that choice wins.
   if (!provider.pendingDisables.remove(app.id)) return false;
   if (undone) {

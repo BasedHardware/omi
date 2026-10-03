@@ -34,6 +34,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
@@ -62,6 +63,7 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
@@ -308,14 +310,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents =
-            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
-        final backgroundEvents =
-            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
+        final recentEvents = diagnostics.disconnectHistory
+            .where((event) => event.timestamp >= startMs && !event.isManual)
+            .toList();
+        final backgroundEvents = recentEvents
+            .where((event) => event.appState == 'background' || event.appState == 'inactive')
+            .toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
-        connectionTimeoutCount =
-            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
+        connectionTimeoutCount = backgroundEvents
+            .where((event) => event.reason.toLowerCase().contains('timeout'))
+            .length;
         final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
         reconnectCount = reconnectedEvents.length;
         for (final event in reconnectedEvents) {
@@ -325,7 +330,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         reconnectionCountTotal = diagnostics.reconnectionCount;
         failToConnectCountTotal = diagnostics.failToConnectCount;
-        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
+        bleHistorySaturated =
+            diagnostics.disconnectHistory.length >= 20 &&
             diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
         nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
         nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
@@ -759,7 +765,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: Scaffold(
                 backgroundColor: OmiColors.surface0,
                 resizeToAvoidBottomInset: false,
-                appBar: _buildAppBar(context),
+                appBar: _buildAppBar(context, onHome),
                 body: GestureDetector(
                   onTap: () => primaryFocus?.unfocus(),
                   child: Stack(
@@ -779,6 +785,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               }
                             },
                           ),
+                          if (onHome)
+                            Selector<ConversationProvider, (DateTime?, DateTime?)>(
+                              selector: (_, provider) => (provider.selectedStartDate, provider.selectedEndDate),
+                              builder: (context, range, _) {
+                                final start = range.$1;
+                                if (start == null) return const SizedBox.shrink();
+                                final provider = context.read<ConversationProvider>();
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: OmiDateFilterChip(
+                                      key: const ValueKey('home_date_filter'),
+                                      start: start,
+                                      end: range.$2,
+                                      onClear: () => unawaited(provider.clearDateFilter()),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(
@@ -930,7 +957,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  Future<void> _openCalendar(BuildContext context) async {
+    final provider = context.read<ConversationProvider>();
+    await showConversationDateRangePicker(
+      context,
+      initialStartDate: provider.selectedStartDate,
+      initialEndDate: provider.selectedEndDate,
+      onSelected: (start, end) {
+        if (start.year == end.year && start.month == end.month && start.day == end.day) {
+          routeToPage(context, DayConversationsPage(date: start));
+        } else {
+          unawaited(provider.filterConversationsByDateRange(start, end));
+        }
+      },
+      onClear: provider.clearDateFilter,
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -959,6 +1003,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
+              if (onHome)
+                HeaderCircleButton(
+                  key: const ValueKey('home_calendar_button'),
+                  semanticLabel: context.l10n.filterByDate,
+                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+                  onTap: () {
+                    OmiHaptics.selection();
+                    unawaited(_openCalendar(context));
+                  },
+                ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),

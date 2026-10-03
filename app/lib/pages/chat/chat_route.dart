@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/ui/navigation/omi_edge_swipe.dart';
 import 'package:omi/ui/ui.dart';
 
 /// How long the chat sheet takes to rise; it falls a little faster.
@@ -17,7 +18,7 @@ Future<T?> openChatSheet<T>(BuildContext context, ChatPage page) {
 }
 
 /// The chat sheet's route: not opaque, so the page underneath stays painted behind the blur.
-class ChatSheetRoute<T> extends PageRoute<T> {
+class ChatSheetRoute<T> extends PageRoute<T> with OmiEdgeSwipeRoute<T> {
   ChatSheetRoute({required this.builder, super.settings}) : super(fullscreenDialog: true);
 
   final WidgetBuilder builder;
@@ -49,7 +50,7 @@ class ChatSheetRoute<T> extends PageRoute<T> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
-    return builder(context);
+    return wrapEdgeSwipe(context, builder(context));
   }
 
   @override
@@ -59,8 +60,15 @@ class ChatSheetRoute<T> extends PageRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
-    return ChatSheetTransition(animation: animation, linearMotion: _gestureNavigator != null, child: child);
+    if ((MediaQuery.maybeDisableAnimationsOf(context) ?? false) && !edgeSwipeInProgress) {
+      return child;
+    }
+    return ChatSheetTransition(
+      animation: animation,
+      linearMotion: _gestureNavigator != null || edgeSwipeInProgress,
+      horizontalMotion: edgeSwipeInProgress,
+      child: child,
+    );
   }
 
   bool startDismissDrag({required double extent, required bool reduceMotion}) {
@@ -69,6 +77,7 @@ class ChatSheetRoute<T> extends PageRoute<T> {
         willHandlePopInternally ||
         popDisposition != RoutePopDisposition.pop ||
         _gestureNavigator != null ||
+        edgeSwipeInProgress ||
         controller?.status != AnimationStatus.completed ||
         extent <= 0) {
       return false;
@@ -92,9 +101,9 @@ class ChatSheetRoute<T> extends PageRoute<T> {
     final distance = (1 - progress.value) * _extent;
     final dismiss = isCurrent
         ? !cancelled &&
-            !willHandlePopInternally &&
-            popDisposition == RoutePopDisposition.pop &&
-            ((distance >= _extent * .22 && velocity > -700) || (distance >= 32 && velocity >= 900))
+              !willHandlePopInternally &&
+              popDisposition == RoutePopDisposition.pop &&
+              ((distance >= _extent * .22 && velocity > -700) || (distance >= 32 && velocity >= 900))
         : !isActive;
     final travel = dismiss ? progress.value : 1 - progress.value;
     final duration = _reduceMotion ? Duration.zero : Duration(milliseconds: (180 + 140 * travel).round());
@@ -121,6 +130,7 @@ class ChatSheetRoute<T> extends PageRoute<T> {
         if (owner.mounted) owner.didStopUserGesture();
       });
     }
+    disposeEdgeSwipe();
     super.dispose();
   }
 }
@@ -132,11 +142,14 @@ class ChatSheetTransition extends StatelessWidget {
     required this.animation,
     required this.child,
     this.linearMotion = false,
+    this.horizontalMotion = false,
   });
 
   final Animation<double> animation;
   final Widget child;
   final bool linearMotion;
+
+  final bool horizontalMotion;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +177,10 @@ class ChatSheetTransition extends StatelessWidget {
           ),
         ),
         SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(rise),
+          position: Tween<Offset>(
+            begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(rise),
           child: FadeTransition(opacity: Tween<double>(begin: 0.6, end: 1).animate(rise), child: child),
         ),
       ],

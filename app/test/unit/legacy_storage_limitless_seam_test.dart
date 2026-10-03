@@ -174,16 +174,16 @@ void main() {
   });
 
   Wal storageWal({int totalBytes = 440}) => Wal(
-        timerStart: 1700000000,
-        codec: BleAudioCodec.opus,
-        seconds: 5,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        device: 'devkit-1',
-        fileNum: 1,
-        storageOffset: 0,
-        storageTotalBytes: totalBytes,
-      );
+    timerStart: 1700000000,
+    codec: BleAudioCodec.opus,
+    seconds: 5,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'devkit-1',
+    fileNum: 1,
+    storageOffset: 0,
+    storageTotalBytes: totalBytes,
+  );
 
   StorageSyncImpl storageSyncWith(_FakeLocalSync local, _FakeStorageDevice card, Wal wal) {
     final sync = StorageSyncImpl(_Listener())
@@ -195,10 +195,12 @@ void main() {
   }
 
   test('StorageSync: durable write failure means the file is never deleted and never marked synced', () async {
-    final card = _FakeStorageDevice(script: [
-      _dataPacket([40]),
-      [100]
-    ]);
+    final card = _FakeStorageDevice(
+      script: [
+        _dataPacket([40]),
+        [100],
+      ],
+    );
     final local = _FakeLocalSync(failOnChunk: 1);
     final wal = storageWal();
     final sync = storageSyncWith(local, card, wal);
@@ -212,10 +214,12 @@ void main() {
   });
 
   test('StorageSync: delete only happens after the chunk is durably registered', () async {
-    final card = _FakeStorageDevice(script: [
-      _dataPacket([40]),
-      [100]
-    ]);
+    final card = _FakeStorageDevice(
+      script: [
+        _dataPacket([40]),
+        [100],
+      ],
+    );
     final local = _FakeLocalSync();
     final wal = storageWal();
     final sync = storageSyncWith(local, card, wal);
@@ -229,10 +233,12 @@ void main() {
   });
 
   test('StorageSync: a device switch during persistence never issues DELETE on either connection', () async {
-    final card = _FakeStorageDevice(script: [
-      _dataPacket([40]),
-      [100]
-    ]);
+    final card = _FakeStorageDevice(
+      script: [
+        _dataPacket([40]),
+        [100],
+      ],
+    );
     final gate = Completer<void>();
     final local = _FakeLocalSync()..addGate = gate.future;
     final wal = storageWal();
@@ -261,10 +267,12 @@ void main() {
     final ts = ByteData(4)..setUint32(0, 1700000000, Endian.big);
     final packet = [...ts.buffer.asUint8List(), ...audio];
 
-    final card = _FakeStorageDevice(script: [
-      packet,
-      [100]
-    ]);
+    final card = _FakeStorageDevice(
+      script: [
+        packet,
+        [100],
+      ],
+    );
     final local = _FakeLocalSync();
     final wal = storageWal();
     final sync = storageSyncWith(local, card, wal);
@@ -279,10 +287,12 @@ void main() {
   });
 
   test('StorageSync: a short transfer (end marker before all bytes) is not deleted or synced', () async {
-    final card = _FakeStorageDevice(script: [
-      _dataPacket([40]),
-      [100]
-    ]);
+    final card = _FakeStorageDevice(
+      script: [
+        _dataPacket([40]),
+        [100],
+      ],
+    );
     final local = _FakeLocalSync();
     final wal = storageWal(totalBytes: 2 * 440); // only half the bytes arrive
     final sync = storageSyncWith(local, card, wal);
@@ -298,36 +308,38 @@ void main() {
   test('Limitless: a session gap ACKs only the saved batch max, never the pending page', () async {
     const ts1 = 1700000000000;
     const ts2 = ts1 + 200000; // >120s gap
-    final card = _FakeLimitless(pages: [
-      {
-        'opus_frames': [
-          [1, 2, 3]
-        ],
-        'timestamp_ms': ts1,
-        'max_index': 0
-      },
-      {
-        'opus_frames': [
-          [4, 5]
-        ],
-        'timestamp_ms': ts1,
-        'max_index': 1
-      },
-      {
-        'opus_frames': [
-          [6, 7]
-        ],
-        'timestamp_ms': ts2,
-        'max_index': 2
-      },
-      {
-        'opus_frames': [
-          [8]
-        ],
-        'timestamp_ms': ts2,
-        'max_index': 2
-      },
-    ]);
+    final card = _FakeLimitless(
+      pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3],
+          ],
+          'timestamp_ms': ts1,
+          'max_index': 0,
+        },
+        {
+          'opus_frames': [
+            [4, 5],
+          ],
+          'timestamp_ms': ts1,
+          'max_index': 1,
+        },
+        {
+          'opus_frames': [
+            [6, 7],
+          ],
+          'timestamp_ms': ts2,
+          'max_index': 2,
+        },
+        {
+          'opus_frames': [
+            [8],
+          ],
+          'timestamp_ms': ts2,
+          'max_index': 2,
+        },
+      ],
+    );
     final local = _FakeLocalSync();
     final wal = Wal(
       timerStart: ts1 ~/ 1000,
@@ -356,15 +368,17 @@ void main() {
 
   test('Limitless: a failed durable save aborts — no ACK, wal stays miss', () async {
     const ts1 = 1700000000000;
-    final card = _FakeLimitless(pages: [
-      {
-        'opus_frames': [
-          [1, 2, 3]
-        ],
-        'timestamp_ms': ts1,
-        'max_index': 0
-      },
-    ]);
+    final card = _FakeLimitless(
+      pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3],
+          ],
+          'timestamp_ms': ts1,
+          'max_index': 0,
+        },
+      ],
+    );
     final local = _FakeLocalSync(failOnChunk: 1);
     final wal = Wal(
       timerStart: ts1 ~/ 1000,

@@ -61,7 +61,8 @@ class _Harness {
     void Function(int)? onProgress,
     Future<void>? abortTrigger,
     AuthSessionSnapshot? authorizationSnapshot,
-  })? downloadImpl;
+  })?
+  downloadImpl;
 
   void switchOwnerTo(String? uid) {
     currentOwner = uid;
@@ -73,27 +74,24 @@ Future<void> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    theme: ThemeData.dark(),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Builder(
-      builder: (context) => Scaffold(
-        body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextButton(
-                onPressed: () {},
-                child: const Text('export'),
-              ),
-            ],
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [TextButton(onPressed: () {}, child: const Text('export'))],
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
 }
 
 Future<void> _run(WidgetTester tester, _Harness harness) {

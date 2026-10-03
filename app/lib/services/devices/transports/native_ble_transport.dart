@@ -41,14 +41,14 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   final _audioSubscriptionErrors = StreamController<Object>.broadcast();
   @override
   Stream<Object> get audioSubscriptionErrors => Stream.multi((consumer) {
-        final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
-        // Some adapters subscribe during connection setup, before capture binds.
-        // Replay only failures belonging to the current connection generation.
-        for (final entry in subscriptionFailures.entries) {
-          if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
-        }
-        consumer.onCancel = subscription.cancel;
-      }, isBroadcast: true);
+    final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
+    // Some adapters subscribe during connection setup, before capture binds.
+    // Replay only failures belonging to the current connection generation.
+    for (final entry in subscriptionFailures.entries) {
+      if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
+    }
+    consumer.onCancel = subscription.cancel;
+  }, isBroadcast: true);
   final Map<String, int> _pendingSubscriptions = {};
 
   bool _nativeOwnsAudioHealth(String characteristicUuid) =>
@@ -57,7 +57,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       characteristicUuid.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214';
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-      : _hostApi = hostApi ?? BleHostApi() {
+    : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.addIngressListener(_ingressOwnershipChanged);
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
@@ -208,13 +208,16 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
         if (gate != null) await gate(characteristicUuid);
         if (generation != _subscriptionGeneration) return;
       }
-      await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid).then((_) {
-        if (generation == _subscriptionGeneration &&
-            failure is TimeoutException &&
-            identical(subscriptionFailures[key], failure)) {
-          subscriptionFailures.remove(key);
-        }
-      }).timeout(subscriptionTimeout);
+      await _hostApi
+          .subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid)
+          .then((_) {
+            if (generation == _subscriptionGeneration &&
+                failure is TimeoutException &&
+                identical(subscriptionFailures[key], failure)) {
+              subscriptionFailures.remove(key);
+            }
+          })
+          .timeout(subscriptionTimeout);
       if (generation != _subscriptionGeneration) return;
       _subscribedSubscriptionKeys.add(key);
       subscriptionFailures.remove(key);
@@ -393,13 +396,15 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
           }
         }
       }
-      unawaited(Future.wait(controlSubscriptions).then((_) {
-        for (final key in _activeSubscriptionKeys) {
-          final parts = key.split(':');
-          if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
-          unawaited(_subscribeCharacteristic(parts[0], parts[1]));
-        }
-      }));
+      unawaited(
+        Future.wait(controlSubscriptions).then((_) {
+          for (final key in _activeSubscriptionKeys) {
+            final parts = key.split(':');
+            if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
+            unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+          }
+        }),
+      );
 
       _updateState(DeviceTransportState.connected);
       _audioSilenceResubscribes = 0;
@@ -454,7 +459,8 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     // Waiting for the native confirmation is not a retry. In particular its
     // confirmation wait must not consume the one retry at the 4-second watch.
     if (_pendingSubscriptions.entries.any(
-        (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last))) {
+      (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last),
+    )) {
       _armAudioLivenessWatch();
       return;
     }

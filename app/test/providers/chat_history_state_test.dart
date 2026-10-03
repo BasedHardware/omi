@@ -228,4 +228,49 @@ void main() {
     slow.complete(ApiSuccess([message('late')]));
     expect(await read, isFalse);
   });
+
+  test('marking an app switch fences sends before the bootstrap read starts', () async {
+    // Regression: the drawer raises the switch fence only when refreshMessages
+    // begins, after a deliberate 100ms selection delay — a send landing in that
+    // window targeted the new app while the old transcript was still visible.
+    final slow = Completer<List<ServerMessage>>();
+    final provider = MessageProvider(sessionsApi: FakeSessions())
+      ..legacyMessagesLoader = ({appId, dropdownSelected = false}) => slow.future;
+    addTearDown(provider.dispose);
+    // The drawer's switch handler: mark + raise the fence, then change the selection.
+    provider.markPendingAppSwitch();
+    expect(provider.isSwitchingChatApp, isFalse);
+    provider.notifySwitchingChatApp();
+    expect(provider.isSwitchingChatApp, isTrue);
+    final read = provider.refreshMessages(dropdownSelected: true);
+    await pumpEventQueue();
+    expect(provider.isSwitchingChatApp, isTrue, reason: 'fence must hold while the bootstrap read is pending');
+    slow.complete([message('switched')]);
+    await read;
+    expect(provider.isSwitchingChatApp, isFalse);
+    expect(provider.messages.single.id, 'switched');
+  });
+
+  test('notifySwitchingChatApp without a pending marker does not fence sends', () async {
+    final provider = MessageProvider(sessionsApi: FakeSessions());
+    addTearDown(provider.dispose);
+    provider.notifySwitchingChatApp();
+    expect(provider.isSwitchingChatApp, isFalse);
+  });
+
+  test('a turn that supersedes the switch read drops the raised fence', () async {
+    // A pendant-voice turn can start inside the switch window; the bootstrap
+    // read then early-returns on chatMutationInProgress. The fence must not
+    // survive it, or Send stays disabled forever.
+    final provider = MessageProvider(sessionsApi: FakeSessions());
+    addTearDown(provider.dispose);
+    provider.markPendingAppSwitch();
+    provider.notifySwitchingChatApp();
+    expect(provider.isSwitchingChatApp, isTrue);
+    provider.setSendingMessage(true);
+    await provider.refreshMessages(dropdownSelected: true);
+    expect(provider.isSwitchingChatApp, isFalse);
+    provider.setSendingMessage(false);
+    expect(provider.canSwitchChat, isTrue);
+  });
 }

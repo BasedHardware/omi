@@ -68,11 +68,11 @@ void main() {
   }
 
   Widget deleteButton(List<ServerConversation> conversations) => Builder(
-        builder: (context) => TextButton(
-          onPressed: () => deleteConversationsWithUndo(context, conversations),
-          child: const Center(child: Text('delete')),
-        ),
-      );
+    builder: (context) => TextButton(
+      onPressed: () => deleteConversationsWithUndo(context, conversations),
+      child: const Center(child: Text('delete')),
+    ),
+  );
 
   group('delete with Undo (D5)', () {
     testWidgets('Undo restores the conversation and nothing is deleted on the server', (tester) async {
@@ -156,7 +156,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];
@@ -178,10 +181,12 @@ void main() {
 
   testWidgets('Separate… from a grouped row separates on confirm and reloads the list', (tester) async {
     final separated = <String>[];
-    rowSeparationController = () => CaptureGroupSeparationController(separate: (id) async {
-          separated.add(id);
-          return CaptureGroupSeparationResult.separated;
-        });
+    rowSeparationController = () => CaptureGroupSeparationController(
+      separate: (id) async {
+        separated.add(id);
+        return CaptureGroupSeparationResult.separated;
+      },
+    );
     addTearDown(() => rowSeparationController = CaptureGroupSeparationController.new);
     final grouped = ServerConversation(
       id: 'a',
@@ -191,7 +196,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];

@@ -116,7 +116,8 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
       builder: (context, provider, child) {
         if (!provider.havingNewFirmware) return const SizedBox();
 
-        final isOmiGlass = provider.pairedDevice?.type == DeviceType.openglass ||
+        final isOmiGlass =
+            provider.pairedDevice?.type == DeviceType.openglass ||
             (provider.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
 
         return _CardRow(
@@ -218,7 +219,10 @@ getTranscriptWidget(
   ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
 }) {
   if (conversationCreating) {
-    return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
+    return const Padding(
+      padding: EdgeInsets.only(top: 80),
+      child: Center(child: OmiSpinner()),
+    );
   }
 
   final bool showPhotos = photos.isNotEmpty;

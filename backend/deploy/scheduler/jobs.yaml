@@ -154,7 +154,9 @@ environments:
           uri: https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware/jobs/notifications-job:run
           method: POST
           oauth:
-            service_account: 208440318997-compute@developer.gserviceaccount.com
+            # Dedicated invoker: run.invoker on notifications-job only. The owner
+            # workflow identity (omi-gha-notif-job-prod) holds serviceAccountUser on it.
+            service_account: notifications-job-scheduler@based-hardware.iam.gserviceaccount.com
             scope: https://www.googleapis.com/auth/cloud-platform
         retry:
           max_backoff: 3600s

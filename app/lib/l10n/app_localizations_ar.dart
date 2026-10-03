@@ -12222,7 +12222,51 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'تعذر الاتصال. تحقق من اتصالك وحاول مرة أخرى.';
+
+  @override
+  String get chatReplyServerError => 'حدث خطأ ما من جانبنا. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get chatReplyTimeout => 'استغرقت الاستجابة وقتاً طويلاً. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get chatReplyNotSignedIn => 'لم تسجّل الدخول. سجّل الدخول وحاول مرة أخرى.';
+
+  @override
+  String get chatAppsLoadFailed => 'تعذّر تحميل تطبيقات الدردشة. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'الصوت';
+
+  @override
+  String get assistantVoice => 'صوت المساعد';
+
+  @override
+  String get voiceSharedAcrossDevices => 'اختيارك للصوت مشترك بين الجوال وسطح المكتب.';
+
+  @override
+  String get readChatRepliesAloud => 'قراءة ردود الدردشة بصوت عالٍ';
+
+  @override
+  String get readChatRepliesAloudDescription => 'يتحدث فقط عندما يسمح إعداد \"الرد الصوتي\" بذلك.';
+
+  @override
+  String get voicePreviewSample => 'مرحباً، أنا Omi. هذا صوتي.';
+
+  @override
   String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
+
+  @override
+  String get previousDay => 'اليوم السابق';
+
+  @override
+  String get nextDay => 'اليوم التالي';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'لا توجد مهام في $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';

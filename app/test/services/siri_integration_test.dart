@@ -246,10 +246,14 @@ void main() {
       ..pending = SiriPendingRoute(route: '/conversation/c-1', uid: 'owner-a', generation: 4);
     final seen = <(String, String, int)>[];
     var delivered = false;
-    final siri = SiriIntegration.forTest(host, 'owner-a', routeOpener: (route, uid, generation) async {
-      seen.add((route, uid, generation));
-      return delivered;
-    });
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      routeOpener: (route, uid, generation) async {
+        seen.add((route, uid, generation));
+        return delivered;
+      },
+    );
 
     await siri.deliverPendingRoute();
     expect(host.acknowledgments, [false]);
@@ -273,16 +277,26 @@ void main() {
     addTearDown(AnalyticsManager.resetForTesting);
     final host = _TelemetryDrainHost([
       SiriTelemetryRecord(
-          kind: 'intent', intent: 'askOmi', outcome: 'ok', latencyMs: 5, entityCounts: 0, entryPath: 'unknown')
+        kind: 'intent',
+        intent: 'askOmi',
+        outcome: 'ok',
+        latencyMs: 5,
+        entityCounts: 0,
+        entryPath: 'unknown',
+      ),
     ]);
     final siri = SiriIntegration.forTest(host, 'owner-a');
 
     expect(AnalyticsManager.identityKnown, isFalse, reason: 'cold start must begin unbound');
     siri.installEvents();
     await Future<void>.delayed(Duration.zero);
-    expect(host.takes, 0,
-        reason: 'the destructive native drain must not run before identity binding'
-            ' would discard the emitted events');
+    expect(
+      host.takes,
+      0,
+      reason:
+          'the destructive native drain must not run before identity binding'
+          ' would discard the emitted events',
+    );
 
     AnalyticsManager().bindIdentity('owner-a');
     await Future<void>.delayed(Duration.zero);
@@ -296,7 +310,13 @@ void main() {
     AnalyticsManager().bindIdentity('owner-a');
     final host = _TelemetryDrainHost([
       SiriTelemetryRecord(
-          kind: 'intent', intent: 'askOmi', outcome: 'ok', latencyMs: 5, entityCounts: 0, entryPath: 'unknown')
+        kind: 'intent',
+        intent: 'askOmi',
+        outcome: 'ok',
+        latencyMs: 5,
+        entityCounts: 0,
+        entryPath: 'unknown',
+      ),
     ]);
     final siri = SiriIntegration.forTest(host, 'owner-a');
 
@@ -328,54 +348,72 @@ void main() {
   test('delete and newly locked memory submitted during cooldown reach Spotlight after cooldown', () async {
     final host = _CooldownHost();
     addTearDown(() => host.firstDelete.complete());
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      nativeTimeout: const Duration(milliseconds: 20),
+      indexCooldown: const Duration(milliseconds: 80),
+    );
     siri.queueDelete('memory', 'timed-out');
     await siri.drainIndexForTest();
     siri.queueDelete('memory', 'confirmed-delete');
     siri.queueDeleteMany('task', ['confirmed-batch-delete']);
     siri.queueUpsertMemories([
       Memory(
-          id: 'newly-locked',
-          uid: 'owner-a',
-          content: 'Private',
-          category: MemoryCategory.manual,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          visibility: MemoryVisibility.private,
-          isLocked: true)
+        id: 'newly-locked',
+        uid: 'owner-a',
+        content: 'Private',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private,
+        isLocked: true,
+      ),
     ]);
     await siri.drainIndexForTest();
     expect(host.calls, 1);
     await Future<void>.delayed(const Duration(milliseconds: 130));
     await siri.drainIndexForTest();
-    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'memory').expand((call) => call.$3),
-        containsAll(['confirmed-delete', 'newly-locked']));
-    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'task').expand((call) => call.$3),
-        contains('confirmed-batch-delete'));
+    expect(
+      host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'memory').expand((call) => call.$3),
+      containsAll(['confirmed-delete', 'newly-locked']),
+    );
+    expect(
+      host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'task').expand((call) => call.$3),
+      contains('confirmed-batch-delete'),
+    );
   });
 
   test('latest authoritative reconciliation for each type survives cooldown', () {
     fakeAsync((time) {
       final host = _CooldownHost();
       final date = DateTime.now();
-      final siri = SiriIntegration.forTest(host, 'owner-a',
-          nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+      final siri = SiriIntegration.forTest(
+        host,
+        'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20),
+        indexCooldown: const Duration(milliseconds: 80),
+      );
       siri.queueDelete('memory', 'trigger-timeout');
       time.flushMicrotasks();
       time.elapse(const Duration(milliseconds: 20));
       Memory memory(String id) => Memory(
-          id: id,
-          uid: 'owner-a',
-          content: id,
-          category: MemoryCategory.manual,
-          createdAt: date,
-          updatedAt: date,
-          visibility: MemoryVisibility.private);
+        id: id,
+        uid: 'owner-a',
+        content: id,
+        category: MemoryCategory.manual,
+        createdAt: date,
+        updatedAt: date,
+        visibility: MemoryVisibility.private,
+      );
       ActionItemWithMetadata task(String id) =>
           ActionItemWithMetadata(id: id, description: id, completed: false, createdAt: date);
       ServerConversation conversation(String id) => ServerConversation(
-          id: id, createdAt: date, structured: Structured(id, id), status: ConversationStatus.completed);
+        id: id,
+        createdAt: date,
+        structured: Structured(id, id),
+        status: ConversationStatus.completed,
+      );
       unawaited(siri.reconcileMemories([memory('obsolete')]));
       time.flushMicrotasks();
       unawaited(siri.reconcileMemories([memory('current')]));
@@ -407,12 +445,15 @@ void main() {
 
   test('removal ledger cap requests an owner repair and fresh traversal', () async {
     final host = _CooldownHost();
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        taskPageFetcher: ({required limit, required offset, required completed}) async =>
-            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
-        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
-            const ApiSuccess<List<ServerConversation>>([]),
-        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      taskPageFetcher: ({required limit, required offset, required completed}) async =>
+          const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+      conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+          const ApiSuccess<List<ServerConversation>>([]),
+      memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true),
+    );
     siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
     await siri.drainIndexForTest();
     expect(host.repairs, 1);
@@ -424,13 +465,16 @@ void main() {
 
   test('failed owner repair keeps the obligation and retries after cooldown', () async {
     final host = _CooldownHost()..repairFailuresRemaining = 1;
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        retryBase: const Duration(milliseconds: 20),
-        taskPageFetcher: ({required limit, required offset, required completed}) async =>
-            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
-        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
-            const ApiSuccess<List<ServerConversation>>([]),
-        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      retryBase: const Duration(milliseconds: 20),
+      taskPageFetcher: ({required limit, required offset, required completed}) async =>
+          const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+      conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+          const ApiSuccess<List<ServerConversation>>([]),
+      memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true),
+    );
     siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
     await siri.drainIndexForTest();
     expect(host.repairs, 1);
@@ -444,19 +488,23 @@ void main() {
   test('pending removals from the old account are discarded on account change', () async {
     final host = _CooldownHost();
     addTearDown(() => host.firstDelete.complete());
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        nativeTimeout: const Duration(milliseconds: 20),
-        indexCooldown: const Duration(milliseconds: 80),
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-            uid: user.uid,
-            generation: generation,
-            baseUrl: 'http://127.0.0.1:8977',
-            profile: 'local_dev',
-            appVersion: 'test',
-            appBuild: '0',
-            deviceIdHash: 'test',
-            token: token.token,
-            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      nativeTimeout: const Duration(milliseconds: 20),
+      indexCooldown: const Duration(milliseconds: 80),
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
     siri.queueDelete('memory', 'timed-out');
     await siri.drainIndexForTest();
     siri.queueDelete('memory', 'old-private');
@@ -470,19 +518,23 @@ void main() {
   test('same-owner session refresh retains pending removals', () async {
     final host = _CooldownHost();
     addTearDown(() => host.firstDelete.complete());
-    final siri = SiriIntegration.forTest(host, 'owner-a',
-        nativeTimeout: const Duration(milliseconds: 20),
-        indexCooldown: const Duration(milliseconds: 80),
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-            uid: user.uid,
-            generation: generation,
-            baseUrl: 'http://127.0.0.1:8977',
-            profile: 'local_dev',
-            appVersion: 'test',
-            appBuild: '0',
-            deviceIdHash: 'test',
-            token: token.token,
-            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-a',
+      nativeTimeout: const Duration(milliseconds: 20),
+      indexCooldown: const Duration(milliseconds: 80),
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
     siri.queueDelete('memory', 'timed-out');
     await siri.drainIndexForTest();
     siri.queueDelete('memory', 'still-private');
@@ -509,18 +561,22 @@ void main() {
 
   test('cold launch with the same owner retains the native index and generation', () async {
     final host = _ColdOwnerHost('owner-race');
-    final siri = SiriIntegration.forTest(host, 'owner-race',
-        coldStart: true,
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-            uid: user.uid,
-            generation: generation,
-            baseUrl: 'http://127.0.0.1:8977',
-            profile: 'local_dev',
-            appVersion: 'test',
-            appBuild: '0',
-            deviceIdHash: 'test',
-            token: token.token,
-            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-race',
+      coldStart: true,
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
 
     await siri.accountChanged(_RaceUser());
     expect(host.wipes, 0);
@@ -530,18 +586,22 @@ void main() {
 
   test('cold launch with a changed owner wipes the prior index before binding', () async {
     final host = _ColdOwnerHost('old-owner');
-    final siri = SiriIntegration.forTest(host, 'owner-race',
-        coldStart: true,
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-            uid: user.uid,
-            generation: generation,
-            baseUrl: 'http://127.0.0.1:8977',
-            profile: 'local_dev',
-            appVersion: 'test',
-            appBuild: '0',
-            deviceIdHash: 'test',
-            token: token.token,
-            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-race',
+      coldStart: true,
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
 
     await siri.accountChanged(_RaceUser());
     expect(host.wipes, 1);
@@ -552,22 +612,26 @@ void main() {
   test('Siri Start and Stop use conversation capture and finalize the phone session', () async {
     final calls = <String>[];
     String? source;
-    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-capture', listeningCapture: (
-      start: () async {
-        calls.add('streamRecording');
-        source = 'phone';
-      },
-      stop: () async {
-        calls.add('stopStreamRecording');
-        source = null;
-        return true;
-      },
-      source: () => source,
-      deviceConnected: () => false,
-      phoneBatchRecording: () => false,
-      deviceBatchRecording: () => false,
-      phonePaused: () => false,
-    ));
+    final siri = SiriIntegration.forTest(
+      RecordingSiriHost(),
+      'owner-capture',
+      listeningCapture: (
+        start: () async {
+          calls.add('streamRecording');
+          source = 'phone';
+        },
+        stop: () async {
+          calls.add('stopStreamRecording');
+          source = null;
+          return true;
+        },
+        source: () => source,
+        deviceConnected: () => false,
+        phoneBatchRecording: () => false,
+        deviceBatchRecording: () => false,
+        phonePaused: () => false,
+      ),
+    );
 
     await siri.setListening(true);
     await siri.setListening(false);
@@ -577,88 +641,113 @@ void main() {
   test('Siri Start does not report success for paused phone stream or batch capture', () async {
     for (final batch in [false, true]) {
       var starts = 0;
-      final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-paused', listeningCapture: (
-        start: () async {
-          starts++;
-        },
-        stop: () async => true,
-        source: () => 'phone',
-        deviceConnected: () => false,
-        phoneBatchRecording: () => batch,
-        deviceBatchRecording: () => false,
-        phonePaused: () => true,
-      ));
-      await expectLater(siri.setListening(true),
-          throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'capture_paused')));
+      final siri = SiriIntegration.forTest(
+        RecordingSiriHost(),
+        'owner-paused',
+        listeningCapture: (
+          start: () async {
+            starts++;
+          },
+          stop: () async => true,
+          source: () => 'phone',
+          deviceConnected: () => false,
+          phoneBatchRecording: () => batch,
+          deviceBatchRecording: () => false,
+          phonePaused: () => true,
+        ),
+      );
+      await expectLater(
+        siri.setListening(true),
+        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'capture_paused')),
+      );
       expect(starts, 0);
     }
   });
 
   test('Siri Start reports an already-streaming BLE device without opening phone capture', () async {
     var phoneStarts = 0;
-    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-device', listeningCapture: (
-      start: () async {
-        phoneStarts++;
-      },
-      stop: () async => true,
-      source: () => 'omi',
-      deviceConnected: () => true,
-      phoneBatchRecording: () => false,
-      deviceBatchRecording: () => false,
-      phonePaused: () => false,
-    ));
+    final siri = SiriIntegration.forTest(
+      RecordingSiriHost(),
+      'owner-device',
+      listeningCapture: (
+        start: () async {
+          phoneStarts++;
+        },
+        stop: () async => true,
+        source: () => 'omi',
+        deviceConnected: () => true,
+        phoneBatchRecording: () => false,
+        deviceBatchRecording: () => false,
+        phonePaused: () => false,
+      ),
+    );
 
-    await expectLater(siri.setListening(true),
-        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'device_already_listening')));
+    await expectLater(
+      siri.setListening(true),
+      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'device_already_listening')),
+    );
     expect(phoneStarts, 0);
   });
 
   test('connected idle device does not block phone conversation capture', () async {
     var phoneStarts = 0;
-    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-device', listeningCapture: (
-      start: () async {
-        phoneStarts++;
-      },
-      stop: () async => true,
-      source: () => null,
-      deviceConnected: () => true,
-      phoneBatchRecording: () => false,
-      deviceBatchRecording: () => false,
-      phonePaused: () => false,
-    ));
+    final siri = SiriIntegration.forTest(
+      RecordingSiriHost(),
+      'owner-device',
+      listeningCapture: (
+        start: () async {
+          phoneStarts++;
+        },
+        stop: () async => true,
+        source: () => null,
+        deviceConnected: () => true,
+        phoneBatchRecording: () => false,
+        deviceBatchRecording: () => false,
+        phonePaused: () => false,
+      ),
+    );
 
     await siri.setListening(true);
     expect(phoneStarts, 1);
   });
 
   test('Siri Stop reports nothing to stop with a typed listening outcome', () async {
-    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-stop', listeningCapture: (
-      start: () async {},
-      stop: () async => true,
-      source: () => null,
-      deviceConnected: () => false,
-      phoneBatchRecording: () => false,
-      deviceBatchRecording: () => false,
-      phonePaused: () => false,
-    ));
-    await expectLater(siri.setListening(false),
-        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'nothing_to_stop')));
+    final siri = SiriIntegration.forTest(
+      RecordingSiriHost(),
+      'owner-stop',
+      listeningCapture: (
+        start: () async {},
+        stop: () async => true,
+        source: () => null,
+        deviceConnected: () => false,
+        phoneBatchRecording: () => false,
+        deviceBatchRecording: () => false,
+        phonePaused: () => false,
+      ),
+    );
+    await expectLater(
+      siri.setListening(false),
+      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'nothing_to_stop')),
+    );
   });
 
   test('sign-out ordered after an in-flight native session publication', () async {
     final host = _RaceHost();
-    final siri = SiriIntegration.forTest(host, 'owner-race',
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-              uid: user.uid,
-              generation: generation,
-              baseUrl: 'http://127.0.0.1:8977',
-              profile: 'local_dev',
-              appVersion: 'test',
-              appBuild: '0',
-              deviceIdHash: 'test',
-              token: token.token,
-              tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
-            ));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-race',
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
     final signingIn = siri.accountChanged(_RaceUser());
     await host.publishStarted.future.timeout(const Duration(seconds: 5));
     final signingOut = siri.accountChanged(null);
@@ -669,17 +758,21 @@ void main() {
 
   test('sign-out fence bypasses a stuck native publication', () async {
     final host = _RaceHost();
-    final siri = SiriIntegration.forTest(host, 'owner-race',
-        sessionConfig: (user, token, generation) => SiriSessionConfig(
-            uid: user.uid,
-            generation: generation,
-            baseUrl: 'http://127.0.0.1:8977',
-            profile: 'local_dev',
-            appVersion: 'test',
-            appBuild: '0',
-            deviceIdHash: 'test',
-            token: token.token,
-            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    final siri = SiriIntegration.forTest(
+      host,
+      'owner-race',
+      sessionConfig: (user, token, generation) => SiriSessionConfig(
+        uid: user.uid,
+        generation: generation,
+        baseUrl: 'http://127.0.0.1:8977',
+        profile: 'local_dev',
+        appVersion: 'test',
+        appBuild: '0',
+        deviceIdHash: 'test',
+        token: token.token,
+        tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+      ),
+    );
     final signingIn = siri.accountChanged(_RaceUser());
     await host.publishStarted.future.timeout(const Duration(seconds: 5));
     final preparing = siri.prepareForSignOut();
@@ -703,14 +796,16 @@ void main() {
   test('conversation projection sorts newest and excludes old or unfinished rows', () async {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-a');
-    ServerConversation conversation(String id, int ageDays,
-            {ConversationStatus status = ConversationStatus.completed}) =>
-        ServerConversation(
-          id: id,
-          createdAt: now.subtract(Duration(days: ageDays)),
-          structured: Structured('Title $id', 'Summary $id'),
-          status: status,
-        );
+    ServerConversation conversation(
+      String id,
+      int ageDays, {
+      ConversationStatus status = ConversationStatus.completed,
+    }) => ServerConversation(
+      id: id,
+      createdAt: now.subtract(Duration(days: ageDays)),
+      structured: Structured('Title $id', 'Summary $id'),
+      status: status,
+    );
 
     await siri.upsertConversations([
       conversation('older', 10),
@@ -730,25 +825,27 @@ void main() {
   test('memory projection sorts newest and drops expired or deleted rows', () async {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-b');
-    Memory memory(String id, int ageDays,
-            {bool deleted = false,
-            DateTime? invalidAt,
-            DateTime? expiresAt,
-            MemoryLayer? layer = MemoryLayer.longTerm}) =>
-        Memory(
-          id: id,
-          uid: 'owner-b',
-          content: 'Content $id',
-          category: MemoryCategory.manual,
-          createdAt: now.subtract(Duration(days: ageDays)),
-          updatedAt: now,
-          visibility: MemoryVisibility.private,
-          deleted: deleted,
-          invalidAt: invalidAt,
-          expiresAt: expiresAt,
-          layer: layer,
-          layerIsExplicit: true,
-        );
+    Memory memory(
+      String id,
+      int ageDays, {
+      bool deleted = false,
+      DateTime? invalidAt,
+      DateTime? expiresAt,
+      MemoryLayer? layer = MemoryLayer.longTerm,
+    }) => Memory(
+      id: id,
+      uid: 'owner-b',
+      content: 'Content $id',
+      category: MemoryCategory.manual,
+      createdAt: now.subtract(Duration(days: ageDays)),
+      updatedAt: now,
+      visibility: MemoryVisibility.private,
+      deleted: deleted,
+      invalidAt: invalidAt,
+      expiresAt: expiresAt,
+      layer: layer,
+      layerIsExplicit: true,
+    );
 
     await siri.upsertMemories([
       memory('older', 10),
@@ -780,7 +877,7 @@ void main() {
         createdAt: now,
         updatedAt: now,
         visibility: MemoryVisibility.private,
-      )
+      ),
     ]);
     expect(host.reconciledMemories, isFalse);
   });
@@ -789,12 +886,12 @@ void main() {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-c');
     ActionItemWithMetadata task(String id, bool completed, DateTime? completedAt) => ActionItemWithMetadata(
-          id: id,
-          description: 'Task $id',
-          completed: completed,
-          createdAt: now.subtract(const Duration(days: 45)),
-          completedAt: completedAt,
-        );
+      id: id,
+      description: 'Task $id',
+      completed: completed,
+      createdAt: now.subtract(const Duration(days: 45)),
+      completedAt: completedAt,
+    );
 
     await siri.upsertTasks([
       task('active', false, null),
@@ -828,26 +925,25 @@ void main() {
       DateTime? invalidAt,
       String? ledgerStatus,
       String? supersededBy,
-    }) =>
-        Memory(
-          id: 'memory',
-          uid: 'owner',
-          content: 'Visible',
-          category: MemoryCategory.manual,
-          createdAt: date,
-          updatedAt: now,
-          visibility: MemoryVisibility.private,
-          deleted: deleted,
-          isDismissed: dismissed,
-          isLocked: locked,
-          siriVisibilityValid: siriVisibilityValid,
-          userReview: userReview,
-          layer: layer,
-          layerIsExplicit: layerIsExplicit,
-          invalidAt: invalidAt,
-          ledgerStatus: ledgerStatus,
-          supersededBy: supersededBy,
-        );
+    }) => Memory(
+      id: 'memory',
+      uid: 'owner',
+      content: 'Visible',
+      category: MemoryCategory.manual,
+      createdAt: date,
+      updatedAt: now,
+      visibility: MemoryVisibility.private,
+      deleted: deleted,
+      isDismissed: dismissed,
+      isLocked: locked,
+      siriVisibilityValid: siriVisibilityValid,
+      userReview: userReview,
+      layer: layer,
+      layerIsExplicit: layerIsExplicit,
+      invalidAt: invalidAt,
+      ledgerStatus: ledgerStatus,
+      supersededBy: supersededBy,
+    );
     final memoryCases = <(String, Memory, bool)>[
       ('eligible', memory(), true),
       ('empty id', memory()..id = '', false),
@@ -866,8 +962,11 @@ void main() {
     for (final (name, row, expected) in memoryCases) {
       expect(siriMemoryIsIndexable(row, now), expected, reason: name);
     }
-    expect(Memory.fromJson(memory(dismissed: true).toJson()).isDismissed, isTrue,
-        reason: 'wire dismissal must survive the Dart adapter');
+    expect(
+      Memory.fromJson(memory(dismissed: true).toJson()).isDismissed,
+      isTrue,
+      reason: 'wire dismissal must survive the Dart adapter',
+    );
 
     ServerConversation conversation({
       String id = 'conversation',
@@ -877,17 +976,16 @@ void main() {
       bool siriVisibilityValid = true,
       ConversationStatus status = ConversationStatus.completed,
       DateTime? createdAt,
-    }) =>
-        ServerConversation(
-          id: id,
-          createdAt: createdAt ?? date,
-          structured: Structured('Title', 'Summary'),
-          deleted: deleted,
-          discarded: discarded,
-          isLocked: locked,
-          siriVisibilityValid: siriVisibilityValid,
-          status: status,
-        );
+    }) => ServerConversation(
+      id: id,
+      createdAt: createdAt ?? date,
+      structured: Structured('Title', 'Summary'),
+      deleted: deleted,
+      discarded: discarded,
+      isLocked: locked,
+      siriVisibilityValid: siriVisibilityValid,
+      status: status,
+    );
     final conversationCases = <(String, ServerConversation, bool)>[
       ('eligible', conversation(), true),
       ('empty id', conversation(id: ''), false),
@@ -903,13 +1001,21 @@ void main() {
     }
 
     final malformedMemory = Memory.fromJson({...memory().toJson(), 'visibility': 'future-value'});
-    expect(malformedMemory.visibility, MemoryVisibility.public,
-        reason: 'ordinary Memories UI keeps its pre-Siri fallback');
+    expect(
+      malformedMemory.visibility,
+      MemoryVisibility.public,
+      reason: 'ordinary Memories UI keeps its pre-Siri fallback',
+    );
     expect(siriMemoryIsIndexable(malformedMemory, now), isFalse);
-    final malformedConversation =
-        ServerConversation.fromJson({...conversation().toJson(), 'visibility': 'future-value'});
-    expect(malformedConversation.visibility, ConversationVisibility.private_,
-        reason: 'ordinary Conversations UI keeps its pre-Siri fallback');
+    final malformedConversation = ServerConversation.fromJson({
+      ...conversation().toJson(),
+      'visibility': 'future-value',
+    });
+    expect(
+      malformedConversation.visibility,
+      ConversationVisibility.private_,
+      reason: 'ordinary Conversations UI keeps its pre-Siri fallback',
+    );
     expect(siriConversationIsIndexable(malformedConversation, now), isFalse);
 
     ActionItemWithMetadata task({
@@ -919,27 +1025,22 @@ void main() {
       String status = 'active',
       String? supersededBy,
       DateTime? completedAt,
-    }) =>
-        ActionItemWithMetadata(
-          id: id,
-          description: 'Visible',
-          createdAt: date,
-          completed: completed,
-          completedAt: completedAt,
-          isLocked: locked,
-          status: status,
-          supersededBy: supersededBy,
-        );
+    }) => ActionItemWithMetadata(
+      id: id,
+      description: 'Visible',
+      createdAt: date,
+      completed: completed,
+      completedAt: completedAt,
+      isLocked: locked,
+      status: status,
+      supersededBy: supersededBy,
+    );
     final taskCases = <(String, ActionItemWithMetadata, bool)>[
       ('eligible', task(), true),
       (
         'omitted status wire default',
-        ActionItemWithMetadata.fromJson({
-          'id': 'legacy-task',
-          'description': 'Legacy task',
-          'completed': false,
-        }),
-        true
+        ActionItemWithMetadata.fromJson({'id': 'legacy-task', 'description': 'Legacy task', 'completed': false}),
+        true,
       ),
       ('empty id', task(id: ''), false),
       ('locked', task(locked: true), false),

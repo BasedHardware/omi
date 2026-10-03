@@ -28,7 +28,16 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
+
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
+  final dates = OmiDateFormat.of(context);
+  if (end == null || (start.year == end.year && start.month == end.month && start.day == end.day)) {
+    return dates.date(start);
+  }
+  return '${dates.date(start)} – ${dates.date(end)}';
+}
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -81,8 +90,7 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -94,18 +102,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      startDate?.toIso8601String() ?? '',
-      endDate?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -530,7 +537,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
@@ -551,26 +559,28 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
         };
         final apiPhase = snapshot.apiViewPhase;
-        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final bool showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
             apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
         final bool showCaptureGaps = _captureGapsEligible(convoProvider) && !convoProvider.isSelectionModeActive;
-        final captureGapsByDate =
-            showCaptureGaps ? _captureGaps.gapsByDate : const <DateTime, List<CalendarCaptureGap>>{};
+        final captureGapsByDate = showCaptureGaps
+            ? _captureGaps.gapsByDate
+            : const <DateTime, List<CalendarCaptureGap>>{};
         final mergedDates = <DateTime>{
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           if (showCaptureGaps) ...captureGapsByDate.keys,
           ...processingByDate.keys,
-        }.toList()
-          ..sort((a, b) => b.compareTo(a));
+        }.toList()..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
@@ -637,7 +647,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32.0),
-                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                      child: EmptyConversationsWidget(
+                        isStarredFilterActive: convoProvider.showStarredOnly,
+                        dateFilterLabel: convoProvider.selectedStartDate == null
+                            ? null
+                            : _conversationDateRangeLabel(
+                                context,
+                                convoProvider.selectedStartDate!,
+                                convoProvider.selectedEndDate,
+                              ),
+                      ),
                     ),
                   ),
                 )

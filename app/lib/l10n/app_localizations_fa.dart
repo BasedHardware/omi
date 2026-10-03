@@ -12291,7 +12291,51 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'اتصال برقرار نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyServerError => 'مشکلی از سمت ما پیش آمد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyTimeout => 'پاسخ بیش از حد طول کشید. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyNotSignedIn => 'شما وارد نشده‌اید. وارد شوید و دوباره تلاش کنید.';
+
+  @override
+  String get chatAppsLoadFailed => 'بارگیری برنامه‌های گفتگو ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'صدا';
+
+  @override
+  String get assistantVoice => 'صدای دستیار';
+
+  @override
+  String get voiceSharedAcrossDevices => 'صدای انتخابی شما در موبایل و دسکتاپ مشترک است.';
+
+  @override
+  String get readChatRepliesAloud => 'خواندن پاسخ‌های گفتگو با صدای بلند';
+
+  @override
+  String get readChatRepliesAloudDescription => 'فقط زمانی صحبت می‌کند که «پاسخ صوتی» اجازه دهد.';
+
+  @override
+  String get voicePreviewSample => 'سلام، من Omi هستم. این صدای من است.';
+
+  @override
   String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
+  String get previousDay => 'روز قبل';
+
+  @override
+  String get nextDay => 'روز بعد';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'هیچ وظیفه‌ای در $date نیست';
+  }
 
   @override
   String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';

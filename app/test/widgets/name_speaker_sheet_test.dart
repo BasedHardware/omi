@@ -20,15 +20,15 @@ Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
 TranscriptSegment _seg(String id, {String? personId}) => TranscriptSegment(
-      id: id,
-      text: 'speech',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: personId,
-      translations: [],
-      start: 0,
-      end: 1,
-    );
+  id: id,
+  text: 'speech',
+  speaker: 'SPEAKER_00',
+  isUser: false,
+  personId: personId,
+  translations: [],
+  start: 0,
+  end: 1,
+);
 
 Future<void> _pumpSheet(
   WidgetTester tester, {
@@ -41,7 +41,8 @@ Future<void> _pumpSheet(
     String personName,
     List<String> segmentIds,
     bool applyToSpeaker,
-  )? onSpeakerAssigned,
+  )?
+  onSpeakerAssigned,
 }) async {
   final provider = PeopleProvider()..people = people;
   await tester.pumpWidget(
@@ -79,7 +80,12 @@ void main() {
       tester,
       people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
       suggestion: SpeakerLabelSuggestionEvent(
-          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+        speakerId: 0,
+        personId: '',
+        personName: 'Maya',
+        segmentId: 'seg0',
+        suggestedPersonId: 'maya',
+      ),
       onSpeakerAssigned: (_, id, __, ___, ____) async {
         assignments.add(id);
         return false;

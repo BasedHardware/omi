@@ -103,7 +103,8 @@ class ConversationDetailHeader extends StatelessWidget {
       focusNode: provider.titleFocusNode,
       controller: provider.titleController,
       style: titleStyle,
-      hintText: transcriptFallbackTitle(conversation) ??
+      hintText:
+          transcriptFallbackTitle(conversation) ??
           recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
     );
   }
@@ -114,10 +115,7 @@ class ConversationDetailHeader extends StatelessWidget {
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
     final duration = conversationDurationLabel(conversation, context.l10n);
-    final label = [
-      '${dates.dayHeader(start)} ${dates.time(start)}',
-      if (duration.isNotEmpty) duration,
-    ].join(' · ');
+    final label = ['${dates.dayHeader(start)} ${dates.time(start)}', if (duration.isNotEmpty) duration].join(' · ');
     final calendarEvent = conversation.calendarEvent;
     final chip = ConversationDetailChip(
       key: const Key('conversation_when'),

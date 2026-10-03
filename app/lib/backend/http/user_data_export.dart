@@ -41,9 +41,11 @@ Future<String?> exportUserDataToFile(
   final tempFile = File(tempPath);
   final abort = Completer<void>();
   if (abortTrigger != null) {
-    unawaited(abortTrigger.then((_) {
-      if (!abort.isCompleted) abort.complete();
-    }));
+    unawaited(
+      abortTrigger.then((_) {
+        if (!abort.isCompleted) abort.complete();
+      }),
+    );
   }
   StreamSubscription<int>? generationWatch;
   if (snapshot != null) {
@@ -56,8 +58,9 @@ Future<String?> exportUserDataToFile(
   RandomAccessFile? output;
   var finished = false;
   try {
-    final response = await (request ??
-        () => makeRawApiCall(
+    final response =
+        await (request ??
+            () => makeRawApiCall(
               url: '${Env.apiBaseUrl}v1/users/export?stream=true',
               method: 'GET',
               abortTrigger: abort.future,
