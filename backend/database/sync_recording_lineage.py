@@ -21,6 +21,7 @@ from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, reco
 CONVERSATIONS_COLLECTION = 'conversations'
 
 LINEAGE_FIELD_PATHS = (
+    'created_at',
     'started_at',
     'finished_at',
     'source',

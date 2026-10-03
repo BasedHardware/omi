@@ -369,14 +369,14 @@ def test_trailing_allowance_does_not_exceed_sixty_seconds():
     assert result.targets == {chunk['id']: None}
 
 
-def test_overlapping_generations_never_pick_one():
-    """A row whose interval grew over its successor (e.g. an earlier stamp append) is ambiguous."""
+def test_overlapping_generations_pick_the_later_created():
+    """A row whose interval grew over its successor (e.g. an earlier stamp append) overlaps it."""
     rows = [generation(1, finished_at=at(gen_start(2) + DURATION)), generation(2)]
     chunk = sync_chunk(gen_start(2) + 61, gen_start(2) + 69, live_text(2, 1))
     result = select_segment_targets(
         rows, ORIGIN, spans([chunk]), stamped_target='STAMP', source='omi', client_device_id='pendant', is_locked=False
     )
-    assert result.targets == {chunk['id']: 'STAMP'} and result.reason == 'interval_miss'
+    assert result.targets == {chunk['id']: gen_id(2)}
 
 
 @pytest.mark.parametrize(
@@ -561,7 +561,7 @@ def test_old_stamp_extended_into_a_later_generation_is_not_hidden_by_the_limit(l
     chunk = upload_straddling_next_two()[0]
     # The origin row and LIVE-12 both contain the segment. The original
     # newest-eight query hides the extended origin and falsely overrides STAMP.
-    assert resolve([chunk], stamp='STAMP') == {chunk['id']: 'STAMP'}
+    assert resolve([chunk], stamp='STAMP') == {chunk['id']: gen_id(L + 1)}
 
 
 def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage_db):
@@ -570,7 +570,7 @@ def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage
     # Donors need not be recent: the survivor can also have a late stamped
     # append while unrelated newer generations of the same recording exist.
     chunk = upload_straddling_next_two()[0]
-    assert resolve([chunk]) == {chunk['id']: None}
+    assert resolve([chunk]) == {chunk['id']: gen_id(L + 1)}
 
 
 @pytest.mark.parametrize('duration', [0, -1, float('nan'), float('inf')])

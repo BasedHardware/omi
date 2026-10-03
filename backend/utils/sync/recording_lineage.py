@@ -38,6 +38,7 @@ from config.sync_lineage import sync_lineage_resolve_enabled, sync_lineage_resol
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
+from utils.sync.lineage_intervals import pick_overlapping
 from utils.sync.recording_session_target import (
     START_SKEW_SECONDS,
     TRAILING_AUDIO_SECONDS,
@@ -83,6 +84,7 @@ class _Generation:
     end: float
     canonical: str
     deleted: bool
+    created: Optional[float]
 
 
 @dataclass
@@ -181,7 +183,7 @@ def _generations(
     wanted_source = source_value(source)
     device_id = clean_text(client_device_id)
     redirects: dict[str, str] = {}
-    candidates: list[tuple[str, float, float, bool]] = []
+    candidates: list[tuple[str, float, float, bool, Optional[float]]] = []
     for row in rows:
         row_id = clean_text(row.get('id'))
         external = row.get('external_data')
@@ -207,10 +209,10 @@ def _generations(
         start, end = unix_seconds(row.get('started_at')), unix_seconds(row.get('finished_at'))
         if start is None or end is None or end < start:
             continue
-        candidates.append((row_id, start, end, bool(row.get('deleted'))))
+        candidates.append((row_id, start, end, bool(row.get('deleted')), unix_seconds(row.get('created_at'))))
     return [
-        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted)
-        for row_id, start, end, deleted in sorted(candidates)
+        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted, created)
+        for row_id, start, end, deleted, created in sorted(candidates)
     ]
 
 
@@ -231,7 +233,10 @@ def _unique(matches: list[_Generation]) -> Optional[str]:
 def _bind(generations: list[_Generation], start: float, end: float) -> Optional[str]:
     strict = [g for g in generations if g.start <= start and end <= g.end]
     if strict:
-        return _unique(strict)
+        unique = _unique(strict)
+        if unique is not None:
+            return unique
+        return _unique([pick_overlapping(strict, start, end)])
     tolerant = [
         g
         for g in generations
