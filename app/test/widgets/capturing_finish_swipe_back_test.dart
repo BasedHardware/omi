@@ -117,7 +117,7 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])..people = []),
+        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => null)..people = []),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
