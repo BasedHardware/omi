@@ -13,7 +13,6 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 import asyncio
 import logging
 import os
-import re
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -21,6 +20,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.other.safe_filename import safe_filename
 
 logger = logging.getLogger(__name__)
 
@@ -35,26 +35,17 @@ _MAX_UPLOAD_BYTES = 200_000_000
 # slot is acquired), so this only bounds client-perceived latency.
 _UPSTREAM_WAIT_SECS = 30.0
 
-_SAFE_FILENAME_RE = re.compile(r'[^A-Za-z0-9._-]')
-_MAX_FILENAME_LEN = 64
-_MAX_EXTENSION_LEN = 8
-
 
 def _safe_upstream_filename(filename) -> str:
     """Parakeet builds its temp file path from the client-supplied filename —
     never forward path separators, dot-prefixed names, or overlong names.
     Truncation keeps a short extension so upstream decoders that sniff by
     suffix still see it.
+
+    Thin wrapper over the shared sanitizer so this route and the app-logo /
+    speech-profile upload routes cannot drift apart.
     """
-    base = os.path.basename(filename or '')
-    base = _SAFE_FILENAME_RE.sub('_', base).lstrip('.')
-    if len(base) > _MAX_FILENAME_LEN:
-        stem, dot, ext = base.rpartition('.')
-        if dot and 0 < len(ext) <= _MAX_EXTENSION_LEN:
-            base = stem[: _MAX_FILENAME_LEN - len(ext) - 1] + '.' + ext
-        else:
-            base = base[:_MAX_FILENAME_LEN]
-    return base or 'audio.wav'
+    return safe_filename(filename, default='audio.wav')
 
 
 @router.post('/v1/stt/transcribe', tags=['stt'])
