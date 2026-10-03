@@ -1970,7 +1970,9 @@ async def _browse_speaker_conversations(
     include_discarded = bool(search_request.include_discarded)
     start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
     end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
-    budget = conversation_scan_db.conversation_scan_budget(request, route='speaker-browse')
+    budget = await run_blocking(
+        db_executor, conversation_scan_db.conversation_scan_budget, request, route='speaker-browse'
+    )
     # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
     browse_results = await run_blocking(
         db_executor,
