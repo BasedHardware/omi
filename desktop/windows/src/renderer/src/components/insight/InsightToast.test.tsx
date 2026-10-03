@@ -84,4 +84,3 @@ describe('meeting capture status toast', () => {
     expect(meetingAction).toHaveBeenCalledWith('meeting-1', 'dismiss')
   })
 })
-

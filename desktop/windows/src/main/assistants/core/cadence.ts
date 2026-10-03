@@ -2,4 +2,3 @@
 export function intervalElapsed(timeSinceLastMs: number, intervalMs: number): boolean {
   return timeSinceLastMs >= intervalMs
 }
-

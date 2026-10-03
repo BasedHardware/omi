@@ -19,4 +19,3 @@ type FunctionDeclaration = {
   }
 }
 type PropertySpec = { type: string; description: string; enum?: string[] }
-
