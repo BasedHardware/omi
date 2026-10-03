@@ -13,7 +13,6 @@ from models.product_memory import (
     MemorySubjectScope,
     ProcessingState,
 )
-from utils.memory.jit_trigger_snapshot import read_authoritative_trigger_snapshot
 from utils.retrieval.tools import knowledge_ledger_write_tools as tools
 
 NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
@@ -243,14 +242,8 @@ def test_create_standing_trigger_rejects_oversize_description(monkeypatch):
     assert result.startswith("Error:")
 
 
-def test_create_standing_trigger_created_row_is_visible_to_desktop_watchlist(monkeypatch):
-    """Prove the exact condition/arguments this tool builds satisfy the paid-work snapshot.
-
-    ``read_authoritative_trigger_snapshot`` is the authority the desktop
-    watchlist reads. This feeds the condition and arguments our tool would
-    send to ``create_trigger`` into a MemoryItem and confirms the snapshot
-    admits it — the row is not just written, it is actually watchable.
-    """
+def test_create_standing_trigger_keeps_canonical_condition_and_arguments(monkeypatch):
+    """Canonical knowledge writes survive retirement of the paid trigger watcher."""
     captured = {}
 
     def fake_create_trigger(uid, description, condition, *, provenance, arguments, db_client, prior_memory_id=None):
@@ -300,70 +293,11 @@ def test_create_standing_trigger_created_row_is_visible_to_desktop_watchlist(mon
         arguments=captured["arguments"],
     )
 
-    result = read_authoritative_trigger_snapshot("owner", firestore_client=_FakeTriggerSnapshotClient([item]))
-
-    assert result.complete is True
-    assert len(result.rows) == 1
-    assert result.rows[0].memory_id == "mem_new_trigger"
-    assert result.rows[0].action.prompt == "Tell the user Jane emailed about the contract."
-    assert result.rows[0].wakeup_budget_per_day == 1
-
-
-class _FakeSnapshot:
-    def __init__(self, identifier, payload):
-        self.id = identifier
-        self._payload = payload
-        self.exists = True
-
-    def to_dict(self):
-        return self._payload
-
-
-class _FakeDocument:
-    def __init__(self, snapshot):
-        self._snapshot = snapshot
-
-    def get(self):
-        return self._snapshot
-
-
-class _FakeQuery:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def where(self, *, filter):  # noqa: A002 - matches the google.cloud.firestore_v1 API shape
-        return self
-
-    def limit(self, _count):
-        return self
-
-    def stream(self):
-        return iter(self._rows)
-
-
-class _FakeTriggerSnapshotClient:
-    """Minimal duck-typed Firestore double matching test_jit_trigger_snapshot.py."""
-
-    def __init__(self, items):
-        self._rows = [_FakeSnapshot(item.memory_id, item.model_dump(mode="python")) for item in items]
-
-    def document(self, _path):
-        return _FakeDocument(
-            _FakeSnapshot(
-                "head",
-                {
-                    "schema_version": MEMORY_STATE_HEAD_SCHEMA_VERSION,
-                    "source": MEMORY_STATE_HEAD_SOURCE,
-                    "uid": "owner",
-                    "account_generation": 3,
-                    "head_commit_id": "head-7",
-                    "commit_sequence": 7,
-                },
-            )
-        )
-
-    def collection(self, _path):
-        return _FakeQuery(self._rows)
+    assert item.kind == MemoryKind.trigger
+    assert item.trigger_condition == captured["condition"]
+    assert item.arguments == captured["arguments"]
+    assert item.intent_backed is True
+    assert item.ledger_schema_version == "knowledge_ledger.v1"
 
 
 # ---------------------------------------------------------------------------

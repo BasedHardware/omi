@@ -748,9 +748,6 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'true'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-          category: rollout
-          value: 'true'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'true'
@@ -2649,9 +2646,6 @@ environments:
           category: rollout
           value: 'false'
         MEMORY_BELIEF_MODEL_ENABLED:
-          category: rollout
-          value: 'false'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
           category: rollout
           value: 'false'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:

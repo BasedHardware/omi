@@ -25,7 +25,7 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'faa5baad5119b596a5256cd1eb552ddf93f00aef37c560f558aabcf7eabc1831'
+CATALOG_SHA256: Final = '2c9eb127ad6882d7d62a6c35b59474644189eb2f0b2bc3ee0bd1b81babb73b1c'
 CATALOG_REVISION: Final = 3
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
@@ -347,15 +347,9 @@ PRIMARY_BILLING_ENV_VARS: Final[dict[PlanType, dict[str, str]]] = {
     PlanType.plus: {'month': 'STRIPE_PLUS_MONTHLY_PRICE_ID', 'year': 'STRIPE_PLUS_ANNUAL_PRICE_ID'},
     PlanType.unlimited_v2: {'month': 'STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'year': 'STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'}
 }
-DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False,
-                  'cloud_screen_vectors': False,
-                  'proactivity_daily': {'proactive_extraction': 150, 'proactive_reasoning': 60}},
- 'desktop_full': {'full_desktop': True,
-                  'cloud_screen_vectors': True,
-                  'proactivity_daily': {'proactive_extraction': 1000, 'proactive_reasoning': 500}},
- 'desktop_architect': {'full_desktop': True,
-                       'cloud_screen_vectors': True,
-                       'proactivity_daily': {'proactive_extraction': 2000, 'proactive_reasoning': 1000}}}
+DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False, 'cloud_screen_vectors': False},
+ 'desktop_full': {'full_desktop': True, 'cloud_screen_vectors': True},
+ 'desktop_architect': {'full_desktop': True, 'cloud_screen_vectors': True}}
 FAIR_USE_PROFILE_LIMITS: Final[dict[str, dict[str, Any]]] = {'metered_transcription': {'speech_milliseconds': {'rolling_day': 7200000,
                                                    'rolling_three_days': 28800000,
                                                    'rolling_week': 36000000}},

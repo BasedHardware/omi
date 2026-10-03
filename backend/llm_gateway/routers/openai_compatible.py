@@ -41,9 +41,6 @@ from llm_gateway.gateway.errors import (
 )
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
-    jit_reservation_units,
-    reserve_jit_attempt,
-    settle_jit_attempt,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     output_budget_for,
@@ -63,8 +60,7 @@ from llm_gateway.gateway.metrics import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.jit_budget import JITAttemptReservation
-from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for, request_id_for
+from llm_gateway.gateway.request_context import JITBudgetHeaders, request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
@@ -99,14 +95,11 @@ async def create_chat_completion(
     attempt_trace = AttemptTrace()
     try:
         request_body = await _request_json(request)
-        try:
-            jit_budget = jit_budget_headers_for(request, owner_uid=caller.user_uid)
-            if jit_budget is not None and not caller.user_uid:
-                raise ValueError('JIT budget requires authenticated owner attribution')
-        except ValueError as exc:
-            raise GatewayInvalidRequestError(str(exc), param='x-omi-jit-contract-version') from exc
-        if jit_budget is not None:
-            _apply_jit_request_budget(request_body, jit_budget)
+        # Explicit legacy JIT requests must never fall through to paid chat.
+        if any(name.lower().startswith('x-omi-jit-') for name in request.headers):
+            return JSONResponse(
+                status_code=410, content={'error': {'code': 'feature_retired'}}, headers={'Cache-Control': 'no-store'}
+            )
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = _resolve_credentials(request, caller)
         credential_source = credentials.source.value
@@ -116,7 +109,6 @@ async def create_chat_completion(
             api_surface='openai_chat_completions',
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
-            jit_budget=jit_budget,
         )
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
         if is_streaming:
@@ -128,22 +120,12 @@ async def create_chat_completion(
                 request_id=request_id,
                 accounting_context=accounting_context,
                 attempt_trace=attempt_trace,
-                max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
-                jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
-                jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
-                jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-                jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
             )
         result = await execute_chat_completion(
             resolved_route,
             credentials,
             provider_registry,
             attempt_trace=attempt_trace,
-            max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
-            jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
-            jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-            jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
-            jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
         )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
@@ -453,10 +435,6 @@ async def _streaming_response(
     accounting_context: AccountingContext,
     attempt_trace: AttemptTrace,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
     output_budget = output_budget_for(resolved_route, route)
@@ -468,10 +446,6 @@ async def _streaming_response(
         route,
         attempt_trace=attempt_trace,
         max_provider_attempts=max_provider_attempts,
-        jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-        jit_owner_uid=jit_owner_uid,
-        jit_run_id=jit_run_id,
-        jit_contract_version=jit_contract_version,
     )
     async_iterator = _stream_with_terminal_metrics(
         prepared,
@@ -497,7 +471,6 @@ class _PreparedStream:
     fallback_used: bool
     fallback_reason: str | None
     cache_requested: bool = False
-    reservation: JITAttemptReservation | None = None
 
 
 async def _prepared_streaming_iterator(
@@ -508,17 +481,12 @@ async def _prepared_streaming_iterator(
     *,
     attempt_trace: AttemptTrace,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
     for provider_ref in [route.primary, *route.fallbacks]:
         if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
             raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
-        reservation: JITAttemptReservation | None = None
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -527,29 +495,6 @@ async def _prepared_streaming_iterator(
             continue
         provider_request = provider_request_for(resolved_route, provider_ref)
         _request_stream_usage(provider_request, provider_ref.provider)
-        if jit_run_id is not None:
-            try:
-                units = jit_reservation_units(provider_request)
-                reservation = await reserve_jit_attempt(
-                    owner_uid=cast(str, jit_owner_uid),
-                    run_id=jit_run_id,
-                    contract_version=cast(str, jit_contract_version),
-                    max_attempts=cast(int, max_provider_attempts),
-                    max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
-                    provider=provider_ref.provider,
-                    model=provider_ref.model,
-                    input_tokens=int(cast(int | str, units['input_tokens'])),
-                    cached_input_tokens=int(cast(int | str, units['cached_input_tokens'])),
-                    output_tokens=int(cast(int | str, units['output_tokens'])),
-                    cache_write_tokens=int(cast(int | str, units['cache_write_tokens'])),
-                    cache_ttl=cast(str | None, units['cache_ttl']),
-                )
-            except ValueError as exc:
-                raise GatewayInvalidRequestError(str(exc)) from exc
-            except Exception as exc:
-                raise GatewayInvalidRequestError('JIT budget authority unavailable') from exc
-            if reservation is None:
-                raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         stream = stream_chat_completion(
             provider_request,
             provider_ref=provider_ref,
@@ -562,13 +507,6 @@ async def _prepared_streaming_iterator(
                 if first_chunk:
                     break
         except StopAsyncIteration:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             return _PreparedStream(
                 first_chunk=None,
                 stream=stream,
@@ -579,13 +517,6 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
                 provider=provider_ref.provider,
@@ -598,11 +529,6 @@ async def _prepared_streaming_iterator(
                 usage_status=UsageStatus.INDETERMINATE,
             )
             first_failure = first_failure or exc.failure_class.value
-            if jit_run_id is not None:
-                # A provider failure has unknown usage.  The reservation
-                # authority blocks this run, so do not attempt a fallback that
-                # would immediately spend around the blocked reservation.
-                raise last_error
             if not is_lkg_eligible(route, exc.failure_class):
                 raise last_error
             continue
@@ -614,7 +540,6 @@ async def _prepared_streaming_iterator(
             fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
-            reservation=reservation,
         )
     if last_error is not None:
         raise last_error
@@ -651,27 +576,8 @@ async def _stream_with_terminal_metrics(
         if terminal_observed:
             return terminal_settlement_ok
         terminal_observed = True
-        settlement_ok = await settle_jit_attempt(
-            prepared.reservation,
-            provider=prepared.provider,
-            model=prepared.model,
-            metadata=usage_metadata if outcome == 'success' else None,
-            status='succeeded' if outcome == 'success' else ('cancelled' if outcome == 'cancelled' else 'failed'),
-        )
-        terminal_settlement_ok = settlement_ok
-        if outcome == 'success' and not settlement_ok:
-            # The provider bytes may already be visible to the caller, but a
-            # successful JIT receipt is only valid after durable settlement.
-            outcome = 'error'
-            error_class = 'jit_budget_settlement_failed'
-            # Keep provider-observed usage for diagnostics and reconciliation;
-            # the failed settlement still suppresses the success receipt below.
-            usage_for_trace = usage_metadata
-        else:
-            # A provider may report usage or a response ID before an error or
-            # client cancellation. Preserve those diagnostics, but mark their
-            # completeness and cost as indeterminate below.
-            usage_for_trace = usage_metadata
+        terminal_settlement_ok = True
+        usage_for_trace = usage_metadata
         # Per the PR behavioral contract, actual fallback requires a subsequent
         # successful provider/route.  Only stamp the actual-fallback labels when
         # the terminal outcome is success; an error or cancellation means the
@@ -728,7 +634,7 @@ async def _stream_with_terminal_metrics(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return settlement_ok
+        return True
 
     async def handle_events(frame_events: list[SSEEvent]) -> bool:
         nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
@@ -865,8 +771,6 @@ def _accounting_context(
         api_surface=api_surface,
         payer=payer,
         app_platform=caller.app_platform,
-        jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-        jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
     )
 
 

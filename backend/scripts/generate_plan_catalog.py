@@ -258,21 +258,11 @@ def _validate_allocation_profiles(profiles: Any, errors: list[str]) -> tuple[set
             if not isinstance(profile, dict):
                 errors.append(f'{path}: expected an object')
                 continue
-            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors', 'proactivity_daily'}, path, errors)
+            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors'}, path, errors)
             if not isinstance(profile.get('full_desktop'), bool):
                 errors.append(f'{path}.full_desktop: expected a boolean')
             if not isinstance(profile.get('cloud_screen_vectors'), bool):
                 errors.append(f'{path}.cloud_screen_vectors: expected a boolean')
-            limits = profile.get('proactivity_daily')
-            if not isinstance(limits, dict):
-                errors.append(f'{path}.proactivity_daily: expected an object')
-                continue
-            _unexpected_keys(
-                limits, {'proactive_extraction', 'proactive_reasoning'}, f'{path}.proactivity_daily', errors
-            )
-            for operation, value in limits.items():
-                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                    errors.append(f'{path}.proactivity_daily.{operation}: expected a positive integer')
 
     fair_use = profiles.get('fair_use')
     if isinstance(fair_use, dict):

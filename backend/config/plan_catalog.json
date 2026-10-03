@@ -13,27 +13,15 @@
     "desktop": {
       "desktop_free": {
         "full_desktop": false,
-        "cloud_screen_vectors": false,
-        "proactivity_daily": {
-          "proactive_extraction": 150,
-          "proactive_reasoning": 60
-        }
+        "cloud_screen_vectors": false
       },
       "desktop_full": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 1000,
-          "proactive_reasoning": 500
-        }
+        "cloud_screen_vectors": true
       },
       "desktop_architect": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 2000,
-          "proactive_reasoning": 1000
-        }
+        "cloud_screen_vectors": true
       }
     },
     "fair_use": {
