@@ -109,6 +109,7 @@ from utils.other.list_budget import (
 )
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
+    normalize_event_title,
     write_conversation_link_to_calendar_event,
 )
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
@@ -1053,7 +1054,7 @@ def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
 
     return CalendarEventLink(
         event_id=event.get('id', ''),
-        title=event.get('summary', 'Untitled Event'),
+        title=normalize_event_title(event.get('summary')),
         attendees=attendee_names,
         attendee_emails=attendee_emails,
         start_time=start_time,
