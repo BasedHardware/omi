@@ -220,15 +220,13 @@ void main() {
   });
 
   group('row titles (hub audit #21)', () {
-    testWidgets('a blank title uses its recording date; a discarded one says so with its length', (tester) async {
+    testWidgets('a blank title says Untitled Conversation; a discarded one says so with its length', (tester) async {
       late BuildContext captured;
       await pump(tester, Builder(builder: (context) => (captured = context, const SizedBox()).$2));
 
+      // The day header and the row's time already say when, so the date is not the title too.
       final blankTitle = _conversation('a', title: '  ');
-      expect(
-        conversationRowTitle(captured, blankTitle),
-        OmiDateFormat.of(captured).dateTime(blankTitle.createdAt.toLocal()),
-      );
+      expect(conversationRowTitle(captured, blankTitle), 'Untitled Conversation');
       final start = DateTime(2026, 9, 20, 10);
       final discarded = _conversation(
         'b',

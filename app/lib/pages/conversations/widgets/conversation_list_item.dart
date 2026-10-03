@@ -30,8 +30,9 @@ import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
-/// rows the server left untitled), a recording date/time when neither exists, and
-/// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
+/// rows the server left untitled), "Untitled Conversation" when neither exists (the day header and
+/// the row's time already say when), and "Discarded · 12s" for a discarded one (its words go in
+/// [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
   if (conversation.discarded) {
@@ -45,6 +46,7 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     surface: ConversationUntitledRenderedSurface.list,
     dates: OmiDateFormat.of(context),
     title: conversation.structured.title.decodeString,
+    untitledLabel: true,
   );
 }
 
@@ -71,6 +73,10 @@ class ConversationListItem extends StatefulWidget {
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
   final bool allowSelection;
 
+  /// Drawn inside a [LockedConversationRun]: only the card, which the run blurs under its one
+  /// upgrade action, with no gestures, padding or lock of its own.
+  final bool inLockedRun;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
@@ -79,6 +85,7 @@ class ConversationListItem extends StatefulWidget {
     this.isFromOnboarding = false,
     this.reprocess,
     this.allowSelection = true,
+    this.inLockedRun = false,
   });
 
   @override
@@ -290,6 +297,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.inLockedRun) {
+      return DecoratedBox(
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+          child: _buildMobileLayout(context),
+        ),
+      );
+    }
     // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
@@ -831,6 +847,49 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
             style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Two or more locked rows in a row on the free plan: one frosted card holding all of them, with a
+/// single "Upgrade to Unlimited" instead of one per row. A lone locked row stays a
+/// [ConversationListItem] with its own [OmiLockedPreview].
+class LockedConversationRun extends StatelessWidget {
+  const LockedConversationRun({super.key, required this.conversations, required this.date});
+
+  final List<ServerConversation> conversations;
+  final DateTime date;
+
+  Future<void> _upgrade(BuildContext context) async {
+    if (!context.read<UsageProvider>().showSubscriptionUI) return;
+    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
+    routeToPage(context, const UsagePage(showUpgradeDialog: true));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+      child: OmiLockedPreview(
+        key: const Key('locked_conversation_run'),
+        label: context.l10n.upgradeToUnlimited,
+        onPressed: () => _upgrade(context),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (index, conversation) in conversations.indexed) ...[
+              if (index > 0) const SizedBox(height: 8),
+              ConversationListItem(
+                key: ValueKey('locked_${conversation.id}'),
+                conversation: conversation,
+                date: date,
+                conversationIdx: -1,
+                inLockedRun: true,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

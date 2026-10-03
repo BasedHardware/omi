@@ -40,21 +40,24 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
 }
 
 /// The display title of a kept (not discarded) conversation: its title, else transcript text,
-/// else a localized recording date/time. The last case reports [ConversationUntitledRendered]
-/// so missing server titles remain observable. [title] overrides the raw structured title
-/// when a surface already normalized it.
+/// else a localized recording date/time — or "Untitled Conversation" when [untitledLabel] is set,
+/// for surfaces that already show the date and time beside the title (the list row under its day
+/// header). The last case reports [ConversationUntitledRendered] so missing server titles remain
+/// observable. [title] overrides the raw structured title when a surface already normalized it.
 String conversationDisplayTitle(
   ServerConversation conversation,
   AppLocalizations l10n, {
   required ConversationUntitledRenderedSurface surface,
   String? title,
   OmiDateFormat? dates,
+  bool untitledLabel = false,
 }) {
   final trimmed = (title ?? conversation.structured.title).trim();
   if (trimmed.isNotEmpty) return trimmed;
   final fallback = transcriptFallbackTitle(conversation);
   if (fallback != null) return fallback;
   UntitledConversationTelemetry.report(conversation, surface);
+  if (untitledLabel) return l10n.untitledConversation;
   return recordingFallbackTitle(conversation, l10n, dates: dates);
 }
 

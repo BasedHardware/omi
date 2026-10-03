@@ -143,6 +143,14 @@ void main() {
       expect(conversation.showsSummaryRetry, isFalse);
     });
 
+    test('a list row with no title and no transcript says Untitled Conversation and still reports', () {
+      final conversation = _conversation(createdAt: DateTime(2026, 9, 20, 10));
+      final title = conversationDisplayTitle(conversation, l10n,
+          surface: ConversationUntitledRenderedSurface.list, untitledLabel: true);
+      expect(title, 'Untitled Conversation');
+      expect(emitted.map((event) => event.surface), [ConversationUntitledRenderedSurface.list]);
+    });
+
     test('an untitled legacy row falls back to transcript text and emits nothing', () {
       final title = conversationDisplayTitle(
         _conversation(segments: [_segment('Lunch plans for Friday')]),
