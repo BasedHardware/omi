@@ -117,4 +117,28 @@ void main() {
     expect(source.requested, [OnboardingPermission.location]);
     expect(find.text('Allowed'), findsOneWidget);
   });
+
+  testWidgets('the action sits on the title line and the reason uses the width below it', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const reason = 'So Omi can send you conversation summaries, task reminders and replies from your apps.';
+    await tester.pumpWidget(_app(Padding(
+      padding: const EdgeInsets.all(24),
+      child: OmiPermissionRow(
+        leading: const FaIcon(FontAwesomeIcons.solidBell),
+        title: 'Notifications',
+        reason: reason,
+        status: OmiPermissionStatus.blocked,
+        onAllow: () {},
+      ),
+    )));
+    final title = tester.getRect(find.text('Notifications'));
+    final button = tester.getRect(find.byKey(const Key('omi_permission_open_settings')));
+    final body = tester.getRect(find.text(reason));
+    expect(button.center.dy, closeTo(title.center.dy, 1), reason: 'button on the title line');
+    expect(body.top, greaterThanOrEqualTo(button.bottom - 1), reason: 'reason starts below the button');
+    expect(body.right, greaterThan(button.left), reason: 'reason runs under the button, not beside it');
+  });
 }

@@ -380,15 +380,33 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition, monkey
 
 
 @pytest.mark.parametrize(
-    'error,expected,retryable',
+    'error,expected,kind,retryable',
     [
-        (InvalidArgument('Document private-id exceeds the maximum allowed size'), 'document_size_limit', False),
-        (InvalidArgument('private unexpected input'), 'invalid_argument_other', True),
-        (InvalidArgument('The transaction has expired private-id'), 'expired_transaction', True),
-        (ServiceUnavailable('private detail'), 'ServiceUnavailable', True),
+        (InvalidArgument('Document private-id exceeds the maximum allowed size'), 'document_size_limit', 'none', False),
+        (
+            InvalidArgument(
+                "Document 'projects/p/databases/(default)/documents/users/private-uid/conversations/private-id' "
+                'cannot be written because its size (1,048,601 bytes) exceeds the maximum allowed size'
+            ),
+            'document_size_limit',
+            'conversation',
+            False,
+        ),
+        (
+            InvalidArgument(
+                "Document 'projects/p/databases/(default)/documents/users/private-uid/sync_assignment/2026-10-03' "
+                'cannot be written because its size (1,048,601 bytes) exceeds the maximum allowed size'
+            ),
+            'document_size_limit',
+            'sync_day_index',
+            False,
+        ),
+        (InvalidArgument('private unexpected input'), 'invalid_argument_other', 'none', True),
+        (InvalidArgument('The transaction has expired private-id'), 'expired_transaction', 'none', True),
+        (ServiceUnavailable('private detail'), 'ServiceUnavailable', 'none', True),
     ],
 )
-def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, error, expected, retryable):
+def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, error, expected, kind, retryable):
     module, store = pipeline
     module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
     module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
@@ -404,5 +422,6 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert ('repeat_failure_fingerprint' in outcome) is (not retryable)
     event = next(r.message for r in caplog.records if 'event=sync_persistence_exception' in r.message)
     assert f'firestore_error={expected}' in event
-    assert 'private' not in event
+    assert f'firestore_doc_kind={kind} ' in event
+    assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
