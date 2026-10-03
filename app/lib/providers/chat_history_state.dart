@@ -30,6 +30,10 @@ mixin ChatHistoryState on ChangeNotifier {
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   ApiProblem? historyProblem;
+
+  @visibleForTesting
+  Future<List<ServerMessage>> Function({String? appId, bool dropdownSelected})? legacyMessagesLoader;
+
   int _historyEpoch = 0;
   int _messageOffset = 0;
   bool _historyDisposed = false;
@@ -55,6 +59,12 @@ mixin ChatHistoryState on ChangeNotifier {
     resetChatDraft();
     notifyListeners();
     return true;
+  }
+
+  void beginChatTurn() {
+    _historyEpoch++;
+    isLoadingMessages = false;
+    loadingOlderMessages = false;
   }
 
   /// Commits a new selection after a successful read; epoch checks discard superseded results.
@@ -207,7 +217,8 @@ mixin ChatHistoryState on ChangeNotifier {
         historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
       }
     } else {
-      final loaded = await getMessagesServer(appId: appId, dropdownSelected: dropdownSelected);
+      final loaded =
+          await (legacyMessagesLoader ?? getMessagesServer)(appId: appId, dropdownSelected: dropdownSelected);
       if (_historyDisposed || epoch != _historyEpoch || appId != appProvider?.selectedChatAppId) return;
       isLoadingMessages = false;
       messages = loaded;

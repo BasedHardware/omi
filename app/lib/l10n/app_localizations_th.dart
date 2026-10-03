@@ -12155,4 +12155,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
+
+  @override
+  String get chatReplyOffline => 'ไม่สามารถเชื่อมต่อได้ โปรดตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+
+  @override
+  String get chatReplyServerError => 'เกิดข้อผิดพลาดจากฝั่งเรา โปรดลองอีกครั้ง';
+
+  @override
+  String get chatReplyTimeout => 'คำตอบใช้เวลานานเกินไป โปรดลองอีกครั้ง';
+
+  @override
+  String get chatReplyNotSignedIn => 'คุณยังไม่ได้เข้าสู่ระบบ เข้าสู่ระบบแล้วลองอีกครั้ง';
+
+  @override
+  String get chatAppsLoadFailed => 'ไม่สามารถโหลดแอปแชทได้ โปรดลองอีกครั้ง';
 }

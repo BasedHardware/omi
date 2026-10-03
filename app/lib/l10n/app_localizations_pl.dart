@@ -12260,4 +12260,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
+
+  @override
+  String get chatReplyOffline => 'Nie można połączyć. Sprawdź połączenie i spróbuj ponownie.';
+
+  @override
+  String get chatReplyServerError => 'Coś poszło nie tak po naszej stronie. Spróbuj ponownie.';
+
+  @override
+  String get chatReplyTimeout => 'Odpowiedź trwała zbyt długo. Spróbuj ponownie.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nie jesteś zalogowany. Zaloguj się i spróbuj ponownie.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nie udało się załadować aplikacji czatu. Spróbuj ponownie.';
 }

@@ -14575,5 +14575,25 @@
                 "type": "String"
             }
         }
+    },
+    "chatReplyOffline": "Unable to connect. Check your connection and try again.",
+    "@chatReplyOffline": {
+        "description": "Shown when a chat reply fails because the device has no connectivity"
+    },
+    "chatReplyServerError": "Something went wrong on our side. Please try again.",
+    "@chatReplyServerError": {
+        "description": "Shown when a chat reply fails with a server error"
+    },
+    "chatReplyTimeout": "The response took too long. Please try again.",
+    "@chatReplyTimeout": {
+        "description": "Shown when a chat reply times out"
+    },
+    "chatReplyNotSignedIn": "You're not signed in. Sign in and try again.",
+    "@chatReplyNotSignedIn": {
+        "description": "Shown when a chat reply fails because the user is not signed in"
+    },
+    "chatAppsLoadFailed": "Couldn't load chat apps. Please try again.",
+    "@chatAppsLoadFailed": {
+        "description": "Shown in the chat apps drawer when loading installed chat apps fails"
     }
 }

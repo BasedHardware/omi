@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengecam {name} pada masa akan datang.} pending{Ini mengambil masa beberapa saat.} disabled{Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam {name}.} other{Omi memerlukan lebih banyak pertuturan yang jelas daripada {name} dan akan terus mencuba.}}",
     "speakerLabelEarlierMatches": "Perbualan terdahulu dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
-    "speakerLabelTalkTime": "{duration} daripada suara ini"
+    "speakerLabelTalkTime": "{duration} daripada suara ini",
+    "chatReplyOffline": "Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.",
+    "chatReplyServerError": "Sesuatu telah berlaku di pihak kami. Sila cuba lagi.",
+    "chatReplyTimeout": "Respons mengambil masa terlalu lama. Sila cuba lagi.",
+    "chatReplyNotSignedIn": "Anda belum log masuk. Log masuk dan cuba lagi.",
+    "chatAppsLoadFailed": "Tidak dapat memuatkan aplikasi sembang. Sila cuba lagi."
 }

@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{次回から Omi が{name}さんを認識します。} pending{数秒かかります。} disabled{Omi が{name}さんを認識できるように、設定で声の保存をオンにしてください。} other{Omi は{name}さんのはっきりした音声がもっと必要です。引き続き試みます。}}",
     "speakerLabelEarlierMatches": "この声の過去の会話数：{count}",
     "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
-    "speakerLabelTalkTime": "この声の{duration}"
+    "speakerLabelTalkTime": "この声の{duration}",
+    "chatReplyOffline": "接続できません。接続を確認してもう一度お試しください。",
+    "chatReplyServerError": "こちら側で問題が発生しました。もう一度お試しください。",
+    "chatReplyTimeout": "応答に時間がかかりすぎました。もう一度お試しください。",
+    "chatReplyNotSignedIn": "サインインしていません。サインインして、もう一度お試しください。",
+    "chatAppsLoadFailed": "チャットアプリを読み込めませんでした。もう一度お試しください。"
 }

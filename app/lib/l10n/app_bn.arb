@@ -11339,5 +11339,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi পরের বার {name}-কে চিনতে পারবে।} pending{এতে কয়েক সেকেন্ড লাগবে।} disabled{Omi যাতে {name}-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।} other{Omi-র {name}-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।}}",
     "speakerLabelEarlierMatches": "এই ভয়েসের আগের কথোপকথন: {count}",
     "speakerLabelText": "{part, select, likely{সম্ভাব্য} soundsLike{{name}-এর মতো শোনাচ্ছে} notPerson{{name} নয়} carried{এখনও {name}। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।} change{পরিবর্তন} alsoTitle{এটিও কি {name}?} alsoBody{Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।} confirmed{আপনি এই লেবেল নিশ্চিত করেছেন} other{পর্যালোচনা}}",
-    "speakerLabelTalkTime": "এই ভয়েসের {duration}"
+    "speakerLabelTalkTime": "এই ভয়েসের {duration}",
+    "chatReplyOffline": "সংযোগ করা যাচ্ছে না। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+    "chatReplyServerError": "আমাদের দিক থেকে কিছু ভুল হয়েছে। আবার চেষ্টা করুন।",
+    "chatReplyTimeout": "উত্তরটি আসতে বেশি সময় নিয়েছে। আবার চেষ্টা করুন।",
+    "chatReplyNotSignedIn": "আপনি সাইন ইন করেননি। সাইন ইন করে আবার চেষ্টা করুন।",
+    "chatAppsLoadFailed": "চ্যাট অ্যাপ লোড করা যায়নি। আবার চেষ্টা করুন।"
 }

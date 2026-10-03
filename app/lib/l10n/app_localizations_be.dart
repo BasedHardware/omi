@@ -12255,4 +12255,19 @@ class AppLocalizationsBe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
+
+  @override
+  String get chatReplyOffline => 'Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyServerError => 'Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyTimeout => 'Адказ заняў занадта шмат часу. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Вы не ўвайшлі. Увайдзіце і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз.';
 }

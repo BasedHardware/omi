@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
     "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
     "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
-    "speakerLabelTalkTime": "{duration} từ giọng nói này"
+    "speakerLabelTalkTime": "{duration} từ giọng nói này",
+    "chatReplyOffline": "Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.",
+    "chatReplyServerError": "Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.",
+    "chatReplyTimeout": "Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.",
+    "chatReplyNotSignedIn": "Bạn chưa đăng nhập. Đăng nhập và thử lại.",
+    "chatAppsLoadFailed": "Không thể tải ứng dụng trò chuyện. Vui lòng thử lại."
 }

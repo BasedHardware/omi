@@ -12243,4 +12243,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get chatReplyOffline => 'Nepavyko prisijungti. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String get chatReplyServerError => 'Mūsų pusėje įvyko klaida. Bandykite dar kartą.';
+
+  @override
+  String get chatReplyTimeout => 'Atsakymas užtruko per ilgai. Bandykite dar kartą.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nesate prisijungę. Prisijunkite ir bandykite dar kartą.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nepavyko įkelti pokalbių programų. Bandykite dar kartą.';
 }

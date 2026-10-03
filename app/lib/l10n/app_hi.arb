@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi अगली बार {name} को पहचान लेगा।} pending{इसमें कुछ सेकंड लगते हैं।} disabled{Omi {name} को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।} other{Omi को {name} की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।}}",
     "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
-    "speakerLabelTalkTime": "इस आवाज़ का {duration}"
+    "speakerLabelTalkTime": "इस आवाज़ का {duration}",
+    "chatReplyOffline": "कनेक्ट नहीं हो सका। अपना कनेक्शन जांचें और फिर से प्रयास करें।",
+    "chatReplyServerError": "हमारी ओर से कुछ गड़बड़ हुई। कृपया फिर से प्रयास करें।",
+    "chatReplyTimeout": "जवाब देने में बहुत समय लगा। कृपया फिर से प्रयास करें।",
+    "chatReplyNotSignedIn": "आपने साइन इन नहीं किया है। साइन इन करें और फिर से प्रयास करें।",
+    "chatAppsLoadFailed": "चैट ऐप लोड नहीं हो सके। कृपया फिर से प्रयास करें।"
 }

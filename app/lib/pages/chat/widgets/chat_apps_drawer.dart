@@ -92,7 +92,20 @@ class ChatAppsDrawer extends StatelessWidget {
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
                         ),
-                      if (chatApps.isEmpty)
+                      if (messageProvider.isLoadingChatApps && chatApps.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(OmiSpacing.lg),
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                        )
+                      else if (messageProvider.chatAppsProblem != null)
+                        Padding(
+                          padding: const EdgeInsets.all(OmiSpacing.md),
+                          child: OmiErrorState(
+                            message: l10n.chatAppsLoadFailed,
+                            onRetry: messageProvider.fetchChatApps,
+                          ),
+                        )
+                      else if (chatApps.isEmpty)
                         Padding(
                           padding: const EdgeInsets.all(OmiSpacing.lg),
                           child: Text(

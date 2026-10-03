@@ -11339,5 +11339,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
     "speakerLabelEarlierMatches": "ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: {count}",
     "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
-    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}"
+    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
+    "chatReplyOffline": "ಸಂಪರ್ಕ ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "chatReplyServerError": "ನಮ್ಮ ಬದೆಯಲ್ಲಿ ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "chatReplyTimeout": "ಪ್ರತಿಕ್ರಿಯೆ ಬಹಳ ಸಮಯ ತೆಗೆದುಕೊಂಡಿತು. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "chatReplyNotSignedIn": "ನೀವು ಸೈನ್ ಇನ್ ಮಾಡಿಲ್ಲ. ಸೈನ್ ಇನ್ ಮಾಡಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "chatAppsLoadFailed": "ಚಾಟ್ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

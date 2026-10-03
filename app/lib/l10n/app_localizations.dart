@@ -21884,6 +21884,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Shown when a chat reply fails because the device has no connectivity
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect. Check your connection and try again.'**
+  String get chatReplyOffline;
+
+  /// Shown when a chat reply fails with a server error
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong on our side. Please try again.'**
+  String get chatReplyServerError;
+
+  /// Shown when a chat reply times out
+  ///
+  /// In en, this message translates to:
+  /// **'The response took too long. Please try again.'**
+  String get chatReplyTimeout;
+
+  /// Shown when a chat reply fails because the user is not signed in
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re not signed in. Sign in and try again.'**
+  String get chatReplyNotSignedIn;
+
+  /// Shown in the chat apps drawer when loading installed chat apps fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load chat apps. Please try again.'**
+  String get chatAppsLoadFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

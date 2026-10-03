@@ -12221,4 +12221,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
+
+  @override
+  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrollige ühendust ja proovige uuesti.';
+
+  @override
+  String get chatReplyServerError => 'Meie poolel läks midagi valesti. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyTimeout => 'Vastus võttis liiga kaua aega. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Sa pole sisse logitud. Logi sisse ja proovi uuesti.';
+
+  @override
+  String get chatAppsLoadFailed => 'Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti.';
 }

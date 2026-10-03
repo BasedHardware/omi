@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest"
+    "speakerLabelTalkTime": "{duration} sellest häälest",
+    "chatReplyOffline": "Ühendust ei saa luua. Kontrollige ühendust ja proovige uuesti.",
+    "chatReplyServerError": "Meie poolel läks midagi valesti. Palun proovi uuesti.",
+    "chatReplyTimeout": "Vastus võttis liiga kaua aega. Palun proovi uuesti.",
+    "chatReplyNotSignedIn": "Sa pole sisse logitud. Logi sisse ja proovi uuesti.",
+    "chatAppsLoadFailed": "Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti."
 }

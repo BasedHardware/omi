@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi herkent {name} de volgende keer.} pending{Dit duurt een paar seconden.} disabled{Zet stemmen opslaan aan in Instellingen zodat Omi {name} kan herkennen.} other{Omi heeft meer duidelijke spraak van {name} nodig en blijft het proberen.}}",
     "speakerLabelEarlierMatches": "Eerdere gesprekken met deze stem: {count}",
     "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} carried{Nog steeds {name}. Overgenomen uit je laatste gesprek.} change{Wijzigen} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
-    "speakerLabelTalkTime": "{duration} van deze stem"
+    "speakerLabelTalkTime": "{duration} van deze stem",
+    "chatReplyOffline": "Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.",
+    "chatReplyServerError": "Er is iets misgegaan aan onze kant. Probeer het opnieuw.",
+    "chatReplyTimeout": "De reactie duurde te lang. Probeer het opnieuw.",
+    "chatReplyNotSignedIn": "Je bent niet ingelogd. Log in en probeer het opnieuw.",
+    "chatAppsLoadFailed": "Chat-apps konden niet worden geladen. Probeer het opnieuw."
 }

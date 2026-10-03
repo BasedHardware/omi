@@ -3782,5 +3782,10 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nabudúce rozpozná osobu {name}.} pending{Trvá to niekoľko sekúnd.} disabled{Zapnite ukladanie hlasov v Nastaveniach, aby Omi mohol rozpoznať osobu {name}.} other{Omi potrebuje viac zreteľnej reči osoby {name} a bude to skúšať ďalej.}}",
     "speakerLabelEarlierMatches": "Predchádzajúce rozhovory s týmto hlasom: {count}",
     "speakerLabelText": "{part, select, likely{Pravdepodobne} soundsLike{Znie ako {name}} notPerson{Nie je to {name}} carried{Stále {name}. Prevzaté z vášho posledného rozhovoru.} change{Zmeniť} alsoTitle{Je to aj {name}?} alsoBody{Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.} confirmed{Tento štítok ste potvrdili} other{Skontrolovať}}",
-    "speakerLabelTalkTime": "{duration} tohto hlasu"
+    "speakerLabelTalkTime": "{duration} tohto hlasu",
+    "chatReplyOffline": "Nedá sa pripojiť. Skontrolujte pripojenie a skúste to znova.",
+    "chatReplyServerError": "Niečo sa pokazilo na našej strane. Skúste to znova.",
+    "chatReplyTimeout": "Odpoveď trvala príliš dlho. Skúste to znova.",
+    "chatReplyNotSignedIn": "Nie ste prihlásení. Prihláste sa a skúste to znova.",
+    "chatAppsLoadFailed": "Aplikácie četu sa nepodarilo načítať. Skúste to znova."
 }

@@ -12269,4 +12269,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get chatReplyOffline => 'Nem sikerült csatlakozni. Ellenőrizze a kapcsolatot, és próbálja újra.';
+
+  @override
+  String get chatReplyServerError => 'Valami hiba történt a mi oldalunkon. Kérjük, próbáld újra.';
+
+  @override
+  String get chatReplyTimeout => 'A válasz túl sokáig tartott. Kérjük, próbáld újra.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nem vagy bejelentkezve. Jelentkezz be, és próbáld újra.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nem sikerült betölteni a csevegőalkalmazásokat. Kérjük, próbáld újra.';
 }

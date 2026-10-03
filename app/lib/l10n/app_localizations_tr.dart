@@ -12235,4 +12235,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Bağlanılamıyor. Bağlantınızı kontrol edin ve yeniden deneyin.';
+
+  @override
+  String get chatReplyServerError => 'Bizim tarafta bir sorun oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get chatReplyTimeout => 'Yanıt çok uzun sürdü. Lütfen tekrar deneyin.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Oturum açmadınız. Oturum açın ve tekrar deneyin.';
+
+  @override
+  String get chatAppsLoadFailed => 'Sohbet uygulamaları yüklenemedi. Lütfen tekrar deneyin.';
 }

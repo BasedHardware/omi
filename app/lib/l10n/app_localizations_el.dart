@@ -12304,4 +12304,19 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
+
+  @override
+  String get chatReplyOffline => 'Δεν είναι δυνατή η σύνδεση. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyServerError => 'Κάτι πήγε στραβά από την πλευρά μας. Δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyTimeout => 'Η απάντηση καθυστέρησε πολύ. Δοκιμάστε ξανά.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Δεν έχετε συνδεθεί. Συνδεθείτε και δοκιμάστε ξανά.';
+
+  @override
+  String get chatAppsLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των εφαρμογών συνομιλίας. Δοκιμάστε ξανά.';
 }

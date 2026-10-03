@@ -12027,4 +12027,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get chatReplyOffline => '接続できません。接続を確認してもう一度お試しください。';
+
+  @override
+  String get chatReplyServerError => 'こちら側で問題が発生しました。もう一度お試しください。';
+
+  @override
+  String get chatReplyTimeout => '応答に時間がかかりすぎました。もう一度お試しください。';
+
+  @override
+  String get chatReplyNotSignedIn => 'サインインしていません。サインインして、もう一度お試しください。';
+
+  @override
+  String get chatAppsLoadFailed => 'チャットアプリを読み込めませんでした。もう一度お試しください。';
 }

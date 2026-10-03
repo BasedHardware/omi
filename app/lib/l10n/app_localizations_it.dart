@@ -12292,4 +12292,19 @@ class AppLocalizationsIt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
+
+  @override
+  String get chatReplyOffline => 'Impossibile connettersi. Controlla la connessione e riprova.';
+
+  @override
+  String get chatReplyServerError => 'Qualcosa è andato storto da parte nostra. Riprova.';
+
+  @override
+  String get chatReplyTimeout => 'La risposta ha impiegato troppo tempo. Riprova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Non hai effettuato l\'accesso. Accedi e riprova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Impossibile caricare le app di chat. Riprova.';
 }

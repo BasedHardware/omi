@@ -12031,4 +12031,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get chatReplyOffline => '연결할 수 없습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get chatReplyServerError => '저희 측에서 문제가 발생했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get chatReplyTimeout => '응답 시간이 너무 오래 걸렸습니다. 다시 시도해 주세요.';
+
+  @override
+  String get chatReplyNotSignedIn => '로그인되어 있지 않습니다. 로그인하고 다시 시도하세요.';
+
+  @override
+  String get chatAppsLoadFailed => '채팅 앱을 불러오지 못했습니다. 다시 시도해 주세요.';
 }

@@ -12223,4 +12223,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get chatReplyOffline => 'Kan ikke koble til. Sjekk tilkoblingen din og prøv igjen.';
+
+  @override
+  String get chatReplyServerError => 'Noe gikk galt på vår side. Prøv igjen.';
+
+  @override
+  String get chatReplyTimeout => 'Svaret tok for lang tid. Prøv igjen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Du er ikke logget inn. Logg inn og prøv igjen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Kunne ikke laste inn chat-apper. Prøv igjen.';
 }

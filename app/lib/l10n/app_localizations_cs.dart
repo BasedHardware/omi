@@ -12222,4 +12222,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get chatReplyOffline => 'Nelze se připojit. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get chatReplyServerError => 'Něco se pokazilo na naší straně. Zkuste to prosím znovu.';
+
+  @override
+  String get chatReplyTimeout => 'Odpověď trvala příliš dlouho. Zkuste to prosím znovu.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nejste přihlášeni. Přihlaste se a zkuste to znovu.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chatovací aplikace se nepodařilo načíst. Zkuste to prosím znovu.';
 }

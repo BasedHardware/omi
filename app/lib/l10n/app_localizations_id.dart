@@ -12235,4 +12235,19 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get chatReplyOffline => 'Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Terjadi kesalahan di sisi kami. Silakan coba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons memakan waktu terlalu lama. Silakan coba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum masuk. Masuk dan coba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuat aplikasi chat. Silakan coba lagi.';
 }

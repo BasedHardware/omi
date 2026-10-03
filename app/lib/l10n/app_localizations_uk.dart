@@ -12248,4 +12248,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
+
+  @override
+  String get chatReplyOffline => 'Не вдалося під\'єднатися. Перевірте з\'єднання та повторіть спробу.';
+
+  @override
+  String get chatReplyServerError => 'Щось пішло не так з нашого боку. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyTimeout => 'Відповідь забрала забагато часу. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Ви не ввійшли. Увійдіть і спробуйте ще раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не вдалося завантажити застосунки чату. Спробуйте ще раз.';
 }

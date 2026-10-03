@@ -12128,4 +12128,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
+
+  @override
+  String get chatReplyOffline => 'לא ניתן להתחבר. בדקו את החיבור ונסו שוב.';
+
+  @override
+  String get chatReplyServerError => 'משהו השתבש אצלנו. נסה שוב.';
+
+  @override
+  String get chatReplyTimeout => 'התשובה ארכה יותר מדי זמן. נסה שוב.';
+
+  @override
+  String get chatReplyNotSignedIn => 'לא התחברת. התחבר ונסה שוב.';
+
+  @override
+  String get chatAppsLoadFailed => 'לא ניתן לטעון את אפליקציות הצ\'אט. נסה שוב.';
 }

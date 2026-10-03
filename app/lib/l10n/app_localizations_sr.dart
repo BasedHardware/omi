@@ -12238,4 +12238,19 @@ class AppLocalizationsSr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration овог гласа';
   }
+
+  @override
+  String get chatReplyOffline => 'Није могуће повезивање. Проверите везу и покушајте поново.';
+
+  @override
+  String get chatReplyServerError => 'Нешто је пошло по злу са наше стране. Покушајте поново.';
+
+  @override
+  String get chatReplyTimeout => 'Одговор је предуго трајао. Покушајте поново.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Нисте пријављени. Пријавите се и покушајте поново.';
+
+  @override
+  String get chatAppsLoadFailed => 'Није могуће учитати апликације за ћаскање. Покушајте поново.';
 }

@@ -12006,4 +12006,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '此声音共 $duration';
   }
+
+  @override
+  String get chatReplyOffline => '无法连接。请检查您的连接并重试。';
+
+  @override
+  String get chatReplyServerError => '我们这边出了点问题。请重试。';
+
+  @override
+  String get chatReplyTimeout => '响应耗时过长。请重试。';
+
+  @override
+  String get chatReplyNotSignedIn => '你尚未登录。请登录后重试。';
+
+  @override
+  String get chatAppsLoadFailed => '无法加载聊天应用。请重试。';
 }
