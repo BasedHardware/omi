@@ -175,6 +175,20 @@ process_resident_memory_bytes 1000
     assert summarize(metric_samples(text), metric_samples(text.replace(' 8', ' 1')))['counter_resets']
 
 
+def test_registered_but_unobserved_terminal_counter_is_zero_not_missing():
+    samples = metric_samples('''# HELP omi_live_stt_terminal_failures_total Terminal failures
+# TYPE omi_live_stt_terminal_failures_total counter
+# HELP omi_live_session_terminal_after_text_total Failures after text
+# TYPE omi_live_session_terminal_after_text_total counter
+''')
+    report = summarize({}, samples)
+    assert report['totals']['omi_live_stt_terminal_failures_total'] == 0
+    assert report['totals']['omi_live_session_terminal_after_text_total'] == 0
+    assert 'omi_live_stt_terminal_failures_total' not in report['missing_metrics']
+    assert 'omi_stt_recovery_attempts_total' in report['missing_metrics']
+    assert report['gate'] == 'HOLD'
+
+
 def test_client_observes_early_terminal_even_after_text():
     async def exercise():
         async def peer(ws, _path):

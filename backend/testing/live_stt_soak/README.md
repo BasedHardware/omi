@@ -105,7 +105,9 @@ replay counts/wall sum/buckets/audio/skipped seconds, recovery attempts,
 recovered/exhausted fallback counts, authoritative client-terminal counters,
 terminal-after-text, injected faults, pod UID/image and process RSS samples/peak.
 `before.prom`/`after.prom` retain existing metrics without transcript/audio.
-Missing metric names and counter decreases cause nonzero exit/HOLD. Recovered
+Missing metric families and counter decreases cause nonzero exit/HOLD. An
+exported TYPE declaration with no labeled samples is a registered zero-event
+counter, not missing telemetry; positive replay exposure is still required. Recovered
 and exhausted fallback counts are diagnostics; **exhausted does not equal
 client termination**. Histogram replay counts include empty prefixes; the
 report gives a conservative positive-replay lower bound by excluding ≤100ms

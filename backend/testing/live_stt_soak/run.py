@@ -90,17 +90,37 @@ def public_pcm() -> bytes:
         return audio.readframes(audio.getnframes())
 
 
-def metric_samples(text: str) -> dict[tuple[str, tuple], float]:
-    return {
-        (sample.name, tuple(sorted(sample.labels.items()))): float(sample.value)
-        for family in text_string_to_metric_families(text)
-        for sample in family.samples
-        if sample.name in METRICS or sample.name == 'process_resident_memory_bytes'
-    }
+class MetricSamples(dict):
+    declared: set[str]
+
+
+def metric_samples(text: str) -> MetricSamples:
+    families = list(text_string_to_metric_families(text))
+    samples = MetricSamples(
+        {
+            (sample.name, tuple(sorted(sample.labels.items()))): float(sample.value)
+            for family in families
+            for sample in family.samples
+            if sample.name in METRICS or sample.name == 'process_resident_memory_bytes'
+        }
+    )
+    # Labeled counters have no samples before their first event. An exported
+    # TYPE declaration proves registration; absence of that family does not.
+    declared = set()
+    for family in families:
+        if family.type == 'counter':
+            declared.add(family.name + '_total')
+        elif family.type == 'histogram':
+            declared.update(family.name + suffix for suffix in ('_count', '_sum', '_bucket'))
+        else:
+            declared.add(family.name)
+    samples.declared = declared.intersection(METRICS)
+    return samples
 
 
 def summarize(before: dict, after: dict) -> dict:
-    missing = [name for name in METRICS if not any(key[0] == name for key in after)]
+    declared = getattr(after, 'declared', set())
+    missing = [name for name in METRICS if name not in declared and not any(key[0] == name for key in after)]
     deltas, resets = [], []
     for key, value in sorted(after.items()):
         name, labels = key
@@ -110,7 +130,7 @@ def summarize(before: dict, after: dict) -> dict:
         if delta < 0:
             resets.append(name)
         deltas.append({'metric': name, 'labels': dict(labels), 'increase': delta})
-    totals = {}
+    totals = {name: 0 for name in declared if name != 'omi_stt_replay_wall_seconds_bucket'}
     for row in deltas:
         name = row['metric']
         if name != 'omi_stt_replay_wall_seconds_bucket':
