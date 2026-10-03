@@ -471,7 +471,11 @@ class TestV1QueueDeadline:
                     headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '0.05'},
                 )
             assert resp.status_code == 503
-            assert 'expired' in resp.json()['detail'].lower()
+            assert resp.json() == {
+                'detail': 'Queued transcription request expired — try again',
+                'error': 'queue_timeout',
+            }
+            assert resp.headers['x-omi-stt-error'] == 'queue_timeout'
             assert mod.LANE_REFUSALS.labels(lane='live', reason='queue_timeout')._value.get() == refusals_before + 1
             assert gpu.submit.call_count == 1
             assert written and not os.path.exists(written[0])

@@ -1143,6 +1143,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 response = await self._post_window(pcm)
             finally:
                 self._post_in_flight = False
+            if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                outcome = 'queue_timeout'
+                self.fail('capacity_full', capacity_subtype='queue_timeout')
+                response.raise_for_status()
             if response.status_code >= 500:
                 st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
                 self.fail('provider_5xx')

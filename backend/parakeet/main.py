@@ -276,7 +276,11 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
     except QueueTimeoutError:
         status = "error"
         LANE_REFUSALS.labels(lane=lane, reason='queue_timeout').inc()
-        return JSONResponse(status_code=503, content={"detail": "Queued transcription request expired — try again"})
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Queued transcription request expired — try again", "error": "queue_timeout"},
+            headers={"X-Omi-STT-Error": "queue_timeout"},
+        )
     except AudioDurationExceededError as e:
         status = "rejected"
         LANE_REFUSALS.labels(lane=lane, reason='duration').inc()

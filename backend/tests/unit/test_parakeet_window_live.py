@@ -97,8 +97,9 @@ def runtime(monkeypatch):
 
 
 class Client:
-    def __init__(self, status=200, data=None, error=None):
+    def __init__(self, status=200, data=None, error=None, headers=None, content=None):
         self.status, self.data, self.error = status, data or {'text': 'hello'}, error
+        self.headers, self.content = headers, content
         self.requests = []
         self.called = asyncio.Event()
 
@@ -107,7 +108,11 @@ class Client:
         self.called.set()
         if self.error:
             raise self.error
-        return httpx.Response(self.status, json=self.data, request=httpx.Request('POST', url))
+        if self.content is not None:
+            return httpx.Response(
+                self.status, content=self.content, headers=self.headers, request=httpx.Request('POST', url)
+            )
+        return httpx.Response(self.status, json=self.data, headers=self.headers, request=httpx.Request('POST', url))
 
 
 class SeqClient:
@@ -394,6 +399,127 @@ async def test_post_failure_benches_leg_and_releases_slot(monkeypatch, fault):
     assert len(client.requests) == 1
     await sock.drain_and_close()
     assert len(client.requests) == 1  # no retry of a failed window during teardown
+
+
+def _serve_failure_spy(monkeypatch):
+    calls = [0]
+    circuit = st._parakeet_circuit
+    real_record = circuit.record_serve_failure
+
+    def spy():
+        calls[0] += 1
+        real_record()
+
+    monkeypatch.setattr(circuit, 'record_serve_failure', spy)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_signalled_queue_timeout_503_is_capacity_death_without_serve_failure(monkeypatch):
+    client = Client(status=503, headers={'X-Omi-STT-Error': 'queue_timeout'})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    serve_failures = _serve_failure_spy(monkeypatch)
+    before = WINDOW_POSTS.labels(outcome='queue_timeout')._value.get()
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.is_connection_dead
+    assert sock.death_reason == 'capacity_full'
+    assert sock.typed_death_reason == 'capacity_full'
+    assert sock.capacity_subtype == 'queue_timeout'
+    assert window.admission.active == 0
+    assert len(client.requests) == 1
+    assert serve_failures[0] == 0
+    assert st._parakeet_circuit.state == 'closed'
+    assert WINDOW_POSTS.labels(outcome='queue_timeout')._value.get() == before + 1
+    await sock.drain_and_close()
+    assert len(client.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_signalled_queue_timeout_503_ignores_response_body(monkeypatch):
+    client = Client(status=503, headers={'X-Omi-STT-Error': 'queue_timeout'}, content=b'not json')
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    serve_failures = _serve_failure_spy(monkeypatch)
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.death_reason == 'capacity_full'
+    assert sock.capacity_subtype == 'queue_timeout'
+    assert serve_failures[0] == 0
+    assert st._parakeet_circuit.state == 'closed'
+    assert window.admission.active == 0
+    await sock.drain_and_close()
+
+
+@pytest.mark.parametrize(
+    'status, headers',
+    [
+        (503, None),
+        (503, {'X-Omi-STT-Error': 'bogus'}),
+        (500, {'X-Omi-STT-Error': 'queue_timeout'}),
+    ],
+    ids=['unmarked-503', 'unknown-marker', '500-with-marker'],
+)
+@pytest.mark.asyncio
+async def test_unsignalled_provider_5xx_keeps_provider_classification(monkeypatch, status, headers):
+    client = Client(status=status, headers=headers)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    serve_failures = _serve_failure_spy(monkeypatch)
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.is_connection_dead
+    assert sock.death_reason == 'provider_5xx'
+    assert sock.capacity_subtype is None
+    assert serve_failures[0] == 1
+    assert st._parakeet_circuit.state == 'open'
+    assert window.admission.active == 0
+    assert len(client.requests) == 1
+    await sock.drain_and_close()
+    assert len(client.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_frozen_legacy_listener_classifies_signalled_503_as_provider_5xx(monkeypatch):
+    """Pre-signal listener rollout order: the new Parakeet response must keep
+    the old provider_5xx classification through a frozen copy of the previous
+    _post_and_parse algorithm patched on the real socket."""
+
+    async def legacy_post_and_parse(self, pcm, dur):
+        response = await self._post_window(pcm)
+        if response.status_code >= 500:
+            st._parakeet_circuit.record_serve_failure()
+            self.fail('provider_5xx')
+            response.raise_for_status()
+        response.raise_for_status()
+        return []
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_post_and_parse', legacy_post_and_parse)
+    client = Client(
+        status=503,
+        data={'detail': 'Queued transcription request expired — try again', 'error': 'queue_timeout'},
+        headers={'X-Omi-STT-Error': 'queue_timeout'},
+    )
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    serve_failures = _serve_failure_spy(monkeypatch)
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.death_reason == 'provider_5xx'
+    assert serve_failures[0] == 1
+    assert st._parakeet_circuit.state == 'open'
+    assert window.admission.active == 0
+    assert len(client.requests) == 1
+    await sock.drain_and_close()
 
 
 @pytest.mark.asyncio
@@ -2212,7 +2338,37 @@ async def test_stalled_window_pcm_cap_reports_buffer_subtype_and_replays(monkeyp
     await actual._drain_stt_sockets()
 
 
-def test_capacity_subtype_is_bounded_log_detail_not_a_metric_reason(caplog):
+@pytest.mark.asyncio
+async def test_signalled_queue_timeout_death_fails_over_to_soniox_with_queue_subtype(monkeypatch, caplog):
+    client = Client(
+        status=503,
+        data={'detail': 'Queued transcription request expired — try again', 'error': 'queue_timeout'},
+        headers={'X-Omi-STT-Error': 'queue_timeout'},
+    )
+    serve_failures = _serve_failure_spy(monkeypatch)
+    serve_error_events_before = st._parakeet_circuit._serve_error_events
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await asyncio.wait_for(previous.raw._pump_task, 2)
+    assert previous.raw.death_reason == 'capacity_full'
+    assert previous.raw.capacity_subtype == 'queue_timeout'
+    assert previous.capacity_subtype == 'queue_timeout'
+    assert st._parakeet_circuit.state == 'closed'
+    await _flush_capture(actual, pcm, len(pcm) // 2)
+    assert len(callbacks) == 1
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert actual._pending_live_failover.capacity_subtype == 'queue_timeout'
+    actual._pending_live_failover.note_transcript([{'text': 'test'}])
+    assert 'reason=capacity_full outcome=recovered subtype=queue_timeout' in caplog.text
+    assert serve_failures[0] == 0
+    assert st._parakeet_circuit._serve_error_events == serve_error_events_before
+    assert st._parakeet_circuit.state == 'closed'
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.parametrize('subtype', ['buffer_cap', 'queue_timeout'])
+def test_capacity_subtype_is_bounded_log_detail_not_a_metric_reason(caplog, subtype):
     label = OMI_FALLBACK_TOTAL.labels(
         component='stt_live_session',
         from_mode='parakeet',
@@ -2227,10 +2383,10 @@ def test_capacity_subtype_is_bounded_log_detail_not_a_metric_reason(caplog):
         to_mode='soniox',
         reason='capacity_full',
         outcome='recovered',
-        capacity_subtype='buffer_cap',
+        capacity_subtype=subtype,
     )
     assert label._value.get() == before + 1
-    assert 'reason=capacity_full outcome=recovered subtype=buffer_cap' in caplog.text
+    assert f'reason=capacity_full outcome=recovered subtype={subtype}' in caplog.text
     record_fallback(
         component='stt_live_session',
         from_mode='parakeet',
