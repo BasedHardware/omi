@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "האם אתה בטוח שברצונך לדווח על הודעה זו?",
+    "reportMessageConfirm": "לדווח על ההודעה הזו?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "האם אתה בטוח שברצונך לנקות את הצ'ט? לא ניתן לבטל פעולה זו.",
+    "clearChatConfirm": "כל ההודעות בצ'אט הזה יימחקו. לא ניתן לבטל זאת.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "כל הזיכרונות והשיחות שלך יימחקו לצמיתות.",
+    "allDataErased": "הזיכרונות והשיחות שלך יימחקו.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "האפליקציות והאינטגרציות שלך יהיו מנותקות באופן מיידי.",
+    "appsDisconnected": "האפליקציות והשילובים שלך ינותקו.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "האם אתה בטוח שברצונך להתנתק מ-{appName}? אתה יכול להתחבר מחדש בכל עת.",
+    "disconnectAppMessage": "אפשר לחבר מחדש את {appName} בכל עת.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "האם אתה בטוח שברצונך למחוק משימה זו?",
+    "deleteActionItemMessage": "למחוק את המשימה הזו?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "האם אתה בטוח שברצונך למחוק {count} משימות{s} שנבחרו?",
+    "deleteSelectedItemsMessage": "למחוק {count} משימות{s} שנבחרו?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 אין זכרונות עדיין",
+    "noMemoriesYet": "אין זכרונות עדיין",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 לא נמצאו זכרונות",
+    "noMemoriesFound": "לא נמצאו זכרונות",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "האם אתה בטוח שברצונך לנקות את הזיכרון של Omi? לא ניתן לבטל פעולה זו.",
+    "clearMemoryMessage": "כל הזיכרונות שלך יימחקו. לא ניתן לבטל זאת.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "האם אתה בטוח שברצונך למחוק משימה זו?",
+    "deleteActionItemConfirmMessage": "למחוק את המשימה הזו?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "שינוי שפת אפליקציה משנה תפריטים וכפתורים. שפת דיבור משפיעה על אופן התמלול של ההקלטות שלך.",
+    "languageSettingsHelperText": "שפת האפליקציה משנה תפריטים וכפתורים. השפה הראשונית משפיעה על אופן התמלול של ההקלטות שלך.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "לא ניתן לבטל פעולה זו.",
+    "thisActionCannotBeUndone": "לא ניתן לבטל זאת.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "האם אתה בטוח שברצונך למחוק משימה זו? לא ניתן לבטל פעולה זו.",
+    "deleteActionItemConfirmation": "למחוק את המשימה הזו? לא ניתן לבטל זאת.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "האם אתה בטוח שברצונך להדיח הודעה זו?",
+    "confirmReportMessage": "לדווח על ההודעה הזו?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "האם אתה בטוח שברצונך לנקות את הצ'אט? לא ניתן לבטל פעולה זו.",
+    "confirmClearChat": "לנקות את הצ'אט הזה? לא ניתן לבטל זאת.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "האם אתה בטוח שברצונך למחוק זיכרון זה? לא ניתן לבטל פעולה זו.",
+    "deleteMemoryConfirmation": "למחוק את הזיכרון הזה? לא ניתן לבטל זאת.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "האם אתה בטוח שברצונך לנקות את הזיכרון של Omi? פעולה זו לא יכולה להיות בוטלה ותמחק בצורה קבועה את כל {count} הזיכרונות.",
+    "clearMemoryConfirmation": "כל הזיכרונות ({count}) יימחקו. לא ניתן לבטל זאת.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "תן לOmi לבחור את האפליקציה הטובה ביותר באופן אוטומטי",
-    "deleteConversationConfirmation": "האם אתה בטוח שברצונך למחוק שיחה זו? אין דרך לבטל פעולה זו.",
+    "deleteConversationConfirmation": "למחוק את השיחה הזו? לא ניתן לבטל זאת.",
     "conversationDeleted": "השיחה נמחקה",
     "generatingLink": "הוצר קישור…",
     "editConversation": "ערוך שיחה",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "האם אתה בטוח שברצונך לעדכן את האפליקציה שלך? השינויים יישקפו לאחר בדיקה מצדנו.",
+    "updateAppConfirmation": "השינויים יפורסמו לאחר בדיקה של הצוות שלנו.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "האם אתה בטוח שברצונך לבטל את המנוי שלך? תהיה לך גישה מתמשכת עד סוף תקופת החיוב הנוכחית.",
+    "cancelSubscriptionConfirmation": "תהיה לך גישה מתמשכת עד סוף תקופת החיוב הנוכחית.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "לא ניתן לבטל פעולה זו. כל יישומים המשתמשים במפתח זה לא יוכלו עוד להשתמש ב-API.",
+    "revokeApiKeyWarning": "אפליקציות שמשתמשות במפתח הזה יאבדו גישה ל-API. לא ניתן לבטל זאת.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "האם אתה בטוח שברצונך למחוק את ה{item} הזה? אין דרך לבטל פעולה זו.",
+    "deleteItemConfirmation": "מחיקת ה{item} אינה ניתנת לביטול.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "האם אתה בטוח שברצונך לבטל את המפתח \"{keyName}\"? אין דרך לבטל פעולה זו.",
+    "revokeKeyConfirmation": "כל מה שמשתמש ב-\"{keyName}\" יאבד גישה. לא ניתן לבטל זאת.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "התוכנית שלך תישאר פעילה עד {date}. לאחר מכן, תאבד גישה לתכונות הבלתי מוגבלות שלך. האם אתה בטוח?",
+    "planRemainsActiveUntil": "התוכנית שלך תישאר פעילה עד {date}. לאחר מכן, תאבד גישה לתכונות הבלתי מוגבלות שלך.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "בטל את הנעילה של הזיכרון האינסופי של Omi",
+    "unlockOmiInfiniteMemory": "זיכרונות ללא הגבלה",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "בדוק את החיבור ונסה שוב",
+    "checkConnectionTryAgain": "בדקו את החיבור ונסו שוב.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "זה ימחק לצמיתות את כל השיחות שיובאו מ-Limitless. לא ניתן לבטל פעולה זו.",
+    "deleteAllLimitlessWarning": "כל השיחות שיובאו מ-Limitless יימחקו. לא ניתן לבטל זאת.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "האם אתה בטוח שברצונך למחוק את הדוגמה של {name}?",
+    "deleteSampleConfirmation": "דגימת הקול של {name} תוסר. לא ניתן לבטל זאת.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "האם אתה בטוח שברצונך למחוק את {name}? זה גם יסיר את כל דגימות הדיבור הקשורות.",
+    "deletePersonConfirmation": "פעולה זו מסירה את דגימות הקול של {name} ואי אפשר לבטל אותה. הדברים שנאמרו בשיחות קודמות יהפכו לדוברים ללא שם.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "האם אתה בטוח שברצונך להפסיק את ההקלטה ולסכם את השיחה כעת?",
+    "stopRecordingConfirmation": "לעצור את ההקלטה ולסכם את השיחה עכשיו?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
+    "premiumMinutesInfo": "300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
+    "premiumMinutesMonth": "300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "התמלול החי המובנה של Omi מותאם לשיחות בזמן אמת עם זיהוי דוברים אוטומטי וdiarization.",
+    "omiTranscriptionOptimized": "התמלול החי של Omi בנוי לשיחות בזמן אמת ומציין מי אמר מה.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "האם אתה בטוח שברצונך למחוק סופית הקלטה זו? לא ניתן לבטל פעולה זו.",
+    "deleteRecordingConfirmation": "לא ניתן לבטל זאת.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "אתה עובר מתוכנית Unlimited ל-{title}. האם אתה בטוח שברצונך להמשיך?",
+    "planSwitchingDescriptionWithTitle": "אתה עובר מתוכנית Unlimited ל-{title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "ספר לנו עוד",
     "deleteFlowFeedbackSubtitle": "מה היה גורם ל-Omi לעבוד עבורך?",
     "deleteFlowFeedbackHint": "אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.",
-    "deleteFlowConfirmTitle": "זה לצמיתות",
-    "deleteFlowConfirmSubtitle": "לאחר מחיקת החשבון, אין דרך לשחזר אותו.",
+    "deleteFlowConfirmTitle": "למחוק את החשבון שלך?",
+    "deleteFlowConfirmSubtitle": "לא ניתן לבטל פעולה זו, גם לא על ידי התמיכה.",
     "deleteConsequenceSubscription": "כל מנוי פעיל יבוטל.",
     "deleteConsequenceNoRecovery": "לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.",
     "deleteTypeToConfirm": "הקלד DELETE לאישור",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "הסנכרון משתמש בתמלול של Omi",
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
-    "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
+    "transcribeLaterDescription": "הקליטו עכשיו ותמללו מתי שתרצו. עד אז האודיו נשאר בטלפון שלכם.",
     "transcribeLaterNote": "פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "תמלול בענן",
     "copyMessage": "העתקת הודעה",
     "deleteOnDeviceModel": "מחיקת מודל",
-    "deleteOnDeviceModelConfirm": "האם אתה בטוח שברצונך למחוק מודל זה?",
+    "deleteOnDeviceModelConfirm": "למחוק את המודל הזה?",
     "downgradeAnyway": "שנמך בכל זאת",
     "downgradeLimitBattery": "צריכת סוללה גבוהה פי 7",
     "downgradeLimitDelay": "עיכוב של 5-7 שניות",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
     "whisperModelSizeTiny": "זעיר",
-    "planSheetChooseYourPlan": "בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.",
+    "planSheetChooseYourPlan": "בחרו את התוכנית שמתאימה לכם.",
     "availableOnMacMobileWeb": "זמין ב-Mac, בנייד ובאינטרנט",
     "popularBadge": "פופולרי",
     "worksOnDesktop": "עובד במחשב",
@@ -10789,7 +10789,7 @@
     "moreOptions": "אפשרויות נוספות",
     "filterByDate": "סינון לפי תאריך",
     "memoryGraph": "גרף זיכרונות",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{הקול מוכן לזיהוי} saved_sample_awaiting_embedding{הדגימה נשמרה; עדיין נדרש עיבוד קול} not_learned{הקול לא נלמד} other{מצב הקול אינו ידוע}}",
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "אמת את המספר שלך כדי להתקשר דרך Omi.",
     "phoneDeleteNumberFailed": "לא ניתן למחוק את המספר",
     "forgetDeviceConfirmTitle": "לשכוח את המכשיר?",
-    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה. כדי להשתמש בו שוב, יהיה עליך לצמד אותו מחדש.",
+    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה.",
     "deviceForgottenMessage": "המכשיר נשכח",
     "unpairDeviceConfirmTitle": "לבטל את צימוד המכשיר?",
     "rollBack": "שחזור לגרסה קודמת",
@@ -11252,20 +11252,20 @@
     "evidenceNoVoice": "עדיין אין דגימת קול",
     "evidenceNotHeard": "עוד לא נשמע בשיחה",
     "evidenceNothing": "עדיין לא תייגת ולא אישרת את האדם הזה",
-    "effectCountsALot": "נחשב הרבה",
-    "effectCounts": "נחשב",
-    "effectCountsALittle": "נחשב מעט",
-    "effectBarelyCounts": "כמעט לא נחשב",
-    "effectCountsAgainst": "נחשב לרעה",
+    "effectCountsALot": "עוזר מאוד",
+    "effectCounts": "עוזר",
+    "effectCountsALittle": "עוזר מעט",
+    "effectBarelyCounts": "כמעט לא עוזר",
+    "effectCountsAgainst": "מזיק",
     "effectNeeded": "נדרש כדי להיות מאושר",
     "confidenceToReachConfirmed": "כדי להגיע למאושר",
     "confidenceNextVoice": "Omi צריך גם דגימת קול של {name}. תייג אותו כשהאפשרות \"זכירת קולות\" פעילה.",
     "confidenceIsConfirmed": "רמת הביטחון של {name}: מאושר. Omi ממשיך ללמוד מכל תיוג.",
-    "confidenceFootnote": "רק התשובות שלך משפיעות באמת על רמת הביטחון. התאמות אוטומטיות לבדן כמעט לא נחשבות.",
+    "confidenceFootnote": "רק התשובות שלך משפיעות באמת על רמת הביטחון. התאמות אוטומטיות לבדן כמעט לא עוזרות.",
     "personWhyConfidence": "למה?",
     "pinPersonTitle": "הצמדת {name}",
     "pinPersonSubtitle": "השאר את {name} בראש הרשימה וצפה לו בשיחות שלך",
-    "pinPersonHonestLine": "Omi יבקש ממך לאשר התאמות קרובות במקום לנחש.",
+    "pinPersonHonestLine": "Omi שואל לפני התאמת קולות דומים.",
     "pinAction": "הצמד",
     "unpinAction": "בטל הצמדה",
     "personPinnedToast": "הוצמד: {name}",
@@ -11334,10 +11334,28 @@
     "autoRemoveSyncedCopiesDays": "עותקים מסונכרנים נמחקים לאחר {days} ימים",
     "autoRemoveSyncedCopiesDescription": "מוחק עותקים מקומיים {days} ימים לאחר הסנכרון. עותקי הענן נשמרים.",
     "localCopiesSection": "עותקים מקומיים",
-    "speakerLabelLinesLabeled": "שורות שסומנו: {count}",
+    "speakerLabelLinesLabeled": "{count, plural, =1{סומנה שורה אחת} other{סומנו {count} שורות}}",
     "speakerLabelVoiceStatus": "{state, select, learned{הקול נלמד} pending{לומד את הקול…} disabled{שמירת קול כבויה} other{הקול עדיין לא נלמד}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
-    "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{נמצא בשיחה קודמת אחת} other{נמצא ב-{count} שיחות קודמות}}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה"
+    "speakerLabelTalkTime": "{duration} מהקול הזה",
+    "findDeviceNoneTitle": "לא נמצא Omi",
+    "findDeviceNoneMessage": "הפעילו אותו והחזיקו אותו ליד הטלפון.",
+    "startupFailedDetails": "פרטים",
+    "couldNotLoadApiKeys": "לא ניתן לטעון את מפתחות ה-API.",
+    "speakerTagPromptNoAction": "לא…",
+    "diagnosticsRightNow": "כרגע",
+    "diagnosticsLast7Days": "7 הימים האחרונים",
+    "diagnosticsConnectedFor": "מחובר במשך",
+    "diagnosticsVerdictReconnects": "מתחבר מחדש מעצמו",
+    "diagnosticsVerdictReconnectsDetail": "ניתוקים קצרים, חוזר תוך כ־{duration} בכל פעם",
+    "diagnosticsVerdictNoDrops": "אין ניתוקים השבוע",
+    "diagnosticsVerdictTrouble": "יש בעיה בהתחברות",
+    "diagnosticsVerdictTroubleDetail": "חיבורים שנכשלו ב־24 השעות האחרונות: {count}",
+    "diagnosticsDrops": "ניתוקים",
+    "diagnosticsDropsPerHour": "בערך {count} בשעה",
+    "diagnosticsLongestGap": "הפער הארוך ביותר",
+    "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
+    "diagnosticsLastDuration": "{duration} אחרונות"
 }

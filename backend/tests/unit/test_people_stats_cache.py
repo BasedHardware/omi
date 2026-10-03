@@ -781,6 +781,43 @@ def test_assign_sync_conversation_invalidates_after_the_transaction(writer_env, 
     assert invalidated == ['u1']
 
 
+def test_assign_sync_conversation_invalidates_once_after_size_limit_retry(writer_env, monkeypatch):
+    store, invalidated = writer_env
+    import utils.sync.assignment as sync_assignment
+
+    conversation = {'id': 'sync1', 'sync_merged_from': []}
+    planned_calls = []
+
+    def flaky_plan(transaction, user_ref, incoming, **kwargs):
+        planned_calls.append(kwargs.get('full_ids'))
+        if len(planned_calls) == 1:
+            raise RuntimeError('sync rollover size limit')
+        return (conversation, True, [])
+
+    monkeypatch.setattr(sync_assignment, 'assign_in_transaction', flaky_plan)
+    retries = []
+    invalidated_before_return = []
+
+    def fake_backstop(run, attempted_canonical):
+        try:
+            return run(frozenset())
+        except RuntimeError:
+            retries.append('retry')
+            result = run(frozenset({'sync1'}))
+            invalidated_before_return.append(len(invalidated))
+            return result
+
+    monkeypatch.setattr(sync_assignment, 'run_with_size_limit_backstop', fake_backstop)
+    result = conversations_db.assign_sync_conversation(
+        'u1', {'data_protection_level': 'standard', 'id': 'sync1'}, firestore_client=store
+    )
+    assert result[0]['id'] == 'sync1'
+    assert planned_calls == [frozenset(), frozenset({'sync1'})]
+    assert retries == ['retry']
+    assert invalidated_before_return == [0]
+    assert invalidated == ['u1']
+
+
 def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_env):
     store, invalidated = writer_env
     for index in range(600):

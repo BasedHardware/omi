@@ -25,7 +25,12 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import httpx
 import numpy as np
 from google.api_core import exceptions as google_exceptions
-from database._client import is_document_size_limit_error, is_expired_transaction_error
+from database._client import (
+    FIRESTORE_DOCUMENT_KINDS,
+    firestore_document_kind,
+    is_document_size_limit_error,
+    is_expired_transaction_error,
+)
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -280,6 +285,17 @@ def _firestore_error_class(error: BaseException) -> str:
     if isinstance(error, google_exceptions.InvalidArgument):
         return 'invalid_argument_other'
     return bounded_exception_class(error) if isinstance(error, google_exceptions.GoogleAPICallError) else 'none'
+
+
+def _firestore_doc_kind(error: BaseException) -> str:
+    """Which document a Firestore rejection named, as one bounded token; never the path or ids.
+
+    The sync assignment boundary may refine ``conversation`` to ``donor``.
+    """
+    stamped = getattr(error, 'sync_firestore_doc_kind', None)
+    if isinstance(stamped, str) and stamped in FIRESTORE_DOCUMENT_KINDS:
+        return stamped
+    return firestore_document_kind(error)
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -1425,9 +1441,11 @@ def process_segment(
             # Preserve a bounded code-defined subtype for incident diagnosis;
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
-                'event=sync_persistence_exception exception_type=%s firestore_error=%s job_ref=%s attempt_ref=%s',
+                'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
+                'job_ref=%s attempt_ref=%s',
                 _bounded_exception_type(e),
                 _firestore_error_class(e),
+                _firestore_doc_kind(e),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
             )
