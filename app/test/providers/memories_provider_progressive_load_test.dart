@@ -38,6 +38,20 @@ Memory _supersededFact() => Memory(
       intentBacked: true,
     );
 
+Memory _currentFact() => Memory(
+      id: 'current-fact',
+      uid: _uid,
+      content: 'Lives in Brooklyn',
+      category: MemoryCategory.system,
+      createdAt: DateTime.utc(2026, 8, 23),
+      updatedAt: DateTime.utc(2026, 8, 23),
+      visibility: MemoryVisibility.private,
+      ledgerSchemaVersion: 'knowledge_ledger.v1',
+      ledgerKind: KnowledgeLedgerKind.fact,
+      ledgerSlot: 'home_city',
+      intentBacked: true,
+    );
+
 Memory _revertReplacement(Memory source) => Memory(
       id: 'restored-fact',
       uid: source.uid,
@@ -403,5 +417,87 @@ void main() {
     expect(provider.memories.map((m) => m.id), ['m1']);
     expect(host.calls, contains('upsert'), reason: 'retained partial rows must reach Siri/search indexing');
     expect(host.calls, isNot(contains('reconcile')), reason: 'a partial traversal is never authoritative');
+  });
+
+  test('a thrown continuation upserts the retained rows so Siri matches what is shown', () async {
+    final host = _RecordingIndex();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);
+    final gate = Completer<void>();
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: (
+          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+        if (cursor == null) return Future.value(GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'));
+        return gate.future.then((_) => throw StateError('offline'));
+      },
+      fetchLedgerHistoryRequest: _noHistory(),
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    gate.complete();
+    await load;
+    await pumpEventQueue();
+
+    expect(provider.loadFailed, isTrue);
+    expect(provider.memories.map((m) => m.id), ['m1']);
+    expect(host.calls, contains('upsert'), reason: 'rows retained after a thrown continuation must still be indexed');
+    expect(host.calls, isNot(contains('reconcile')));
+  });
+
+  test('an authoritative ledger edit fences a still-running traversal', () async {
+    final fact = _currentFact();
+    final gate = Completer<void>();
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: _gatedPages([
+        GetMemoriesResult([fact], true, nextCursor: 'c2'),
+        GetMemoriesResult([fact, _row('m2')], true),
+      ], gate: gate),
+      fetchLedgerHistoryRequest: _noHistory(),
+      editMemoryRequest: (id, value) async =>
+          EditMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(fact)),
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadMemories(limit: 1);
+    await pumpEventQueue();
+    expect(provider.memories.map((m) => m.id), ['current-fact']);
+
+    expect(await provider.editMemory(fact, fact.content), isTrue);
+    gate.complete();
+    await load;
+    await pumpEventQueue();
+
+    expect(provider.memories.map((m) => m.id), contains('restored-fact'));
+    expect(provider.memories.map((m) => m.id), isNot(contains('superseded')),
+        reason: 'a replaced fact must not resurrect from the stale traversal snapshot');
+  });
+
+  test('a delete-all during a pending-memory sync releases the sync latch', () async {
+    final gate = Completer<void>();
+    final drafts = <Memory>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult(List<Memory>.of(drafts), true),
+      fetchLedgerHistoryRequest: _noHistory(),
+      deleteAllMemoriesRequest: () async => true,
+      createMemoryRequest: (content, visibility, category) => gate.future.then((_) => null),
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    SharedPreferencesUtil().pendingMemories = [
+      _row('draft-1'),
+    ];
+    final sync = provider.syncPendingMemories();
+    await pumpEventQueue();
+    expect(await provider.deleteAllMemories(), isTrue);
+
+    gate.complete();
+    await sync;
+    await pumpEventQueue();
+
+    // The latch must be free again: a later sync attempt may proceed.
+    expect(provider.isSyncing, isFalse, reason: 'delete-all must not strand the pending-sync latch');
   });
 }

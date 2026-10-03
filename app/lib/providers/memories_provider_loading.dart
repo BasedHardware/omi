@@ -271,6 +271,9 @@ extension _MemoriesProviderLoading on MemoriesProvider {
       }
       Logger.error('MemoriesProvider: memory load failed (${e.runtimeType})');
       if (all.isNotEmpty) {
+        // Same non-authoritative consistency rule as the failed-result path:
+        // index the rows the user can see so Siri/search match the screen.
+        SiriIntegration.current.queueUpsertMemories(all);
         publishProvisional(failed: true);
       } else {
         _loadFailed = true;

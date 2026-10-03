@@ -86,15 +86,18 @@ class HttpPoolManager {
     Object? lastError;
 
     for (var i = 0; i <= retries; i++) {
+      final attemptDeadline = Stopwatch()..start();
       try {
         final request = requestBuilder();
         stampRequestTime(request);
         _applyJourneyFaults(request);
         final streamed = await _client.send(request).timeout(timeout);
-        // The deadline must cover body consumption too: a server that sends
-        // headers and then stalls the body would otherwise leave the caller
-        // pending indefinitely (idle timeouts do not bound an open response).
-        lastResponse = await http.Response.fromStream(streamed).timeout(timeout);
+        // One deadline covers headers and body: a server that sends headers
+        // and then stalls the body must not extend the caller's budget to
+        // timeout + timeout. Spend only what is left of this attempt.
+        final bodyBudget = timeout - attemptDeadline.elapsed;
+        if (bodyBudget <= Duration.zero) throw TimeoutException('Request timeout');
+        lastResponse = await http.Response.fromStream(streamed).timeout(bodyBudget);
 
         if (lastResponse.statusCode < 500) {
           return lastResponse;

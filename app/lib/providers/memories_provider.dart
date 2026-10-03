@@ -173,6 +173,10 @@ class MemoriesProvider extends ChangeNotifier {
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
+
+  /// True while an offline pending-memory sync is in flight. A stuck-true
+  /// value would block every later sync attempt.
+  bool get isSyncing => _isSyncing;
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get showOnlyManual => _showOnlyManual;
@@ -587,39 +591,45 @@ class MemoriesProvider extends ChangeNotifier {
     if (pendingMemories.isEmpty) return;
 
     _isSyncing = true;
-    Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
+    // Release the latch on every exit: a bare guard-return after a session
+    // invalidation (delete-all, clear) would otherwise leave _isSyncing stuck
+    // true and block every later sync for the provider's lifetime.
+    try {
+      Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
 
-    for (var memory in List.from(pendingMemories)) {
-      if (generation != _sessionGeneration) return;
-      try {
-        final serverMemory = await _createMemoryRequest(
-          memory.content,
-          memory.visibility.toString().split('.').last,
-          memory.category.toString().split('.').last,
-        );
-
-        if (serverMemory != null) {
-          SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
-          if (generation != _sessionGeneration) return;
-          final idx = _memories.indexWhere((m) => m.id == memory.id);
-          if (idx != -1) {
-            // Keep the authoritative server projection, including temporal
-            // assessment fields that are absent from an offline draft.
-            _memories[idx] = serverMemory;
-          }
-          SiriIntegration.current.queueUpsertMemories([serverMemory]);
-        }
+      for (var memory in List.from(pendingMemories)) {
         if (generation != _sessionGeneration) return;
-      } catch (e) {
-        Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
-        // Keep in pending list for next sync attempt
-      }
-    }
+        try {
+          final serverMemory = await _createMemoryRequest(
+            memory.content,
+            memory.visibility.toString().split('.').last,
+            memory.category.toString().split('.').last,
+          );
 
-    if (generation == _sessionGeneration) {
+          if (serverMemory != null) {
+            SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
+            if (generation != _sessionGeneration) return;
+            final idx = _memories.indexWhere((m) => m.id == memory.id);
+            if (idx != -1) {
+              // Keep the authoritative server projection, including temporal
+              // assessment fields that are absent from an offline draft.
+              _memories[idx] = serverMemory;
+            }
+            SiriIntegration.current.queueUpsertMemories([serverMemory]);
+          }
+          if (generation != _sessionGeneration) return;
+        } catch (e) {
+          Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
+          // Keep in pending list for next sync attempt
+        }
+      }
+
+      if (generation == _sessionGeneration) {
+        SharedPreferencesUtil().cachedMemories = List<Memory>.unmodifiable(_memories);
+        notifyListeners();
+      }
+    } finally {
       _isSyncing = false;
-      SharedPreferencesUtil().cachedMemories = List<Memory>.unmodifiable(_memories);
-      notifyListeners();
     }
   }
 
@@ -1192,6 +1202,10 @@ class MemoriesProvider extends ChangeNotifier {
             return false;
           }
           _memories[idx] = replacement;
+          // An authoritative replacement changes the ledger projection; a
+          // progressive load still traversing old pages must not republish the
+          // superseded row from its stale snapshot.
+          _ledgerProjectionRevision++;
           SiriIntegration.current.queueDelete('memory', memory.id);
         } else {
           memory.content = value;
