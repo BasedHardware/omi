@@ -302,7 +302,7 @@ async def test_exclusive_dispatch(lane, pipeline, flag, expected):
             raise ConnectionError('flag service unavailable')
         return flag is True
 
-    lane.monkeypatch.setattr(producers.spine, 'enabled', resolve)
+    lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', resolve)
     lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', lambda *args: [{'text': 'test'}])
     old = MagicMock(return_value=None)

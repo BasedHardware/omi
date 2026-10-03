@@ -35,14 +35,14 @@ def test_flag_off_empty_and_store_error_is_503(monkeypatch):
     for route in routes.router.routes:
         for dep in route.dependant.dependencies:
             app.dependency_overrides[dep.call] = lambda: 'u'
-    monkeypatch.setattr(routes.proactivity, 'enabled', lambda uid: False)
+    monkeypatch.setattr(routes.proactivity_flags, 'enabled', lambda uid: False)
     with TestClient(app) as client:
         assert client.get('/v1/proactivity/feed').json()['enabled'] is False
 
         def unavailable(uid):
             raise ConnectionError('offline')
 
-        monkeypatch.setattr(routes.proactivity, 'enabled', unavailable)
+        monkeypatch.setattr(routes.proactivity_flags, 'enabled', unavailable)
         assert client.get('/v1/proactivity/feed').status_code == 503
 
 

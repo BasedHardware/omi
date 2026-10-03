@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from config.proactivity_v2 import ProactivityDenied, utc_now
 from database import proactivity as ledger
 from models.proactivity import ProactivityFeedResponse, ProactivityOutcomeRequest, ProactivityOutcomeResponse
-from utils import proactivity
+from utils import proactivity, proactivity_flags
 from utils.executors import db_executor, run_blocking
 from utils.other import endpoints as auth
 
@@ -30,7 +30,7 @@ async def get_proactivity_feed(
     uid: Owner, limit: int = Query(20, ge=1, le=50), cursor: str = Query('', max_length=1024)
 ):
     try:
-        enabled = await run_blocking(db_executor, proactivity.enabled, uid)
+        enabled = await run_blocking(db_executor, proactivity_flags.enabled, uid)
         if not enabled:
             return ProactivityFeedResponse(
                 enabled=False, items=[], next_cursor='', has_more=False, server_time=utc_now()

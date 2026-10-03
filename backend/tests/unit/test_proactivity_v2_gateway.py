@@ -341,7 +341,7 @@ async def test_gateway_cohort_admission_uses_same_user_resolver(store, monkeypat
             raise ConnectionError('flag service unavailable')
         return flag is True
 
-    monkeypatch.setattr(service, 'enabled', resolve)
+    monkeypatch.setattr(service.proactivity_flags, 'enabled', resolve)
     monkeypatch.setattr(service.ledger, 'client_or_default', lambda client=None: store)
     monkeypatch.setattr(service.ledger, 'utc_now', lambda: NOW)
     monkeypatch.setattr(service.ledger, 'refresh_health', lambda *args, **kwargs: None)

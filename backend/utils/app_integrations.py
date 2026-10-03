@@ -18,7 +18,7 @@ from utils.http_client import (
     latest_wins_check,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
-from utils import proactivity
+from utils import proactivity_flags
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 import database.mentor_gate_state as mentor_gate_state
@@ -1157,7 +1157,7 @@ async def _async_trigger_realtime_integrations(
 
     # Both paths share buffering and deterministic admission. Invalid flips invoke neither.
     mentor_results = {}
-    pipeline = await run_blocking(db_executor, proactivity.mentor_pipeline, uid)
+    pipeline = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
     if pipeline in {'legacy', 'v2'}:
         conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
         if conversation_messages:
