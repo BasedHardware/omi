@@ -13,17 +13,25 @@
 // toggles the on-device silence gate on the ambient capture lanes
 // (AudioSessionHost reads `vadGateEnabled` at session start).
 //
-// Deliberately NOT built — no Windows machinery for either of these:
-//  - Custom vocabulary (PATCH /v1/users/transcription-preferences carries
-//    vocabulary + single_language_mode, but nothing plumbs keywords into the
-//    listen/PTT params — a dead control until that lands).
+// Custom vocabulary is stored on the account (PATCH
+// /v1/users/transcription-preferences); the backend loads it when each /v4/listen
+// session starts, so it needs no listen/PTT parameter here.
+//
+// Deliberately NOT built — no Windows machinery for it:
 //  - A separate voice-assistant languages multi-select (Windows uses the single
 //    `language` for PTT too; there is no per-turn LID / voiceLanguages backend).
-import { useState } from 'react'
-import { Languages, Waves } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Languages, Plus, SpellCheck, Waves, X } from 'lucide-react'
 import { LANGUAGES, DEFAULT_LANGUAGE } from '../../../lib/languages'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { syncLanguage } from '../../../lib/userProfile'
+import {
+  MAX_VOCABULARY_TERMS,
+  fetchVocabulary,
+  normalizeVocabulary,
+  parseVocabularyInput,
+  saveVocabulary
+} from '../../../lib/transcriptionVocabulary'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
@@ -107,7 +115,118 @@ export function TranscriptionTab(): React.JSX.Element {
         keywords="vad voice activity detection silence gate deepgram cost usage"
         control={<Toggle on={vadGate} onChange={changeVadGate} label="Local VAD gate" />}
       />
+
+      <VocabularyRow />
     </>
+  )
+}
+
+/** Custom vocabulary (Mac's "Custom Vocabulary" card). Terms live on the account and
+ *  the backend applies them to every /v4/listen session. Editing stays disabled until
+ *  the saved list has loaded, so a failed read can never overwrite it with a partial one. */
+function VocabularyRow(): React.JSX.Element {
+  const [terms, setTerms] = useState<string[] | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    fetchVocabulary()
+      .then((saved) => {
+        if (alive) setTerms(saved)
+      })
+      .catch(() => {
+        if (alive) setLoadFailed(true)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const commit = (next: string[]): void => {
+    if (!terms) return
+    const previous = terms
+    const normalized = normalizeVocabulary(next)
+    setTerms(normalized) // optimistic
+    void saveVocabulary(normalized).catch(() => {
+      setTerms(previous)
+      toast('Vocabulary sync failed', { tone: 'warn' })
+    })
+  }
+
+  const addDraft = (): void => {
+    if (!terms || !draft.trim()) return
+    commit([...terms, ...parseVocabularyInput(draft)])
+    setDraft('')
+  }
+
+  const editable = terms !== null
+  return (
+    <SettingRow
+      icon={SpellCheck}
+      title="Custom vocabulary"
+      subtitle="Improve recognition of names, brands, and technical terms"
+      keywords="vocabulary custom words names brands jargon keywords transcription accuracy"
+    >
+      {loadFailed ? (
+        <p className="text-xs text-text-tertiary">
+          Couldn’t load your vocabulary. Reopen Settings to try again.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {terms && terms.length > 0 && (
+            <ul className="flex flex-wrap gap-1.5" aria-label="Vocabulary terms">
+              {terms.map((term) => (
+                <li
+                  key={term}
+                  className="flex items-center gap-1 rounded-full bg-white/10 py-0.5 pl-2.5 pr-1 text-xs text-text-primary"
+                >
+                  {term}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${term}`}
+                    onClick={() => commit(terms.filter((t) => t !== term))}
+                    className="rounded-full p-0.5 text-text-tertiary hover:bg-white/10 hover:text-white"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={draft}
+              disabled={!editable}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addDraft()
+                }
+              }}
+              placeholder={editable ? 'Add a word…' : 'Loading…'}
+              aria-label="Add a vocabulary word"
+              className="min-w-0 flex-1 rounded-md bg-white/10 px-2 py-1.5 text-sm text-white placeholder:text-text-tertiary focus:outline-none disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={addDraft}
+              disabled={!editable || !draft.trim()}
+              aria-label="Add word"
+              className="rounded-md bg-white/10 p-1.5 text-white hover:bg-white/15 disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-xs text-text-tertiary">
+            Press Enter or click + to add • Click × to remove
+            {terms ? ` • ${terms.length}/${MAX_VOCABULARY_TERMS}` : ''}
+          </p>
+        </div>
+      )}
+    </SettingRow>
   )
 }
 
