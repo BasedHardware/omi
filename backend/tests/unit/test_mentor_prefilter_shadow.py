@@ -25,6 +25,9 @@ MESSAGES = [{'text': SECRET, 'is_user': True}, {'text': 'other speaker', 'is_use
 
 @pytest.fixture
 def admission(monkeypatch):
+    # Dependency initialization belongs to setup, not the behavioral call-phase budget.
+    from utils import managed_compute  # noqa: F401
+
     lookup = MagicMock(return_value=None)
     monkeypatch.setattr(admission_module.users_db, 'get_user_valid_subscription', lookup)
     monkeypatch.setattr(admission_module, 'get_customer_firestore_client', lambda: 'fake-client')
