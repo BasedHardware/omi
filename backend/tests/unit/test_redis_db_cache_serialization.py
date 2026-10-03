@@ -153,3 +153,35 @@ def test_cache_signed_url_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     redis_db.cache_signed_url("path/a.wav", "https://example.test/a", ttl=60)
     assert fake_redis.expire_calls == []
     assert fake_redis.set_calls == [{'key': 'urls:path/a.wav', 'value': 'https://example.test/a', 'ex': 59}]
+
+
+def test_review_cache_merge_keeps_legacy_literal_reviews() -> None:
+    """The merge base is the reader's own parse, so a pre-JSON blob keeps its entries.
+
+    Seeding the merge from cjson (which cannot parse the legacy literal) deleted
+    every existing review from the cache the moment one new review was added.
+    """
+    merged = redis_db._merge_app_review_cache(b"{'uid-a': {'rating': 4}}", 'uid-b', {'score': 5})
+
+    assert json.loads(merged) == {'uid-a': {'rating': 4}, 'uid-b': {'score': 5}}
+
+
+def test_review_cache_merge_replaces_an_existing_review() -> None:
+    raw = json.dumps({'uid-a': {'rating': 4}})
+
+    merged = redis_db._merge_app_review_cache(raw, 'uid-a', {'rating': 2})
+
+    assert json.loads(merged) == {'uid-a': {'rating': 2}}
+
+
+def test_review_cache_merge_seeds_from_empty_without_state() -> None:
+    merged = redis_db._merge_app_review_cache(None, 'uid-b', {'score': 5})
+
+    assert json.loads(merged) == {'uid-b': {'score': 5}}
+
+
+def test_review_cache_merge_degrades_like_the_reader_on_unreadable_state() -> None:
+    # Neither JSON nor a safe literal: the reader treats it as empty, so the merge must too.
+    merged = redis_db._merge_app_review_cache(b'%%% not a literal %%%', 'uid-b', {'score': 5})
+
+    assert json.loads(merged) == {'uid-b': {'score': 5}}

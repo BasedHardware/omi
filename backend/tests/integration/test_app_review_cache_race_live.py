@@ -55,11 +55,36 @@ def test_concurrent_reviews_do_not_clobber_each_other():
         assert reviews[f"user-{i}"]["score"] == i
 
 
-def test_legacy_unparseable_value_is_treated_as_empty_not_raised():
+def test_legacy_literal_value_keeps_its_reviews_when_a_new_review_arrives():
     _skip_if_no_redis()
-    r.set(f"plugins:{APP_ID}:reviews", "{'uid-a': {'rating': 4}}")  # pre-JSON literal, invalid JSON/cjson
+    # pre-JSON literal, invalid JSON/cjson but parseable by the reader's safe-literal fallback
+    r.set(f"plugins:{APP_ID}:reviews", "{'uid-a': {'rating': 4}}")
 
     set_app_review_cache(APP_ID, "uid-b", {"score": 5, "review": "new"})
 
     reviews = get_app_reviews(APP_ID)
-    assert reviews == {"uid-b": {"score": 5, "review": "new"}}
+    assert reviews == {
+        "uid-a": {"rating": 4},
+        "uid-b": {"score": 5, "review": "new"},
+    }
+
+
+def test_concurrent_reviews_do_not_clobber_a_legacy_blob_either():
+    _skip_if_no_redis()
+    r.set(f"plugins:{APP_ID}:reviews", "{'legacy-uid': {'rating': 3}}")
+    n = 25
+    barrier = threading.Barrier(n)
+
+    def write(i):
+        barrier.wait()
+        set_app_review_cache(APP_ID, f"user-{i}", {"score": i, "review": f"r{i}"})
+
+    threads = [threading.Thread(target=write, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    reviews = get_app_reviews(APP_ID)
+    assert reviews.get("legacy-uid") == {"rating": 3}
+    assert len(reviews) == n + 1
