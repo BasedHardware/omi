@@ -11820,19 +11820,19 @@ class AppLocalizationsFa extends AppLocalizations {
   String get evidenceNothing => 'هنوز آن را برچسب نزده یا تأیید نکرده‌اید';
 
   @override
-  String get effectCountsALot => 'بسیار مؤثر';
+  String get effectCountsALot => 'خیلی کمک می‌کند';
 
   @override
-  String get effectCounts => 'مؤثر';
+  String get effectCounts => 'کمک می‌کند';
 
   @override
-  String get effectCountsALittle => 'کمی مؤثر';
+  String get effectCountsALittle => 'کمی کمک می‌کند';
 
   @override
-  String get effectBarelyCounts => 'تقریباً بی‌اثر';
+  String get effectBarelyCounts => 'تقریباً کمکی نمی‌کند';
 
   @override
-  String get effectCountsAgainst => 'تأثیر منفی دارد';
+  String get effectCountsAgainst => 'ضرر دارد';
 
   @override
   String get effectNeeded => 'برای «تأییدشده» لازم است';
@@ -11852,7 +11852,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'فقط پاسخ‌های شما اطمینان را به‌طور محسوسی تغییر می‌دهد. تطبیق‌های خودکار به‌تنهایی تقریباً بی‌اثرند.';
+      'فقط پاسخ‌های شما اطمینان را به‌طور محسوسی تغییر می‌دهد. تطبیق‌های خودکار به‌تنهایی تقریباً کمکی نمی‌کنند.';
 
   @override
   String get personWhyConfidence => 'چرا؟';
@@ -12163,7 +12163,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'خط‌های برچسب‌خورده: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count خط برچسب خورد',
+      one: '1 خط برچسب خورد',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12196,7 +12202,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'گفتگوهای قبلی با این صدا: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'در $count گفتگوی قبلی پیدا شد',
+      one: 'در 1 گفتگوی قبلی پیدا شد',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12222,4 +12234,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration از این صدا';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'نه…';
 }

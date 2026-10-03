@@ -11868,19 +11868,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get evidenceNothing => 'Még nem címkézted meg és nem erősítetted meg';
 
   @override
-  String get effectCountsALot => 'Sokat számít';
+  String get effectCountsALot => 'Sokat segít';
 
   @override
-  String get effectCounts => 'Számít';
+  String get effectCounts => 'Segít';
 
   @override
-  String get effectCountsALittle => 'Kicsit számít';
+  String get effectCountsALittle => 'Kicsit segít';
 
   @override
-  String get effectBarelyCounts => 'Alig számít';
+  String get effectBarelyCounts => 'Alig segít';
 
   @override
-  String get effectCountsAgainst => 'Ellene szól';
+  String get effectCountsAgainst => 'Árt';
 
   @override
   String get effectNeeded => 'Szükséges a Megerősítve szinthez';
@@ -11900,7 +11900,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Csak a te válaszaid változtatnak sokat a megbízhatóságon. Az automatikus egyezések önmagukban alig számítanak.';
+      'Csak a te válaszaid változtatnak sokat a megbízhatóságon. Az automatikus egyezések önmagukban alig segítenek.';
 
   @override
   String get personWhyConfidence => 'Miért?';
@@ -12210,7 +12210,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Megjelölt sorok: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sor megjelölve',
+      one: '1 sor megjelölve',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12243,7 +12249,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Korábbi beszélgetések ezzel a hanggal: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count korábbi beszélgetésben megtalálható',
+      one: '1 korábbi beszélgetésben megtalálható',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12269,4 +12281,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Nem…';
 }

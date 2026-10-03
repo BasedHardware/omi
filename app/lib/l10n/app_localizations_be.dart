@@ -11854,19 +11854,19 @@ class AppLocalizationsBe extends AppLocalizations {
   String get evidenceNothing => 'Вы яшчэ не называлі і не пацвярджалі';
 
   @override
-  String get effectCountsALot => 'Вельмі важна';
+  String get effectCountsALot => 'Вельмі дапамагае';
 
   @override
-  String get effectCounts => 'Важна';
+  String get effectCounts => 'Дапамагае';
 
   @override
-  String get effectCountsALittle => 'Крыху важна';
+  String get effectCountsALittle => 'Крыху дапамагае';
 
   @override
-  String get effectBarelyCounts => 'Амаль не ўлічваецца';
+  String get effectBarelyCounts => 'Амаль не дапамагае';
 
   @override
-  String get effectCountsAgainst => 'Зніжае ўпэўненасць';
+  String get effectCountsAgainst => 'Шкодзіць';
 
   @override
   String get effectNeeded => 'Патрэбна для «Пацверджана»';
@@ -11886,7 +11886,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не ўлічваюцца.';
+      'Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не дапамагаюць.';
 
   @override
   String get personWhyConfidence => 'Чаму?';
@@ -12196,7 +12196,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Пазначана радкоў: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пазначана радкоў: $count',
+      one: 'Пазначаны 1 радок',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12229,7 +12235,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Ранейшыя размовы з гэтым голасам: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ёсць у ранейшых размовах: $count',
+      one: 'Ёсць у 1 ранейшай размове',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12255,4 +12267,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Не…';
 }

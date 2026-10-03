@@ -11733,19 +11733,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get evidenceNothing => 'עדיין לא תייגת ולא אישרת את האדם הזה';
 
   @override
-  String get effectCountsALot => 'נחשב הרבה';
+  String get effectCountsALot => 'עוזר מאוד';
 
   @override
-  String get effectCounts => 'נחשב';
+  String get effectCounts => 'עוזר';
 
   @override
-  String get effectCountsALittle => 'נחשב מעט';
+  String get effectCountsALittle => 'עוזר מעט';
 
   @override
-  String get effectBarelyCounts => 'כמעט לא נחשב';
+  String get effectBarelyCounts => 'כמעט לא עוזר';
 
   @override
-  String get effectCountsAgainst => 'נחשב לרעה';
+  String get effectCountsAgainst => 'מזיק';
 
   @override
   String get effectNeeded => 'נדרש כדי להיות מאושר';
@@ -11764,7 +11764,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get confidenceFootnote => 'רק התשובות שלך משפיעות באמת על רמת הביטחון. התאמות אוטומטיות לבדן כמעט לא נחשבות.';
+  String get confidenceFootnote => 'רק התשובות שלך משפיעות באמת על רמת הביטחון. התאמות אוטומטיות לבדן כמעט לא עוזרות.';
 
   @override
   String get personWhyConfidence => 'למה?';
@@ -12069,7 +12069,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'שורות שסומנו: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'סומנו $count שורות',
+      one: 'סומנה שורה אחת',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12102,7 +12108,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'שיחות קודמות עם הקול הזה: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'נמצא ב-$count שיחות קודמות',
+      one: 'נמצא בשיחה קודמת אחת',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12128,4 +12140,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'לא…';
 }

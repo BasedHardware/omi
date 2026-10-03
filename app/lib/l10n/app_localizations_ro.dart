@@ -11878,19 +11878,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get evidenceNothing => 'Nu ai etichetat sau confirmat încă această persoană';
 
   @override
-  String get effectCountsALot => 'Contează mult';
+  String get effectCountsALot => 'Ajută mult';
 
   @override
-  String get effectCounts => 'Contează';
+  String get effectCounts => 'Ajută';
 
   @override
-  String get effectCountsALittle => 'Contează puțin';
+  String get effectCountsALittle => 'Ajută puțin';
 
   @override
-  String get effectBarelyCounts => 'Abia contează';
+  String get effectBarelyCounts => 'Abia ajută';
 
   @override
-  String get effectCountsAgainst => 'Contează în sens negativ';
+  String get effectCountsAgainst => 'Dăunează';
 
   @override
   String get effectNeeded => 'Necesar pentru Confirmat';
@@ -11910,7 +11910,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Doar răspunsurile tale schimbă mult încrederea. Potrivirile automate singure abia contează.';
+      'Doar răspunsurile tale schimbă mult încrederea. Potrivirile automate singure abia ajută.';
 
   @override
   String get personWhyConfidence => 'De ce?';
@@ -12218,7 +12218,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Rânduri etichetate: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rânduri etichetate: $count',
+      one: '1 rând etichetat',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12251,7 +12257,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Conversații anterioare cu această voce: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Găsită în conversații anterioare: $count',
+      one: 'Găsită într-o conversație anterioară',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12277,4 +12289,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Nu…';
 }

@@ -11835,19 +11835,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get evidenceNothing => 'Kamu belum memberi label atau mengonfirmasinya';
 
   @override
-  String get effectCountsALot => 'Sangat berpengaruh';
+  String get effectCountsALot => 'Sangat membantu';
 
   @override
-  String get effectCounts => 'Berpengaruh';
+  String get effectCounts => 'Membantu';
 
   @override
-  String get effectCountsALittle => 'Sedikit berpengaruh';
+  String get effectCountsALittle => 'Sedikit membantu';
 
   @override
-  String get effectBarelyCounts => 'Nyaris tak berpengaruh';
+  String get effectBarelyCounts => 'Nyaris tak membantu';
 
   @override
-  String get effectCountsAgainst => 'Berpengaruh negatif';
+  String get effectCountsAgainst => 'Merugikan';
 
   @override
   String get effectNeeded => 'Diperlukan untuk Terkonfirmasi';
@@ -11867,7 +11867,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Hanya jawabanmu yang banyak mengubah keyakinan. Kecocokan otomatis saja nyaris tidak berpengaruh.';
+      'Hanya jawabanmu yang banyak mengubah keyakinan. Kecocokan otomatis saja nyaris tidak membantu.';
 
   @override
   String get personWhyConfidence => 'Kenapa?';
@@ -12176,7 +12176,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Baris diberi label: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count baris diberi label',
+      one: '1 baris diberi label',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12209,7 +12215,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Percakapan sebelumnya dengan suara ini: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ditemukan di $count percakapan sebelumnya',
+      one: 'Ditemukan di 1 percakapan sebelumnya',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12235,4 +12247,7 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Tidak…';
 }

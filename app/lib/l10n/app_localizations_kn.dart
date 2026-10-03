@@ -11860,19 +11860,19 @@ class AppLocalizationsKn extends AppLocalizations {
   String get evidenceNothing => 'ನೀವು ಇನ್ನೂ ಲೇಬಲ್ ಮಾಡಿಲ್ಲ ಅಥವಾ ದೃಢೀಕರಿಸಿಲ್ಲ';
 
   @override
-  String get effectCountsALot => 'ಹೆಚ್ಚು ಪರಿಗಣನೆ';
+  String get effectCountsALot => 'ತುಂಬಾ ಸಹಾಯ ಮಾಡುತ್ತದೆ';
 
   @override
-  String get effectCounts => 'ಪರಿಗಣನೆ';
+  String get effectCounts => 'ಸಹಾಯ ಮಾಡುತ್ತದೆ';
 
   @override
-  String get effectCountsALittle => 'ಸ್ವಲ್ಪ ಪರಿಗಣನೆ';
+  String get effectCountsALittle => 'ಸ್ವಲ್ಪ ಸಹಾಯ ಮಾಡುತ್ತದೆ';
 
   @override
-  String get effectBarelyCounts => 'ಬಹುತೇಕ ಪರಿಗಣನೆ ಇಲ್ಲ';
+  String get effectBarelyCounts => 'ಬಹುತೇಕ ಸಹಾಯ ಮಾಡುವುದಿಲ್ಲ';
 
   @override
-  String get effectCountsAgainst => 'ವಿರುದ್ಧವಾಗಿ ಪರಿಗಣನೆ';
+  String get effectCountsAgainst => 'ಹಾನಿ ಮಾಡುತ್ತದೆ';
 
   @override
   String get effectNeeded => '“ದೃಢೀಕರಿಸಲಾಗಿದೆ” ಹಂತಕ್ಕೆ ಅಗತ್ಯ';
@@ -11892,7 +11892,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'ನಿಮ್ಮ ಉತ್ತರಗಳು ಮಾತ್ರ ವಿಶ್ವಾಸವನ್ನು ಹೆಚ್ಚು ಬದಲಾಯಿಸುತ್ತವೆ. ಸ್ವಯಂ ಹೊಂದಾಣಿಕೆಗಳು ಮಾತ್ರ ಬಹುತೇಕ ಲೆಕ್ಕಕ್ಕೆ ಬರುವುದಿಲ್ಲ.';
+      'ನಿಮ್ಮ ಉತ್ತರಗಳು ಮಾತ್ರ ವಿಶ್ವಾಸವನ್ನು ಹೆಚ್ಚು ಬದಲಾಯಿಸುತ್ತವೆ. ಸ್ವಯಂ ಹೊಂದಾಣಿಕೆಗಳು ಮಾತ್ರ ಬಹುತೇಕ ಸಹಾಯ ಮಾಡುವುದಿಲ್ಲ.';
 
   @override
   String get personWhyConfidence => 'ಏಕೆ?';
@@ -12202,7 +12202,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'ಲೇಬಲ್ ಹಾಕಿದ ಸಾಲುಗಳು: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಾಲುಗಳಿಗೆ ಲೇಬಲ್ ಹಾಕಲಾಗಿದೆ',
+      one: '1 ಸಾಲಿಗೆ ಲೇಬಲ್ ಹಾಕಲಾಗಿದೆ',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12235,7 +12241,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಹಿಂದಿನ $count ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಕಂಡುಬಂದಿದೆ',
+      one: 'ಹಿಂದಿನ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಕಂಡುಬಂದಿದೆ',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12261,4 +12273,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'ಇಲ್ಲ…';
 }

@@ -11804,19 +11804,19 @@ class AppLocalizationsHi extends AppLocalizations {
   String get evidenceNothing => 'आपने इन्हें अभी तक लेबल या पुष्ट नहीं किया है';
 
   @override
-  String get effectCountsALot => 'बहुत मायने रखता है';
+  String get effectCountsALot => 'बहुत मदद करता है';
 
   @override
-  String get effectCounts => 'मायने रखता है';
+  String get effectCounts => 'मदद करता है';
 
   @override
-  String get effectCountsALittle => 'थोड़ा मायने रखता है';
+  String get effectCountsALittle => 'थोड़ी मदद करता है';
 
   @override
-  String get effectBarelyCounts => 'लगभग मायने नहीं रखता';
+  String get effectBarelyCounts => 'लगभग मदद नहीं करता';
 
   @override
-  String get effectCountsAgainst => 'खिलाफ़ जाता है';
+  String get effectCountsAgainst => 'नुकसान करता है';
 
   @override
   String get effectNeeded => 'पुष्ट के लिए ज़रूरी';
@@ -11836,7 +11836,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'भरोसा मुख्य रूप से आपके जवाबों से बदलता है। अपने-आप हुए मैच अकेले लगभग मायने नहीं रखते।';
+      'भरोसा मुख्य रूप से आपके जवाबों से बदलता है। अपने-आप हुए मैच अकेले लगभग मदद नहीं करते।';
 
   @override
   String get personWhyConfidence => 'क्यों?';
@@ -12146,7 +12146,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'लेबल लगी लाइनें: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लाइनों पर लेबल लगाया',
+      one: '1 लाइन पर लेबल लगाया',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12179,7 +12185,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'इस आवाज़ वाली पिछली बातचीत: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count पिछली बातचीतों में मिली',
+      one: '1 पिछली बातचीत में मिली',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12205,4 +12217,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'नहीं…';
 }

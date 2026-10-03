@@ -11633,19 +11633,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get evidenceNothing => 'まだラベル付けも確認もしていません';
 
   @override
-  String get effectCountsALot => '大きく影響';
+  String get effectCountsALot => '大きく役立つ';
 
   @override
-  String get effectCounts => '影響あり';
+  String get effectCounts => '役立つ';
 
   @override
-  String get effectCountsALittle => '少し影響';
+  String get effectCountsALittle => '少し役立つ';
 
   @override
-  String get effectBarelyCounts => 'ほぼ影響なし';
+  String get effectBarelyCounts => 'ほぼ役立たない';
 
   @override
-  String get effectCountsAgainst => 'マイナスに影響';
+  String get effectCountsAgainst => 'マイナス';
 
   @override
   String get effectNeeded => '「確認済み」に必要';
@@ -11664,7 +11664,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get confidenceFootnote => '信頼度を大きく動かすのは、あなたの回答だけです。自動一致だけではほとんど影響しません。';
+  String get confidenceFootnote => '信頼度を大きく動かすのは、あなたの回答だけです。自動一致だけではほとんど役立ちません。';
 
   @override
   String get personWhyConfidence => 'なぜ?';
@@ -11968,7 +11968,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'ラベルを付けた行数：$count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count行にラベルを付けました',
+      one: '1行にラベルを付けました',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12001,7 +12007,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'この声の過去の会話数：$count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '過去の会話$count件で見つかりました',
+      one: '過去の会話1件で見つかりました',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12027,4 +12039,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'いいえ…';
 }

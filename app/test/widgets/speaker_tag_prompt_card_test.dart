@@ -128,6 +128,13 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.tap(finder);
 }
 
+/// No… / Someone Else…, then Not a Person in the picker.
+Future<void> _pickNotAPerson(WidgetTester tester) async {
+  await _tapKey(tester, 'speaker_tag_prompt_answer_someone_else');
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('speaker_picker_not_a_person')));
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -189,7 +196,12 @@ void main() {
     expect(h.answers.map((a) => a.answer), ['me']);
 
     expect(find.text('Is this Sam?'), findsOneWidget);
-    expect(find.text('Yes raises Sam\'s confidence.'), findsOneWidget);
+    // A yes/no question: Yes, No… (the picker) and Not Sure, with no footnote explaining Yes.
+    expect(find.text('Yes raises Sam\'s confidence.'), findsNothing);
+    expect(find.text('No…'), findsOneWidget);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_me')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_not_a_person')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_skip')), findsOneWidget);
     await _tapKey(tester, 'speaker_tag_prompt_answer_yes');
     await tester.pump();
     expect(find.text('Saved as Sam'), findsOneWidget);
@@ -205,7 +217,7 @@ void main() {
 
   testWidgets('Undo drops a staged answer and puts the question back', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'identify')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Marked as not a person'), findsOneWidget);
@@ -218,7 +230,7 @@ void main() {
 
   testWidgets('closing the card keeps Undo available without saving the answer', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'identify')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await h.provider.close();
@@ -242,11 +254,28 @@ void main() {
     expect(h.answers.single.answer, 'me');
   });
 
-  testWidgets('Not a Person commits the not_a_person answer', (tester) async {
+  testWidgets('No… then Not a Person commits the not_a_person answer', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'confirm_person')], people: [_person('p1', 'Sam')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await _waitOutUndo(tester);
     expect(h.answers.single.answer, 'not_a_person');
+  });
+
+  testWidgets("No… then That's Me commits the me answer", (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'confirm_person')], people: [_person('p1', 'Sam')]);
+    await _tapKey(tester, 'speaker_tag_prompt_answer_someone_else');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('speaker_picker_me')));
+    await _waitOutUndo(tester);
+    expect(h.answers.single.answer, 'me');
+  });
+
+  testWidgets("the owner card keeps its own answers and its picker offers no That's Me", (tester) async {
+    await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
+    for (final key in ['me', 'not_me', 'not_a_person', 'skip']) {
+      expect(find.byKey(Key('speaker_tag_prompt_answer_$key')), findsOneWidget, reason: key);
+    }
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_someone_else')), findsNothing);
   });
 
   testWidgets('Not Sure skips at once, without Undo', (tester) async {

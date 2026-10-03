@@ -11867,19 +11867,19 @@ class AppLocalizationsBg extends AppLocalizations {
   String get evidenceNothing => 'Все още не сте го означили или потвърдили';
 
   @override
-  String get effectCountsALot => 'Тежи много';
+  String get effectCountsALot => 'Помага много';
 
   @override
-  String get effectCounts => 'Тежи';
+  String get effectCounts => 'Помага';
 
   @override
-  String get effectCountsALittle => 'Тежи малко';
+  String get effectCountsALittle => 'Помага малко';
 
   @override
-  String get effectBarelyCounts => 'Почти не тежи';
+  String get effectBarelyCounts => 'Почти не помага';
 
   @override
-  String get effectCountsAgainst => 'Тежи против';
+  String get effectCountsAgainst => 'Пречи';
 
   @override
   String get effectNeeded => 'Нужно за „Потвърдено“';
@@ -11899,7 +11899,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Само вашите отговори променят сигурността значително. Автоматичните съвпадения сами почти не се броят.';
+      'Само вашите отговори променят сигурността значително. Автоматичните съвпадения сами почти не помагат.';
 
   @override
   String get personWhyConfidence => 'Защо?';
@@ -12209,7 +12209,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Означени редове: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Означени са $count реда',
+      one: 'Означен е 1 ред',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12242,7 +12248,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Предишни разговори с този глас: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Открит в $count предишни разговора',
+      one: 'Открит в 1 предишен разговор',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12268,4 +12280,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Не…';
 }

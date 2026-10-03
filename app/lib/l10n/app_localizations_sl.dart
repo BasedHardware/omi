@@ -11854,19 +11854,19 @@ class AppLocalizationsSl extends AppLocalizations {
   String get evidenceNothing => 'Te osebe še niste označili ali potrdili';
 
   @override
-  String get effectCountsALot => 'Šteje veliko';
+  String get effectCountsALot => 'Zelo pomaga';
 
   @override
-  String get effectCounts => 'Šteje';
+  String get effectCounts => 'Pomaga';
 
   @override
-  String get effectCountsALittle => 'Šteje malo';
+  String get effectCountsALittle => 'Malo pomaga';
 
   @override
-  String get effectBarelyCounts => 'Skoraj ne šteje';
+  String get effectBarelyCounts => 'Komaj pomaga';
 
   @override
-  String get effectCountsAgainst => 'Šteje proti';
+  String get effectCountsAgainst => 'Škodi';
 
   @override
   String get effectNeeded => 'Potrebno za raven Potrjeno';
@@ -11886,7 +11886,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Zanesljivost bistveno spreminjajo le vaši odgovori. Samodejna ujemanja sama komaj štejejo.';
+      'Zanesljivost bistveno spreminjajo le vaši odgovori. Samodejna ujemanja sama komaj pomagajo.';
 
   @override
   String get personWhyConfidence => 'Zakaj?';
@@ -12195,7 +12195,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Označene vrstice: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označene vrstice: $count',
+      one: 'Označena 1 vrstica',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12228,7 +12234,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Prejšnji pogovori s tem glasom: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Najden v prejšnjih pogovorih: $count',
+      one: 'Najden v 1 prejšnjem pogovoru',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12254,4 +12266,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Ne…';
 }

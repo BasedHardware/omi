@@ -11873,19 +11873,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String get evidenceNothing => 'మీరు ఇంకా లేబుల్ చేయలేదు లేదా నిర్ధారించలేదు';
 
   @override
-  String get effectCountsALot => 'చాలా లెక్కలోకి వస్తుంది';
+  String get effectCountsALot => 'చాలా సహాయపడుతుంది';
 
   @override
-  String get effectCounts => 'లెక్కలోకి వస్తుంది';
+  String get effectCounts => 'సహాయపడుతుంది';
 
   @override
-  String get effectCountsALittle => 'కొంచెం లెక్కలోకి వస్తుంది';
+  String get effectCountsALittle => 'కొంచెం సహాయపడుతుంది';
 
   @override
-  String get effectBarelyCounts => 'దాదాపు లెక్కలోకి రాదు';
+  String get effectBarelyCounts => 'దాదాపు సహాయపడదు';
 
   @override
-  String get effectCountsAgainst => 'వ్యతిరేకంగా లెక్కవేయబడుతుంది';
+  String get effectCountsAgainst => 'హాని చేస్తుంది';
 
   @override
   String get effectNeeded => 'నిర్ధారించబడింది స్థాయికి అవసరం';
@@ -11905,7 +11905,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'మీ సమాధానాలు మాత్రమే నమ్మకాన్ని ఎక్కువగా మారుస్తాయి. ఆటోమేటిక్ మ్యాచ్‌లు ఒక్కటే దాదాపు లెక్కలోకి రావు.';
+      'మీ సమాధానాలు మాత్రమే నమ్మకాన్ని ఎక్కువగా మారుస్తాయి. ఆటోమేటిక్ మ్యాచ్‌లు ఒక్కటే దాదాపు సహాయపడవు.';
 
   @override
   String get personWhyConfidence => 'ఎందుకు?';
@@ -12215,7 +12215,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'లేబుల్ వేసిన లైన్లు: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count లైన్లకు లేబుల్ వేయబడింది',
+      one: '1 లైన్‌కు లేబుల్ వేయబడింది',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12248,7 +12254,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'ఈ వాయిస్‌తో మునుపటి సంభాషణలు: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'మునుపటి $count సంభాషణల్లో కనిపించింది',
+      one: 'మునుపటి 1 సంభాషణలో కనిపించింది',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12274,4 +12286,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'లేదు…';
 }

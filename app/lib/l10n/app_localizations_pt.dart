@@ -11842,19 +11842,19 @@ class AppLocalizationsPt extends AppLocalizations {
   String get evidenceNothing => 'Você ainda não marcou nem confirmou essa pessoa';
 
   @override
-  String get effectCountsALot => 'Conta muito';
+  String get effectCountsALot => 'Ajuda muito';
 
   @override
-  String get effectCounts => 'Conta';
+  String get effectCounts => 'Ajuda';
 
   @override
-  String get effectCountsALittle => 'Conta um pouco';
+  String get effectCountsALittle => 'Ajuda um pouco';
 
   @override
-  String get effectBarelyCounts => 'Quase não conta';
+  String get effectBarelyCounts => 'Quase não ajuda';
 
   @override
-  String get effectCountsAgainst => 'Conta contra';
+  String get effectCountsAgainst => 'Prejudica';
 
   @override
   String get effectNeeded => 'Necessário para Confirmado';
@@ -11874,7 +11874,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Só as suas respostas mudam muito a confiança. Correspondências automáticas sozinhas quase não contam.';
+      'Só as suas respostas mudam muito a confiança. Correspondências automáticas sozinhas quase não ajudam.';
 
   @override
   String get personWhyConfidence => 'Por quê?';
@@ -12182,7 +12182,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Linhas identificadas: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count linhas identificadas',
+      one: '1 linha identificada',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12215,7 +12221,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Conversas anteriores com esta voz: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Encontrada em $count conversas anteriores',
+      one: 'Encontrada em 1 conversa anterior',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12241,4 +12253,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration desta voz';
   }
+
+  @override
+  String get speakerTagPromptNoAction => 'Não…';
 }
