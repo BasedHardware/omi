@@ -207,8 +207,9 @@ def test_replay_has_no_repeated_speech_when_live_and_sync_wording_match():
         assert len(texts(store, gen_id(k))) == len(set(texts(store, gen_id(k))))
 
 
-def test_residual_differently_worded_overlap_still_repeats_on_the_live_row():
+def test_residual_differently_worded_overlap_still_repeats_on_the_live_row(monkeypatch):
     """Known residual: off the exact live timestamps, dedupe needs identical normalized text."""
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
     store = seeded_store()
     s = gen_start(L) + 1  # one second of phone clock skew
     chunks = [

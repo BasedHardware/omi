@@ -1,0 +1,496 @@
+"""Bound safety-WAL uploads drop speech that lexically repeats the live row.
+
+Synthetic replay: one live generation row carries seven transcript lines; a WAL
+upload stamped for it brings ten segments — seven lexical rewordings of the
+live lines plus three genuinely new ones — under phone-clock skews of +40 s
+and +1200 s. Only the three new lines are appended. An upload that is entirely
+repeats is acknowledged with no writes, no enrichment receipt and no audio
+effects; the flag off, a mistyped value or a uid outside the lineage allowlist
+restores the previous intake exactly. All ids and text are synthetic.
+"""
+
+import json
+import logging
+import threading
+from copy import deepcopy
+from pathlib import Path
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
+
+from config import sync_lineage
+from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_sync_cross_job_assignment import intake
+
+T0 = 1_800_000_000.0
+LIVE_ID = 'LIVE-ROW'
+ORIGIN = 'REC-1'
+
+LIVE = [f'the quarterly planning review meeting covered agenda item {n} in detail' for n in range(1, 8)]
+NEW = [
+    'a genuinely new remark about weekend hiking plans with close friends',
+    'the dog barked twice at the delivery driver near the front gate',
+    'dinner reservations moved to eight thirty at the corner bistro tonight',
+]
+
+
+def at(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc)
+
+
+def reworded(text):
+    words = [token for token in text.replace('the ', '').split(' ') if token]
+    return 'Um, ' + ' '.join(words).capitalize() + '!'
+
+
+def live_row(**extra):
+    row = {
+        'id': LIVE_ID,
+        'started_at': at(T0),
+        'finished_at': at(T0 + 70),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'is_locked': False,
+        'discarded': False,
+        'status': 'completed',
+        'external_data': {'recording_session_id': ORIGIN, 'recording_origin_id': ORIGIN},
+        'transcript_segments': [
+            {
+                'start': i * 10.0,
+                'end': i * 10.0 + 10.0,
+                'text': LIVE[i],
+                'speaker': 'SPEAKER_00',
+                'speaker_id': 0,
+                'is_user': False,
+            }
+            for i in range(len(LIVE))
+        ],
+    }
+    row.update(extra)
+    return row
+
+
+def wal(skew, texts, row_id='WAL-1'):
+    start = T0 + skew
+    return {
+        'id': row_id,
+        'started_at': at(start),
+        'finished_at': at(start + 10 * len(texts)),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'discarded': False,
+        'status': 'completed',
+        'transcript_segments': [
+            {'start': i * 10.0 + 0.7, 'end': i * 10.0 + 10.7, 'text': text, 'speaker_id': 0, 'is_user': False}
+            for i, text in enumerate(texts)
+        ],
+    }
+
+
+def seeded_store(rows):
+    store = StrictFirestore()
+    for row in rows:
+        store.rows[('users', 'u', 'conversations', row['id'])] = deepcopy(row)
+    return store
+
+
+def texts_of(store, cid):
+    return [segment['text'] for segment in store.rows[('users', 'u', 'conversations', cid)]['transcript_segments']]
+
+
+@pytest.fixture(scope='module', autouse=True)
+def load_dependencies():
+    from database import conversations  # noqa: F401
+    from models import transcript_segment  # noqa: F401
+    from utils.conversations import lifecycle  # noqa: F401
+    from utils.sync import pipeline  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def default_flags(monkeypatch):
+    monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+
+
+@pytest.mark.parametrize('skew', [40, 1200])
+def test_mixed_upload_appends_only_the_genuinely_new_speech(skew):
+    store = seeded_store([live_row()])
+    chunk = wal(skew, [reworded(text) for text in LIVE] + NEW)
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False and assigned['id'] == LIVE_ID
+    assert len(survivors) == 3
+    stats = assigned['_sync_lineage_dedupe']
+    assert stats['appended_seconds'] == 30.0 and stats['dropped_as_repeat_seconds'] == 70.0
+    assert stats['alignment_method'] == 'content_window' and stats['repeat_only'] is False
+    stored = texts_of(store, LIVE_ID)
+    assert stored[: len(LIVE)] == LIVE
+    assert {text for text in stored} >= set(NEW)
+    row = store.rows[('users', 'u', 'conversations', LIVE_ID)]
+    live_segments = {segment['text']: segment for segment in row['transcript_segments']}
+    assert live_segments[LIVE[0]]['speaker'] == 'SPEAKER_00'
+    assert live_segments[NEW[0]]['start'] == pytest.approx(skew + 7 * 10.0 + 0.7)
+    assert {key for key in row if key.startswith('_sync_lineage')} == set()
+
+
+@pytest.mark.parametrize('skew', [40, 1200])
+def test_repeats_drop_under_both_measured_skews(skew):
+    store = seeded_store([live_row()])
+    chunk = wal(skew, [reworded(text) for text in LIVE])
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False and survivors == []
+    assert assigned['_sync_lineage_repeat_only'] is True
+    assert texts_of(store, LIVE_ID) == LIVE
+
+
+def test_repeat_only_upload_writes_nothing_and_reports_a_decoded_copy():
+    store = seeded_store([live_row()])
+    before = deepcopy(store.rows)
+    chunk = wal(40, [reworded(text) for text in LIVE])
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False and survivors == []
+    assert assigned['_sync_lineage_repeat_only'] is True
+    assert assigned['_sync_lineage_dedupe']['repeat_only'] is True
+    assert assigned['_sync_lineage_dedupe']['dropped_as_repeat_seconds'] == 70.0
+    assert assigned['sync_relevance'] == 'keep'
+    assert store.rows == before
+    assigned['transcript_segments'].clear()
+    assert texts_of(store, LIVE_ID) == LIVE
+
+
+@pytest.mark.parametrize('flag', ['off', 'disabled-typo'])
+def test_flag_off_and_mistyped_restore_the_old_intake_exactly(monkeypatch, flag):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, flag)
+    store = seeded_store([live_row()])
+    chunk = wal(40, [reworded(text) for text in LIVE] + NEW)
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False and len(survivors) == 10
+    assert '_sync_lineage_dedupe' not in assigned and '_sync_lineage_repeat_only' not in assigned
+    assert len(texts_of(store, LIVE_ID)) == len(LIVE) + 10
+
+
+def test_uid_outside_the_lineage_allowlist_uses_the_old_intake(monkeypatch):
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
+    store = seeded_store([live_row()])
+    chunk = wal(40, [reworded(text) for text in LIVE])
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert len(survivors) == 7 and '_sync_lineage_dedupe' not in assigned
+
+
+def test_capture_window_rows_report_capture_alignment():
+    segments = [
+        dict(
+            segment,
+            audio_capture_start=T0 + segment['start'],
+            audio_capture_end=T0 + segment['end'],
+        )
+        for segment in live_row()['transcript_segments']
+    ]
+    store = seeded_store([live_row(transcript_segments=segments)])
+    assigned, _, survivors = intake(store, wal(40, [reworded(text) for text in LIVE]), target_id=LIVE_ID)
+    assert survivors == []
+    assert assigned['_sync_lineage_dedupe']['alignment_method'] == 'capture_window'
+
+
+def test_pinned_v2_origin_reports_capture_alignment():
+    store = seeded_store([live_row(audio_timeline={'version': 2})])
+    assigned, _, survivors = intake(store, wal(40, [reworded(text) for text in LIVE]), target_id=LIVE_ID)
+    assert survivors == []
+    assert assigned['_sync_lineage_dedupe']['alignment_method'] == 'capture_window'
+
+
+def test_non_live_sync_target_is_never_deduped():
+    sync_row = live_row(id='SYNC-ROW', sync_content_revision=2)
+    sync_row['transcript_segments'] = [
+        dict(segment, speaker_id_scope='sync:earlier') for segment in sync_row['transcript_segments']
+    ]
+    store = seeded_store([sync_row])
+    store.rows[('users', 'u', 'conversations', 'SYNC-ROW')]['sync_live_target'] = False
+    assigned, _, survivors = intake(store, wal(40, [reworded(text) for text in LIVE]), target_id='SYNC-ROW')
+    assert survivors and '_sync_lineage_dedupe' not in assigned
+
+
+def test_append_to_live_row_with_no_segments_keeps_everything():
+    store = seeded_store([live_row(transcript_segments=[])])
+    _, _, survivors = intake(store, wal(40, NEW), target_id=LIVE_ID)
+    assert len(survivors) == 3
+
+
+def short_text_row():
+    row = live_row()
+    row['transcript_segments'][0] = {
+        'start': 0.0,
+        'end': 3.0,
+        'text': 'okay see you',
+        'speaker': 'SPEAKER_00',
+        'speaker_id': 0,
+        'is_user': False,
+    }
+    return row
+
+
+def wal_at(abs_start, texts, duration):
+    return {
+        'id': 'WAL-1',
+        'started_at': at(abs_start),
+        'finished_at': at(abs_start + duration * len(texts)),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'discarded': False,
+        'status': 'completed',
+        'transcript_segments': [
+            {'start': 0.0, 'end': duration, 'text': text, 'speaker_id': 0, 'is_user': False} for text in texts
+        ],
+    }
+
+
+def test_unrelated_new_text_at_an_occupied_absolute_range_is_kept():
+    store = seeded_store([live_row()])
+    chunk = wal_at(T0, [NEW[0]], 10.0)
+    assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert created is False and [s['text'] for s in survivors] == [NEW[0]]
+    assert assigned['_sync_lineage_dedupe']['appended_seconds'] == 10.0
+    assert NEW[0] in texts_of(store, LIVE_ID)
+
+
+def test_unrelated_new_text_at_an_occupied_range_drops_when_flag_off(monkeypatch):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
+    store = seeded_store([live_row()])
+    _, _, survivors = intake(store, wal_at(T0, [NEW[0]], 10.0), target_id=LIVE_ID)
+    assert survivors == []
+
+
+def test_identical_retry_of_a_short_line_reports_exact_retry_no_op():
+    store = seeded_store([short_text_row()])
+    before = deepcopy(store.rows)
+    assigned, created, survivors = intake(store, wal_at(T0, ['okay see you'], 3.0), target_id=LIVE_ID)
+    assert created is False and survivors == []
+    assert assigned['_sync_lineage_repeat_only'] is True
+    stats = assigned['_sync_lineage_dedupe']
+    assert stats['alignment_method'] == 'exact_retry' and stats['dropped_as_repeat_seconds'] == 3.0
+    assert store.rows == before
+
+
+def test_retry_identical_text_and_range_drops_without_novel_speech():
+    store = seeded_store([live_row()])
+    chunk = wal_at(T0, [LIVE[0]], 10.0)
+    assigned, _, survivors = intake(store, chunk, target_id=LIVE_ID)
+    assert survivors == [] and assigned['_sync_lineage_repeat_only'] is True
+
+
+def test_negation_changes_keep_the_segment_at_intake():
+    base = 'the quarterly planning review did not cover the budget numbers in detail'
+    row = live_row()
+    row['transcript_segments'][0]['text'] = base
+    store = seeded_store([row])
+    missing = wal_at(T0, [base.replace('did not', 'did')], 10.0)
+    _, _, survivors = intake(store, missing, target_id=LIVE_ID)
+    assert len(survivors) == 1
+    store = seeded_store([row])
+    contracted = wal_at(T0, [base.replace('did not', "didn't")], 10.0)
+    _, _, survivors = intake(store, contracted, target_id=LIVE_ID)
+    assert len(survivors) == 1
+
+
+def test_changed_or_omitted_digit_tokens_keep_the_segment_at_intake():
+    base = 'the quarterly planning review moved to room 204 for the budget talk'
+    row = live_row()
+    row['transcript_segments'][0]['text'] = base
+    store = seeded_store([row])
+    _, _, survivors = intake(store, wal_at(T0, [base.replace('204', '205')], 10.0), target_id=LIVE_ID)
+    assert len(survivors) == 1
+    store = seeded_store([row])
+    _, _, survivors = intake(store, wal_at(T0, [base.replace('204 ', '')], 10.0), target_id=LIVE_ID)
+    assert len(survivors) == 1
+
+
+@pytest.fixture(scope='module')
+def pipeline_module():
+    from database import conversations  # noqa: F401
+    from utils.sync import pipeline
+
+    return pipeline
+
+
+def _segments(texts):
+    from models.transcript_segment import TranscriptSegment
+
+    return [
+        TranscriptSegment(
+            text=text, start=i * 10.0 + 0.7, end=i * 10.0 + 10.7, speaker='SPEAKER_00', is_user=False, speaker_id=0
+        )
+        for i, text in enumerate(texts)
+    ]
+
+
+def _drive_process_segment(pipeline, monkeypatch, store, texts, *, target=LIVE_ID, response=None):
+    from utils.conversations import lifecycle
+
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
+    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
+    monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
+    monkeypatch.setattr(pipeline, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
+    monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: T0 + 40)
+    monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
+    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    finish = MagicMock()
+    monkeypatch.setattr(pipeline, 'finish_sync_segment', finish)
+    if response is None:
+        response = {'new_memories': set(), 'updated_memories': set()}
+    ok = pipeline.process_segment(
+        '/tmp/wal.wav',
+        'u',
+        response,
+        threading.Lock(),
+        [],
+        target_conversation_id=target,
+        client_device_id='pendant',
+    )
+    return ok, response, finish
+
+
+def test_all_repeat_segment_acknowledges_without_writes_or_enrichment(pipeline_module, monkeypatch, caplog):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    before = deepcopy(store.rows)
+    texts = [reworded(text) for text in LIVE]
+    with caplog.at_level(logging.INFO):
+        ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts)
+    assert ok is True
+    assert response == {'new_memories': set(), 'updated_memories': set()}
+    finish.assert_not_called()
+    assert store.rows == before
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
+    assert len(lines) == 1 and len(lines[0]) <= 512
+    assert 'repeat_only=True' in lines[0] and 'dropped_as_repeat_seconds=70.00' in lines[0]
+    for forbidden in (LIVE_ID, 'WAL-', 'u ', 'quarterly'):
+        assert forbidden not in lines[0]
+
+
+def test_repeat_only_does_not_clear_existing_enrichment_debt(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE]
+    response = {'new_memories': set(), 'updated_memories': set(), '_merged': {LIVE_ID: 'en'}}
+    ok, response, _ = _drive_process_segment(pipeline, monkeypatch, store, texts, response=response)
+    assert ok is True
+    assert response['_merged'] == {LIVE_ID: 'en'}
+    assert response['new_memories'] == set() and response['updated_memories'] == set()
+    reprocess = MagicMock()
+    monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', reprocess)
+    pipeline._reprocess_merged_conversations('u', response)
+    assert reprocess.call_count == 1
+    assert reprocess.call_args.args[1] == LIVE_ID
+
+
+def test_empty_response_skips_reprocess_entirely(pipeline_module, monkeypatch):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE]
+    ok, response, _ = _drive_process_segment(pipeline, monkeypatch, store, texts)
+    assert ok is True and '_merged' not in response
+    reprocess = MagicMock()
+    monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', reprocess)
+    pipeline._reprocess_merged_conversations('u', response)
+    reprocess.assert_not_called()
+
+
+def test_new_speech_enrolls_and_finishes_normally(pipeline_module, monkeypatch, caplog):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE] + NEW
+    with caplog.at_level(logging.INFO):
+        ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts)
+    assert ok is True
+    assert response['updated_memories'] == {LIVE_ID}
+    assert response.get('_merged') == {LIVE_ID: 'en'}
+    finish.assert_called_once()
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
+    assert len(lines) == 1
+    assert 'appended_seconds=30.00' in lines[0] and 'repeat_only=False' in lines[0]
+
+
+def test_flag_off_logs_nothing_and_enrolls_normally(pipeline_module, monkeypatch, caplog):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    texts = [reworded(text) for text in LIVE]
+    with caplog.at_level(logging.INFO):
+        ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, texts)
+    assert ok is True
+    assert response['updated_memories'] == {LIVE_ID}
+    finish.assert_called_once()
+    assert not any('sync_lineage_append' in r.getMessage() for r in caplog.records)
+
+
+_BASELINE_FIXTURE = Path(__file__).parent / 'fixtures' / 'sync_lineage_dedupe_baseline.json'
+
+
+def _baseline_cases():
+    expected = json.loads(_BASELINE_FIXTURE.read_text())
+    return {
+        'mixed40': (live_row(), wal(40, [reworded(text) for text in LIVE] + NEW)),
+        'mixed1200': (live_row(), wal(1200, [reworded(text) for text in LIVE] + NEW)),
+        'all_reworded': (live_row(), wal(40, [reworded(text) for text in LIVE])),
+        'short_retry': (short_text_row(), wal_at(T0, ['okay see you'], 3.0)),
+    }, expected
+
+
+def _snapshot(store, assigned, created, survivors):
+    row = store.rows[('users', 'u', 'conversations', LIVE_ID)]
+    return {
+        'created': created,
+        'survivor_texts': [segment['text'] for segment in survivors],
+        'survivor_starts': [round(segment['start'], 4) for segment in survivors],
+        'assigned_marker_keys': sorted(key for key in assigned if key.startswith('_sync_lineage')),
+        'row_texts': [segment['text'] for segment in row['transcript_segments']],
+        'row_speakers': [segment.get('speaker_id') for segment in row['transcript_segments']],
+        'revision': row.get('sync_content_revision'),
+    }
+
+
+@pytest.mark.parametrize('gate', ['off', 'disabled-typo', 'nonallowlisted'])
+def test_flag_off_parity_with_the_pre_dedupe_baseline(monkeypatch, gate):
+    cases, expected = _baseline_cases()
+    if gate == 'nonallowlisted':
+        monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
+    else:
+        monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, gate)
+    for name, (row, chunk) in cases.items():
+        store = seeded_store([row])
+        assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
+        assert _snapshot(store, assigned, created, survivors) == expected[name], name
+
+
+def test_config_parser_unset_blank_and_on_tokens(monkeypatch):
+    from config.sync_live_dedupe import sync_live_dedupe_enabled
+
+    for value in (None, '', '   ', '1', 'true', 'on', 'yes', 'enabled', 'TRUE', ' On '):
+        if value is None:
+            monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
+        else:
+            monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, value)
+        assert sync_live_dedupe_enabled() is True, repr(value)
+    for value in ('0', 'false', 'off', 'disabled', 'treu', '1x', 'enabledd', 'offf'):
+        monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, value)
+        assert sync_live_dedupe_enabled() is False, repr(value)
+
+
+def test_config_parser_active_for_requires_the_allowlist(monkeypatch):
+    from config.sync_live_dedupe import sync_live_dedupe_active_for
+
+    monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    assert sync_live_dedupe_active_for('u') is True
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
+    assert sync_live_dedupe_active_for('u') is False

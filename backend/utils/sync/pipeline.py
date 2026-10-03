@@ -19,6 +19,7 @@ import time
 import wave
 import uuid
 from collections import deque
+from functools import partial
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -70,14 +71,7 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from utils.capture_evidence import (
-    bounded_envelope,
-    decoded_frame_map,
-    merge_track_receipts,
-    sync_segment_receipt,
-    unknown_envelope,
-)
-from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+from utils.capture_evidence import bounded_envelope, decoded_frame_map, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
@@ -165,6 +159,12 @@ from utils.sync.assignment_errors import (
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
+from utils.sync.intake_completion import (
+    acknowledge_processed_segment,
+    apply_capture_evidence_dark_write,
+    complete_sync_intake,
+    record_capture_evidence_metric,
+)
 from utils.sync.lanes import SyncLane
 from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
 from utils.sync.telemetry import bounded_exception_class
@@ -1323,26 +1323,7 @@ def process_segment(
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
-        if capture_evidence_dark_write_enabled():
-            receipt = unknown_envelope('missing_source_position', origin='sync_vad')
-            if source_position_map is not None:
-                frame_map, derivative_start = source_position_map
-                rate = frame_map['claim']['rate_hz']
-                mapped = [
-                    sync_segment_receipt(
-                        frame_map,
-                        wav_sample_start=derivative_start + round(segment.start * rate),
-                        wav_sample_end=derivative_start + round(segment.end * rate),
-                        segment_id=str(segment.id),
-                    )
-                    for segment in transcript_segments
-                ]
-                if all(item is not None for item in mapped):
-                    receipt = merge_track_receipts([], mapped)
-                    if frame_map['incomplete'] and receipt.get('capability') == 'source_position':
-                        receipt['coverage'] = 'incomplete'
-                    receipt = bounded_envelope(receipt)
-            incoming['capture_evidence'] = receipt
+        apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -1352,55 +1333,47 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
-        if capture_evidence_dark_write_enabled():
-            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-                path='sync',
-                status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
-            ).inc()
+        record_capture_evidence_metric(incoming)
+
+        def mark_finalize():
+            nonlocal phase
+            phase = 'finalize'
+
         conversation_id = assigned['id']
-        with lock:
-            response['new_memories' if created else 'updated_memories'].add(conversation_id)
-            if assigned['sync_relevance'] == 'keep':
-                response.setdefault('_merged', {})[conversation_id] = language
-        if private_cloud_sync_enabled and survivors:
-            if len(survivors) == len(transcript_segments):
-                _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
-            else:
-                store_partial_merge_survivor_audio(
-                    uid=uid,
-                    conversation_id=conversation_id,
-                    file_timestamp=timestamp,
-                    audio_bytes=audio_bytes,
-                    data_protection_level=data_protection_level,
-                    survivors=survivors,
-                )
-        phase = 'finalize'
-        finish_sync_segment(
-            uid,
-            assigned,
-            response,
-            lock,
-            language,
-            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
-        )
-        _set_deferred_segment_outcome(
-            deferred_outcome,
-            outcome=TranscriptionOutcome.SUCCESS,
-            provider=provider,
-            model=model,
-            retryable=False,
-        )
-        if deferred_outcome is None:
-            _record_sync_segment_outcome(
-                TranscriptionOutcome.SUCCESS,
+        complete_sync_intake(
+            uid=uid,
+            assigned=assigned,
+            created=created,
+            survivors=survivors,
+            response=response,
+            lock=lock,
+            language=language,
+            audio_enabled=bool(private_cloud_sync_enabled and survivors),
+            store_audio=partial(
+                _store_intake_audio,
+                uid,
+                timestamp,
+                audio_bytes,
+                data_protection_level,
+                survivors,
+                len(transcript_segments),
+                private_cloud_sync_enabled,
+            ),
+            finish=finish_sync_segment,
+            mark_finalize=mark_finalize,
+            acknowledge=partial(
+                acknowledge_processed_segment,
+                deferred_outcome,
                 provider=provider,
                 model=model,
                 lane=sync_lane,
-                retryable=False,
                 job_id=job_id,
                 segment_key=segment_key,
                 attempt_ref=attempt_ref,
-            )
+                set_outcome=_set_deferred_segment_outcome,
+                record_outcome=_record_sync_segment_outcome,
+            ),
+        )
         return True
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
@@ -1558,6 +1531,30 @@ def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
     seg = AudioSegment.from_wav(io.BytesIO(audio_bytes))
     seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
     return seg.raw_data
+
+
+def _store_intake_audio(
+    uid: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: str,
+    survivors: list,
+    transcript_segment_count: int,
+    private_cloud_sync_enabled: bool,
+    conversation_id: str,
+) -> None:
+    if private_cloud_sync_enabled and survivors:
+        if len(survivors) == transcript_segment_count:
+            _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
+        else:
+            store_partial_merge_survivor_audio(
+                uid=uid,
+                conversation_id=conversation_id,
+                file_timestamp=timestamp,
+                audio_bytes=audio_bytes,
+                data_protection_level=data_protection_level,
+                survivors=survivors,
+            )
 
 
 def _store_sync_audio_chunk(

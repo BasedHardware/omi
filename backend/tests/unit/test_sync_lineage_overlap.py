@@ -72,7 +72,6 @@ def test_segment_inside_both_proxy_intervals_binds_the_later_created():
 
 
 def test_segment_before_the_later_creation_binds_the_row_that_covers_it():
-    # 1500..1510 sits outside GEN-LATE's creation interval proxy.
     result = select(overlap_rows(), sync_chunk(1500, 1510, 'speech only the first row captured'))
     assert result.targets == {'SYNC-1500': 'GEN-EARLY'}
 
@@ -132,8 +131,6 @@ def test_an_incomplete_overlap_set_still_binds_nothing():
 
 
 def test_tolerant_only_overlap_stays_ambiguous():
-    # Adjacent generations whose edge allowance reaches the segment from both
-    # sides, while neither strictly contains it: still no deterministic winner.
     rows = [backdated('GEN-EARLY', 1000, 2000, 1000), backdated('GEN-LATE', 2003, 2400, 2003)]
     chunk = sync_chunk(1999, 2010, 'speech straddling the rollover')
     result = select(rows, chunk)

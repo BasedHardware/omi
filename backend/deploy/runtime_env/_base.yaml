@@ -494,6 +494,9 @@ environment_shared:
         env:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -649,6 +652,9 @@ environment_shared:
         env:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -787,6 +793,9 @@ environment_shared:
         env:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -910,6 +919,9 @@ environment_shared:
         env:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:

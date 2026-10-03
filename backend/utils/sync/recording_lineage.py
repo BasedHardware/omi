@@ -236,7 +236,8 @@ def _bind(generations: list[_Generation], start: float, end: float) -> Optional[
         unique = _unique(strict)
         if unique is not None:
             return unique
-        return _unique([pick_overlapping(strict, start, end)])
+        pick = pick_overlapping(strict, start, end)
+        return _unique([pick]) if pick is not None else None
     tolerant = [
         g
         for g in generations

@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Callable, Optional
 
 from config.sync_lineage import sync_lineage_resolve_active_for
+from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
@@ -18,6 +19,13 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.relevance_rules import deterministic_relevance
+from utils.sync.live_speech_dedupe import (
+    append_alignment_method,
+    bounded_span_seconds,
+    drop_covered_repeats,
+    drop_exact_retries,
+    pinned_audio_timeline,
+)
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
@@ -286,16 +294,49 @@ def assign_in_transaction(
     new = deepcopy(incoming['transcript_segments'])
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
-    survivors = dedupe_segments_for_merge(
-        origin,
-        existing,
-        new,
-        text_match_slop_seconds=600 if target and (smart_live_target or not target.get('sync_content_revision')) else 0,
-        # A bound safety WAL can mix one duplicate with genuinely new speech.
-        # Near-exact text, duration, and time are enough to drop that one line;
-        # broader clock-offset matches still require the batch gate.
-        single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
+    dedupe_report = None
+    live_row = next((row for row in records if row['id'] == canonical), None)
+    live_dedupe = bool(
+        target
+        and canonical == target_id
+        and live_row is not None
+        and result['sync_live_target']
+        and sync_live_dedupe_active_for(user_ref.id)
     )
+    exact_retries = 0
+    if live_dedupe and target is not None:
+        new, dedupe_report = drop_covered_repeats(
+            new,
+            (live_row or {}).get('transcript_segments', []),
+            live_origin=target['started_at'].timestamp(),
+            live_pinned=pinned_audio_timeline(target.get('audio_timeline')),
+        )
+        survivors, exact_retries = drop_exact_retries(new, existing)
+    else:
+        survivors = dedupe_segments_for_merge(
+            origin,
+            existing,
+            new,
+            text_match_slop_seconds=(
+                600 if target and (smart_live_target or not target.get('sync_content_revision')) else 0
+            ),
+            # A bound safety WAL can mix one duplicate with genuinely new speech.
+            # Near-exact text, duration, and time are enough to drop that one line;
+            # broader clock-offset matches still require the batch gate.
+            single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
+        )
+    if live_dedupe and not survivors and len(matched) == 1 and not created:
+        no_op = deepcopy(result)
+        no_op['id'] = canonical
+        no_op.setdefault('sync_relevance', 'keep')
+        no_op['_sync_lineage_repeat_only'] = True
+        no_op['_sync_lineage_dedupe'] = {
+            'appended_seconds': 0.0,
+            'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
+            'alignment_method': append_alignment_method(dedupe_report or {}, exact_retries),
+            'repeat_only': True,
+        }
+        return no_op, False, []
     for segment in survivors:
         allocator.assign(segment)
     segments = existing + deepcopy(survivors)
@@ -384,4 +425,12 @@ def assign_in_transaction(
                 },
             )
     index.write(result, set(matched) | {canonical})
+    if dedupe_report is not None:
+        appended = bounded_span_seconds(survivors)
+        result['_sync_lineage_dedupe'] = {
+            'appended_seconds': appended,
+            'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
+            'alignment_method': append_alignment_method(dedupe_report or {}, exact_retries),
+            'repeat_only': False,
+        }
     return result, created, survivors
