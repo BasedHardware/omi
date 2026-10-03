@@ -592,8 +592,9 @@ class CaptureController extends ChangeNotifier
   /// transcript counts from the server's start, so these anchor it to the phone's own clock.
   final Map<String, int> _segmentArrivals = {};
 
-  /// [_segmentArrivals] of the conversation whose processing started, consumed on ConversationEvent.
-  Map<String, int> _pendingSegmentArrivals = const {};
+  /// [_segmentArrivals] of each conversation whose processing started, by id, until its ConversationEvent
+  /// arrives. The next conversation can close before that event does, so each close keeps its own.
+  final Map<String, Map<String, int>> _closingSegmentArrivals = {};
 
   /// Set in onClosed() when the socket drops during active device recording.
   /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
@@ -3142,12 +3143,14 @@ class CaptureController extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
+      _closingSegmentArrivals[event.memory.id] = Map.of(_segmentArrivals);
+      // An event that never arrives leaves its entry behind, and a few closes back are plenty.
+      if (_closingSegmentArrivals.length > 8) _closingSegmentArrivals.remove(_closingSegmentArrivals.keys.first);
       // Replace the optimistic Process Now placeholder once the server confirms
       // a real processing row, so timeout/retry apply to the confirmed id.
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
-      _pendingSegmentArrivals = Map.of(_segmentArrivals);
       _pendingAutoSyncConversationId = event.memory.id;
       _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
       _sessionTransportInterrupted = false;
@@ -3174,6 +3177,7 @@ class CaptureController extends ChangeNotifier
     }
 
     if (event is ConversationEvent) {
+      final segmentArrivals = _closingSegmentArrivals.remove(event.memory.id) ?? const <String, int>{};
       event.memory.isNew = true;
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.removeProcessingConversation(event.memory.id);
@@ -3182,8 +3186,6 @@ class CaptureController extends ChangeNotifier
       if (_pendingAutoSyncSessionStart > 0) {
         final sessionStart = _pendingAutoSyncSessionStart;
         final needsRepair = _pendingAutoSyncNeedsRepair;
-        final segmentArrivals = _pendingSegmentArrivals;
-        _pendingSegmentArrivals = const {};
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
         _pendingAutoSyncNeedsRepair = false;
