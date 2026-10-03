@@ -3,7 +3,18 @@ import Foundation
 enum ScreenTaskFeature {
   static let flagName = "screen_task_jev_gate"
   /// All bundles default off; Beta/dev must also have explicit consent and enablement.
-  @MainActor static var isEnabled: Bool { PostHogManager.shared.isFeatureEnabled(flagName) }
+  @MainActor static var isConfigured: Bool { PostHogManager.shared.isFeatureEnabled(flagName) }
+  @MainActor static var isEnabled: Bool {
+    ScreenTaskFlagRefresh.start()
+    if !PostHogManager.shared.isFeatureEnabled(flagName) { authority.disable() }
+    return lease() != nil
+  }
+  static let authority = ScreenTaskAdmissionAuthority()
+  static let serverAuthority = ScreenTaskAdmissionAuthority()
+  static func lease() -> ScreenTaskLease? {
+    guard let flag = authority.snapshot(), let server = serverAuthority.snapshot() else { return nil }
+    return ScreenTaskLease(flag: flag, server: server)
+  }
 
   static func enforceQuota() async throws {
     guard await ManagedProactivityDecisionSource.current() != .planGated else { throw ScreenTaskFailure.planGated }
@@ -12,7 +23,7 @@ enum ScreenTaskFeature {
 
 struct ScreenTaskDedupe {
   private struct Entry {
-    let date: Date
+    let time: TimeInterval
     let lines: [String]
   }
   private var entries: [String: Entry] = [:]
@@ -29,19 +40,19 @@ struct ScreenTaskDedupe {
     }.filter { !$0.isEmpty }
   }
 
-  func shouldSkip(key: String, lines: [String], now: Date) -> Bool {
-    guard !lines.isEmpty, let entry = entries[key], now >= entry.date,
-      now.timeIntervalSince(entry.date) <= 60
+  func shouldSkip(key: String, lines: [String], now: TimeInterval) -> Bool {
+    guard !lines.isEmpty, let entry = entries[key], now >= entry.time,
+      now - entry.time <= 60
     else { return false }
     return lines == entry.lines
   }
 
-  mutating func record(key: String, lines: [String], now: Date) {
-    entries = entries.filter { now.timeIntervalSince($0.value.date) <= 60 }
-    if entries.count >= 64, let oldest = entries.min(by: { $0.value.date < $1.value.date })?.key {
+  mutating func record(key: String, lines: [String], now: TimeInterval) {
+    entries = entries.filter { now - $0.value.time <= 60 }
+    if entries.count >= 64, let oldest = entries.min(by: { $0.value.time < $1.value.time })?.key {
       entries.removeValue(forKey: oldest)
     }
-    entries[key] = Entry(date: now, lines: lines)
+    entries[key] = Entry(time: now, lines: lines)
   }
 }
 
@@ -64,29 +75,4 @@ enum ScreenTaskContext {
         return seen.insert(key).inserted
       }.prefix(max(0, min(limit, 8))))
   }
-}
-
-/// Capture authority at admission, before a queued frame can cross an account transition.
-struct ScreenTaskFrameOwners {
-  private struct Key: Hashable {
-    let app: String
-    let number: Int
-    let date: Date
-    init(_ frame: CapturedFrame) {
-      app = frame.appName
-      number = frame.frameNumber
-      date = frame.captureTime
-    }
-  }
-  private var owners: [Key: RuntimeOwnerAuthorizationSnapshot] = [:]
-
-  mutating func record(_ frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) {
-    let key = Key(frame)
-    if owners.count >= 64, let oldest = owners.keys.min(by: { $0.date < $1.date }) {
-      owners.removeValue(forKey: oldest)
-    }
-    owners[key] = authorization
-  }
-
-  func authorization(for frame: CapturedFrame) -> RuntimeOwnerAuthorizationSnapshot? { owners[Key(frame)] }
 }

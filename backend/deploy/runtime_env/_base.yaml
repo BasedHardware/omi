@@ -12,6 +12,9 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
         TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
         TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
         TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -319,6 +322,8 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -400,6 +405,18 @@ environment_shared:
   region: us-central1
   desktop_backend:
     env:
+      OMI_VERTEX_RESERVATION_STATES:
+        env_var: OMI_VERTEX_RESERVATION_STATES
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MODE:
+        env_var: OMI_VERTEX_LEGACY_TASK_MODE
+        provisional: true
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         category: rollout
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -477,6 +494,9 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -630,6 +650,9 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -766,6 +789,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -887,6 +913,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:

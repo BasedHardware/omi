@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟",
+    "reportMessageConfirm": "این پیام گزارش شود؟",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.",
+    "clearChatConfirm": "همه پیام‌های این گفتگو حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "تمام یادداشت‌ها و گفتگوهای شما برای همیشه حذف خواهند شد.",
+    "allDataErased": "یادداشت‌ها و گفتگوهای شما پاک می‌شوند.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "اپلیکیشن‌ها و ادغام‌های شما بلافاصله قطع خواهند شد.",
+    "appsDisconnected": "اتصال برنامه‌ها و یکپارچه‌سازی‌های شما قطع می‌شود.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "آیا مطمئن هستید که می‌خواهید از {appName} قطع شوید؟ شما می‌توانید هر زمان دوباره متصل شوید.",
+    "disconnectAppMessage": "می‌توانید هر زمان {appName} را دوباره متصل کنید.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟",
+    "deleteActionItemMessage": "این وظیفه حذف شود؟",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "آیا مطمئن هستید که می‌خواهید {count} وظیفه{s} انتخاب‌شده را حذف کنید؟",
+    "deleteSelectedItemsMessage": "{count} وظیفه{s} انتخاب‌شده حذف شود؟",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 هیچ خاطره‌ای هنوز نیست",
+    "noMemoriesYet": "هیچ خاطره‌ای هنوز نیست",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 هیچ خاطره‌ای یافت نشد",
+    "noMemoriesFound": "هیچ خاطره‌ای یافت نشد",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این اقدام قابل برگشت نیست.",
+    "clearMemoryMessage": "همه خاطرات شما حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟",
+    "deleteActionItemConfirmMessage": "این وظیفه حذف شود؟",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "زبان برنامه منوها و دکمه‌ها را تغییر می‌دهد. زبان سخن بر نحوه رونویسی ضبط‌های شما تأثیر می‌گذارد.",
+    "languageSettingsHelperText": "زبان برنامه منوها و دکمه‌ها را تغییر می‌دهد. زبان اصلی بر نحوه رونویسی ضبط‌های شما تأثیر می‌گذارد.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "این عمل قابل بازگشت نیست.",
+    "thisActionCannotBeUndone": "این کار قابل بازگشت نیست.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "آیا مطمئن هستید که می‌خواهید این وظیفه را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteActionItemConfirmation": "این وظیفه حذف شود؟ این کار قابل بازگشت نیست.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "آیا مطمئن هستید که می‌خواهید این پیام را گزارش کنید؟",
+    "confirmReportMessage": "این پیام گزارش شود؟",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "آیا مطمئن هستید که می‌خواهید چت را پاک کنید؟ این عمل قابل بازگشت نیست.",
+    "confirmClearChat": "این گفتگو پاک شود؟ این کار قابل بازگشت نیست.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "آیا مطمئن هستید که می‌خواهید این یادآوری را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteMemoryConfirmation": "این خاطره حذف شود؟ این کار قابل بازگشت نیست.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "آیا مطمئن هستید که می‌خواهید حافظه Omi را پاک کنید؟ این عمل قابل بازگشت نیست و تمام {count} یادآوری را به‌طور دائمی حذف می‌کند.",
+    "clearMemoryConfirmation": "همه {count} خاطره حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "اجازه دهید Omi بهترین برنامه را به طور خودکار انتخاب کند",
-    "deleteConversationConfirmation": "آیا مطمئنید که می‌خواهید این گفتگو را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteConversationConfirmation": "این گفتگو حذف شود؟ این کار قابل بازگشت نیست.",
     "conversationDeleted": "گفتگو حذف شد",
     "generatingLink": "در حال ایجاد پیوند…",
     "editConversation": "ویرایش گفتگو",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "آیا مطمئنید که می‌خواهید برنامه خود را به‌روز کنید؟ تغییرات زمانی‌که توسط تیم ما بررسی شوند منعکس می‌شوند.",
+    "updateAppConfirmation": "تغییرات پس از بررسی تیم ما اعمال می‌شوند.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "آیا مطمئنید که می‌خواهید اشتراک خود را لغو کنید؟ تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.",
+    "cancelSubscriptionConfirmation": "تا پایان دوره صورت‌حساب جاری دسترسی خواهید داشت.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "این عمل قابل بازگشت نیست. هر برنامه‌ای که از این کلید استفاده می‌کند دیگر نخواهد توانست API را دسترسی کند.",
+    "revokeApiKeyWarning": "برنامه‌هایی که از این کلید استفاده می‌کنند دسترسی به API را از دست می‌دهند. این کار قابل بازگشت نیست.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "آیا مطمئنید که می‌خواهید این {item} را حذف کنید؟ این عمل قابل بازگشت نیست.",
+    "deleteItemConfirmation": "حذف این {item} قابل بازگشت نیست.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "آیا مطمئنید که می‌خواهید کلید \"{keyName}\" را لغو کنید؟ این عمل قابل بازگشت نیست.",
+    "revokeKeyConfirmation": "هر چیزی که از \"{keyName}\" استفاده می‌کند دسترسی را از دست می‌دهد. این کار قابل بازگشت نیست.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "طرح شما تا {date} فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد. آیا مطمئنید؟",
+    "planRemainsActiveUntil": "طرح شما تا {date} فعال می‌ماند. پس از آن، دسترسی به ویژگی‌های نامحدود خود را از دست خواهید داد.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "حافظه نامحدود Omi را بازگشایید",
+    "unlockOmiInfiniteMemory": "یادداشت‌های نامحدود",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "اتصال خود را بررسی کنید و دوباره تلاش کنید",
+    "checkConnectionTryAgain": "اتصال خود را بررسی کنید و دوباره امتحان کنید.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "این تمام مکالمات واردشده از Limitless را به‌طور دائم حذف خواهد کرد. این عمل برگشت‌پذیر نیست.",
+    "deleteAllLimitlessWarning": "همه گفتگوهای واردشده از Limitless حذف می‌شوند. این کار قابل بازگشت نیست.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "آیا مطمئن هستید که می‌خواهید نمونه {name} را حذف کنید؟",
+    "deleteSampleConfirmation": "نمونه صدای {name} حذف می‌شود. این کار قابل بازگشت نیست.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "آیا مطمئن هستید که می‌خواهید {name} را حذف کنید؟ این تمام نمونه‌های صوتی مرتبط را نیز حذف خواهد کرد.",
+    "deletePersonConfirmation": "این کار نمونه‌های صدای {name} را حذف می‌کند و قابل بازگشت نیست. گفته‌های او در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "آیا مطمئن هستید که می‌خواهید ضبط را متوقف کنید و مکالمه را اکنون خلاصه کنید؟",
+    "stopRecordingConfirmation": "ضبط متوقف شود و گفتگو اکنون خلاصه شود؟",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesInfo": "300 دقیقه ویژه در ماه. برای رونویسی رایگان و نامحدود «روی دستگاه» را انتخاب کنید.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesMonth": "300 دقیقه ویژه در ماه. برای رونویسی رایگان و نامحدود «روی دستگاه» را انتخاب کنید. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "رونویسی زنده تعبیه شده Omi برای مکالمات بلادرنگ با شناسایی و دیاریزاسیون گوینده خودکار بهینه شده است.",
+    "omiTranscriptionOptimized": "رونویسی زنده Omi برای گفتگوهای هم‌زمان ساخته شده و مشخص می‌کند چه کسی چه گفت.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "آیا می‌خواهید این ضبط‌شده را برای همیشه حذف کنید؟ این کار قابل بازگشت نیست.",
+    "deleteRecordingConfirmation": "این کار قابل بازگشت نیست.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "شما نقشهِ نامحدود خود را به {title} تغییر می‌دهید. آیا مطمئن هستید می‌خواهید ادامه دهید؟",
+    "planSwitchingDescriptionWithTitle": "شما طرح نامحدود خود را به {title} تغییر می‌دهید.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "بیشتر بگویید",
     "deleteFlowFeedbackSubtitle": "چه چیزی باعث می‌شد Omi برای شما مفید باشد؟",
     "deleteFlowFeedbackHint": "اختیاری — نظرات شما به ما کمک می‌کند محصول بهتری بسازیم.",
-    "deleteFlowConfirmTitle": "این عمل برگشت‌ناپذیر است",
-    "deleteFlowConfirmSubtitle": "پس از حذف حساب، راهی برای بازیابی آن وجود ندارد.",
+    "deleteFlowConfirmTitle": "حساب خود را حذف می‌کنید؟",
+    "deleteFlowConfirmSubtitle": "این کار قابل بازگشت نیست، حتی توسط پشتیبانی.",
     "deleteConsequenceSubscription": "هرگونه اشتراک فعال لغو خواهد شد.",
     "deleteConsequenceNoRecovery": "حساب شما قابل بازیابی نیست — حتی توسط پشتیبانی.",
     "deleteTypeToConfirm": "برای تأیید، DELETE را تایپ کنید",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "همگام‌سازی از رونویسی Omi استفاده می‌کند",
     "syncCustomSttWarningMessage": "شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.",
     "transcribeLaterTitle": "رونویسی در زمان دلخواه",
-    "transcribeLaterDescription": "صدا را همین حالا ضبط کنید و به‌جای رونویسی زنده، هر وقت خواستید آن را رونویسی کنید. ضبط‌ها روی گوشی شما ذخیره می‌شوند و سپس با بارگذاری آن‌ها گفت‌وگوها ساخته می‌شوند.",
+    "transcribeLaterDescription": "اکنون ضبط کنید و هر زمان خواستید رونویسی کنید. تا آن موقع صدا روی تلفن شما می‌ماند.",
     "transcribeLaterNote": "با میکروفون گوشی و دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
     "transcribeLaterStorageFull": "فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.",
     "unmute": "باصدا کردن",
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "رونویسی ابری",
     "copyMessage": "کپی پیام",
     "deleteOnDeviceModel": "حذف مدل",
-    "deleteOnDeviceModelConfirm": "آیا مطمئن هستید که می‌خواهید این مدل را حذف کنید؟",
+    "deleteOnDeviceModelConfirm": "این مدل حذف شود؟",
     "downgradeAnyway": "با این حال تنزل بده",
     "downgradeLimitBattery": "۷ برابر مصرف باتری",
     "downgradeLimitDelay": "۵ تا ۷ ثانیه تأخیر",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "کوچک",
     "whisperModelSizeTiny": "خیلی کوچک",
-    "planSheetChooseYourPlan": "برای باز کردن Omi نامحدود، طرح خود را انتخاب کنید.",
+    "planSheetChooseYourPlan": "طرحی را انتخاب کنید که مناسب شماست.",
     "availableOnMacMobileWeb": "در دسترس روی Mac، موبایل و وب",
     "popularBadge": "محبوب",
     "worksOnDesktop": "روی دسکتاپ کار می‌کند",
@@ -10789,7 +10789,7 @@
     "moreOptions": "گزینه‌های بیشتر",
     "filterByDate": "فیلتر بر اساس تاریخ",
     "memoryGraph": "نمودار خاطرات",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{صدا آمادهٔ شناسایی است} saved_sample_awaiting_embedding{نمونه ذخیره شد؛ پردازش صدا هنوز لازم است} not_learned{صدا یاد گرفته نشده است} other{وضعیت صدا نامشخص است}}",
     "tagSpeakerIncludingLaterSpeech": "گفتار بعدی این گوینده را هم برچسب بزن",
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "برای تماس از طریق Omi، شماره خود را تأیید کنید.",
     "phoneDeleteNumberFailed": "حذف این شماره ممکن نشد",
     "forgetDeviceConfirmTitle": "دستگاه فراموش شود؟",
-    "forgetDeviceConfirmMessage": "Omi دیگر به این دستگاه وصل نمی‌شود. برای استفادهٔ دوباره، باید آن را دوباره جفت کنید.",
+    "forgetDeviceConfirmMessage": "Omi دیگر به این دستگاه وصل نمی‌شود.",
     "deviceForgottenMessage": "دستگاه فراموش شد",
     "unpairDeviceConfirmTitle": "جفت‌سازی دستگاه لغو شود؟",
     "rollBack": "بازگرداندن",
@@ -11252,20 +11252,20 @@
     "evidenceNoVoice": "هنوز نمونه صدا وجود ندارد",
     "evidenceNotHeard": "هنوز در هیچ گفتگویی شنیده نشده",
     "evidenceNothing": "هنوز آن را برچسب نزده یا تأیید نکرده‌اید",
-    "effectCountsALot": "بسیار مؤثر",
-    "effectCounts": "مؤثر",
-    "effectCountsALittle": "کمی مؤثر",
-    "effectBarelyCounts": "تقریباً بی‌اثر",
-    "effectCountsAgainst": "تأثیر منفی دارد",
+    "effectCountsALot": "خیلی کمک می‌کند",
+    "effectCounts": "کمک می‌کند",
+    "effectCountsALittle": "کمی کمک می‌کند",
+    "effectBarelyCounts": "تقریباً کمکی نمی‌کند",
+    "effectCountsAgainst": "ضرر دارد",
     "effectNeeded": "برای «تأییدشده» لازم است",
     "confidenceToReachConfirmed": "برای رسیدن به «تأییدشده»",
     "confidenceNextVoice": "Omi به یک نمونه صدای {name} هم نیاز دارد. با روشن بودن «به خاطر سپردن صداها» او را برچسب بزنید.",
     "confidenceIsConfirmed": "{name} تأییدشده است. Omi از هر برچسب یاد می‌گیرد.",
-    "confidenceFootnote": "فقط پاسخ‌های شما اطمینان را به‌طور محسوسی تغییر می‌دهد. تطبیق‌های خودکار به‌تنهایی تقریباً بی‌اثرند.",
+    "confidenceFootnote": "فقط پاسخ‌های شما اطمینان را به‌طور محسوسی تغییر می‌دهد. تطبیق‌های خودکار به‌تنهایی تقریباً کمکی نمی‌کنند.",
     "personWhyConfidence": "چرا؟",
     "pinPersonTitle": "سنجاق کردن {name}",
     "pinPersonSubtitle": "{name} را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید",
-    "pinPersonHonestLine": "Omi به‌جای حدس زدن، از شما می‌خواهد تطبیق‌های نزدیک را تأیید کنید.",
+    "pinPersonHonestLine": "Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.",
     "pinAction": "سنجاق",
     "unpinAction": "برداشتن سنجاق",
     "personPinnedToast": "{name} سنجاق شد",
@@ -11334,10 +11334,46 @@
     "autoRemoveSyncedCopiesDays": "نسخه‌های همگام‌شده پس از {days} روز حذف می‌شوند",
     "autoRemoveSyncedCopiesDescription": "نسخه‌های محلی را {days} روز پس از همگام‌سازی حذف می‌کند. نسخه‌های ابری حفظ می‌شوند.",
     "localCopiesSection": "نسخه‌های محلی",
-    "speakerLabelLinesLabeled": "خط‌های برچسب‌خورده: {count}",
+    "speakerLabelLinesLabeled": "{count, plural, =1{1 خط برچسب خورد} other{{count} خط برچسب خورد}}",
     "speakerLabelVoiceStatus": "{state, select, learned{صدا یاد گرفته شد} pending{در حال یادگیری صدا…} disabled{ذخیره صدا خاموش است} other{صدا هنوز یاد گرفته نشده}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi دفعه بعد {name} را تشخیص می‌دهد.} pending{این کار چند ثانیه طول می‌کشد.} disabled{ذخیره صداها را در تنظیمات روشن کنید تا Omi بتواند {name} را تشخیص دهد.} other{Omi به گفتار واضح‌تری از {name} نیاز دارد و به تلاش ادامه می‌دهد.}}",
-    "speakerLabelEarlierMatches": "گفتگوهای قبلی با این صدا: {count}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{در 1 گفتگوی قبلی پیدا شد} other{در {count} گفتگوی قبلی پیدا شد}}",
     "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
-    "speakerLabelTalkTime": "{duration} از این صدا"
+    "speakerLabelTalkTime": "{duration} از این صدا",
+    "findDeviceNoneTitle": "Omi پیدا نشد",
+    "findDeviceNoneMessage": "آن را روشن کنید و نزدیک تلفن خود نگه دارید.",
+    "startupFailedDetails": "جزئیات",
+    "couldNotLoadApiKeys": "بارگیری کلیدهای API ممکن نشد.",
+    "speakerTagPromptNoAction": "نه…",
+    "diagnosticsRightNow": "هم‌اکنون",
+    "diagnosticsLast7Days": "۷ روز گذشته",
+    "diagnosticsConnectedFor": "مدت اتصال",
+    "diagnosticsVerdictReconnects": "خودکار دوباره وصل می‌شود",
+    "diagnosticsVerdictReconnectsDetail": "قطعی‌های کوتاه، هر بار در حدود {duration} برمی‌گردد",
+    "diagnosticsVerdictNoDrops": "این هفته قطعی نداشته",
+    "diagnosticsVerdictTrouble": "در اتصال مشکل دارد",
+    "diagnosticsVerdictTroubleDetail": "اتصالات ناموفق در ۲۴ ساعت گذشته: {count}",
+    "diagnosticsDrops": "قطعی‌ها",
+    "diagnosticsDropsPerHour": "حدود {count} در ساعت",
+    "diagnosticsLongestGap": "طولانی‌ترین وقفه",
+    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
+    "diagnosticsLastDuration": "{duration} گذشته",
+    "peopleStatsIncomplete": "شمارش‌ها ممکن است ناقص باشند.",
+    "reprocessingConversationProgress": "در حال پردازش دوبارهٔ گفتگو…",
+    "conversationReprocessed": "گفتگو به‌روز شد",
+    "loadingTranscript": "در حال بارگیری متن…",
+    "transcriptLoadFailed": "بارگیری متن ممکن نشد.",
+    "processingConversationProgress": "در حال پردازش گفتگو…",
+    "conversationProcessingFailedMessage": "پردازش این گفتگو ممکن نشد.",
+    "waitForReprocessing": "صبر کنید تا پردازش دوباره تمام شود.",
+    "unnamedSpeakerLabel": "سخنران",
+    "unresolvedSpeakersNotice": "گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.",
+    "unresolvedSpeakersTitle": "درباره برچسب‌های گوینده",
+    "unresolvedSpeakersMessage": "Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.",
+    "nameSpeakerTitle": "نام‌گذاری گوینده",
+    "playbackPreparingAudio": "در حال آماده‌سازی صدا…",
+    "playbackBackToCurrent": "بازگشت به مورد فعلی",
+    "playbackAudioUnavailable": "صدا در دسترس نیست",
+    "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
+    "playbackAudioNetworkFailed": "اتصال را بررسی کنید"
 }

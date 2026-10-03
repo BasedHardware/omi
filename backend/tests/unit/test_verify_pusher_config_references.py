@@ -179,7 +179,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
@@ -189,6 +191,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
@@ -238,7 +241,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
     assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "1"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "10"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"

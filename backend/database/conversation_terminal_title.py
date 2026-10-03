@@ -29,6 +29,7 @@ from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
 
 # Terminal failure codes after which a user reprocess can still succeed: the
@@ -46,6 +47,7 @@ SUMMARY_RETRYABLE_FAILURE_CODES: frozenset[str] = frozenset(
 
 # Firestore's maximum document size, and the headroom kept for estimation error.
 FIRESTORE_MAX_DOCUMENT_BYTES: int = 1_048_576
+# Headroom kept below FIRESTORE_MAX_DOCUMENT_BYTES for estimation error.
 # Generous on purpose: dropping a title near the ceiling costs nothing, while
 # an underestimate aborts the terminal write.
 TERMINAL_SIZE_HEADROOM_BYTES: int = 65_536
@@ -54,6 +56,7 @@ PHOTO_DESCRIPTION_PROBE_LIMIT: int = 64
 # Used when a test double exposes no document path.
 _FALLBACK_DOCUMENT_NAME_BYTES: int = 256
 MAX_ID_LENGTH: int = 128
+PHOTO_DESCRIPTION_PROBE_LIMIT = 64
 
 
 def _clean_id(raw_id: Any, field_name: str = 'id') -> str:

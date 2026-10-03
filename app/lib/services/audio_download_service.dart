@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/audio/wav_combiner.dart';
 import 'package:omi/utils/logger.dart';
@@ -28,13 +29,21 @@ class AudioDownloadService {
       onStageChange?.call(AudioDownloadStage.preparing);
 
       // Asking for URLs also enqueues artifact builds server-side; poll while
-      // they finish instead of giving up immediately.
+      // they finish instead of giving up immediately. A failed request throws —
+      // the caller's download-failure handling reports it instead of silently
+      // polling an empty answer for a minute.
       final deadline = DateTime.now().add(const Duration(seconds: 60));
-      var urlsResponse = await getConversationAudioSignedUrls(conversation.id);
-      while (urlsResponse.files.isEmpty || !urlsResponse.playbackReady) {
+      var urlsResponse = switch (await getConversationAudioSignedUrls(conversation.id)) {
+        ApiSuccess<AudioUrlsResponse>(:final data) => data,
+        ApiFailure<AudioUrlsResponse>(:final problem) => throw problem,
+      };
+      while (!urlsResponse.playbackReady && urlsResponse.files.isNotEmpty) {
         if (DateTime.now().isAfter(deadline)) break;
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
-        urlsResponse = await getConversationAudioSignedUrls(conversation.id);
+        urlsResponse = switch (await getConversationAudioSignedUrls(conversation.id)) {
+          ApiSuccess<AudioUrlsResponse>(:final data) => data,
+          ApiFailure<AudioUrlsResponse>(:final problem) => throw problem,
+        };
       }
 
       // Conversation-level dense MP3: one download, nothing to combine.

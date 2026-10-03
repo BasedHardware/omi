@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import Any, Awaitable, Callable, Protocol
 
 from models.message_event import MessageServiceStatusEvent
@@ -24,6 +25,7 @@ from utils.observability.fallback import (
     record_fallback,
 )
 from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
+from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -102,8 +104,8 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # audio. ``initialization_failed`` happens at connect time, where the selection
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
-# Preserve legacy terminal VAD circuit protection; fleet evidence censors it.
-_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed'})
+# Local VAD/input failures are not evidence against a provider circuit either.
+_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
 
 
 def fallback_metric_reason(reason: str | None) -> str:
@@ -140,6 +142,7 @@ class PendingLiveFailover:
         component: str = 'stt_live_session',
         reason: str,
         capacity_subtype: str | None = None,
+        source_outcome: LiveLegOutcome | None = None,
     ) -> None:
         self.component, self.reason = component, normalize_live_stt_reason(reason)
         self.capacity_subtype = capacity_subtype
@@ -148,11 +151,50 @@ class PendingLiveFailover:
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
+        self._settlement_timer: asyncio.TimerHandle | None = None
+        self.source_outcome = source_outcome
+        if source_outcome is not None:
+            self.reason = source_outcome.claim(reason, connect=component == 'stt_selection')
+            if source_outcome.pending is None:
+                source_outcome.pending = self
+            if not source_outcome.settled:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass  # Synchronous tests; serving owners run on the listen loop.
+                else:
+                    # Recovery still requires text. After 30s without proof,
+                    # report this hop as degraded, without touching its audio
+                    # or connection. Source availability cannot depend on a
+                    # silent successor eventually ending its session.
+                    self._settlement_timer = loop.call_later(30, self._settle_delayed_hop)
+
+    def _settle_delayed_hop(self) -> None:
+        self.note_failure(None, continuing=True)
+
+    def _mark_settled(self) -> None:
+        self._settled = True
+        if self._settlement_timer is not None:
+            self._settlement_timer.cancel()
+            self._settlement_timer = None
 
     @classmethod
     def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
         """Capture the source cause before a successor can change the hop."""
-        return cls(from_mode=from_mode, to_mode=to_mode, reason=live_stt_terminal_reason(source, 'connection_lost'))
+        return cls(
+            from_mode=from_mode,
+            to_mode=to_mode,
+            reason=live_stt_terminal_reason(source, 'connection_lost'),
+            source_outcome=getattr(source, 'leg_outcome', None),
+        )
+
+    def _emit(self, **kwargs: Any) -> None:
+        if self.source_outcome is None:
+            record_fallback(**kwargs)
+        else:
+            self.source_outcome.settle(
+                emit_fallback=lambda: record_fallback(**kwargs),
+            )
 
     @property
     def settled(self) -> bool:
@@ -169,8 +211,8 @@ class PendingLiveFailover:
             return
         if segments is not None and not _segments_have_transcript(segments):
             return
-        self._settled = True
-        record_fallback(
+        self._mark_settled()
+        self._emit(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
@@ -183,19 +225,21 @@ class PendingLiveFailover:
     def note_failure(self, typed_reason: str | None, *, continuing: bool = False) -> None:
         if self._settled:
             return
-        self._settled = True
+        self._mark_settled()
         # The hop belongs to the source leg; a successor failure changes the
         # outcome, never the source cause used to reconcile health evidence.
         reason = fallback_metric_reason(self.reason)
         details: FailureFallbackKwargs = {}
         if reason == 'other':
             details['failure_subtype'] = normalize_live_stt_reason(typed_reason)
-        record_fallback(
+        self._emit(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
             reason=reason,
             outcome='degraded' if continuing else 'exhausted',
+            **first_text_fallback_kwargs(self.first_text_diagnostics),
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
             **details,
         )
 
@@ -206,6 +250,23 @@ class LiveSTTSession(Protocol):
     stt_terminal_failure: bool
     live_transcription_attempt: Any
     client_live_transcription_attempt: Any
+
+
+def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str) -> None:
+    """Settle a managed serving leg when the owner has exhausted recovery."""
+    outcome = getattr(stt_socket, 'leg_outcome', None)
+    if outcome is None or outcome.settled or outcome.owner_closing and not outcome.claimed:
+        return
+    if outcome.pending is not None:
+        outcome.pending.note_failure(None)
+        return
+    hop = PendingLiveFailover(
+        from_mode=provider or 'unknown',
+        to_mode='unavailable',
+        reason=live_stt_terminal_reason(stt_socket, reason),
+        source_outcome=outcome,
+    )
+    hop.note_failure(None)
 
 
 class LiveSTTClientSocket(Protocol):
@@ -485,8 +546,17 @@ async def send_live_stt_audio(
         OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     async def _recoverable_failure(reason: str) -> None:
+        outcome = getattr(stt_socket, 'leg_outcome', None)
+        if outcome is not None and outcome.owner_closing:
+            # The final client-tail flush may still send valid audio, but its
+            # transport errors cannot launch recovery or bench a provider.
+            return
         if attempt_failover is not None and await attempt_failover():
             return
+        if outcome is not None and outcome.owner_closing:
+            return  # Client teardown can win while replacement admission awaits.
+        if session.active and not session.stt_terminal_failure:
+            settle_terminal_socket(stt_socket, provider, reason)
         await terminate_live_stt_session(
             websocket,
             session,

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/ui/format/omi_duration.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/conversation_title.dart';
@@ -109,13 +110,14 @@ abstract final class HomeWidgetsPayload {
   }
 
   /// Latest: its title, when it started, and "1 task · 14 s" in the app's words.
-  static Map<String, Object?>? latest(ServerConversation? conversation, AppLocalizations l10n) {
+  static Map<String, Object?>? latest(ServerConversation? conversation, AppLocalizations l10n, {OmiDateFormat? dates}) {
     if (conversation == null) return null;
     final title = conversationDisplayTitle(
       conversation,
       l10n,
       surface: ConversationUntitledRenderedSurface.homeWidget,
       title: conversation.structured.title.decodeString,
+      dates: dates,
     );
     final tasks = conversation.structured.actionItems.where((item) => !item.deleted).length;
     final seconds = conversation.getDurationInSeconds();

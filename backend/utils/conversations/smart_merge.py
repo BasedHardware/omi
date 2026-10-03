@@ -44,6 +44,7 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
+    smart_merge_flatten_enabled,
     smart_merge_mode,
     smart_merge_uid_allowed,
 )
@@ -55,7 +56,9 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.factory import deserialize_conversation
+from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -76,6 +79,7 @@ from utils.conversations.smart_merge_policy import (
     revision,
     smart_merge_state,
     stretch_before,
+    user_managed,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.executors import postprocess_executor, run_blocking
@@ -84,6 +88,7 @@ from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh,
+    record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
 from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
@@ -153,11 +158,21 @@ def decide_and_apply(
 
 
 class _MergePlan:
-    def __init__(self, survivor_id: str, expected_revision: int, record: dict[str, Any], gap: Optional[float]):
+    def __init__(
+        self,
+        survivor_id: str,
+        expected_revision: int,
+        record: dict[str, Any],
+        gap: Optional[float],
+        expected_survivor_sync_revision: Any = None,
+        expected_donor_sync_revision: Any = None,
+    ):
         self.survivor_id = survivor_id
         self.expected_revision = expected_revision
         self.record = record
         self.gap = gap
+        self.expected_survivor_sync_revision = expected_survivor_sync_revision
+        self.expected_donor_sync_revision = expected_donor_sync_revision
 
 
 def _segments(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -349,7 +364,14 @@ def _decide(
     merge_record = record(MERGED, reason)
     if not reuse and not smart_merge_db.record_decision(uid, conversation_id, merge_record):
         return None
-    return _MergePlan(survivor_id, revision(survivor), merge_record, check.gap_seconds)
+    return _MergePlan(
+        survivor_id,
+        revision(survivor),
+        merge_record,
+        check.gap_seconds,
+        expected_survivor_sync_revision=survivor.get('sync_content_revision'),
+        expected_donor_sync_revision=new_row.get('sync_content_revision'),
+    )
 
 
 # --------------------------------------------------------------------------- absorb
@@ -357,28 +379,50 @@ def _decide(
 
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
+    flattened_count = 0
 
     def payloads(
         survivor: Mapping[str, Any],
         survivor_segments: Sequence[Mapping[str, Any]],
         donor: Mapping[str, Any],
         donor_segments: Sequence[Mapping[str, Any]],
-    ) -> tuple[Optional[str], Optional[dict], Optional[dict]]:
+        ancestor_rows: Mapping[str, Optional[Mapping[str, Any]]],
+    ) -> tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]]:
         reason = new_conversation_skip(donor, donor_segments, capture_end=True)
         if reason is None:
             reason = check_pair(survivor, survivor_segments, donor, donor_segments).reason
         if reason is not None:
-            return reason, None, None
+            return reason, None, None, {}
         survivor_update, donor_update = absorb_payloads(
             survivor, survivor_segments, donor, donor_segments, merged_at=merged_at, decision=plan.record
         )
-        return None, survivor_update, donor_update
+        if not smart_merge_flatten_enabled():
+            return None, survivor_update, donor_update, {}
+        flat_reason, union, ancestor_updates = flatten_updates(
+            survivor, {str(donor['id']): donor}, ancestor_rows, user_managed=user_managed
+        )
+        if flat_reason is not None:
+            return flat_reason, None, None, {}
+        survivor_update['sync_merged_from'] = union
+        return None, survivor_update, donor_update, ancestor_updates
 
     try:
         result = smart_merge_db.absorb_conversation(
-            uid, plan.survivor_id, conversation_id, expected_revision=plan.expected_revision, plan=payloads
+            uid,
+            plan.survivor_id,
+            conversation_id,
+            expected_revision=plan.expected_revision,
+            plan=payloads,
+            expected_survivor_sync_revision=plan.expected_survivor_sync_revision,
+            expected_donor_sync_revision=plan.expected_donor_sync_revision,
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
+        flattened_count = result.flattened_ancestor_count
+        if smart_merge_flatten_enabled():
+            if outcome == 'absorbed':
+                record_smart_merge_flatten('absorbed', 'none')
+            elif reason in _FLATTEN_REASONS:
+                record_smart_merge_flatten('rejected', reason)
     except Exception as error:
         # A transaction error normally commits nothing; an ambiguous commit is
         # settled by reading the donor marker back.
@@ -400,12 +444,13 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             logger.warning('event=smart_merge outcome=record_failed uid=%s conversation=%s', uid, conversation_id)
         record_conversation_smart_merge(mode=mode.value, decision='keep', reason=reason, gap_seconds=plan.gap)
         logger.info(
-            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s',
+            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s',
             mode.value,
             reason,
             uid,
             conversation_id,
             plan.survivor_id,
+            flattened_count,
         )
         return False
 
@@ -424,15 +469,26 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
                 outcome='degraded',
             )
     logger.info(
-        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s',
+        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s flattened_ancestor_count=%s',
         mode.value,
         plan.record.get('p_same'),
         uid,
         conversation_id,
         plan.survivor_id,
+        flattened_count,
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True
+
+
+_FLATTEN_REASONS = frozenset(
+    {
+        'flatten_ancestor_invalid',
+        'flatten_ancestor_user_managed',
+        'flatten_ancestor_cap',
+        'flatten_content_changed',
+    }
+)
 
 
 # This module's own SmartMergeIncomplete codes: a bounded log vocabulary.
@@ -446,6 +502,7 @@ _INCOMPLETE_CODES = frozenset(
         'refresh_completion_fenced',
         'processing_checkpoint_fenced',
         'donor_cleanup_deferred',
+        'flatten_cleanup_source_invalid',
     }
 )
 
@@ -472,6 +529,7 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         if not survivor_id:
             return
         _cleanup_donor(uid, donor_id, donor, survivor_id)
+        _cleanup_flattened_ancestors(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
     except Exception as error:
@@ -497,6 +555,8 @@ def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_i
     needs_copy = bool(audio_target) and (needs_cleanup or donor.get('sync_bridge_audio_target') != audio_target)
     deferred = False
     if needs_cleanup:
+        if live_survivor:
+            transfer_donor(uid, donor_id, survivor_id)
         try:
             retract_sync_bridge_source(uid, donor_id)
         except _DEFERRED_RETRACTION:
@@ -527,6 +587,31 @@ def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_i
     if deferred:
         # A held source still owes retraction. Do not close its only durable retry.
         raise SmartMergeIncomplete('donor_cleanup_deferred')
+
+
+def _cleanup_flattened_ancestors(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_id: str) -> None:
+    """The sync-bridge receipt protocol, for each ancestor a committed flatten absorbed.
+
+    Only a donor whose marker recorded a flatten owes the extra pass: legacy
+    donors keep the old single-source cleanup with no added reads. The work set
+    is the donor's own persisted ``sync_merged_from`` — bounded by the absorb
+    cap, never the survivor's later sources — and every listed source must
+    still be a tombstone pointing at the survivor; a missing or foreign row is
+    owed work (``flatten_cleanup_source_invalid``), never silently dropped. An
+    already-cleaned ancestor is a read-only no-op on replay.
+    """
+    if not int(smart_merge_state(donor).get('flattened_ancestor_count') or 0):
+        return
+    survivor = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE) or {}
+    if not survivor or survivor.get('deleted'):
+        return
+    for source_id in donor.get('sync_merged_from') or []:
+        if source_id == donor_id:
+            continue
+        source = conversations_db.get_conversation(uid, source_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if not source or not source.get('deleted') or source.get('sync_merged_into') != survivor_id:
+            raise SmartMergeIncomplete('flatten_cleanup_source_invalid')
+        _cleanup_donor(uid, source_id, source, survivor_id)
 
 
 def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:

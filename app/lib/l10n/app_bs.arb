@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Jeste li sigurni da želite da prijavite ovu poruku?",
+    "reportMessageConfirm": "Prijaviti ovu poruku?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Jeste li sigurni da želite da očistite čat? Ova radnja se ne može opozvati.",
+    "clearChatConfirm": "Sve poruke u ovom četu bit će obrisane. Ovo se ne može poništiti.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Sve vaše uspomene i razgovori će biti zauvek izbrisani.",
+    "allDataErased": "Vaše uspomene i razgovori bit će izbrisani.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Vaše aplikacije i integracije će biti odmah prekopčane.",
+    "appsDisconnected": "Vaše aplikacije i integracije bit će odspojene.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Jeste li sigurni da želite da se iskopčate od {appName}? Možete se ponovo povezati bilo kada.",
+    "disconnectAppMessage": "{appName} možete ponovo povezati bilo kada.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Jeste li sigurni da želite da obrišete ovaj zadatak?",
+    "deleteActionItemMessage": "Obrisati ovaj zadatak?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Jeste li sigurni da želite obrisati {count} odabranih zadatak{s}?",
+    "deleteSelectedItemsMessage": "Obrisati {count} odabranih zadataka{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Nema uspomena",
+    "noMemoriesYet": "Nema uspomena",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Nema pronađenih uspomena",
+    "noMemoriesFound": "Nema pronađenih uspomena",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Ste li sigurni da želite da obrišete Omi-jevu memoriju? Ova akcija se ne može poništiti.",
+    "clearMemoryMessage": "Sve vaše uspomene bit će obrisane. Ovo se ne može poništiti.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Jeste li sigurni da želite da obrišete ovaj zadatak?",
+    "deleteActionItemConfirmMessage": "Obrisati ovaj zadatak?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "INTERFEJS APLIKACIJE",
+    "appInterfaceSectionTitle": "Interfejs aplikacije",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "GOVOR I TRANSKRIPCIJA",
+    "speechTranscriptionSectionTitle": "Govor i transkripcija",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Jezik aplikacije menja menije i dugmad. Jezik govora utiče na to kako se vaša snimanja transkribiraju.",
+    "languageSettingsHelperText": "Jezik aplikacije mijenja menije i dugmad. Primarni jezik utiče na to kako se vaši snimci transkribuju.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "Ova radnja se ne može opozvati.",
+    "thisActionCannotBeUndone": "Ovo se ne može poništiti.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Jesi li siguran da želiš obrisati ovaj zadatak? Ova radnja se ne može opozvati.",
+    "deleteActionItemConfirmation": "Obrisati ovaj zadatak? Ovo se ne može poništiti.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Jesi li siguran da želiš prijaviti ovu poruku?",
+    "confirmReportMessage": "Prijaviti ovu poruku?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Jesi li siguran da želiš očistiti razgovor? Ova radnja se ne može opozvati.",
+    "confirmClearChat": "Očistiti ovaj čet? Ovo se ne može poništiti.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Jesi li siguran da želiš obrisati ovu uspomenu? Ova radnja se ne može opozvati.",
+    "deleteMemoryConfirmation": "Obrisati ovu uspomenu? Ovo se ne može poništiti.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Jesi li siguran da želiš očistiti Omijevu memoriju? Ova radnja se ne može opozvati i trajno će obrisati sve {count} uspomena.",
+    "clearMemoryConfirmation": "Sve uspomene ({count}) bit će obrisane. Ovo se ne može poništiti.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Pusti Omi da automatski odabere najbolju aplikaciju",
-    "deleteConversationConfirmation": "Jesi li siguran da želiš obrisati ovaj razgovor? Ova se akcija ne može poništiti.",
+    "deleteConversationConfirmation": "Obrisati ovaj razgovor? Ovo se ne može poništiti.",
     "conversationDeleted": "Razgovor je obrisan",
     "generatingLink": "Generiranje veze…",
     "editConversation": "Uredi razgovor",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Jesi li siguran da želiš ažurirati svoju aplikaciju? Promjene će se odraziti kada ih odobri naš tim.",
+    "updateAppConfirmation": "Promjene će biti objavljene nakon što ih pregleda naš tim.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4474,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Jesi li siguran da želiš otkazati svoju pretplatu? Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.",
+    "cancelSubscriptionConfirmation": "Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4734,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "Ova se akcija ne može poništiti. Sve aplikacije koje koriste ovaj ključ neće više moći pristupiti API-ju.",
+    "revokeApiKeyWarning": "Aplikacije koje koriste ovaj ključ gube pristup API-ju. Ovo se ne može poništiti.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4825,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Jesi li siguran da želiš obrisati ovaj {item}? Ova se akcija ne može poništiti.",
+    "deleteItemConfirmation": "{item} će biti obrisana. Ovo se ne može poništiti.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4838,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Jesi li siguran da želiš opozva ključ \"{keyName}\"? Ova se akcija ne može poništiti.",
+    "revokeKeyConfirmation": "Sve što koristi \"{keyName}\" gubi pristup. Ovo se ne može poništiti.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5085,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Tvoj će plan ostati aktivna do {date}. Nakon toga ćeš izgubiti pristup svojima neograničenim značajkama. Jesi li siguran?",
+    "planRemainsActiveUntil": "Tvoj će plan ostati aktivna do {date}. Nakon toga ćeš izgubiti pristup svojima neograničenim značajkama.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5221,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Otključajte Omijevu beskonačnu memoriju",
+    "unlockOmiInfiniteMemory": "Neograničene uspomene",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5237,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo",
+    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5493,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "Ovo će trajno obrisati sve razgovore uvezene iz Limitless aplikacije. Ova akcija se ne može poništiti.",
+    "deleteAllLimitlessWarning": "Svi razgovori uvezeni iz Limitlessa bit će obrisani. Ovo se ne može poništiti.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5551,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Jeste li sigurni da želite obrisati {name}ov uzorak?",
+    "deleteSampleConfirmation": "Uzorak glasa osobe {name} bit će uklonjen. Ovo se ne može poništiti.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5564,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Jeste li sigurni da želite obrisati {name}? Ovo će ukloniti i sve povezane uzorke govora.",
+    "deletePersonConfirmation": "Ovo uklanja uzorke glasa osobe {name} i ne može se poništiti. Replike u prošlim razgovorima postaju neimenovani govornici.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -6028,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Jeste li sigurni da želite zaustaviti snimanje i sažeti razgovor sada?",
+    "stopRecordingConfirmation": "Zaustaviti snimanje i sada sažeti razgovor?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7211,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium minuta/mjesec. Kartaca na uređaju nudi neограничenu besplatnu transkripciju.",
+    "premiumMinutesInfo": "300 premium minuta mjesečno. Odaberite „Na uređaju“ za neograničenu besplatnu transkripciju.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7322,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium minuta/mjesec. Kartaca na uređaju nudi neograničenu besplatnu transkripciju. ",
+    "premiumMinutesMonth": "300 premium minuta mjesečno. Odaberite „Na uređaju“ za neograničenu besplatnu transkripciju. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7410,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Ugrađena transkripcija u realnom vremenu tvrtke Omi je optimizovana za razgovore u realnom vremenu sa automatskim detektovanjem govornika i dijalizacijom.",
+    "omiTranscriptionOptimized": "Omi transkripcija uživo napravljena je za razgovore u stvarnom vremenu i označava ko je šta rekao.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8092,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Jeste li sigurni da želite da trajno izbrišete ovaj snimak? Ovo se ne može poništiti.",
+    "deleteRecordingConfirmation": "Ovo se ne može poništiti.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8606,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "Prebacujete svoj Unlimited plan na {title}. Jeste li sigurni da želite nastaviti?",
+    "planSwitchingDescriptionWithTitle": "Prebacujete svoj Unlimited plan na {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "MEMORIJA",
+    "storageSection": "Memorija",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10411,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Recite nam više",
     "deleteFlowFeedbackSubtitle": "Šta bi učinilo da Omi radi za vas?",
     "deleteFlowFeedbackHint": "Opcionalno — vaše misli nam pomažu da napravimo bolji proizvod.",
-    "deleteFlowConfirmTitle": "Ovo je trajno",
-    "deleteFlowConfirmSubtitle": "Nakon brisanja računa nije ga moguće vratiti.",
+    "deleteFlowConfirmTitle": "Izbrisati vaš račun?",
+    "deleteFlowConfirmSubtitle": "Ovo se ne može poništiti, čak ni uz pomoć podrške.",
     "deleteConsequenceSubscription": "Svaka aktivna pretplata će biti otkazana.",
     "deleteConsequenceNoRecovery": "Vaš račun se ne može vratiti — čak ni preko podrške.",
     "deleteTypeToConfirm": "Upišite DELETE za potvrdu",
@@ -10559,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Sinkronizacija koristi Omi transkripciju",
     "syncCustomSttWarningMessage": "Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.",
     "transcribeLaterTitle": "Transkripcija kasnije",
-    "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.",
+    "transcribeLaterDescription": "Snimajte sada, transkribujte kada želite. Do tada zvuk ostaje na vašem telefonu.",
     "transcribeLaterNote": "Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
     "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
@@ -10664,7 +10664,7 @@
     "cloudTranscription": "Transkripcija u oblaku",
     "copyMessage": "Kopiraj poruku",
     "deleteOnDeviceModel": "Izbriši model",
-    "deleteOnDeviceModelConfirm": "Jeste li sigurni da želite izbrisati ovaj model?",
+    "deleteOnDeviceModelConfirm": "Obrisati ovaj model?",
     "downgradeAnyway": "Ipak pređi na niži plan",
     "downgradeLimitBattery": "7x veća potrošnja baterije",
     "downgradeLimitDelay": "Kašnjenje od 5-7 sekundi",
@@ -10710,7 +10710,7 @@
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
     "whisperModelSizeTiny": "Sićušni",
-    "planSheetChooseYourPlan": "Odaberite svoj plan da otključate neograničeni Omi.",
+    "planSheetChooseYourPlan": "Odaberite plan koji vam odgovara.",
     "availableOnMacMobileWeb": "Dostupno na Macu, mobitelu i webu",
     "popularBadge": "POPULARNO",
     "worksOnDesktop": "Radi na desktopu",
@@ -10789,7 +10789,7 @@
     "moreOptions": "Više opcija",
     "filterByDate": "Filtriraj po datumu",
     "memoryGraph": "Graf sjećanja",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{Glas je spreman za prepoznavanje} saved_sample_awaiting_embedding{Uzorak je sačuvan, čeka obradu glasa} not_learned{Glas nije naučen} other{Status glasa je nepoznat}}",
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
@@ -10884,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Potvrdite svoj broj da biste zvali putem Omi.",
     "phoneDeleteNumberFailed": "Nije moguće izbrisati ovaj broj",
     "forgetDeviceConfirmTitle": "Zaboraviti uređaj?",
-    "forgetDeviceConfirmMessage": "Omi se više neće povezivati s ovim uređajem. Da biste ga ponovo koristili, morat ćete ga ponovo upariti.",
+    "forgetDeviceConfirmMessage": "Omi se više neće povezivati s ovim uređajem.",
     "deviceForgottenMessage": "Uređaj je zaboravljen",
     "unpairDeviceConfirmTitle": "Poništiti uparivanje uređaja?",
     "rollBack": "Vrati",
@@ -11252,20 +11252,20 @@
     "evidenceNoVoice": "Još nema uzorka glasa",
     "evidenceNotHeard": "Još se ne čuje ni u jednom razgovoru",
     "evidenceNothing": "Još niste imenovali niti potvrdili",
-    "effectCountsALot": "Mnogo vrijedi",
-    "effectCounts": "Vrijedi",
-    "effectCountsALittle": "Malo vrijedi",
-    "effectBarelyCounts": "Jedva vrijedi",
-    "effectCountsAgainst": "Vrijedi protiv",
+    "effectCountsALot": "Mnogo pomaže",
+    "effectCounts": "Pomaže",
+    "effectCountsALittle": "Malo pomaže",
+    "effectBarelyCounts": "Jedva pomaže",
+    "effectCountsAgainst": "Šteti",
     "effectNeeded": "Potrebno za „Potvrđeno“",
     "confidenceToReachConfirmed": "Kako do „Potvrđeno“",
     "confidenceNextVoice": "Omi treba i uzorak glasa osobe {name}. Imenujte je uz uključeno „Pamti glasove“.",
     "confidenceIsConfirmed": "Osoba {name} je potvrđena. Omi nastavlja učiti iz svake oznake.",
-    "confidenceFootnote": "Samo vaši odgovori bitno mijenjaju sigurnost. Automatska podudaranja sama jedva računaju.",
+    "confidenceFootnote": "Samo vaši odgovori bitno mijenjaju sigurnost. Automatska podudaranja sama jedva pomažu.",
     "personWhyConfidence": "Zašto?",
     "pinPersonTitle": "Prikvači osobu {name}",
     "pinPersonSubtitle": "Zadržite osobu {name} i očekujte je u svojim razgovorima",
-    "pinPersonHonestLine": "Omi će tražiti da potvrdite bliska podudaranja umjesto da nagađa.",
+    "pinPersonHonestLine": "Omi pita prije nego što upari slične glasove.",
     "pinAction": "Prikvači",
     "unpinAction": "Otkvači",
     "personPinnedToast": "Osoba {name} je prikvačena",
@@ -11334,10 +11334,46 @@
     "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se brišu nakon {days} dana",
     "autoRemoveSyncedCopiesDescription": "Briše lokalne kopije {days} dana nakon sinkronizacije. Cloud kopije se zadržavaju.",
     "localCopiesSection": "Lokalne kopije",
-    "speakerLabelLinesLabeled": "Označeni redovi: {count}",
+    "speakerLabelLinesLabeled": "{count, plural, =1{Označen 1 red} other{Označeno redova: {count}}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Glas je naučen} pending{Učenje glasa…} disabled{Spremanje glasa je isključeno} other{Glas još nije naučen}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{Ovo traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama da bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
-    "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{Pronađen u 1 ranijem razgovoru} other{Pronađen u ranijim razgovorima: {count}}}",
     "speakerLabelText": "{part, select, likely{Vjerovatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg posljednjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
-    "speakerLabelTalkTime": "{duration} ovog glasa"
+    "speakerLabelTalkTime": "{duration} ovog glasa",
+    "findDeviceNoneTitle": "Omi nije pronađen",
+    "findDeviceNoneMessage": "Uključite ga i držite blizu telefona.",
+    "startupFailedDetails": "Detalji",
+    "couldNotLoadApiKeys": "Učitavanje API ključeva nije uspjelo.",
+    "speakerTagPromptNoAction": "Ne…",
+    "diagnosticsRightNow": "Trenutno",
+    "diagnosticsLast7Days": "Posljednjih 7 dana",
+    "diagnosticsConnectedFor": "Povezano",
+    "diagnosticsVerdictReconnects": "Sam se ponovo povezuje",
+    "diagnosticsVerdictReconnectsDetail": "Kratki prekidi, svaki put se vrati za otprilike {duration}",
+    "diagnosticsVerdictNoDrops": "Bez prekida ove sedmice",
+    "diagnosticsVerdictTrouble": "Problemi s povezivanjem",
+    "diagnosticsVerdictTroubleDetail": "Neuspjele veze u posljednja 24 sata: {count}",
+    "diagnosticsDrops": "Prekidi",
+    "diagnosticsDropsPerHour": "otprilike {count} na sat",
+    "diagnosticsLongestGap": "Najduži prekid",
+    "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspjelih veza {failed}.",
+    "diagnosticsLastDuration": "Posljednjih {duration}",
+    "peopleStatsIncomplete": "Brojevi možda nisu potpuni.",
+    "reprocessingConversationProgress": "Ponovna obrada razgovora…",
+    "conversationReprocessed": "Razgovor je ažuriran",
+    "loadingTranscript": "Učitavanje transkripta…",
+    "transcriptLoadFailed": "Nije moguće učitati transkript.",
+    "processingConversationProgress": "Obrada razgovora…",
+    "conversationProcessingFailedMessage": "Ovaj razgovor nije moguće obraditi.",
+    "waitForReprocessing": "Sačekajte da se ponovna obrada završi.",
+    "unnamedSpeakerLabel": "Govornik",
+    "unresolvedSpeakersNotice": "Govornici nisu odvojeni kroz snimke.",
+    "unresolvedSpeakersTitle": "O oznakama govornika",
+    "unresolvedSpeakersMessage": "Omi nije mogao razlikovati ostale glasove kroz snimke. Dodirnite oznaku govornika da imenujete ko govori.",
+    "nameSpeakerTitle": "Imenuj govornika",
+    "playbackPreparingAudio": "Priprema zvuka…",
+    "playbackBackToCurrent": "Natrag na trenutno",
+    "playbackAudioUnavailable": "Zvuk nije dostupan",
+    "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
+    "playbackAudioNetworkFailed": "Provjerite vezu"
 }

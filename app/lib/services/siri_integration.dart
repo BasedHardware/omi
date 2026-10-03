@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -225,13 +226,13 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<T> _nativeOperation<T>(Future<T> Function() operation, {bool indexWork = false}) {
     final result = _nativeTail.then((_) async {
-      if (indexWork && (_indexSuspendedUntil?.isAfter(DateTime.now()) ?? false)) {
+      if (indexWork && (_indexSuspendedUntil?.isAfter(clock.now()) ?? false)) {
         throw TimeoutException('Siri index is cooling down after a native timeout');
       }
       try {
         return await operation().timeout(_nativeTimeout);
       } on TimeoutException {
-        if (indexWork) _indexSuspendedUntil = DateTime.now().add(_indexCooldown);
+        if (indexWork) _indexSuspendedUntil = clock.now().add(_indexCooldown);
         rethrow;
       }
     });
@@ -321,7 +322,7 @@ class SiriIntegration extends SiriEventsApi {
 
   void _scheduleRemovalRetry(String uid, int generation) {
     if (_removalRetry != null || _uid != uid || _accountGeneration != generation) return;
-    final remaining = _indexSuspendedUntil?.difference(DateTime.now()) ?? Duration.zero;
+    final remaining = _indexSuspendedUntil?.difference(clock.now()) ?? Duration.zero;
     // A failed attempt owns one timer; its callback clears the slot before
     // queueing the next attempt, so prolonged outages cannot stack retries.
     final backoff = siriRemovalRetryDelay(_retryBase, _retryAttempt);

@@ -23,6 +23,7 @@ STT_STREAM_CLOSE_REASONS = frozenset(
         *ACCOUNT_REJECTION_REASONS,
         PROVIDER_RATE_LIMITED,
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'soniox_invalid_hint',

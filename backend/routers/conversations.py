@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
+import database.conversation_scan as conversation_scan_db
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
@@ -91,6 +92,7 @@ from utils.conversations.search import (
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_assignment_teaching import commit_manual_assignment
+from utils.speaker_learning_jobs import schedule_reprocessed_learning
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -102,6 +104,7 @@ from services.conversation_frame_evidence import delete_conversation_and_frame_e
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
+    finish_list_budget,
     list_read_budget_for_request,
 )
 from utils.conversations.calendar_linking import (
@@ -750,6 +753,7 @@ def reprocess_conversation(
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
     response: Response = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -774,11 +778,7 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
-    receipt_applied = False
-
-    def record_speaker_receipt(applied: bool) -> None:
-        nonlocal receipt_applied
-        receipt_applied = applied
+    receipt_applied: list = []
 
     processed_conversation = process_conversation(
         uid,
@@ -790,15 +790,8 @@ def reprocess_conversation(
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
-        speaker_receipt_observer=record_speaker_receipt,
+        speaker_receipt_observer=receipt_applied.append,
     )
-
-    # The mobile speaker-label refresh must distinguish this processor from an
-    # older backend that accepted reprocess but built its prompt before applying
-    # the current manual speaker receipt. A header keeps released JSON decoders
-    # compatible and is emitted only after processing returns successfully.
-    if response is not None and receipt_applied:
-        response.headers['X-Omi-Speaker-Receipt-Summary'] = '1'
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
     # the user's choice (``restore_discarded``) so no later reassessment hides it
@@ -808,7 +801,13 @@ def reprocess_conversation(
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 
-    return processed_conversation
+    return schedule_reprocessed_learning(
+        uid,
+        processed_conversation,
+        background_tasks,
+        response=response,
+        receipt_applied=bool(receipt_applied and receipt_applied[-1]),
+    )
 
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
@@ -1927,6 +1926,8 @@ async def generate_conversation_topic_endpoint(
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = users_db.get_person(uid, search_request.speaker_id)
@@ -1983,20 +1984,20 @@ def search_conversations_endpoint(
         include_discarded = bool(search_request.include_discarded)
         start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
         end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        budget = conversation_scan_db.conversation_scan_budget(request, route='speaker-browse')
+        # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
         browse_results = browse_conversations_by_speaker(
-            lambda limit, offset: conversations_db.get_conversations_without_photos(
-                uid,
-                limit=limit,
-                offset=offset,
-                include_discarded=include_discarded,
-                start_date=start_dt,
-                end_date=end_dt,
+            conversation_scan_db.speaker_browse_scan(
+                uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
             ),
             search_request.speaker_id,
             page=browse_page,
             per_page=browse_per_page,
+            include_discarded=include_discarded,
+            budget=budget,
         )
         redact_conversations_for_list(browse_results['items'])
+        finish_list_budget(response, budget)
         return browse_results
 
     try:

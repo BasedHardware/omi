@@ -5,8 +5,10 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
 
+from utils.owner_voice_evidence import owner_base
+
 from ._client import get_firestore_client, run_transactional
-from .conversations import decode_manual_speaker_assignments
+from .speaker_profile_authority import owner_teaching_authorized
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
     'speaker_tag_prompts_enabled': True,
@@ -159,6 +161,8 @@ def add_owner_voice_confirmation(
     *,
     conversation_id: str,
     expected_receipt_generation: Optional[int] = None,
+    segment_ids: Optional[List[str]] = None,
+    card_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
@@ -167,30 +171,27 @@ def add_owner_voice_confirmation(
 
     @firestore.transactional
     def pool_in(transaction: Any) -> int:
-        if expected_receipt_generation is not None:
-            conversation = (
-                ref.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict()
-            )
-            if not conversation or conversation.get('deleted'):
-                return 0
-            receipt = decode_manual_speaker_assignments(
-                uid,
-                conversation.get('manual_speaker_assignments'),
-                bool(conversation.get('manual_speaker_assignments_compressed')),
-            )
-            if receipt.get('generation', 0) != expected_receipt_generation:
-                return 0
+        if expected_receipt_generation is not None and not owner_teaching_authorized(
+            transaction, ref, uid, conversation_id, segment_ids, expected_receipt_generation, card_generation
+        ):
+            return 0
         snapshot = ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
-        current = data.get('speaker_embedding')
-        base = data.get('speaker_embedding_base')
-        pooled_at = as_utc(data.get('owner_voice_pooled_at'))
-        updated_at = as_utc(data.get('speaker_embedding_updated_at'))
-        if current and (pooled_at is None or (updated_at is not None and updated_at > pooled_at)):
-            base = current
+        base = owner_base(data)
         now = datetime.now(timezone.utc)
         confirmations = list(data.get('owner_voice_confirmations') or [])
-        confirmations.append({'embedding': list(embedding), 'conversation_id': conversation_id, 'at': now})
+        # One contribution per conversation: retries and repeated cards cannot
+        # consume the entire bounded bank or amplify a single recording.
+        confirmations = [item for item in confirmations if item.get('conversation_id') != conversation_id]
+        confirmations.append(
+            {
+                'embedding': list(embedding),
+                'conversation_id': conversation_id,
+                'segment_ids': list(segment_ids or []),
+                'generation': expected_receipt_generation,
+                'at': now,
+            }
+        )
         confirmations = confirmations[-OWNER_VOICE_CONFIRMATIONS_MAX:]
         vectors = ([list(base)] if base else []) + [list(item['embedding']) for item in confirmations]
         update: Dict[str, Any] = {

@@ -1,30 +1,36 @@
 """Provisioned-Throughput policy for the gateway Vertex adapter.
 
 Every decision delegates to utils.llm.vertex_pt_routing - the single
-policy module the desktop BFF mirrors on its kill-switch path. The
-promotion latch and reachability table moved here from the desktop proxy:
-process-local, taught by traffic, never probed at startup.
+policy module the desktop BFF mirrors on its kill-switch path. Reservation evidence is shared across services; reachability remains process-local.
+Only declared, synthetic probes may confirm that the exclusive order moved.
 """
 
 from __future__ import annotations
 
 import logging
+import json
 import os
+from contextvars import ContextVar
+from typing import TypeVar
 from collections.abc import Callable
 
 from llm_gateway.gateway.provider_types import ProviderFailure
 from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.gateway.vertex_wire import _bounded_error_text  # pyright: ignore[reportPrivateUsage]
+from llm_gateway.gateway.vertex_wire import _vertex_rejection_reason  # pyright: ignore[reportPrivateUsage]
 from utils.llm import vertex_pt_routing as ptr
+from config.vertex_reservations import RESERVATIONS, State
+from utils.llm.vertex_reservation_state import effective_states
 
 logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
 DEFAULT_GCP_LOCATION = 'us-central1'
 VERTEX_API_VERSION = 'v1'
 
 
 class VertexPTPolicyMixin:
-    """PT pin/overflow/host-split decisions and their process-local state."""
+    """Apply the shared state snapshot; keep only reachability local."""
 
     _pt_model_override_env: str
     _overflow_model_override_env: str
@@ -34,48 +40,46 @@ class VertexPTPolicyMixin:
     _now: Callable[[], float]
     _project_env: str
     _location_env: str
-    _pt_target_ready: bool
-    _pt_target_probed_at: float | None
+    _reservation_state_context: ContextVar[dict[str, State]]
     _model_unavailable_at: dict[str, float]
+
+    @property
+    def _reservation_states(self) -> dict[str, State]:
+        return self._reservation_state_context.get()
+
+    @_reservation_states.setter
+    def _reservation_states(self, states: dict[str, State]) -> None:
+        self._reservation_state_context.set(states)
 
     def _attempt_plan(self, anchor: str, *, origin_model: str = '') -> list[tuple[str, str]]:
         serving = self._serving_model(anchor, origin_model=origin_model)
-        if serving == ptr.PT_MODEL_TARGET and not self._pt_target_is_ready() and self._pt_probe_due():
-            self._pt_target_probed_at = self._now()
-            return [(serving, ptr.REQUEST_TYPE_DEDICATED), (serving, ptr.REQUEST_TYPE_SHARED)]
-        return [(serving, self._capacity_for(serving))]
-
-    def _is_target_probe(self, model: str, capacity: str) -> bool:
-        return (
-            model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED and not self._pt_target_is_ready()
+        logger.info(
+            'vertex_reservation_policy model=%s state=%s lane=backend_other action=%s',
+            serving if serving in RESERVATIONS else 'other',
+            effective_states(self._reservation_states, os.environ).get(serving, State.UNKNOWN).value,
+            self._capacity_for(serving),
         )
-
-    @staticmethod
-    def _pt_probe_timeout_ms(remaining_ms: int) -> int:
-        # At most one second and one quarter of the original remaining budget.
-        # The shared attempt keeps the same request deadline, without a reset.
-        return max(1, min(1000, remaining_ms // 4))
+        return [(serving, self._capacity_for(serving))]
 
     def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
         intended = self._validated_pin(
             lambda: ptr.desktop_serving_model(
                 anchor,
-                target_dedicated_ready=self._pt_target_is_ready(),
                 override=self._env(self._pt_model_override_env),
             )
         )
         return self._first_reachable(intended, origin_model=origin_model)
 
-    def _provisioned_model(self) -> str:
+    def _protected_models(self) -> frozenset[str]:
         return self._validated_pin(
-            lambda: ptr.resolve_pt_model(
-                target_dedicated_ready=self._pt_target_is_ready(),
+            lambda: ptr.resolve_pt_models(
+                effective_states(self._reservation_states, os.environ),
                 override=self._env(self._pt_model_override_env),
             )
         )
 
     @staticmethod
-    def _validated_pin(resolve: Callable[[], str]) -> str:
+    def _validated_pin(resolve: Callable[[], T]) -> T:
         """SCA-481: a prohibited or undeclared operator pin — a Pro/image-output
         shape — fails the request closed instead of dispatching PayGo."""
         try:
@@ -84,23 +88,32 @@ class VertexPTPolicyMixin:
             raise ProviderFailure(FailureClass.INVALID_CONFIG, str(exc)) from exc
 
     def _capacity_for(self, model: str) -> str:
-        return ptr.request_type_for(model=model, pt_model=self._provisioned_model())
+        return ptr.reservation_capacity(
+            model,
+            effective_states(self._reservation_states, os.environ),
+            override=self._env(self._pt_model_override_env),
+        )
 
     def _recovery_attempts(
         self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
-        if served_model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
-            if self._is_target_probe(served_model, capacity) or status_code == 429:
-                # Preserve the target lane's precision on absent/full dedicated capacity.
-                return [(served_model, ptr.REQUEST_TYPE_SHARED)]
-        if ptr.is_model_unavailable(status_code, message):
+        action = ptr.recovery_action(
+            served_model,
+            capacity or self._capacity_for(served_model),
+            status_code,
+            message,
+            overflow_enabled=self._overflow_enabled(),
+        )
+        if action == 'shared':
+            return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+        if action == 'unavailable':
             self._record_model_unavailable(served_model)
             return [
                 (rung, ptr.REQUEST_TYPE_SHARED)
                 for rung in self._fallback_chain(served_model, origin_model=origin_model)
             ]
-        if self._overflow_triggered(status_code, message):
+        if action == 'overflow':
             return self._overflow_plan(served_model, origin_model=origin_model)
         return []
 
@@ -111,16 +124,27 @@ class VertexPTPolicyMixin:
         status_code: int,
         preview: bytes,
         *,
-        traffic_type: str | None = 'PROVISIONED_THROUGHPUT',
+        traffic_type: str | None = None,
     ) -> None:
-        """Latch PT-target probe outcomes from a dedicated attempt."""
-        if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
+        """Record strict positive capacity evidence in the request snapshot."""
+        if 400 <= status_code < 500:
+            # JSON stdout is parsed into jsonPayload by Cloud Logging. Values
+            # are allowlisted metadata; never include the raw provider error.
+            print(
+                json.dumps(
+                    {
+                        'severity': 'WARNING',
+                        'event': 'vertex_provider_rejection',
+                        'served_model': model if model in ptr.DESKTOP_TEXT_LANES else 'other',
+                        'status': status_code,
+                        'reason': _vertex_rejection_reason(preview),
+                    }
+                )
+            )
+        if model not in RESERVATIONS or capacity != ptr.REQUEST_TYPE_DEDICATED:
             return
         if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':
-            self._record_pt_target_observation(True)
-        else:
-            # No error proves an order exists or revokes a successful observation.
-            self._pt_target_probed_at = self._now()
+            self._reservation_states = {**self._reservation_states, model: State.ACTIVE}
 
     def _overflow_triggered(self, status_code: int, message: str) -> bool:
         return ptr.is_provisioned_capacity_exhausted(status_code, message) or ptr.is_provisioned_capacity_absent(
@@ -130,12 +154,13 @@ class VertexPTPolicyMixin:
     def _overflow_plan(self, served_model: str, *, origin_model: str = '') -> list[tuple[str, str]]:
         if not self._overflow_enabled():
             return []
-        pt_model = self._provisioned_model()
-        if served_model != pt_model:
+        protected = self._protected_models()
+        if self._capacity_for(served_model) != ptr.REQUEST_TYPE_DEDICATED:
             return []
         try:
             ladder = ptr.resolve_overflow_ladder(
-                pt_model=pt_model,
+                pt_model='',
+                protected_models=protected,
                 override=self._env(self._overflow_model_override_env),
                 origin_model=origin_model or served_model,
             )
@@ -152,7 +177,8 @@ class VertexPTPolicyMixin:
         try:
             return ptr.resolve_fallback_chain(
                 model=model,
-                pt_model=self._provisioned_model(),
+                pt_model='',
+                protected_models=self._protected_models(),
                 unreachable=self._unreachable_models(),
                 override=self._env(self._overflow_model_override_env),
                 origin_model=origin_model,
@@ -160,8 +186,8 @@ class VertexPTPolicyMixin:
         except ValueError:
             return ()
 
-    def _pt_target_is_ready(self) -> bool:
-        return self._pt_target_ready and self._model_believed_available(ptr.PT_MODEL_TARGET)
+    def _reservation_active(self, model: str) -> bool:
+        return effective_states(self._reservation_states, os.environ).get(model) == State.ACTIVE
 
     def _model_believed_available(self, model: str) -> bool:
         observed = self._model_unavailable_at.get(model)
@@ -182,23 +208,9 @@ class VertexPTPolicyMixin:
 
     def _record_model_unavailable(self, model: str) -> None:
         self._model_unavailable_at[model] = self._now()
-        if model == ptr.PT_MODEL_TARGET:
-            self._pt_target_ready = False
 
     def _record_model_available(self, model: str) -> None:
         self._model_unavailable_at.pop(model, None)
-
-    def _pt_probe_due(self) -> bool:
-        if self._pt_target_probed_at is None:
-            return True
-        return (self._now() - self._pt_target_probed_at) >= self._probe_ttl_seconds
-
-    def _record_pt_target_observation(self, ready: bool) -> None:
-        became_ready = ready and not self._pt_target_ready
-        self._pt_target_ready = ready
-        self._pt_target_probed_at = self._now()
-        if became_ready:
-            logger.info('llm_gateway vertex pt_promotion target=%s', ptr.PT_MODEL_TARGET)
 
     def _overflow_enabled(self) -> bool:
         return self._env(self._overflow_enabled_env, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
@@ -225,11 +237,9 @@ class VertexPTPolicyMixin:
             regional_location=os.getenv(self._location_env, DEFAULT_GCP_LOCATION).strip() or DEFAULT_GCP_LOCATION,
             multi_region_location=self._multi_region_location(),
         )
-        if model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
+        if model in RESERVATIONS and capacity == ptr.REQUEST_TYPE_DEDICATED:
             try:
-                host, location = ptr.target_capacity_endpoint(
-                    location=self._env(ptr.PT_TARGET_LOCATION_ENV, self._multi_region_location())
-                )
+                host, location = ptr.reservation_endpoint(model, os.environ)
             except ValueError as exc:
                 raise ProviderFailure(FailureClass.INVALID_CONFIG) from exc
         return (

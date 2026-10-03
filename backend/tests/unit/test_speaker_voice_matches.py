@@ -78,6 +78,8 @@ def env(monkeypatch):
         pytest.fail('Historical matching must not compute embeddings, download audio, or write caches')
 
     monkeypatch.setattr(matches.users_db, 'get_person', get_person)
+    monkeypatch.setattr(matches.users_db, 'get_people', lambda uid: [state.person] if state.person else [])
+    monkeypatch.setattr(matches.users_db, 'get_user_speaker_embedding', lambda uid: None)
     monkeypatch.setattr(matches.conversations_db, 'get_conversations', get_conversations)
     monkeypatch.setattr(matches, 'named_speaker_prompts_allowed', lambda uid: state.allowed)
     monkeypatch.setattr(
@@ -316,3 +318,12 @@ def test_route_ownership_and_response(env, monkeypatch, exists, status):
     else:
         assert response.json() == {'detail': 'Person not found'}
         assert env.queries == env.reads == []
+
+
+@pytest.mark.parametrize('competitor', ['owner', 'duplicate'])
+def test_historical_matches_abstain_when_competing_identity_is_as_close(env, monkeypatch, competitor):
+    if competitor == 'owner':
+        monkeypatch.setattr(matches.users_db, 'get_user_speaker_embedding', lambda uid: [1.0, 0.0])
+    else:
+        monkeypatch.setattr(matches.users_db, 'get_people', lambda uid: [env.person, {**env.person, 'id': 'duplicate'}])
+    assert asyncio.run(matches.find_person_voice_matches(UID, PERSON_ID)).matches == []

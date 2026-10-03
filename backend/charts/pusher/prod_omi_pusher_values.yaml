@@ -115,6 +115,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
@@ -210,7 +216,7 @@ env:
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "1"
+    value: "10"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP

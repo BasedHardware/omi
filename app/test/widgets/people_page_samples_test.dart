@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -23,7 +24,7 @@ class _UnreachableApiEnv implements EnvFields {
 }
 
 class _People extends PeopleProvider {
-  _People(List<Person> seeded) : super(loadPeople: () async => seeded);
+  _People(List<Person> seeded) : super(loadPeople: () async => PeopleListResponse(people: seeded));
 
   final List<(int, int)> played = [];
   final List<(int, int)> deletedSamples = [];

@@ -29,7 +29,13 @@ from tests.support.firestore_query_drivers import (
     ref_document,
     ref_transaction,
 )
-from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
+from tests.support.firestore_conversation_profiles import (
+    COUNT_PROFILES,
+    PHOTO_PROFILES,
+    RECIPE_PROFILES,
+    SCAN_PROFILES,
+    WITHOUT_PHOTOS_PROFILES,
+)
 from tests.support import firestore_outside_query_drivers as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
@@ -46,6 +52,7 @@ from models.task_recommendation import (
 )
 from models.workstream import TaskGoalLinkImportRequest
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
+from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
 
 UID = SHAPE_UID
@@ -69,6 +76,25 @@ def _seed(path: str, data: dict):
         client.documents[path] = dict(data)
 
     return apply
+
+
+def _queue_conversation_scan_pages(client, combo, trial):
+    """One full batch page then an empty one, forcing a ``start_after`` cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
+    client.queue_results([])
+
+
+def _queue_conversation_scan_page(client, combo, trial):
+    """One short page: the recipe batches (50/100) end the scan without a cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
 
 
 def _redis_noop(dotted: str):
@@ -705,6 +731,65 @@ _add(
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
     )
 )
+_add(
+    DriverEntry(
+        'database.conversation_scan.iter_conversations',
+        base={'uid': UID},
+        profiles=SCAN_PROFILES,
+        neutrals={
+            'limit': (1000, 'visible-row work bound; fixed, not filter-affecting'),
+            'batch': (1, 'page size; fixed small so one queued row forces a cursor page'),
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_pages,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.people_stats_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[0],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.speaker_browse_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[1],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
 
 _add(
     CoveredByEntry(
@@ -834,6 +919,16 @@ _add(
         'database.dev_api_key.get_user_and_scopes_by_api_key',
         base={'api_key': _DEV_KEY},
         patchers=(_stub('database.redis_db.read_cached_dev_api_key_data', _CACHE_MISS),),
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.dev_api_key._get_api_key_auth_result',
+        covered_by=(
+            'database.dev_api_key.get_api_key_auth_result',
+            'database.dev_api_key.get_user_and_scopes_by_api_key',
+        ),
+        reason='hashed-key lookup shared by the public auth entry points; the revocation fence retries through it',
     )
 )
 _add(
@@ -1267,6 +1362,14 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.mcp_api_key._get_api_key_auth_result',
+        base={'hashed_key': 'a' * 64},
+        domains={'cache_available': [True, False]},
+        patchers=(_stub('database.redis_db.read_cached_mcp_api_key_auth_context', _CACHE_MISS),),
+    )
+)
+_add(
     CoveredByEntry(
         'database.mcp_auth_read.mcp_auth_stream',
         covered_by=(
@@ -1653,17 +1756,22 @@ _add(
 
 
 def _seed_daily_summary_recipient(client, combo, trial):
-    """Queue one recipient so the per-user ``fcm_tokens`` stream executes.
-
-    The consume-once queues feed the recipients query (one matched user, whose
-    ``fcm_token`` legacy field doubles as the non-subcollection token source)
-    and then the nested ``users/{uid}/fcm_tokens`` stream.
-    """
+    """Queue a due owner; tokens are now resolved after generation guards."""
     client.queue_results([client.snapshot(f'users/{UID}', {'fcm_token': 'legacy-1'})])
+
+
+def _seed_notification_recipient_with_tokens(client, combo, trial):
+    _seed_daily_summary_recipient(client, combo, trial)
     client.queue_results([])
 
 
-_add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.notifications.get_all_tokens',
+        base={'uid': UID},
+        domains={'user_document_loaded': [False, True], 'legacy_token': [None, 'legacy-1']},
+    )
+)
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',
@@ -1675,14 +1783,14 @@ _add(
     DriverEntry(
         'database.notifications.get_users_id_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(
     DriverEntry(
         'database.notifications.get_users_token_in_timezones',
         base={'timezones': ['UTC']},
-        setup=_seed_daily_summary_recipient,
+        setup=_seed_notification_recipient_with_tokens,
     )
 )
 _add(DriverEntry('database.notifications.remove_bulk_tokens', base={'tokens': ['token-1', 'token-2']}))
@@ -2317,3 +2425,27 @@ _add(
 
 for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
     _add(entry)
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.task_refs',
+        base={'user': ref_document(f'users/{UID}'), 'conversation_id': 'conv-1', 'transaction': ref_transaction()},
+    )
+)
+
+
+def _refresh_seed(client, combo, trial):
+    client.documents[f'users/{UID}/conversations/conv-1'] = {'id': 'conv-1'}
+    client.documents[f'users/{UID}/conversations/donor-1'] = {'deleted': True, 'smart_merge': {'survivor_id': 'conv-1'}}
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.reconcile',
+        base={'uid': UID, 'conversation_id': 'conv-1', 'items': [], 'expected_revision': None},
+        domains={'donor_id': [None, 'donor-1']},
+        setup=_refresh_seed,
+        patchers=(_redis_noop('database.action_item_refresh.bump_action_items_list_version'),),
+    )
+)

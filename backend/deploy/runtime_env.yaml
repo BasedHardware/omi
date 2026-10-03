@@ -14,6 +14,15 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -346,6 +355,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -441,6 +453,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -487,6 +505,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
@@ -714,6 +735,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        OMI_VERTEX_RESERVATION_STATES:
+          env_var: OMI_VERTEX_RESERVATION_STATES
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+          env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MODE:
+          env_var: OMI_VERTEX_LEGACY_TASK_MODE
+          provisional: true
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
           value: 'true'
@@ -808,6 +841,15 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -979,6 +1021,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -1090,6 +1135,15 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1337,6 +1391,15 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1537,6 +1600,15 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1980,6 +2052,15 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -2131,10 +2212,10 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '8'
+            value: '16'
             category: rollout
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
             value: '8'
@@ -2310,6 +2391,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
@@ -2387,7 +2471,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2423,6 +2507,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2467,6 +2557,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2500,7 +2593,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2573,6 +2666,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        OMI_VERTEX_RESERVATION_STATES:
+          env_var: OMI_VERTEX_RESERVATION_STATES
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+          env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MODE:
+          env_var: OMI_VERTEX_LEGACY_TASK_MODE
+          provisional: true
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
           value: 'false'
@@ -2674,6 +2779,15 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -2844,6 +2958,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
             SCREEN_FRAME_EGRESS_ENABLED:
@@ -2931,7 +3048,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -2973,6 +3090,15 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3169,7 +3295,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3210,6 +3336,15 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3376,7 +3511,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '1'
+              value: '10'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3421,6 +3556,15 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'

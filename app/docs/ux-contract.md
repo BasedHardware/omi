@@ -82,6 +82,7 @@ There are exactly two ways out, and they mean different things.
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
+| A choice among people or answers (tag a speaker, a likely-speaker Yes / Not) | `OmiFilterChip` as above, with an optional leading `icon:` ("+ Add Person") | a Material `ChoiceChip` on a grey slab that reads as disabled |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 | Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton.tertiary`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
@@ -160,7 +161,8 @@ One policy, and never neither:
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
-  contrast). Floating, above Home's chat bar.
+  contrast). Floating, above Home's chat bar. A pushed page with a pinned bottom action (conversation
+  detail's Ask Omi bar) wraps its body in `OmiFeedbackClearance(bottom:)` so toasts float above it.
 - Code without a `BuildContext` uses `AppSnackbar` (same toasts on the global navigator).
 - An informational toast has no "OK" action.
 
@@ -204,6 +206,11 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - Everyone else is **Speaker N**, N dense per conversation (1, 2, 3… in order of first
   appearance, skipping the owner and Omi). Never a raw id, never a gap. Naming a person does not
   renumber the others. `TranscriptSegment.getDisplaySpeakerId` returns the same N.
+- When the server could not resolve speakers across the conversation (`speaker_resolution.status`
+  is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
+  the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
+  transcript heading omits its speaker count. A saved transcript names each speaker once per turn
+  (consecutive lines from the same voice), so a change of voice is still visible.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

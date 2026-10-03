@@ -633,6 +633,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         tasks: context.read<ActionItemsProvider>(),
         conversations: context.read<ConversationProvider>(),
         l10n: () => context.l10n,
+        dates: () => OmiDateFormat.of(context),
       )..start();
     });
   }

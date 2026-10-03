@@ -1,11 +1,16 @@
 import 'dart:async';
 
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 
 /// A pendant BLE link for capture scenarios: the controller subscribes to its audio exactly as it
 /// subscribes to a real connection, and the test pushes frames with [emitAudio]. It records how many
 /// audio subscriptions are open, so a scenario can tell whether the pendant is streaming.
 class ScriptedDeviceConnection implements DeviceConnection {
+  @override
+  final _ScriptedTransport transport = _ScriptedTransport();
+
+  void emitSubscriptionFailure() => transport.errors.add(StateError('CCCD failed'));
   final _audio = StreamController<List<int>>.broadcast(sync: true);
   int audioSubscriptionsOpened = 0;
   int _open = 0;
@@ -69,4 +74,12 @@ class _CountingSubscription<T> implements StreamSubscription<T> {
   bool get isPaused => _inner.isPaused;
   @override
   Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue);
+}
+
+class _ScriptedTransport implements DeviceTransport, CaptureSubscriptionErrors {
+  final errors = StreamController<Object>.broadcast(sync: true);
+  @override
+  Stream<Object> get audioSubscriptionErrors => errors.stream;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

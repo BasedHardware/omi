@@ -284,7 +284,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reportMessage => 'Raportați mesajul';
 
   @override
-  String get reportMessageConfirm => 'Ești sigur că vrei să raportezi acest mesaj?';
+  String get reportMessageConfirm => 'Raportezi acest mesaj?';
 
   @override
   String get messageReported => 'Mesaj raportat cu succes.';
@@ -296,7 +296,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearChat => 'Șterge conversația';
 
   @override
-  String get clearChatConfirm => 'Ești sigur că vrei să ștergi chat-ul? Această acțiune nu poate fi anulată.';
+  String get clearChatConfirm => 'Toate mesajele din acest chat vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String get maxFilesLimit => 'Poți încărca doar 4 fișiere simultan';
@@ -360,10 +360,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cannotBeUndone => 'Acest lucru nu poate fi anulat.';
 
   @override
-  String get allDataErased => 'Toate amintirile și conversațiile tale vor fi șterse permanent.';
+  String get allDataErased => 'Amintirile și conversațiile tale vor fi șterse.';
 
   @override
-  String get appsDisconnected => 'Aplicațiile și integrările tale vor fi deconectate imediat.';
+  String get appsDisconnected => 'Aplicațiile și integrările tale vor fi deconectate.';
 
   @override
   String get exportBeforeDelete =>
@@ -1043,7 +1043,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Ești sigur că vrei să te deconectezi de la $appName? Te poți reconecta oricând.';
+    return 'Poți reconecta $appName oricând.';
   }
 
   @override
@@ -1988,14 +1988,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItemTitle => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemMessage => 'Sunteți sigur că doriți să ștergeți această sarcină?';
+  String get deleteActionItemMessage => 'Ștergi această sarcină?';
 
   @override
   String get deleteSelectedItemsTitle => 'Șterge elementele selectate';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Ești sigur că vrei să ștergi $count sarcini$s selectate?';
+    return 'Ștergi $count sarcini$s selectate?';
   }
 
   @override
@@ -2064,7 +2064,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get undo => 'Anulează';
 
   @override
-  String get noMemoriesYet => '🧠 Încă nu există amintiri';
+  String get noMemoriesYet => 'Încă nu există amintiri';
 
   @override
   String get noAutoMemories => 'Nicio amintire extrasă automat încă';
@@ -2076,7 +2076,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noMemoriesInCategories => 'Nicio amintire în aceste categorii';
 
   @override
-  String get noMemoriesFound => '🔍 Nu s-au găsit amintiri';
+  String get noMemoriesFound => 'Nu s-au găsit amintiri';
 
   @override
   String get addFirstMemory => 'Adaugă prima ta amintire';
@@ -2085,8 +2085,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearMemoryTitle => 'Șterge memoria lui Omi';
 
   @override
-  String get clearMemoryMessage =>
-      'Sunteți sigur că doriți să ștergeți memoria lui Omi? Această acțiune nu poate fi anulată.';
+  String get clearMemoryMessage => 'Toate amintirile tale vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String get clearMemoryButton => 'Șterge memoria';
@@ -2232,20 +2231,20 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Ești sigur că vrei să ștergi această sarcină?';
+  String get deleteActionItemConfirmMessage => 'Ștergi această sarcină?';
 
   @override
   String get appLanguage => 'Limba aplicației';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFAȚĂ APLICAȚIE';
+  String get appInterfaceSectionTitle => 'Interfață aplicație';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VORBIRE ȘI TRANSCRIERE';
+  String get speechTranscriptionSectionTitle => 'Vorbire și transcriere';
 
   @override
   String get languageSettingsHelperText =>
-      'Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările.';
+      'Limba aplicației schimbă meniurile și butoanele. Limba principală afectează modul în care sunt transcrise înregistrările.';
 
   @override
   String get translationNotice => 'Notificare de traducere';
@@ -2772,8 +2771,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItem => 'Șterge sarcina';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Sigur doriți să ștergeți această sarcină? Această acțiune nu poate fi anulată.';
+  String get deleteActionItemConfirmation => 'Ștergi această sarcină? Această acțiune nu poate fi anulată.';
 
   @override
   String get enterActionItemDescription => 'Introduceți descrierea sarcinii';
@@ -3116,7 +3114,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Mesaj raportat cu succes';
 
   @override
-  String get confirmReportMessage => 'Sigur doriți să raportați acest mesaj?';
+  String get confirmReportMessage => 'Raportezi acest mesaj?';
 
   @override
   String get selectChatAssistant => 'Selectați asistent de chat';
@@ -3131,7 +3129,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearChatTitle => 'Ștergeți chatul?';
 
   @override
-  String get confirmClearChat => 'Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată.';
+  String get confirmClearChat => 'Golești acest chat? Această acțiune nu poate fi anulată.';
 
   @override
   String get copy => 'Copiază';
@@ -3303,8 +3301,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createMemory => 'Creează amintire';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.';
+  String get deleteMemoryConfirmation => 'Ștergi această amintire? Această acțiune nu poate fi anulată.';
 
   @override
   String get makePrivate => 'Fă privat';
@@ -3341,7 +3338,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Sigur vrei să ștergi memoria lui Omi? Această acțiune nu poate fi anulată și va șterge permanent toate cele $count amintiri.';
+    return 'Toate amintirile ($count) vor fi șterse. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -3637,8 +3634,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lăsați Omi să aleagă automat cea mai bună aplicație';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Sigur doriți să ștergeți această conversație? Această acțiune nu poate fi anulată.';
+  String get deleteConversationConfirmation => 'Ștergi această conversație? Această acțiune nu poate fi anulată.';
 
   @override
   String get conversationDeleted => 'Conversație ștearsă';
@@ -3964,8 +3960,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get updateAppQuestion => 'Actualizați aplicația?';
 
   @override
-  String get updateAppConfirmation =>
-      'Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.';
+  String get updateAppConfirmation => 'Modificările vor fi vizibile după examinarea de către echipa noastră.';
 
   @override
   String get updateApp => 'Actualizare aplicație';
@@ -4030,7 +4025,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sunteți sigur că doriți să vă anulați abonamentul? Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
+      'Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
 
   @override
   String get cancelSubscriptionButton => 'Anulare abonament';
@@ -4217,7 +4212,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.';
+      'Aplicațiile care folosesc această cheie pierd accesul la API. Această acțiune nu poate fi anulată.';
 
   @override
   String get revoke => 'Revocă';
@@ -4274,7 +4269,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Ești sigur că vrei să ștergi acest $item? Această acțiune nu poate fi anulată.';
+    return '$item va fi ștearsă. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4282,7 +4277,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Ești sigur că vrei să revoci cheia \"$keyName\"? Această acțiune nu poate fi anulată.';
+    return 'Tot ce folosește \"$keyName\" pierde accesul. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4460,7 +4455,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Planul dvs. va rămâne activ până la $date. După aceea, veți pierde accesul la funcțiile nelimitate. Sunteți sigur?';
+    return 'Planul dvs. va rămâne activ până la $date. După aceea, veți pierde accesul la funcțiile nelimitate.';
   }
 
   @override
@@ -4552,7 +4547,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get askOmiAnything => 'Întrebați Omi orice despre viața dvs.';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Deblocați memoria infinită a lui Omi';
+  String get unlockOmiInfiniteMemory => 'Amintiri nelimitate';
 
   @override
   String get youreOnAnnualPlan => 'Sunteți pe planul anual';
@@ -4564,7 +4559,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get unableToLoadPlans => 'Nu s-au putut încărca planurile';
 
   @override
-  String get checkConnectionTryAgain => 'Verificați conexiunea și încercați din nou';
+  String get checkConnectionTryAgain => 'Verifică conexiunea și încearcă din nou.';
 
   @override
   String get useFreePlan => 'Folosește planul gratuit';
@@ -4746,7 +4741,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
+      'Toate conversațiile importate din Limitless vor fi șterse. Această acțiune nu poate fi anulată.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4787,7 +4782,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sigur doriți să ștergeți eșantionul lui $name?';
+    return 'Mostra vocală a persoanei $name va fi eliminată. Această acțiune nu poate fi anulată.';
   }
 
   @override
@@ -4795,7 +4790,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sigur doriți să ștergeți $name? Acest lucru va elimina și toate eșantioanele vocale asociate.';
+    return 'Aceasta elimină mostrele vocale ale persoanei $name și nu poate fi anulată. Replicile din conversațiile trecute devin vorbitori fără nume.';
   }
 
   @override
@@ -5153,7 +5148,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finishedConversation => 'Conversație terminată?';
 
   @override
-  String get stopRecordingConfirmation => 'Sigur doriți să opriți înregistrarea și să rezumați conversația acum?';
+  String get stopRecordingConfirmation => 'Oprești înregistrarea și rezumi conversația acum?';
 
   @override
   String get conversationEndsManually => 'Conversația se va încheia doar manual.';
@@ -5998,7 +5993,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo => '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo =>
+      '300 de minute premium pe lună. Alege „Pe dispozitiv” pentru transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6081,7 +6077,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '300 de minute premium pe lună. Alege „Pe dispozitiv” pentru transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6136,7 +6132,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Transcrierea live integrată a Omi este optimizată pentru conversații în timp real cu detectarea automată a vorbitorului și diarizare.';
+      'Transcrierea live Omi este creată pentru conversații în timp real și arată cine ce a spus.';
 
   @override
   String get reset => 'Resetează';
@@ -6672,8 +6668,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get shareRecording => 'Partajează înregistrarea';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Ești sigur că vrei să ștergi definitiv această înregistrare? Această acțiune nu poate fi anulată.';
+  String get deleteRecordingConfirmation => 'Această acțiune nu poate fi anulată.';
 
   @override
   String get recordingIdLabel => 'ID înregistrare';
@@ -7045,7 +7040,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Treci de la Planul Nelimitat la $title. Ești sigur că vrei să continui?';
+    return 'Treci de la Planul Nelimitat la $title.';
   }
 
   @override
@@ -8513,7 +8508,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tipAutoSync => 'Înregistrările se sincronizează automat';
 
   @override
-  String get storageSection => 'STOCARE';
+  String get storageSection => 'Stocare';
 
   @override
   String get permissions => 'Permisiuni';
@@ -8940,10 +8935,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Opțional — ideile tale ne ajută să construim un produs mai bun.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Acest lucru este permanent';
+  String get deleteFlowConfirmTitle => 'Ștergi contul?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Odată ce îți ștergi contul, nu mai poate fi recuperat.';
+  String get deleteFlowConfirmSubtitle => 'Acțiunea nu poate fi anulată, nici măcar de echipa de asistență.';
 
   @override
   String get deleteConsequenceSubscription => 'Orice abonament activ va fi anulat.';
@@ -9389,7 +9384,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.';
+      'Înregistrează acum, transcrie când vrei. Până atunci, audio rămâne pe telefonul tău.';
 
   @override
   String get transcribeLaterNote =>
@@ -9671,7 +9666,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteOnDeviceModel => 'Șterge modelul';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Sigur doriți să ștergeți acest model?';
+  String get deleteOnDeviceModelConfirm => 'Ștergi acest model?';
 
   @override
   String get onDeviceModelDownloaded => 'Descărcat';
@@ -9828,7 +9823,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
 
   @override
-  String get planSheetChooseYourPlan => 'Alege-ți planul pentru a debloca Omi nelimitat.';
+  String get planSheetChooseYourPlan => 'Alege planul potrivit pentru tine.';
 
   @override
   String get availableOnMacMobileWeb => 'Disponibil pe Mac, mobil și web';
@@ -10077,24 +10072,23 @@ class AppLocalizationsRo extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10107,13 +10101,13 @@ class AppLocalizationsRo extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10495,8 +10489,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Uitați dispozitivul?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi nu se va mai conecta la acest dispozitiv. Pentru a-l folosi din nou, va trebui să-l asociați din nou.';
+  String get forgetDeviceConfirmMessage => 'Omi nu se va mai conecta la acest dispozitiv.';
 
   @override
   String get deviceForgottenMessage => 'Dispozitiv uitat';
@@ -11878,19 +11871,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get evidenceNothing => 'Nu ai etichetat sau confirmat încă această persoană';
 
   @override
-  String get effectCountsALot => 'Contează mult';
+  String get effectCountsALot => 'Ajută mult';
 
   @override
-  String get effectCounts => 'Contează';
+  String get effectCounts => 'Ajută';
 
   @override
-  String get effectCountsALittle => 'Contează puțin';
+  String get effectCountsALittle => 'Ajută puțin';
 
   @override
-  String get effectBarelyCounts => 'Abia contează';
+  String get effectBarelyCounts => 'Abia ajută';
 
   @override
-  String get effectCountsAgainst => 'Contează în sens negativ';
+  String get effectCountsAgainst => 'Dăunează';
 
   @override
   String get effectNeeded => 'Necesar pentru Confirmat';
@@ -11910,7 +11903,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Doar răspunsurile tale schimbă mult încrederea. Potrivirile automate singure abia contează.';
+      'Doar răspunsurile tale schimbă mult încrederea. Potrivirile automate singure abia ajută.';
 
   @override
   String get personWhyConfidence => 'De ce?';
@@ -11926,7 +11919,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi îți va cere să confirmi potrivirile apropiate, în loc să ghicească.';
+  String get pinPersonHonestLine => 'Omi întreabă înainte de a potrivi voci asemănătoare.';
 
   @override
   String get pinAction => 'Fixează';
@@ -12218,7 +12211,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Rânduri etichetate: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rânduri etichetate: $count',
+      one: '1 rând etichetat',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12251,7 +12250,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Conversații anterioare cu această voce: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Găsită în conversații anterioare: $count',
+      one: 'Găsită într-o conversație anterioară',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12277,4 +12282,123 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get findDeviceNoneTitle => 'Niciun Omi găsit';
+
+  @override
+  String get findDeviceNoneMessage => 'Pornește-l și ține-l aproape de telefon.';
+
+  @override
+  String get startupFailedDetails => 'Detalii';
+
+  @override
+  String get couldNotLoadApiKeys => 'Cheile API nu au putut fi încărcate.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nu…';
+
+  @override
+  String get diagnosticsRightNow => 'Acum';
+
+  @override
+  String get diagnosticsLast7Days => 'Ultimele 7 zile';
+
+  @override
+  String get diagnosticsConnectedFor => 'Conectat de';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Se reconectează singur';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Întreruperi scurte, revine în aproximativ $duration de fiecare dată';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Nicio întrerupere săptămâna aceasta';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Probleme de conectare';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Conexiuni eșuate în ultimele 24 de ore: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Întreruperi';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'aproximativ $count pe oră';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Cea mai lungă întrerupere';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'De la asociere: $drops întreruperi, $failed conexiuni eșuate.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Ultimele $duration';
+  }
+
+  @override
+  String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
+
+  @override
+  String get reprocessingConversationProgress => 'Se reprocesează conversația…';
+
+  @override
+  String get conversationReprocessed => 'Conversație actualizată';
+
+  @override
+  String get loadingTranscript => 'Se încarcă transcrierea…';
+
+  @override
+  String get transcriptLoadFailed => 'Transcrierea nu a putut fi încărcată.';
+
+  @override
+  String get processingConversationProgress => 'Se procesează conversația…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Această conversație nu a putut fi procesată.';
+
+  @override
+  String get waitForReprocessing => 'Așteaptă finalizarea reprocesării.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Vorbitor';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Vocile nu sunt separate între înregistrări.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Despre etichetele vorbitorilor';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.';
+
+  @override
+  String get nameSpeakerTitle => 'Denumiți vorbitorul';
+
+  @override
+  String get playbackPreparingAudio => 'Se pregătește audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Înapoi la curent';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio indisponibil';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio nu a putut fi încărcat';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verificați conexiunea';
 }

@@ -1399,6 +1399,7 @@ final class DesktopDiagnosticsManager {
   ]
 
   private static let allowedFallbackAreas: Set<String> = [
+    "screen_task_gate", "screen_task_extraction",
     "sync_dispatch",
     "pusher",
     "stt_selection",
@@ -1443,6 +1444,7 @@ final class DesktopDiagnosticsManager {
   ]
 
   private static let allowedFallbackReasons: Set<String> = [
+    "ocr_unusable", "offline", "gate_unavailable", "gate_invalid_response",
     "timeout",
     "provider_5xx",
     "provider_429",
