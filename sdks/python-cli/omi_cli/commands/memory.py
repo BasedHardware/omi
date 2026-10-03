@@ -167,16 +167,35 @@ class ExportFormat(str, Enum):
     markdown = "markdown"
 
 
+def spreadsheet_text(value: Any) -> str:
+    """Render one exported field as spreadsheet-safe text.
+
+    Prefixes text starting with =, +, -, @, \\t, \\r, \\n with an apostrophe
+    to prevent formula injection upon spreadsheet import.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+        return "'" + value
+    return value
+
+
 def _memories_to_csv(items: list[dict[str, Any]]) -> str:
     output = io.StringIO()
+    # Prepend UTF-8 BOM so Excel/Sheets decode UTF-8 correctly
+    output.write("\ufeff")
     fieldnames = ["id", "category", "visibility", "content", "tags", "created_at", "updated_at"]
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     for item in items:
-        row = dict(item)
-        tags = row.get("tags")
-        if isinstance(tags, list):
-            row["tags"] = ", ".join(str(t) for t in tags)
+        row: dict[str, str] = {}
+        for field in fieldnames:
+            val = item.get(field)
+            if field == "tags" and isinstance(val, list):
+                val = ", ".join(str(t) for t in val)
+            row[field] = spreadsheet_text(val)
         writer.writerow(row)
     return output.getvalue()
 
@@ -251,19 +270,15 @@ def export_memories(
             if not page:
                 break
             items.extend(page)
-            if len(page) < page_size:
-                break
             offset += page_size
 
-    fmt = format.value.lower()
+    fmt = format.value
     if fmt == "json":
         content = json.dumps(items, indent=2)
     elif fmt == "csv":
         content = _memories_to_csv(items)
-    elif fmt in ("md", "markdown"):
+    else:  # md or markdown
         content = _memories_to_markdown(items)
-    else:
-        raise UsageError(message=f"Unsupported format: {format}")
 
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
