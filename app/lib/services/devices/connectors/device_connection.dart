@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -310,6 +311,14 @@ abstract class DeviceConnection {
     return null;
   }
 
+  /// Progressive tap sequence notifications (`23ba7926`). Null when unsupported.
+  Future<StreamSubscription?> getBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async {
+    if (await isConnected()) {
+      return await performGetBleButtonTapsListener(onTapsReceived: onTapsReceived);
+    }
+    return null;
+  }
+
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
@@ -320,6 +329,12 @@ abstract class DeviceConnection {
   Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
     return stream.listen(onButtonReceived);
+  }
+
+  Future<StreamSubscription?> performGetBleButtonTapsListener({
+    required void Function(List<int>) onTapsReceived,
+  }) async {
+    return null;
   }
 
   Future<BleAudioCodec> getAudioCodec() async {
@@ -379,6 +394,14 @@ abstract class DeviceConnection {
       return false;
     }
   }
+
+  /// Whether this link exposes the DevKit 2 PCM speaker write characteristic.
+  bool get supportsPcmSpeakerPlayback => false;
+
+  /// Stream mono PCM16LE @ 8 kHz to the wearable speaker.
+  ///
+  /// Default no-op. [OmiDeviceConnection] implements the DevKit 2 BLE protocol.
+  Future<bool> performPlayPcmToSpeaker(Uint8List pcm16leMono8k) async => false;
 
   // storage here
 

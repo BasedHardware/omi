@@ -9065,6 +9065,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get voiceResponseAlways => 'नेहमी';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi डिव्हाइस';
+
+  @override
   String get agreeAndContinue => 'सहमत व्हा आणि सुरू ठेवा';
 
   @override
@@ -11257,6 +11260,18 @@ class AppLocalizationsMr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name आणि इतर';
   }
+
+  @override
+  String get singleTap => 'एकेरी टॅप';
+
+  @override
+  String get singleTapAction => 'एकेरी टॅप क्रिया';
+
+  @override
+  String get tripleTap => 'तिहेरी टॅप';
+
+  @override
+  String get tripleTapAction => 'तिहेरी टॅप क्रिया';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi ची उत्तरे ऐका';

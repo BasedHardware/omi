@@ -9057,6 +9057,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get voiceResponseAlways => 'Luôn luôn';
 
   @override
+  String get voiceResponseOmiDevice => 'Thiết bị Omi';
+
+  @override
   String get agreeAndContinue => 'Đồng ý và tiếp tục';
 
   @override
@@ -11245,6 +11248,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
+
+  @override
+  String get singleTap => 'Nhấn đơn';
+
+  @override
+  String get singleTapAction => 'Hành động nhấn đơn';
+
+  @override
+  String get tripleTap => 'Nhấn ba lần';
+
+  @override
+  String get tripleTapAction => 'Hành động nhấn ba lần';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Nghe câu trả lời của Omi';

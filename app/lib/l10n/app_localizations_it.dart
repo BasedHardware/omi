@@ -9110,6 +9110,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get voiceResponseAlways => 'Sempre';
 
   @override
+  String get voiceResponseOmiDevice => 'Dispositivo Omi';
+
+  @override
   String get agreeAndContinue => 'Accetta e continua';
 
   @override
@@ -11312,6 +11315,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e altri';
   }
+
+  @override
+  String get singleTap => 'Tocco Singolo';
+
+  @override
+  String get singleTapAction => 'Azione Tocco Singolo';
+
+  @override
+  String get tripleTap => 'Triplo Tocco';
+
+  @override
+  String get tripleTapAction => 'Azione Triplo Tocco';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Ascolta le risposte di Omi';

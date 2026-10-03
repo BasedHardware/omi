@@ -9057,6 +9057,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get voiceResponseAlways => 'Aina';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi-laite';
+
+  @override
   String get agreeAndContinue => 'Hyväksy ja jatka';
 
   @override
@@ -11251,6 +11254,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get singleTap => 'Kertanapautus';
+
+  @override
+  String get singleTapAction => 'Kertanapautustoiminto';
+
+  @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautustoiminto';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Kuuntele Omin vastaukset';

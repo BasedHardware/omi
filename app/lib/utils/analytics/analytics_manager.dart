@@ -1509,17 +1509,18 @@ class AnalyticsManager {
   void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
   void voiceResponseModeChanged(int mode) {
-    const TypedEvents().emit(
-      VoiceResponseModeChanged(
-        mode: switch (mode) {
-          0 => VoiceResponseModeChangedMode.off,
-          1 => VoiceResponseModeChangedMode.headphonesOnly,
-          2 => VoiceResponseModeChangedMode.always,
-          _ => VoiceResponseModeChangedMode.unknown,
-        },
-        modeInt: mode,
-      ),
-    );
+    const TypedEvents().emit(VoiceResponseModeChanged(
+      mode: switch (mode) {
+        0 => VoiceResponseModeChangedMode.off,
+        1 => VoiceResponseModeChangedMode.headphonesOnly,
+        2 => VoiceResponseModeChangedMode.always,
+        // Mode 3 (Omi device speaker) is newer than the closed analytics enum;
+        // modeInt carries the real value for funnels that need it.
+        3 => VoiceResponseModeChangedMode.unknown,
+        _ => VoiceResponseModeChangedMode.unknown,
+      },
+      modeInt: mode,
+    ));
   }
 
   /// One terminal outcome for a spoken-reply attempt.

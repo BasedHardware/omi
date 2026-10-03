@@ -8905,6 +8905,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceResponseAlways => '始终';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi 设备';
+
+  @override
   String get agreeAndContinue => '同意并继续';
 
   @override
@@ -11048,6 +11051,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get singleTap => '单击';
+
+  @override
+  String get singleTapAction => '单击操作';
+
+  @override
+  String get tripleTap => '三击';
+
+  @override
+  String get tripleTapAction => '三击操作';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => '聆听 Omi 的回答';

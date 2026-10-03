@@ -9047,6 +9047,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get voiceResponseAlways => 'Altid';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi-enhed';
+
+  @override
   String get agreeAndContinue => 'Accepter og fortsæt';
 
   @override
@@ -11237,6 +11240,18 @@ class AppLocalizationsDa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get singleTap => 'Enkelttryk';
+
+  @override
+  String get singleTapAction => 'Enkelttryk-handling';
+
+  @override
+  String get tripleTap => 'Tredobbelttryk';
+
+  @override
+  String get tripleTapAction => 'Tredobbelttryk-handling';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Hør Omis svar';

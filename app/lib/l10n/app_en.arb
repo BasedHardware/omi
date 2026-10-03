@@ -10772,6 +10772,10 @@
     "@voiceResponseAlways": {
         "description": "Voice response mode: always, including phone speaker"
     },
+    "voiceResponseOmiDevice": "Omi device",
+    "@voiceResponseOmiDevice": {
+        "description": "Voice response mode: play replies through the connected Omi wearable speaker"
+    },
     "agreeAndContinue": "Agree & Continue",
     "@agreeAndContinue": {
         "description": "Button label on the data and AI consent screen — explicit consent action."
@@ -13373,6 +13377,22 @@
                 "type": "String"
             }
         }
+    },
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Single Tap Action",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triple Tap",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Triple Tap Action",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
     },
     "deviceOnboardingVoiceReplyTitle": "Hear Omi's Answers",
     "deviceOnboardingVoiceReplySample": "I've got it. Your next meeting starts in twenty minutes.",

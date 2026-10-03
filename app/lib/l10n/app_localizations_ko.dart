@@ -8919,6 +8919,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceResponseAlways => '항상';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi 기기';
+
+  @override
   String get agreeAndContinue => '동의하고 계속';
 
   @override
@@ -11074,6 +11077,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
+
+  @override
+  String get singleTap => '싱글 탭';
+
+  @override
+  String get singleTapAction => '싱글 탭 동작';
+
+  @override
+  String get tripleTap => '트리플 탭';
+
+  @override
+  String get tripleTapAction => '트리플 탭 동작';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi의 답변 듣기';

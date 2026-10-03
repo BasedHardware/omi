@@ -9104,6 +9104,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get voiceResponseAlways => 'ఎల్లప్పుడూ';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi పరికరం';
+
+  @override
   String get agreeAndContinue => 'అంగీకరించి కొనసాగించండి';
 
   @override
@@ -11297,6 +11300,18 @@ class AppLocalizationsTe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
+
+  @override
+  String get singleTap => 'సింగిల్ ట్యాప్';
+
+  @override
+  String get singleTapAction => 'సింగిల్ ట్యాప్ చర్య';
+
+  @override
+  String get tripleTap => 'ట్రిపుల్ ట్యాప్';
+
+  @override
+  String get tripleTapAction => 'ట్రిపుల్ ట్యాప్ చర్య';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi సమాధానాలను వినండి';

@@ -9037,6 +9037,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get voiceResponseAlways => 'हमेशा';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi डिवाइस';
+
+  @override
   String get agreeAndContinue => 'सहमत हूँ और जारी रखें';
 
   @override
@@ -11229,6 +11232,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name और अन्य';
   }
+
+  @override
+  String get singleTap => 'सिंगल टैप';
+
+  @override
+  String get singleTapAction => 'सिंगल टैप क्रिया';
+
+  @override
+  String get tripleTap => 'ट्रिपल टैप';
+
+  @override
+  String get tripleTapAction => 'ट्रिपल टैप क्रिया';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi के जवाब सुनें';

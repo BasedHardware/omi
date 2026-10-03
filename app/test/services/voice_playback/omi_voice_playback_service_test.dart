@@ -48,9 +48,13 @@ void main() {
   late RecordingAdapter adapter;
   late List<Completer<void>> delays;
   late List<Uint8List> plays;
+  late List<Uint8List> devicePlays;
+  late List<String> synthesizeFormats;
   late List<String> spoken;
   var now = DateTime.utc(2026, 9, 26);
   var probed = false;
+  var probedDevice = false;
+  var deviceReady = true;
 
   setUp(() async {
     AnalyticsManager.resetForTesting();
@@ -70,9 +74,13 @@ void main() {
     await AnalyticsManager.init();
     delays = [];
     plays = [];
+    devicePlays = [];
+    synthesizeFormats = [];
     spoken = [];
     now = DateTime.utc(2026, 9, 26);
     probed = false;
+    probedDevice = false;
+    deviceReady = true;
   });
 
   tearDown(() {
@@ -85,6 +93,7 @@ void main() {
     TtsSynthesisRequest Function(String text)? synthesizeStream,
     Future<void> Function(Uint8List bytes)? play,
     Future<Duration> Function(ProgressiveTtsAudioSource source)? playStream,
+    Future<bool> Function(Uint8List pcm8kMono)? playOnDevice,
     Future<void> Function()? stopPlayback,
     Duration? streamStallTimeout,
     VoicePlaybackOutputSnapshot output = const VoicePlaybackOutputSnapshot(
@@ -94,17 +103,34 @@ void main() {
     ),
   }) async {
     assert(synthesize != null || synthesizeStream != null);
+    devicePlays = [];
+    synthesizeFormats = [];
+    probedDevice = false;
     service.debugHooks = VoicePlaybackDebugHooks(
-      synthesize: synthesize == null ? null : ({required String text}) => synthesize(text),
+      synthesize: synthesize == null
+          ? null
+          : ({required String text, String outputFormat = 'mp3_44100_128'}) {
+              synthesizeFormats.add(outputFormat);
+              return synthesize(text);
+            },
       synthesizeStream: synthesizeStream == null ? null : ({required String text}) => synthesizeStream(text),
       play: play ?? (bytes) async => plays.add(bytes),
       playStream: playStream,
+      playOnDevice: playOnDevice ??
+          (pcm) async {
+            devicePlays.add(pcm);
+            return true;
+          },
       stopPlayback: stopPlayback ?? () async {},
       speak: (text) async => spoken.add(text),
       stopSpeak: () async {},
       probeOutput: () async {
         probed = true;
         return output;
+      },
+      probeOmiDeviceSpeaker: () async {
+        probedDevice = true;
+        return deviceReady;
       },
       now: () => now,
       delay: (duration) {
@@ -615,5 +641,61 @@ void main() {
     expect(plays, [_mp3]);
     expect(playbackEvents(), hasLength(2));
     expect(playbackEvents().last['outcome'], 'played');
+  });
+
+  test('omi device mode streams PCM to the wearable and skips phone playback', () async {
+    SharedPreferencesUtil().voiceResponseMode = 3;
+    deviceReady = true;
+    // Four 16 kHz mono samples → two 8 kHz samples after downsample.
+    final pcm16000 = ByteData(8)
+      ..setInt16(0, 10, Endian.little)
+      ..setInt16(2, 20, Endian.little)
+      ..setInt16(4, 30, Endian.little)
+      ..setInt16(6, 40, Endian.little);
+    await install(synthesize: (_) async => pcm16000.buffer.asUint8List());
+
+    await service.beginResponse(messageId: 'device');
+    expect(probedDevice, isTrue);
+    expect(probed, isFalse);
+
+    service.updateStreamingResponse(messageId: 'device', fullText: _firstSentence, isFinal: true);
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(synthesizeFormats, everyElement('pcm_16000'));
+    expect(plays, isEmpty);
+    expect(devicePlays, hasLength(1));
+    expect(devicePlays.single.length, 4);
+    expectFields(playbackEvents().single, {
+      'outcome': 'played',
+      'skip_reason': 'none',
+      'mode': 'unknown',
+      'output_route': 'bluetooth',
+      'chunks_requested': 1,
+      'chunks_played': 1,
+      'chunks_dropped': 0,
+    });
+  });
+
+  test('omi device mode skips when the wearable speaker is unavailable', () async {
+    SharedPreferencesUtil().voiceResponseMode = 3;
+    deviceReady = false;
+    await install(synthesize: (_) async => _mp3);
+
+    await service.beginResponse(messageId: 'no-device');
+    await flush();
+
+    expect(probedDevice, isTrue);
+    expect(synthesizeFormats, isEmpty);
+    expect(devicePlays, isEmpty);
+    expectFields(playbackEvents().single, {
+      'outcome': 'skipped',
+      'skip_reason': 'none',
+      'mode': 'unknown',
+      'output_route': 'bluetooth',
+      'chunks_requested': 0,
+      'chunks_played': 0,
+    });
   });
 }

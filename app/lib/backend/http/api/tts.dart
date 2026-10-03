@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -112,4 +113,34 @@ TtsSynthesisRequest synthesizeSpeechStream({
   }
 
   return TtsSynthesisRequest(response: send(), cancel: cancel);
+}
+
+/// Collects a full `POST /v2/tts/synthesize` body into memory.
+///
+/// Phone streaming prefers [synthesizeSpeechStream]. The DevKit 2 wearable
+/// speaker path needs this helper so it can request `pcm_16000` (signed 16-bit
+/// LE mono), downsample to 8 kHz, and write over BLE.
+Future<Uint8List?> synthesizeSpeech({
+  required String text,
+  String voiceId = 'BAMYoBHLZM7lJgJAmFz0', // Sloane
+  String modelId = 'eleven_turbo_v2_5',
+  String outputFormat = 'mp3_44100_128',
+  Map<String, dynamic>? voiceSettings,
+}) async {
+  final request = synthesizeSpeechStream(
+    text: text,
+    voiceId: voiceId,
+    modelId: modelId,
+    outputFormat: outputFormat,
+    voiceSettings: voiceSettings,
+  );
+  final audio = await request.response;
+  if (audio == null) return null;
+
+  final builder = BytesBuilder(copy: false);
+  await for (final chunk in audio.bytes) {
+    builder.add(chunk);
+  }
+  final bytes = builder.takeBytes();
+  return bytes.isEmpty ? null : bytes;
 }

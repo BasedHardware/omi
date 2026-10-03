@@ -9119,6 +9119,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get voiceResponseAlways => 'Πάντα';
 
   @override
+  String get voiceResponseOmiDevice => 'Συσκευή Omi';
+
+  @override
   String get agreeAndContinue => 'Συμφωνώ και Συνέχεια';
 
   @override
@@ -11323,6 +11326,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name και άλλοι';
   }
+
+  @override
+  String get singleTap => 'Απλό Πάτημα';
+
+  @override
+  String get singleTapAction => 'Ενέργεια Απλού Πατήματος';
+
+  @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Ακούστε τις απαντήσεις του Omi';

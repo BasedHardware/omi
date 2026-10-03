@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/capture/button_action.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -47,6 +48,7 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -678,6 +680,13 @@ class CaptureController extends ChangeNotifier
   get bleBytesStream => _bleBytesStream;
 
   StreamSubscription? _bleButtonStream;
+  StreamSubscription? _bleButtonTapsStream;
+
+  /// Capability gate (feature bit or successful taps subscribe). Sticky for the
+  /// connected device so legacy actions stay suppressed while streamButton
+  /// re-attaches mid-gesture.
+  bool _deviceHasButtonTaps = false;
+  late final ButtonTapDispatcher _tapDispatcher = ButtonTapDispatcher(_tapActionForCount);
   DateTime? _voiceCommandSession;
   _VoiceCommandTrigger? _voiceCommandTrigger;
   DateTime? _lastVoiceCommandAutoSubmitAt;
@@ -1631,25 +1640,139 @@ class CaptureController extends ChangeNotifier
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
+    _bleButtonTapsStream = lifetime.takeSubscription(_bleButtonTapsStream, null);
     _bleButtonStream = lifetime.takeSubscription(
       _bleButtonStream,
       await _getBleButtonListener(
         deviceId,
-        onButtonReceived: (List<int> value) {
-          final snapshot = List<int>.from(value);
-          if (snapshot.length < 4) {
-            _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.invalidButtonPayload);
-            return;
-          }
-          final buttonState = ByteData.view(
-            Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-          ).getUint32(0);
-          Logger.debug("device button $buttonState");
-          _handleButtonEvent(deviceId, buttonState);
-        },
+        onButtonReceived: (List<int> value) => _onLegacyButton(deviceId, value),
       ),
     );
+    await _streamButtonTaps(deviceId);
   }
+
+
+  Future<void> _streamButtonTaps(String deviceId) async {
+    final connection = await _ensureDeviceConnection(deviceId);
+    if (connection == null) {
+      _deviceHasButtonTaps = false;
+      return;
+    }
+    final features = await connection.getFeatures();
+    var supportsTaps = (features & OmiFeatures.buttonTaps) != 0;
+    StreamSubscription? tapsSub;
+    if (supportsTaps) {
+      tapsSub = await connection.getBleButtonTapsListener(
+        onTapsReceived: (value) => _onButtonTaps(deviceId, value),
+      );
+    } else {
+      // DevKit has no features GATT: probe the taps characteristic.
+      tapsSub = await connection.getBleButtonTapsListener(
+        onTapsReceived: (value) => _onButtonTaps(deviceId, value),
+      );
+      supportsTaps = tapsSub != null;
+    }
+    _deviceHasButtonTaps = supportsTaps;
+    if (!supportsTaps) return;
+    _bleButtonTapsStream = lifetime.takeSubscription(_bleButtonTapsStream, tapsSub);
+  }
+
+  void _onButtonTaps(String deviceId, List<int> value) {
+    if (value.length < 2) return;
+    if (deviceOnboardingProvider?.isOnboardingActive == true) {
+      return;
+    }
+    final count = value[1];
+    final action = switch (value[0]) {
+      1 => _tapDispatcher.onTap(count),
+      2 => _tapDispatcher.onSequenceEnd(count),
+      _ => null,
+    };
+    if (action == null) return;
+    if (_omiButtonActionsDisabled) return;
+    if (action == ButtonAction.askQuestion) {
+      _handleButtonEvent(deviceId, 1);
+      return;
+    }
+    if (_isProcessingButtonEvent) return;
+    _runButtonAction(action, trackDoubleTap: count == 2);
+  }
+
+  ButtonAction _tapActionForCount(int count) {
+    final prefs = _preferences;
+    switch (count) {
+      case 1:
+        return resolveSingleTapAction(prefs.singleTapAction);
+      case 2:
+        return resolveDoubleTapAction(prefs.doubleTapAction);
+      case 3:
+        return resolveTripleTapAction(prefs.tripleTapAction);
+      default:
+        return ButtonAction.none;
+    }
+  }
+
+  void _runButtonAction(ButtonAction action, {required bool trackDoubleTap}) {
+    switch (action) {
+      case ButtonAction.toggleMute:
+        _isProcessingButtonEvent = true;
+        if (isPaused) {
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          resumeDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error resuming device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        } else {
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          pauseDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error pausing device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        }
+        break;
+      case ButtonAction.starConversation:
+        if (!_starOngoingConversation) {
+          markConversationForStarring();
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          HapticFeedback.mediumImpact();
+        } else {
+          unmarkConversationForStarring();
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          HapticFeedback.lightImpact();
+        }
+        break;
+      case ButtonAction.endConversation:
+        if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        forceProcessingCurrentConversation();
+        break;
+      case ButtonAction.askQuestion:
+      case ButtonAction.none:
+        break;
+    }
+  }
+
+  void _onLegacyButton(String deviceId, List<int> value) {
+    final snapshot = List<int>.from(value);
+    if (snapshot.length < 4) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.invalidButtonPayload);
+      return;
+    }
+    final buttonState = ByteData.view(
+      Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
+    ).getUint32(0);
+    Logger.debug("device button $buttonState");
+    if (_deviceHasButtonTaps && deviceOnboardingProvider?.isOnboardingActive != true && buttonState == 2) {
+      return;
+    }
+    _handleButtonEvent(deviceId, buttonState);
+  }
+
+  @visibleForTesting
+  set deviceHasButtonTapsForTesting(bool value) => _deviceHasButtonTaps = value;
 
   @visibleForTesting
   void handleButtonEventForTesting(String deviceId, int buttonState) {
