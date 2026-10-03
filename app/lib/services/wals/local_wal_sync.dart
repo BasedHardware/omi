@@ -194,7 +194,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   int? _sessionGeolocationSetAt;
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
-  int? _conversationStampBeforeSeconds;
+  Set<String>? _conversationStampWalsAtClose;
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
@@ -204,14 +204,20 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Recording id captured before a flush. [stampConversationId] keeps its
   /// original signature so session spies do not have to learn a new argument.
   ///
-  /// [beforeSeconds] is when the conversation closed. A recording can go on into
-  /// the next conversation, so the stamp leaves a WAL that starts at or after it
+  /// [walsAtClose] are the WALs that existed when the conversation closed, taken
+  /// with [walIdsNow] right after the close's drain. A recording can go on into
+  /// the next conversation, so the stamp leaves any WAL created after the close
   /// for that one.
-  void prepareConversationStamp(String? recordingSessionId, {int? beforeSeconds}) {
+  void prepareConversationStamp(String? recordingSessionId, {Set<String>? walsAtClose}) {
     final trimmed = recordingSessionId?.trim();
     _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-    _conversationStampBeforeSeconds = beforeSeconds;
+    _conversationStampWalsAtClose = walsAtClose;
   }
+
+  /// The WALs that exist now. Read right after [finalizeCurrentSession] is called for a closing
+  /// conversation, whose drain runs before its first await, they hold everything recorded up to the
+  /// close, the tail included.
+  Set<String> walIdsNow() => {for (final wal in _wals) wal.id};
 
   bool _isCancelled = false;
 
@@ -866,9 +872,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             entry.value.sourceClockEpoch == evidenceEpoch &&
             entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
-    // At least a second before the drain, so a conversation closing now owns even a sub-second tail:
-    // its stamp leaves WALs that start at or after the close to the next conversation.
-    var timerStart = timerEnd - max<int>(1, high ~/ _framesPerSecond);
+    var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
 
     // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
@@ -938,11 +942,11 @@ class LocalWalSyncImpl implements LocalWalSync {
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
-    final before = _conversationStampBeforeSeconds;
-    _conversationStampBeforeSeconds = null;
+    final walsAtClose = _conversationStampWalsAtClose;
+    _conversationStampWalsAtClose = null;
     for (final wal in _wals) {
       if (wal.status != WalStatus.miss || wal.conversationId != null) continue;
-      if (before != null && wal.timerStart >= before) continue;
+      if (walsAtClose != null && !walsAtClose.contains(wal.id)) continue;
       final walRecording = wal.recordingSessionId;
       final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
       if (foreignRecording) continue;

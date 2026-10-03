@@ -202,6 +202,49 @@ void main() {
     await walsReach('the next conversation released', (wals) => wals.every((wal) => wal.timerStart < startSeconds));
   });
 
+  test('pendant: a late conversation event leaves the next close to its own event', () async {
+    final link = await connectPendant();
+    final firstStart = world.clock.now();
+    await streamPendant(link, 140);
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', firstStart, 140)));
+    await settleFiles();
+
+    // The server is slow: c1's event misses its 30 s fallback, and the next conversation closes first.
+    final secondStart = world.clock.now();
+    final secondSeconds = secondStart.millisecondsSinceEpoch ~/ 1000;
+    await streamPendant(link, 140);
+    await expectCopies('c2 streamed into a copy before it closed', fromSeconds: secondSeconds);
+    final c2 = conversation('c2', secondStart, 140);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: c2));
+    await settleFiles();
+    world.controller
+        .onMessageEventReceived(ConversationEvent(memory: conversation('c1', firstStart, 140), messages: []));
+    await settleFiles();
+    world.controller.onMessageEventReceived(ConversationEvent(memory: c2, messages: []));
+
+    await walsReach('c2 released by its own event', (wals) => wals.every((wal) => wal.timerStart < secondSeconds));
+  });
+
+  test('pendant: windows that open in the same second name different conversations', () async {
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', world.clock.now(), 140)));
+    await settleFiles();
+    final first = world.controller.activeCaptureSessionId;
+
+    // The next conversation closes within the same second.
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c2', world.clock.now(), 0)));
+    await settleFiles();
+    final second = world.controller.activeCaptureSessionId;
+
+    expect(first, isNotNull);
+    expect(second, isNotNull);
+    expect(second, isNot(first));
+  });
+
   test('pendant: audio from a Process now that made no conversation goes with the conversation kept open', () async {
     // The replay world's processInProgressConversation returns null, as a failed request does.
     final origin = world.clock.now();

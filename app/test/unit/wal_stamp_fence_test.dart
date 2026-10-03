@@ -1,5 +1,5 @@
 // A recording can run on into the next conversation, so the stamp for a closing conversation is fenced
-// to the audio recorded before it closed (#20365).
+// to the WALs that existed when it closed (#20365).
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -38,17 +38,22 @@ void main() {
         persistWals: (_) async {},
       )..testWals = wals;
 
-  test('the stamp leaves audio recorded after the close to the next conversation', () async {
+  test('the stamp leaves WALs created after the close to the next conversation', () async {
     final backdated = wal(940);
     final closing = wal(1000);
+    final sync = syncWith([backdated, closing]);
+    final walsAtClose = sync.walIdsNow();
+    // Created after the close, so the next conversation's, even when the start is backdated before it.
+    final nextBackdated = wal(990);
     final next = wal(1200);
-    final sync = syncWith([backdated, closing, next]);
+    sync.testWals = [backdated, closing, nextBackdated, next];
 
-    sync.prepareConversationStamp('recording-1', beforeSeconds: 1200);
+    sync.prepareConversationStamp('recording-1', walsAtClose: walsAtClose);
     await sync.stampConversationId(1000, 'c1');
 
     expect(backdated.conversationId, 'c1', reason: 'a backdated WAL of the same recording still belongs to c1');
     expect(closing.conversationId, 'c1');
+    expect(nextBackdated.conversationId, isNull, reason: 'it was created after the close');
     expect(next.conversationId, isNull, reason: 'the recording went on into the next conversation');
   });
 
@@ -56,7 +61,7 @@ void main() {
     final next = wal(1200);
     final sync = syncWith([next]);
 
-    sync.prepareConversationStamp('recording-1', beforeSeconds: 1200);
+    sync.prepareConversationStamp('recording-1', walsAtClose: const {});
     await sync.stampConversationId(1000, 'c1');
     expect(next.conversationId, isNull);
 
@@ -92,11 +97,13 @@ void main() {
       for (var i = 0; i < 50; i++) {
         sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
-      await sync.finalizeCurrentSession();
+      final drained = sync.finalizeCurrentSession();
+      final walsAtClose = sync.walIdsNow();
+      await drained;
       final tail = sync.testWals.single;
-      expect(tail.timerStart, lessThan(10000), reason: 'the tail holds audio recorded before the close');
+      expect(tail.timerStart, 10000, reason: "half a second rounds to the close's own second, so time can't fence it");
 
-      sync.prepareConversationStamp('recording-1', beforeSeconds: 10000);
+      sync.prepareConversationStamp('recording-1', walsAtClose: walsAtClose);
       await sync.stampConversationId(9990, 'c1');
       expect(tail.conversationId, 'c1');
     });
