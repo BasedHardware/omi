@@ -3155,9 +3155,11 @@ class CaptureController extends ChangeNotifier
       _sessionTransportInterrupted = false;
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so the coordinated transfer wake waits for the stamp.
+      // Store the future so the coordinated transfer wake waits for the stamp. The drain runs before
+      // finalize's first await, so the close read after it is later than the tail's start.
+      final drained = _wal.getSyncs().phone.finalizeCurrentSession();
       final closedAt = _nowSeconds;
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id, closedAt);
+      _pendingFinalizeAndStamp = _finalizeAndStampSession(drained, _sessionStartSeconds, event.memory.id, closedAt);
 
       _resetStateVariables();
       _startNextConversationWindow(closedAt);
@@ -3277,7 +3279,6 @@ class CaptureController extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
     final recordingSessionId = activeRecordingId;
-    final closedAt = _nowSeconds;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3285,7 +3286,10 @@ class CaptureController extends ChangeNotifier
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
 
-    await phoneSync.finalizeCurrentSession();
+    final drained = phoneSync.finalizeCurrentSession();
+    // Read after the drain, which runs before finalize's first await, so the tail starts before it.
+    final closedAt = _nowSeconds;
+    await drained;
     _clearSessionLocation();
 
     _resetStateVariables();
@@ -3319,8 +3323,14 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  /// [closedAt] fences the stamp to the audio recorded before the conversation closed.
-  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId, int closedAt) async {
+  /// [drained] is the finalize that drained the closing conversation's tail. [closedAt], read after
+  /// that drain, fences the stamp to the audio recorded before the conversation closed.
+  Future<void> _finalizeAndStampSession(
+    Future<void> drained,
+    int sessionStartSeconds,
+    String conversationId,
+    int closedAt,
+  ) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
     // Capture before the flush. A device update can roll the session while
@@ -3328,7 +3338,7 @@ class CaptureController extends ChangeNotifier
     final recordingSessionId = activeRecordingId;
     try {
       final phoneSync = _wal.getSyncs().phone;
-      await phoneSync.finalizeCurrentSession();
+      await drained;
       if (sessionStartSeconds > 0) {
         if (phoneSync is LocalWalSyncImpl) {
           phoneSync.prepareConversationStamp(recordingSessionId, beforeSeconds: closedAt);

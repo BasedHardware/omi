@@ -866,7 +866,9 @@ class LocalWalSyncImpl implements LocalWalSync {
             entry.value.sourceClockEpoch == evidenceEpoch &&
             entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
-    var timerStart = timerEnd - high ~/ _framesPerSecond;
+    // At least a second before the drain, so a conversation closing now owns even a sub-second tail:
+    // its stamp leaves WALs that start at or after the close to the next conversation.
+    var timerStart = timerEnd - max<int>(1, high ~/ _framesPerSecond);
     var chunkFrameCount = high;
 
     // Same shouldStored check as _chunk(): one unconfirmed frame is enough to

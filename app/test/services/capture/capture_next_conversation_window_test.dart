@@ -116,6 +116,12 @@ void main() {
     await settleFiles();
   }
 
+  /// Fails unless the streamed audio is in a copy, so a later release can't pass on no copies at all.
+  Future<void> expectCopies(String reason, {int fromSeconds = 0}) async {
+    final wals = await world.wal.syncs.phone.getAllWals();
+    expect(wals.where((wal) => wal.timerStart >= fromSeconds), isNotEmpty, reason: reason);
+  }
+
   /// The controller asks for recovery through its session owner; the replay world has none, so wake
   /// the world's coordinator the way that request would.
   Future<void> recoveryPass() async {
@@ -130,6 +136,7 @@ void main() {
     for (final id in ['c1', 'c2', 'c3']) {
       final start = world.clock.now();
       await streamPendant(link, 140);
+      await expectCopies('$id streamed into a copy before it closed');
       await serverCloses(conversation(id, start, 140));
       await walsReach('$id released like the first conversation', (wals) => wals.isEmpty);
     }
@@ -146,6 +153,7 @@ void main() {
     expect(first, isNotNull);
 
     await streamPendant(link, 135);
+    await expectCopies('c1 streamed into a copy before it closed');
     await serverCloses(conversation('c1', world.clock.now().subtract(const Duration(seconds: 140)), 140));
     await walsReach('c1 released', (wals) => wals.isEmpty);
     await streamPendant(link, 5);
@@ -160,6 +168,7 @@ void main() {
     final link = await connectPendant();
 
     await streamPendant(link, 140);
+    await expectCopies('c1 streamed into a copy before the mute');
     await world.controller.pauseDeviceRecording();
     await world.settle();
     await serverCloses(conversation('c1', origin, 140));
@@ -169,6 +178,7 @@ void main() {
     await world.settle();
     final start = world.clock.now();
     await streamPendant(link, 140);
+    await expectCopies('audio after the unmute is in a copy before c2 closes');
     await serverCloses(conversation('c2', start, 140));
     await walsReach('audio after the unmute released with the next conversation', (wals) => wals.isEmpty);
 
@@ -187,8 +197,31 @@ void main() {
     final start = world.clock.now();
     final startSeconds = start.millisecondsSinceEpoch ~/ 1000;
     await streamPendant(link, 140);
+    await expectCopies('the next conversation streamed into its own copy', fromSeconds: startSeconds);
     await serverCloses(conversation('c2', start, 140));
     await walsReach('the next conversation released', (wals) => wals.every((wal) => wal.timerStart < startSeconds));
+  });
+
+  test('pendant: audio from a Process now that made no conversation goes with the conversation kept open', () async {
+    // The replay world's processInProgressConversation returns null, as a failed request does.
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    await world.controller.forceProcessingCurrentConversation();
+    await settleFiles();
+    final beforeProcessNow = await world.wal.syncs.phone.getAllWals();
+    expect(beforeProcessNow, isNotEmpty, reason: 'the audio before Process now is in a copy');
+    expect(beforeProcessNow.every((wal) => wal.conversationId == null), isTrue,
+        reason: 'no conversation id came back to stamp it with');
+
+    // The server kept the conversation open, so the close it sends holds both parts.
+    await streamPendant(link, 140);
+    world.controller
+        .onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation('c1', origin, 280)));
+    await walsReach(
+      'the audio before Process now stamped with the conversation the server kept open',
+      (wals) => wals.length > beforeProcessNow.length && wals.every((wal) => wal.conversationId == 'c1'),
+    );
   });
 
   test('phone mic: a conversation closed during a call opens the window the resumed audio needs', () async {
