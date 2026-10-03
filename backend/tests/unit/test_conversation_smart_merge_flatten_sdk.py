@@ -23,7 +23,8 @@ from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from tests.unit.test_conversation_smart_merge import UID, World
 from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
-from tests.unit.test_conversation_smart_merge_flatten import _sync_chunk
+from tests.unit.test_conversation_smart_merge_flatten import _seed_index, _sync_chunk
+from utils.sync import bridge
 from utils.sync.assignment import assign_in_transaction
 
 
@@ -213,3 +214,93 @@ def test_absorb_commit_aborted_by_real_sync_rejects_then_converges(sdk_world):
     expected = start_ids | {'wal-race-2-seg'}
     assert set(ids) == expected
     assert len(ids) == len(expected)
+
+
+@pytest.fixture
+def sdk_bridge_world(sdk_world, monkeypatch):
+    test = sdk_world
+    world = test.world
+    world.add('d', 21, 2, sync_content_revision=1)
+    _seed_index(world, 'd')
+    for cid in ('p', 'n', 'd'):
+        world.raw(cid)['private_cloud_sync_enabled'] = True
+    test.start_ids = {seg['id'] for cid in ('p', 'n', 'd') for seg in world.transcript(cid)}
+    monkeypatch.setattr(bridge, 'retract_sync_bridge_source', world.retract)
+    monkeypatch.setattr(
+        bridge, 'copy_sync_bridge_audio', lambda uid, source, target: world.copied.append((source, target))
+    )
+    return test
+
+
+def test_sync_bridge_absorb_aborted_by_smart_merge_retries_one_hop(sdk_bridge_world):
+    test = sdk_bridge_world
+    world = test.world
+    test.state.abort_on = lambda writes: any(
+        write.update.name.endswith('/conversations/n') and 'deleted' not in write.update.fields for write in writes
+    )
+    test.state.compete = lambda: world.finish('n')
+
+    result, created, _ = _sdk_assign(test, _chunk('wal-bridge-race', 21), target_id='n')
+
+    assert test.state.aborted
+    assert test.api.begin_transaction.call_count >= 2
+    assert result['id'] == 'p' and not created
+    assert _visible(world) == ['p']
+    for cid in ('n', 'g1', 'g2', 'd'):
+        assert world.raw(cid)['sync_merged_into'] == 'p'
+    assert sorted(world.get(UID, 'p')['sync_merged_from']) == ['d', 'g1', 'g2', 'n']
+    ids = [segment['id'] for segment in world.transcript('p')]
+    expected = test.start_ids | {'wal-bridge-race-seg'}
+    assert set(ids) == expected
+    assert len(ids) == len(expected)
+    audits = [key for key in world.store.rows if key[:3] == ('users', UID, 'smart_merge_audit')]
+    assert [key[-1] for key in audits] == ['n']
+
+    bridge.finish_sync_bridges(UID, 'p')
+    pairs = set(world.copied)
+    assert pairs == {('n', 'p'), ('g1', 'p'), ('g2', 'p'), ('d', 'p')}
+    assert len(world.copied) == len(pairs)
+    bridge.finish_sync_bridges(UID, 'p')
+    assert set(world.copied) == pairs
+    assert len(world.copied) == len(pairs)
+
+
+def test_smart_merge_aborted_by_sync_bridge_absorb_converges(sdk_bridge_world):
+    test = sdk_bridge_world
+    world = test.world
+
+    def competing_absorb_and_drain():
+        _sdk_assign(test, _chunk('wal-bridge-race-2', 21), target_id='n')
+        bridge.finish_sync_bridges(UID, 'n')
+
+    test.state.compete = competing_absorb_and_drain
+
+    assert world.finish('n') is False
+    assert test.state.aborted
+    donor_writes = [w for w in _committed_writes(test) if w.update.name.endswith('/conversations/n')]
+    assert not any('deleted' in w.update.fields for w in donor_writes)
+
+    assert world.finish('n') is True
+    assert _visible(world) == ['p']
+    for cid in ('n', 'g1', 'g2', 'd'):
+        assert world.raw(cid)['sync_merged_into'] == 'p'
+    assert sorted(world.get(UID, 'p')['sync_merged_from']) == ['d', 'g1', 'g2', 'n']
+    ids = [segment['id'] for segment in world.transcript('p')]
+    expected = test.start_ids | {'wal-bridge-race-2-seg'}
+    assert set(ids) == expected
+    assert len(ids) == len(expected)
+    audits = [key for key in world.store.rows if key[:3] == ('users', UID, 'smart_merge_audit')]
+    assert [key[-1] for key in audits] == ['n']
+    absorb_writes = [
+        w
+        for w in _committed_writes(test)
+        if w.update.name.endswith('/conversations/n') and 'deleted' in w.update.fields
+    ]
+    assert len(absorb_writes) == 1
+
+    bridge.finish_sync_bridges(UID, 'p')
+    bridge.finish_sync_bridges(UID, 'p')
+    pairs = world.copied
+    assert len(pairs) == len(set(pairs))
+    assert {source for source, target in pairs if target == 'p'} == {'n', 'g1', 'g2', 'd'}
+    assert {source for source, target in pairs if target == 'n'} == {'g1', 'g2', 'd'}

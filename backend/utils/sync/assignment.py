@@ -118,6 +118,10 @@ def auto_mergeable(row: dict) -> bool:
     )
 
 
+def _smart_merge_lineage(row: dict | None) -> bool:
+    return bool(row and (row.get('smart_merge') or {}).get('role') in ('donor', 'survivor'))
+
+
 class _Plan(NamedTuple):
     """One complete, unwritten assignment: what the transaction would commit."""
 
@@ -184,15 +188,18 @@ def assign_in_transaction(
     def resolve(cid: str | None, *, one_hop: bool = False) -> tuple[str | None, dict | None]:
         row = load(cid) if cid else None
         seen = set()
+        has_smart_state = False
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+            has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
             seen.add(row['id'])
             redirect_id: str = row['sync_merged_into']
             cid, row = redirect_id, load(redirect_id)
-            if one_hop and row and row.get('sync_merged_into') and row['id'] not in seen:
+            has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
+            if has_smart_state and (len(seen) > 1 or (row and row.get('sync_merged_into') and row['id'] not in seen)):
                 raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
-        if seen and (not row or row.get('deleted') or (one_hop and row.get('discarded'))):
+        if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
 
@@ -204,15 +211,13 @@ def assign_in_transaction(
     if flatten:
         if target and target.get('sync_merged_into'):
             redirect_id = target['sync_merged_into']
-            if redirect_id == target_id:
-                raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
             nxt = load(redirect_id)
-            if nxt and nxt.get('sync_merged_into'):
-                raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
-            smart_lineage = (target.get('smart_merge') or {}).get('role') == 'donor' or (
-                (nxt or {}).get('smart_merge') or {}
-            ).get('role') == 'survivor'
+            smart_lineage = _smart_merge_lineage(target) or _smart_merge_lineage(nxt)
             if smart_lineage:
+                if redirect_id == target_id:
+                    raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+                if nxt and nxt.get('sync_merged_into'):
+                    raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
                 if not nxt or nxt.get('deleted') or nxt.get('discarded'):
                     raise SyncAssignmentSuperseded('sync target survivor was deleted')
                 target_id, target = redirect_id, nxt

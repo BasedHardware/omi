@@ -23,8 +23,9 @@ from database import conversations as conversations_db
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.test_conversation_smart_merge import T0, UID, World
+from utils import metrics
 from utils.conversations import smart_merge
-from utils.conversations.smart_merge_policy import absorb_payloads, user_managed
+from utils.conversations.smart_merge_policy import absorb_payloads, fragment_of, user_managed
 from utils.sync.assignment import assign_in_transaction
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.recording_lineage import select_segment_targets
@@ -728,13 +729,15 @@ def test_two_hop_explicit_target_fails_closed(world):
     assert world.store.rows == before
 
 
-def test_two_hop_own_id_retry_fails_closed(world):
+def test_two_hop_own_id_retry_fails_closed(world, reads):
     _flattened_world(world)
     world.raw('g1')['sync_merged_into'] = 'n'
     before = deepcopy(world.store.rows)
+    reads.clear()
     with pytest.raises(SyncAssignmentConflict):
         _assign(world, _sync_chunk('g1', 26))
     assert world.store.rows == before
+    assert _path('p') not in [path for _, path in reads]
 
 
 def test_smart_donor_tombstone_without_redirect_conflicts(world):
@@ -1104,6 +1107,57 @@ def test_flatten_cleanup_copies_donor_and_ancestor_audio_once(world, monkeypatch
     assert world.raw('p')['audio_files'] == files
 
 
+@pytest.fixture(params=['span_cap', 'segment_cap', 'fragment_cap'])
+def capped_pair(request, world):
+    _setup_pair(world)
+    if request.param == 'span_cap':
+        world.add('p', 0, 170)
+        world.add('n', 175, 10)
+        world.raw('n')['sync_merged_from'] = ['g1', 'g2']
+        world.raw('n')['sync_content_revision'] = 7
+        world.raw('p')['sync_content_revision'] = 2
+    elif request.param == 'segment_cap':
+        row = _decoded(world, 'p')
+        segments = row['transcript_segments']
+        row['transcript_segments'] = [
+            dict(segments[i % len(segments)], id=f'p-many-{i}', text='synthetic') for i in range(3999)
+        ]
+        world.store.rows[_path('p')] = conversations_db.encode_conversation_for_write(UID, row, 'enhanced')
+    else:
+        entry = fragment_of(_decoded(world, 'p')).as_ledger_entry()
+        world.raw('p')['smart_merge'] = {
+            'role': 'survivor',
+            'revision': 11,
+            'refreshed_revision': 11,
+            'fragments': [dict(entry, id=f'f{i}') for i in range(11)] + [entry],
+        }
+    return SimpleNamespace(world=world, expected=request.param, snapshot=deepcopy(world.store.rows))
+
+
+def test_default_caps_refuse_a_flatten_eligible_pair(capped_pair, monkeypatch):
+    world = capped_pair.world
+    seen = []
+    monkeypatch.setattr(
+        metrics.CONVERSATION_SMART_MERGE_DECISION_TOTAL,
+        'labels',
+        lambda **labels: SimpleNamespace(inc=lambda amount=1: seen.append(labels)),
+    )
+    assert world.finish('n') is False
+    assert world.jev_calls == []
+    assert world.raw('n').get('smart_merge_decision') is None
+    assert len(seen) == 1
+    assert {key: seen[0][key] for key in ('mode', 'decision', 'reason')} == {
+        'mode': 'merge',
+        'decision': 'skip',
+        'reason': capped_pair.expected,
+    }
+    assert world.store.rows == capped_pair.snapshot
+    for gid in ('g1', 'g2'):
+        assert world.raw(gid)['sync_merged_into'] == 'n'
+    assert not world.raw('n').get('deleted')
+    assert 'sync_merged_into' not in world.raw('n')
+
+
 # --------------------------------------------------------------------------- privacy delete
 
 
@@ -1207,3 +1261,38 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
     assert not memory_map
     assert not task_map
     assert not blobs
+
+
+def _ordinary_chain(world):
+    world.add('p', 0, 10, sync_content_revision=2)
+    world.add('n', 15, 10)
+    world.add('g1', 5, 2)
+    _tombstone(world, 'n', merged_into='p')
+    _tombstone(world, 'g1', merged_into='n')
+    world.raw('n')['sync_merged_from'] = ['g1']
+    world.raw('p')['sync_merged_from'] = ['n', 'g1']
+
+
+@pytest.mark.parametrize('discarded', [False, True])
+def test_ordinary_retry_follows_a_multihop_chain(world, discarded):
+    _ordinary_chain(world)
+    world.raw('p')['discarded'] = discarded
+    result, created, _ = _assign(world, _sync_chunk('g1', 5, minutes=1))
+    assert result['id'] == 'p'
+    assert created is False
+    assert world.raw('p').get('discarded') is False
+    assert not world.raw('p').get('deleted')
+    for cid, merged_into in (('g1', 'n'), ('n', 'p')):
+        assert world.raw(cid)['deleted']
+        assert world.raw(cid)['sync_merged_into'] == merged_into
+    ids = [segment['id'] for segment in world.transcript('p')]
+    assert len(ids) == len(set(ids))
+
+
+def test_ordinary_target_hint_falls_back_without_chain_checks(world):
+    _ordinary_chain(world)
+    result, created, _ = _assign(world, _sync_chunk('wal-legacy', 60, minutes=1), target_id='g1')
+    assert result['id'] == 'wal-legacy'
+    assert created is True
+    assert world.raw('g1')['sync_merged_into'] == 'n'
+    assert world.raw('n')['sync_merged_into'] == 'p'
