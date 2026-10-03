@@ -19,7 +19,12 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
-from database.person_aliases import rename_person_retaining_aliases
+from database.person_aliases import (
+    dismiss_person_soft,
+    find_person_by_name,
+    list_people,
+    rename_person_retaining_aliases,
+)
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
@@ -885,43 +890,46 @@ def create_person(uid: str, data: dict):
     return data
 
 
-def get_person(uid: str, person_id: str):
+def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
+    """Return one owner-scoped person, hiding soft-dismissed records by default.
+
+    ``include_dismissed`` is reserved for complete-account export paths. Normal
+    product reads must not make dismissed people or their voice data visible.
+    """
+
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
     if not person_doc.exists:
         return None
     person_data = person_doc.to_dict()
+    if not include_dismissed and person_data.get('is_dismissed') is True:
+        return None
     person_data.setdefault('id', person_doc.id)
     return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    result, cache = [], {}
-    for person in people_ref.stream():
-        data = person.to_dict()
-        data.setdefault('id', person.id)
-        result.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
-    return result
+def get_people(uid: str, *, include_dismissed: bool = False):
+    cache = {}
+    return [
+        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
+        for person in list_people(db, uid, include_dismissed=include_dismissed)
+    ]
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:
-    """Server-side count of the user's people (speaker profiles) collection."""
+    """Server-side count of active people, excluding soft-dismissed profiles like `get_people`."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     people_ref = client.collection('users').document(uid).collection('people')
-    result = people_ref.count().get()
-    return int(result[0][0].value or 0)
+    total = int(people_ref.count().get()[0][0].value or 0)
+    dismissed = int(people_ref.where(filter=FieldFilter('is_dismissed', '==', True)).count().get()[0][0].value or 0)
+    return max(total - dismissed, 0)
 
 
 def get_person_by_name(uid: str, name: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        data = docs[0].to_dict()
-        data.setdefault('id', docs[0].id)
-        return project_person_learning(uid, data, firestore_client=db)
-    return None
+    person = find_person_by_name(db, uid, name)
+    if person is None:
+        return None
+    return project_person_learning(uid, person, firestore_client=db)
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
@@ -929,6 +937,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
     Note: db.get_all() returns results in arbitrary order (Firestore behavior).
     Callers must not assume the result order matches person_ids order.
+    Dismissed people are returned on purpose: callers resolve IDs already stored on past
+    segments, and dismissal hides a profile from lists without rewriting that history.
     """
     if not person_ids:
         return []
@@ -950,6 +960,10 @@ def update_person(uid: str, person_id: str, name: str) -> bool:
     """Rename a stable person and retain old names as owner-scoped aliases."""
 
     return rename_person_retaining_aliases(db, uid, person_id, name)
+
+
+def dismiss_person(uid: str, person_id: str) -> bool:
+    return dismiss_person_soft(db, uid, person_id)
 
 
 def delete_person(uid: str, person_id: str):
