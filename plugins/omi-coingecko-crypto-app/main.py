@@ -155,7 +155,7 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
         if response.status_code == 429:
             raise ValueError("CoinGecko API rate limit reached. Please wait a moment before trying again.")
         if response.status_code == 404:
-            raise ValueError(f"Resource not found at {endpoint}.")
+            raise ValueError("Resource not found on CoinGecko.")
         response.raise_for_status()
         try:
             return response.json()
@@ -163,8 +163,24 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
             raise ValueError("CoinGecko returned a response that was not valid JSON.")
     except httpx.TimeoutException:
         raise ValueError("Request to CoinGecko timed out. Please try again.")
-    except httpx.HTTPError as exc:
-        raise ValueError(f"CoinGecko network error: {exc}")
+    except httpx.HTTPError:
+        raise ValueError("CoinGecko network error occurred.")
+
+
+_KNOWN_COINGECKO_ERRORS = {
+    "CoinGecko API rate limit reached. Please wait a moment before trying again.",
+    "Resource not found on CoinGecko.",
+    "CoinGecko returned a response that was not valid JSON.",
+    "Request to CoinGecko timed out. Please try again.",
+    "CoinGecko network error occurred.",
+}
+
+
+def _sanitize_coingecko_error(exc: Exception, fallback: str) -> str:
+    msg = str(exc)
+    if msg in _KNOWN_COINGECKO_ERRORS:
+        return msg
+    return fallback
 
 
 @app.exception_handler(RequestValidationError)
@@ -359,9 +375,11 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
-        return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error fetching crypto prices: {exc}")
+        return ChatToolResponse(
+            error=_sanitize_coingecko_error(exc, "Failed to fetch cryptocurrency prices due to an internal error.")
+        )
+    except Exception:
+        return ChatToolResponse(error="Failed to fetch cryptocurrency prices due to an internal error.")
 
 
 @app.post("/tools/search_crypto_coins", response_model=ChatToolResponse)
@@ -387,9 +405,11 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
 
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
-        return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error searching crypto coins: {exc}")
+        return ChatToolResponse(
+            error=_sanitize_coingecko_error(exc, "Failed to search cryptocurrency coins due to an internal error.")
+        )
+    except Exception:
+        return ChatToolResponse(error="Failed to search cryptocurrency coins due to an internal error.")
 
 
 @app.post("/tools/get_trending_crypto", response_model=ChatToolResponse)
@@ -420,9 +440,13 @@ async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse
 
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
-        return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error retrieving trending crypto: {exc}")
+        return ChatToolResponse(
+            error=_sanitize_coingecko_error(
+                exc, "Failed to retrieve trending cryptocurrencies due to an internal error."
+            )
+        )
+    except Exception:
+        return ChatToolResponse(error="Failed to retrieve trending cryptocurrencies due to an internal error.")
 
 
 @app.post("/tools/get_crypto_market_overview", response_model=ChatToolResponse)
@@ -457,10 +481,14 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
             formatted_change = _format_percentage(change)
             formatted_mcap = _format_compact(mcap, currency_symbol)
 
-            lines.append(f"{rank}. {name} ({symbol}): {formatted_price} (24h: {formatted_change}) | MCap: {formatted_mcap}")
+            lines.append(
+                f"{rank}. {name} ({symbol}): {formatted_price} (24h: {formatted_change}) | MCap: {formatted_mcap}"
+            )
 
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
-        return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error retrieving market overview: {exc}")
+        return ChatToolResponse(
+            error=_sanitize_coingecko_error(exc, "Failed to retrieve market overview due to an internal error.")
+        )
+    except Exception:
+        return ChatToolResponse(error="Failed to retrieve market overview due to an internal error.")
