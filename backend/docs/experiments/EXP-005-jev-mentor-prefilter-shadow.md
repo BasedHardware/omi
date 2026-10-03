@@ -13,6 +13,13 @@ access through BYOK or a trial. Lookup errors fail open, counted by
 `mentor_plan_admission outcome=fail_open reason=plan_lookup_unavailable` and
 the shared fallback metric. Skips use the uid-less bounded log
 `mentor_plan_admission outcome=skipped reason=basic_not_entitled`.
+Admission runs after buffer, frequency, send-rate, daily-cap and debounce
+rejections, including the authoritative debounce recheck under its claim.
+Rejected invocations do no entitlement lookup. Resolved paid/basic entitlement
+uses the existing process-local LRU/singleflight cache per UID for 300 seconds;
+plan changes become visible within that TTL. Lookup errors and unidentified
+plans remain uncached and fail open. Basic users consume no gate evaluation
+record and make no mentor model or embedding calls.
 
 `MENTOR_GATE_DEBOUNCE_ENABLED=true` activates existing shared Redis admission
 before context gathering and model calls in
@@ -98,10 +105,18 @@ acknowledgment, not device rendering, opening or value. Legacy mentor return
 values, rate limits and daily counts retain their behavior even on a dispatch
 failure; the shadow merely observes the returned dispatch result.
 
-No transcript, content hash, prompt, facts, name, reasoning, draft, notification
-text or raw error is stored/logged by this experiment. Only the in-memory
-bounded vendor state contains text. Failures and measurement scheduling never
-change the Luna verdict, draft, critic or delivery path.
+Shadow records and telemetry contain no transcript, content hash, prompt,
+facts, name, reasoning, draft, notification text or raw error. Intentional
+privacy hardening removes the pre-existing gate context/reasoning, critic
+rejection text/reasoning, sending draft reasoning and raw exception messages
+from mentor application logs. Buffer/admission/gate/draft/critic logs retain
+only UIDs, bounded stage/reason codes and numeric metadata such as scores,
+counts and lengths. The model requests still receive buffered input in memory,
+and normal notification delivery still saves and sends approved notification
+text. The content-free guarantee covers shadow storage and mentor-owned logs;
+canonical conversation and delivered-notification storage retain their existing
+purpose. Failures and measurement scheduling never change the Luna verdict,
+draft, critic or delivery path.
 
 ## Aggregate readout query
 

@@ -206,6 +206,36 @@ def _make_segments(count: int) -> list:
     return segments
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('segments', [0, 9])
+async def test_buffer_threshold_skips_plan_and_model_work(monkeypatch, segments):
+    monkeypatch.setattr(mentor_mod, 'message_buffer', MessageBuffer())
+
+    async def inline(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(app_int, 'run_blocking', inline)
+    monkeypatch.setattr(app_int, 'process_mentor_notification', mentor_mod.process_mentor_notification)
+    monkeypatch.setattr(app_int, 'get_available_apps', MagicMock(return_value=[]))
+    calls = []
+    for name in [
+        'mentor_plan_allows_evaluation',
+        'evaluate_relevance',
+        'generate_notification',
+        'validate_notification',
+        'generate_embedding',
+    ]:
+        mock = MagicMock()
+        calls.append(mock)
+        monkeypatch.setattr(app_int, name, mock)
+    assert (
+        await app_int._async_trigger_realtime_integrations('synthetic-buffer', _make_segments(segments), 'synthetic')
+        == {}
+    )
+    for call in calls:
+        call.assert_not_called()
+
+
 # ── Source-level tests ──
 
 

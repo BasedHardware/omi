@@ -18,6 +18,7 @@ from utils import executors, mentor_admission as admission_module, mentor_jev_sh
 from utils.conversations import jev_shadow as shared
 from utils.llm import jev_client
 from database import jev_shadow as store
+from database.cache_manager import InMemoryCacheManager
 
 SECRET = 'PRIVATE_TRANSCRIPT_NEVER_STORED_5921'
 MESSAGES = [{'text': SECRET, 'is_user': True}, {'text': 'other speaker', 'is_user': False}]
@@ -29,6 +30,8 @@ def admission(monkeypatch):
     from utils import managed_compute  # noqa: F401
 
     lookup = MagicMock(return_value=None)
+    cache = InMemoryCacheManager()
+    monkeypatch.setattr(admission_module, 'get_memory_cache', lambda: cache)
     monkeypatch.setattr(admission_module.users_db, 'get_user_valid_subscription', lookup)
     monkeypatch.setattr(admission_module, 'get_customer_firestore_client', lambda: 'fake-client')
     fallback = MagicMock()
@@ -61,6 +64,38 @@ def test_lookup_failure_is_counted_fail_open(admission, failure, caplog):
     assert SECRET not in caplog.text
 
 
+@pytest.mark.parametrize('plan', [PlanType.basic, PlanType.unlimited])
+def test_entitlement_is_cached_per_uid_for_300_seconds(admission, plan):
+    lookup, _ = admission
+    lookup.return_value = SimpleNamespace(plan=plan)
+    allowed = plan in PAID_PLAN_TYPES
+    assert admission_module.mentor_plan_allows_evaluation('synthetic') is allowed
+    assert admission_module.mentor_plan_allows_evaluation('synthetic') is allowed
+    assert lookup.call_count == 1
+    assert admission_module.mentor_plan_allows_evaluation('other-synthetic') is allowed
+    assert lookup.call_count == 2
+    cache = admission_module.get_memory_cache()
+    entry = cache.cache['mentor_entitlement:synthetic']
+    assert entry.ttl == 300
+    entry.timestamp -= 301
+    lookup.return_value = SimpleNamespace(plan=PlanType.basic if allowed else PlanType.unlimited)
+    assert admission_module.mentor_plan_allows_evaluation('synthetic') is not allowed
+    assert lookup.call_count == 3
+
+
+@pytest.mark.parametrize('failure', ['lookup', 'unknown_plan'])
+def test_unresolved_entitlement_is_not_cached(admission, failure):
+    lookup, fallback = admission
+    if failure == 'lookup':
+        lookup.side_effect = [RuntimeError(SECRET), SimpleNamespace(plan=PlanType.basic)]
+    else:
+        lookup.side_effect = [SimpleNamespace(plan='future_plan'), SimpleNamespace(plan=PlanType.basic)]
+    assert admission_module.mentor_plan_allows_evaluation('synthetic') is True
+    assert admission_module.mentor_plan_allows_evaluation('synthetic') is False
+    assert lookup.call_count == 2
+    fallback.assert_called_once()
+
+
 @pytest.fixture
 def pipeline(integration_harness, monkeypatch):  # noqa: F811
     app = integration_harness.app
@@ -86,13 +121,61 @@ def pipeline(integration_harness, monkeypatch):  # noqa: F811
     return app, records
 
 
-def test_free_skip_precedes_all_model_and_context_calls(pipeline):
+@pytest.mark.parametrize('debounce', [True, False])
+def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, debounce):
     app, records = pipeline
+    monkeypatch.setenv('MENTOR_GATE_DEBOUNCE_ENABLED', str(debounce))
+    for name, result in [
+        ('read', None),
+        ('read_authoritative', None),
+        ('claim', True),
+        ('record', None),
+        ('release', None),
+    ]:
+        monkeypatch.setattr(app.mentor_gate_state, name, MagicMock(return_value=result))
     app.mentor_plan_allows_evaluation.return_value = False
-    assert app._process_mentor_proactive_notification('synthetic', MESSAGES) is None
-    for call in (app.evaluate_relevance, app.generate_notification, app.validate_notification, app.get_prompt_memories):
+    assert app._process_mentor_proactive_notification('synthetic', [{'text': 'word ' * 120, 'is_user': True}]) is None
+    for call in (
+        app.evaluate_relevance,
+        app.generate_notification,
+        app.validate_notification,
+        app.get_prompt_memories,
+        app.generate_embedding,
+        app.query_vectors_by_metadata,
+    ):
         call.assert_not_called()
+    app.mentor_plan_allows_evaluation.assert_called_once_with('synthetic')
+    app.mentor_gate_state.record.assert_not_called()
+    if debounce:
+        app.mentor_gate_state.release.assert_called_once_with('synthetic')
     assert records == []
+
+
+@pytest.mark.parametrize(
+    'end', ['gate_reject', 'gate_low_score', 'critic_reject', 'send', 'gate_error', 'draft_error', 'critic_error']
+)
+def test_mentor_pipeline_logs_only_metadata(pipeline, end, caplog):
+    app, _ = pipeline
+    app.generate_notification.return_value.notification_text = SECRET
+    app.generate_notification.return_value.category = SECRET
+    if end == 'gate_reject':
+        app.evaluate_relevance.return_value.is_relevant = False
+    elif end == 'gate_low_score':
+        app.evaluate_relevance.return_value.relevance_score = 0.0
+    elif end == 'critic_reject':
+        app.validate_notification.return_value.approved = False
+    elif end.endswith('error'):
+        stage = {
+            'gate_error': app.evaluate_relevance,
+            'draft_error': app.generate_notification,
+            'critic_error': app.validate_notification,
+        }[end]
+        stage.side_effect = RuntimeError(SECRET)
+    with caplog.at_level('INFO'):
+        app._process_mentor_proactive_notification('synthetic', MESSAGES)
+    assert 'mentor_proactive' in caplog.text
+    assert SECRET not in caplog.text
+    assert 'context=' not in caplog.text and 'reasoning=' not in caplog.text
 
 
 @pytest.mark.parametrize(
