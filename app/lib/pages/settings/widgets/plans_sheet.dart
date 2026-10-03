@@ -221,17 +221,11 @@ class _PlansSheetState extends State<PlansSheet> {
     final plans = availablePlans['plans'] as List;
     final tierId = selectedTierId;
 
-    // Find the matching plan: match tier + billing period
-    Map<String, dynamic>? selectedPlanData;
-    if (tierId != null) {
-      selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
-    }
-    // Fallback to old behavior (first plan matching interval) for backwards compat
-    selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+    final selectedPlanData = planForCheckout(
+      plans.cast<Map<String, dynamic>>(),
+      interval: isYearly ? 'year' : 'month',
+      selectedTierId: tierId,
+    );
 
     if (selectedPlanData == null) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
