@@ -6,6 +6,7 @@ import {
   resolveUiLanguage,
   setUiLanguageForTesting,
   formatLocale,
+  uses12HourClock,
   t,
   tc,
   tn,
@@ -106,6 +107,23 @@ describe('formatLocale', () => {
     expect(
       new Date(2026, 0, 15).toLocaleDateString(formatLocale(), { month: 'long' }),
     ).toBe('enero');
+    setUiLanguageForTesting('en');
+  });
+});
+
+describe('uses12HourClock', () => {
+  it('keeps the 12-hour clock in English and the 24-hour clock in Spanish', () => {
+    const at = new Date(2026, 0, 15, 14, 30);
+    const time = () =>
+      at.toLocaleTimeString(formatLocale(), {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: uses12HourClock(),
+      });
+    setUiLanguageForTesting('en');
+    expect(time()).toMatch(/^2:30\s?PM$/);
+    setUiLanguageForTesting('es');
+    expect(time()).toBe('14:30');
     setUiLanguageForTesting('en');
   });
 });

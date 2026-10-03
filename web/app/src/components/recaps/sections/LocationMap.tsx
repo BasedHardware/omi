@@ -6,7 +6,7 @@ import { Play, Pause, RotateCcw } from 'lucide-react';
 import type { LocationPin } from '@/types/recap';
 import { getConversation } from '@/lib/api';
 import { StaticMapPreview } from '@/components/ui/StaticMapPreview';
-import { t, formatLocale } from '@/lib/i18n';
+import { t, formatLocale, uses12HourClock } from '@/lib/i18n';
 
 // Conversation info cache type
 interface ConversationInfo {
@@ -213,7 +213,7 @@ export default function LocationMap({
     return date.toLocaleTimeString(formatLocale(), {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true,
+      hour12: uses12HourClock(),
     });
   };
 

@@ -34,7 +34,7 @@ import { TasksSection } from './sections/TasksSection';
 import { InsightsSection } from './sections/InsightsSection';
 import { LocationsSection } from './sections/LocationsSection';
 import { ConversationPreviewPanel } from './ConversationPreviewPanel';
-import { t, formatLocale } from '@/lib/i18n';
+import { t, formatLocale, uses12HourClock } from '@/lib/i18n';
 
 interface RecapDetailPanelProps {
   recapId: string;
@@ -90,7 +90,7 @@ function formatJourneyTime(timeString: string): string {
   return date.toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: uses12HourClock(),
   });
 }
 

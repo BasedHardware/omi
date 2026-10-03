@@ -14,7 +14,7 @@ import {
 } from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
-import { t, formatLocale } from '@/lib/i18n';
+import { t, formatLocale, uses12HourClock } from '@/lib/i18n';
 
 /**
  * The chat transcript, with no chrome of its own.
@@ -29,7 +29,7 @@ function formatMessageTime(isoDate: string): string {
   return new Date(isoDate).toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: uses12HourClock(),
   });
 }
 

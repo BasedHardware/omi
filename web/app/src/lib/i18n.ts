@@ -145,6 +145,14 @@ export function formatLocale(): string {
   return current === 'en' ? 'en-US' : current;
 }
 
+/**
+ * `hour12` for time formatting: English keeps the 12-hour clock these screens always
+ * used; other languages follow their locale's convention (24-hour for Spanish).
+ */
+export function uses12HourClock(): boolean | undefined {
+  return current === 'en' ? true : undefined;
+}
+
 /** Save the interface language and reload so every string switches together. */
 export function setUiLanguagePreference(preference: UiLanguagePreference): void {
   try {
