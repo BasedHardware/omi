@@ -567,6 +567,7 @@ def coordinator():
 async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, monkeypatch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
