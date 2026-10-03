@@ -8,6 +8,7 @@
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -23,7 +24,7 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 #define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
 #define ADC_1ST_CHANNEL_ID 0
 #define ADC_1ST_CHANNEL_INPUT NRF_SAADC_INPUT_AIN0
-#define BATTERY_FILTER_ALPHA_U16 (uint16_t)(65535/(5+1))
+#define BATTERY_FILTER_ALPHA_U16 (uint16_t) (65535 / (5 + 1))
 #define FILTER_INIT_CYCLES 5
 #define BATTERY_STATES(is_charging) ((is_charging) ? battery_charging_states : battery_discharge_states)
 
@@ -32,6 +33,48 @@ static uint8_t battery_percentage_ema = 0;
 static bool ema_initialized = false;
 static bool is_first_measurement = true;
 static uint8_t ema_init_counter = 0;
+
+// GPIO edges arrive in interrupt context; never take battery_mut there.
+static struct k_spinlock battery_state_lock;
+static bool charging_state_known;
+static uint32_t charge_generation;
+static uint16_t charge_edge_count;
+static bool first_off_charger_pending;
+static bool has_off_charger_sample;
+static uint8_t last_off_charger_percentage;
+static uint16_t last_off_charger_millivolts = UINT16_MAX;
+static uint16_t measured_millivolts = UINT16_MAX;
+static bool soc_frozen;
+static bool sample_valid;
+static bool sample_charging;
+static uint32_t sample_generation;
+
+struct battery_soc_decision {
+    uint8_t percentage;
+    bool frozen;
+};
+
+// Three cases: charging freezes the last off-charger SOC; booting on the charger
+// falls back to the charging curve without freezing; the first off-charger sample
+// uses the discharge curve directly (later samples keep the discharge clamp/EMA).
+static struct battery_soc_decision battery_soc_policy(bool charging,
+                                                      bool has_off_sample,
+                                                      bool first_off_sample,
+                                                      uint8_t curve_percentage,
+                                                      uint8_t filtered_percentage,
+                                                      uint8_t off_percentage)
+{
+    if (charging) {
+        return (struct battery_soc_decision) {
+            .percentage = has_off_sample ? off_percentage : curve_percentage,
+            .frozen = has_off_sample,
+        };
+    }
+    return (struct battery_soc_decision) {
+        .percentage = first_off_sample ? curve_percentage : MIN(filtered_percentage, off_percentage),
+        .frozen = false,
+    };
+}
 
 static const struct device *const adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
 static const struct gpio_dt_spec power_pin = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(power_pin), gpios, {0});
@@ -126,7 +169,7 @@ uint8_t update_ema_filter(uint32_t current_ema, uint8_t new_value)
     uint64_t new_ema = (alpha * new_value) + (alpha_complement * current_ema);
 
     // Scale result back to 8-bit, with rounding up
-    return (uint8_t)((new_ema + 32768) >> 16);
+    return (uint8_t) ((new_ema + 32768) >> 16);
 }
 
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -147,6 +190,11 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     const uint16_t R2 = 499;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
+    k_spinlock_key_t key = k_spin_lock(&battery_state_lock);
+    const bool charging = is_charging;
+    const uint32_t generation = charge_generation;
+    sample_valid = false;
+    k_spin_unlock(&battery_state_lock, key);
 
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1);
     if (err < 0) {
@@ -224,16 +272,19 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
     LOG_INF("ADC mV at pin (after conversion): %d, charging: %s", adc_raw_val, is_charging ? "true" : "false");
 
+    // Diagnostics retain honest battery ADC millivolts before charging correction.
+    const uint16_t adc_battery_millivolts = (uint16_t) (adc_raw_val * ((float) (R1 + R2) / R2));
+
     // Sub 16mV when charging to correct voltage skew
     // based on practical measurements adjusted on the omi device
-    if (is_charging) {
+    if (charging) {
         adc_raw_val -= 16;
     }
 
     // Calculate battery voltage using the voltage divider formula
     *battery_millivolt = (uint16_t) (adc_raw_val * ((float) (R1 + R2) / R2));
     LOG_INF("Battery voltage (mV): %d", *battery_millivolt);
-    
+
     // Restore bat_read_pin to INPUT state to save power/avoid affecting other circuits
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
     if (err < 0) {
@@ -241,10 +292,27 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
         k_mutex_unlock(&battery_mut);
         return err;
     }
-    
+
+    key = k_spin_lock(&battery_state_lock);
+    measured_millivolts = adc_battery_millivolts;
+    sample_charging = charging;
+    sample_generation = generation;
+    // Discard an ADC sample spanning an edge, rather than applying the wrong curve.
+    const bool stable_charge_pin = charging_state_known && generation == charge_generation;
+    sample_valid = stable_charge_pin;
+    k_spin_unlock(&battery_state_lock, key);
+
+    if (!stable_charge_pin) {
+        k_mutex_unlock(&battery_mut);
+        return -EAGAIN;
+    }
+
     if (is_first_measurement) {
         LOG_INF("First measurement, skipping to allow voltage to stabilize");
         is_first_measurement = false;
+        key = k_spin_lock(&battery_state_lock);
+        sample_valid = false;
+        k_spin_unlock(&battery_state_lock, key);
         k_mutex_unlock(&battery_mut);
         return -EAGAIN; // Skip first measurement to allow voltage to stabilize
     }
@@ -256,8 +324,18 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 
 int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivolt)
 {
+    k_mutex_lock(&battery_mut, K_FOREVER);
+    k_spinlock_key_t key = k_spin_lock(&battery_state_lock);
+    if (!sample_valid || sample_generation != charge_generation) {
+        k_spin_unlock(&battery_state_lock, key);
+        k_mutex_unlock(&battery_mut);
+        return -EAGAIN;
+    }
+    sample_valid = false;
+    const bool charging = sample_charging;
+    const bool first_off_sample = !has_off_charger_sample || first_off_charger_pending;
     uint8_t raw_percentage = 0;
-    BatteryState *battery_states = BATTERY_STATES(is_charging);
+    BatteryState *battery_states = BATTERY_STATES(charging);
 
     // Use the battery discharge profile to determine percentage
     if (battery_millivolt >= battery_states[0].millivolts) {
@@ -267,44 +345,56 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
     } else {
         // Find the appropriate range in the battery profile
         for (int i = 0; i < BATTERY_STATES_COUNT - 1; i++) {
-            if (battery_millivolt <= battery_states[i].millivolts && battery_millivolt > battery_states[i + 1].millivolts) {
-    
+            if (battery_millivolt <= battery_states[i].millivolts &&
+                battery_millivolt > battery_states[i + 1].millivolts) {
+
                 // Linear interpolation between the two closest points
                 uint16_t voltage_range = battery_states[i].millivolts - battery_states[i + 1].millivolts;
                 uint8_t percentage_range = battery_states[i].percentage - battery_states[i + 1].percentage;
                 uint16_t voltage_diff = battery_states[i].millivolts - battery_millivolt;
-    
+
                 raw_percentage = battery_states[i].percentage - (voltage_diff * percentage_range) / voltage_range;
                 break;
             }
         }
     }
 
-    // Prevent sudden jumps in percentage
-    if (battery_percentage_ema != 0) {
-        if (is_charging && raw_percentage < battery_percentage_ema) {
-            raw_percentage = battery_percentage_ema;
-        } else if (!is_charging && raw_percentage > battery_percentage_ema) {
-            raw_percentage = battery_percentage_ema;
+    uint8_t filtered_percentage = raw_percentage;
+    if (!charging && !first_off_sample) {
+        raw_percentage = MIN(raw_percentage, battery_percentage_ema);
+        if (!ema_initialized) {
+            battery_percentage_ema = raw_percentage;
+            if (++ema_init_counter >= FILTER_INIT_CYCLES) {
+                ema_initialized = true;
+            }
+        } else {
+            battery_percentage_ema = update_ema_filter(battery_percentage_ema, raw_percentage);
         }
+        filtered_percentage = battery_percentage_ema;
     }
 
-    // Initialize EMA with first reading
-    if (!ema_initialized) {
-        battery_percentage_ema = raw_percentage;
-        ema_init_counter++;
-        
-        // Run filter for FILTER_INIT_CYCLES to stabilize
-        if (ema_init_counter >= FILTER_INIT_CYCLES) {
-            ema_initialized = true;
+    const struct battery_soc_decision decision = battery_soc_policy(charging,
+                                                                    has_off_charger_sample,
+                                                                    first_off_sample,
+                                                                    raw_percentage,
+                                                                    filtered_percentage,
+                                                                    last_off_charger_percentage);
+    *battery_percentage = decision.percentage;
+    soc_frozen = decision.frozen;
+    if (!charging) {
+        if (first_off_sample) {
+            // Rebase the filter to the uncorrected discharge reading, not charger EMA.
+            battery_percentage_ema = decision.percentage;
+            ema_initialized = false;
+            ema_init_counter = 1;
         }
-        
-        *battery_percentage = raw_percentage;
-    } else {
-        // Apply EMA filter to smooth out percentage changes
-        battery_percentage_ema = update_ema_filter(battery_percentage_ema, raw_percentage);
-        *battery_percentage = battery_percentage_ema;
+        has_off_charger_sample = true;
+        first_off_charger_pending = false;
+        last_off_charger_percentage = decision.percentage;
+        last_off_charger_millivolts = measured_millivolts;
     }
+    k_spin_unlock(&battery_state_lock, key);
+    k_mutex_unlock(&battery_mut);
 
     return 0;
 }
@@ -331,12 +421,38 @@ int battery_set_slow_charge()
 
 int battery_charging_state_read()
 {
-    if (gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
-        is_charging = true;
-    } else {
-        is_charging = false;
+    const int pin = gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin);
+    if (pin < 0) {
+        return pin;
     }
+    const bool charging = pin == 0;
+    k_spinlock_key_t key = k_spin_lock(&battery_state_lock);
+    if (charging_state_known && charging != is_charging) {
+        charge_generation++;
+        if (charge_edge_count < UINT16_MAX - 1U) {
+            charge_edge_count++;
+        }
+        if (!charging) {
+            first_off_charger_pending = true;
+        }
+    }
+    is_charging = charging;
+    charging_state_known = true;
+    k_spin_unlock(&battery_state_lock, key);
     return 0;
+}
+
+void battery_get_diagnostics(struct battery_diagnostics *diagnostics)
+{
+    k_spinlock_key_t key = k_spin_lock(&battery_state_lock);
+    *diagnostics = (struct battery_diagnostics) {
+        .millivolts = measured_millivolts,
+        .last_off_charger_millivolts = last_off_charger_millivolts,
+        .charge_edge_count = charge_edge_count,
+        .charge_pin = charging_state_known ? (is_charging ? 1U : 0U) : UINT8_MAX,
+        .soc_frozen = soc_frozen,
+    };
+    k_spin_unlock(&battery_state_lock, key);
 }
 
 int battery_enable_read()

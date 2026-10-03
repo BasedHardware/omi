@@ -1,3 +1,4 @@
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
@@ -43,6 +44,33 @@ static void print_reset_reason(void)
     uint32_t reas;
 
     reas = nrf_reset_resetreas_get(NRF_RESET);
+    // Preserve the existing boot read before clearing it. Diagnostics parsers use
+    // Zephyr RESET_* bits, not the Nordic RESETREAS register's bit positions.
+    uint32_t cause = 0;
+    if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
+        cause |= RESET_PIN;
+    }
+    if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
+        cause |= RESET_SOFTWARE;
+    }
+    if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
+        cause |= RESET_WATCHDOG;
+    }
+    if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
+        cause |= RESET_LOW_POWER_WAKE;
+    }
+    if (reas & NRF_RESET_RESETREAS_LOCKUP_MASK) {
+        cause |= RESET_CPU_LOCKUP;
+    }
+    const uint32_t known_reasons = NRF_RESET_RESETREAS_RESETPIN_MASK | NRF_RESET_RESETREAS_SREQ_MASK |
+                                   NRF_RESET_RESETREAS_DOG0_MASK | NRF_RESET_RESETREAS_NFC_MASK |
+                                   NRF_RESET_RESETREAS_LOCKUP_MASK;
+    if (reas == 0) {
+        cause = RESET_POR;
+    } else if (reas & ~known_reasons) {
+        cause = UINT32_MAX; // Do not mislabel reset sources we cannot translate.
+    }
+    transport_set_reset_cause(cause);
     nrf_reset_resetreas_clear(NRF_RESET, reas);
 
     if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
