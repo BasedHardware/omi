@@ -12344,6 +12344,17 @@ class AppLocalizationsSl extends AppLocalizations {
   String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
 
   @override
+  String get previousDay => 'Prejšnji dan';
+
+  @override
+  String get nextDay => 'Naslednji dan';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ni opravil za $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'Ponovna obdelava pogovora…';
 
   @override

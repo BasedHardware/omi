@@ -159,8 +159,11 @@ void main() {
     expect(enableAt, isNonNegative, reason: 'capable firmware must see CMD_CUSTODY_ENABLE(0x14, 1, 0x0F)');
     expect(enableAt, greaterThan(infoWriteAt), reason: 'enable must follow a confirmed INFO');
     expect(audioSubAt, isNonNegative);
-    expect(t.ops.indexOf('write'), lessThan(audioSubAt),
-        reason: 'custody negotiation must precede the audio characteristic subscription');
+    expect(
+      t.ops.indexOf('write'),
+      lessThan(audioSubAt),
+      reason: 'custody negotiation must precede the audio characteristic subscription',
+    );
 
     await audioSub?.cancel();
     await conn.disconnect();
@@ -182,26 +185,32 @@ void main() {
     await sync.walReady;
 
     for (var i = 0; i < 1000; i++) {
-      sync.onFrameCaptured(WalFrame(
-        payload: [0xAA, i & 0xFF],
-        syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0]),
-      ));
+      sync.onFrameCaptured(WalFrame(payload: [0xAA, i & 0xFF], syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0])));
     }
 
     final tenSecond = timers.where((e) => e.key.inSeconds == 10).toList();
-    expect(tenSecond, isNotEmpty,
-        reason: 'a 10s pendant drain timer must exist — the 75s/105s batch timers cannot prove custody');
+    expect(
+      tenSecond,
+      isNotEmpty,
+      reason: 'a 10s pendant drain timer must exist — the 75s/105s batch timers cannot prove custody',
+    );
     final dummy = Timer(const Duration(days: 1), () {});
     tenSecond.last.value(dummy);
     dummy.cancel();
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
     final wals = await WalFileManager.loadWals();
-    expect(wals.where((w) => w.storage == WalStorage.disk), isNotEmpty,
-        reason: 'pendant frames must reach the disk index inside the custody window');
+    expect(
+      wals.where((w) => w.storage == WalStorage.disk),
+      isNotEmpty,
+      reason: 'pendant frames must reach the disk index inside the custody window',
+    );
     final wal = wals.firstWhere((w) => w.storage == WalStorage.disk);
-    expect(File('${tempDir.path}/${wal.filePath}').existsSync(), isTrue,
-        reason: 'the audio file must be durable, not just the index entry');
+    expect(
+      File('${tempDir.path}/${wal.filePath}').existsSync(),
+      isTrue,
+      reason: 'the audio file must be durable, not just the index entry',
+    );
 
     await sync.stop();
     for (final entry in timers) {
@@ -214,16 +223,18 @@ void main() {
     for (var i = 0; i < 723; i++) {
       final name = 'pending_$i.bin';
       File('${tempDir.path}/$name').writeAsBytesSync([i & 0xFF]);
-      wals.add(Wal(
-        codec: BleAudioCodec.opus,
-        timerStart: 1700000000 + i,
-        seconds: 1,
-        totalFrames: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        device: 'dev',
-        filePath: name,
-      ));
+      wals.add(
+        Wal(
+          codec: BleAudioCodec.opus,
+          timerStart: 1700000000 + i,
+          seconds: 1,
+          totalFrames: 1,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          device: 'dev',
+          filePath: name,
+        ),
+      );
     }
     final sync = LocalWalSyncImpl(_Listener(), persistWals: WalFileManager.saveWals);
     sync.testWals = wals;
@@ -238,8 +249,11 @@ void main() {
     await WalFileManager.saveWals(List.of(sync.testWals));
     final index = await WalFileManager.loadWals();
     expect(index.length, expectedCount, reason: 'the index must keep every pending WAL');
-    expect(sync.retentionRisk, isNotNull,
-        reason: 'the cap overflow must surface as retention risk, not silent deletion');
+    expect(
+      sync.retentionRisk,
+      isNotNull,
+      reason: 'the cap overflow must surface as retention risk, not silent deletion',
+    );
 
     await sync.stop();
   });

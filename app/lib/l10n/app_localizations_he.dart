@@ -12223,6 +12223,17 @@ class AppLocalizationsHe extends AppLocalizations {
   String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
 
   @override
+  String get previousDay => 'היום הקודם';
+
+  @override
+  String get nextDay => 'היום הבא';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'אין משימות ב$date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'מעבד מחדש את השיחה…';
 
   @override

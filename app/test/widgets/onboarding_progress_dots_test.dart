@@ -8,11 +8,13 @@ import 'package:omi/pages/onboarding/wrapper.dart';
 void main() {
   testWidgets('progress dots count only real steps and speak "Step N of M"', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: OnboardingProgressDots(current: 1, total: 6)),
-    ));
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: OnboardingProgressDots(current: 1, total: 6)),
+      ),
+    );
 
     expect(find.bySemanticsLabel('Step 2 of 6'), findsOneWidget);
     // One dot per step: no placeholder pages inflate the count.
@@ -27,24 +29,27 @@ void main() {
     expect(OnboardingProgressStepsForTest.steps, hasLength(6));
   });
 
-  testWidgets('floating navigation reserves its row, so a step SafeArea starts below the dots and back button',
-      (tester) async {
+  testWidgets('floating navigation reserves its row, so a step SafeArea starts below the dots and back button', (
+    tester,
+  ) async {
     Future<double> top({int? progress, VoidCallback? onBack}) async {
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(390, 844), padding: EdgeInsets.only(top: 47)),
-          child: Scaffold(
-            body: OnboardingStepLayout(
-              reserveHeader: false,
-              progress: progress == null ? null : OnboardingProgressDots(current: progress, total: 6),
-              onBack: onBack,
-              child: const SafeArea(child: Text('step title', key: Key('title'))),
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(390, 844), padding: EdgeInsets.only(top: 47)),
+            child: Scaffold(
+              body: OnboardingStepLayout(
+                reserveHeader: false,
+                progress: progress == null ? null : OnboardingProgressDots(current: progress, total: 6),
+                onBack: onBack,
+                child: const SafeArea(child: Text('step title', key: Key('title'))),
+              ),
             ),
           ),
         ),
-      ));
+      );
       return tester.getTopLeft(find.byKey(const Key('title'))).dy;
     }
 

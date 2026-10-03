@@ -12314,6 +12314,17 @@ class AppLocalizationsBn extends AppLocalizations {
   String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
 
   @override
+  String get previousDay => 'আগের দিন';
+
+  @override
+  String get nextDay => 'পরের দিন';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date-এ কোনো কাজ নেই';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';
 
   @override

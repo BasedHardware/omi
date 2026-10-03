@@ -17,15 +17,25 @@ class CITierTests(unittest.TestCase):
             root = Path(temp)
             calls = root / "calls"
             gh = root / "gh"
-            gh.write_text("#!/bin/sh\n"
-                          "printf '%s\\n' \"$*\" >> \"$FAKE_CALLS\"\n"
-                          + ("exit 1\n" if fail else "printf '%s\\n' \"$FAKE_LABELS\"\n"))
+            gh.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$*\" >> \"$FAKE_CALLS\"\n"
+                + ("exit 1\n" if fail else "printf '%s\\n' \"$FAKE_LABELS\"\n")
+            )
             gh.chmod(0o755)
             output = root / "output"
-            env = dict(os.environ, EVENT_NAME=event, REPO="BasedHardware/omi",
-                       HEAD_REPO=head, PR_NUMBER="123", GH_TOKEN="fixture-token",
-                       GITHUB_OUTPUT=str(output), FAKE_CALLS=str(calls),
-                       FAKE_LABELS=labels, PATH=f"{root}:{os.environ['PATH']}")
+            env = dict(
+                os.environ,
+                EVENT_NAME=event,
+                REPO="BasedHardware/omi",
+                HEAD_REPO=head,
+                PR_NUMBER="123",
+                GH_TOKEN="fixture-token",
+                GITHUB_OUTPUT=str(output),
+                FAKE_CALLS=str(calls),
+                FAKE_LABELS=labels,
+                PATH=f"{root}:{os.environ['PATH']}",
+            )
             result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
             return result, output.read_text(), calls.read_text().splitlines() if calls.exists() else []
 
@@ -63,14 +73,26 @@ class CITierTests(unittest.TestCase):
             body.append(line[10:] if line else "")
         script = "\n".join(body)
         with tempfile.TemporaryDirectory() as temp:
-            env = dict(os.environ, CHANGES_RESULT="success", FULL_CI="false",
-                       HAS_GENERATED="false", HAS_DART="false", HAS_JOURNEYS="false",
-                       HAS_ANDROID="false", HAS_IOS="false",
-                       GENERATED_FILES_RESULT="skipped", ANALYZE_AND_TEST_RESULT="skipped",
-                       DART_TIMEZONE_RESULT="skipped", JOURNEYS_RESULT="skipped",
-                       ANDROID_COMPILE_RESULT="skipped",
-                       ANDROID_UNIT_RESULT="skipped", IOS_COMPILE_RESULT="skipped",
-                       GITHUB_STEP_SUMMARY=str(Path(temp) / "summary"))
+            env = dict(
+                os.environ,
+                CHANGES_RESULT="success",
+                FULL_CI="false",
+                HAS_GENERATED="false",
+                HAS_DART="false",
+                HAS_JOURNEYS="false",
+                HAS_ANDROID="false",
+                HAS_IOS="false",
+                GENERATED_FILES_RESULT="skipped",
+                ANALYZE_AND_TEST_RESULT="skipped",
+                DART_TIMEZONE_RESULT="skipped",
+                JOURNEYS_RESULT="skipped",
+                ANDROID_COMPILE_RESULT="skipped",
+                ANDROID_UNIT_RESULT="skipped",
+                ANDROID_EMULATOR_RESULT="skipped",
+                EMULATOR_EXPECTED="false",
+                IOS_COMPILE_RESULT="skipped",
+                GITHUB_STEP_SUMMARY=str(Path(temp) / "summary"),
+            )
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("no mobile heavy checks selected", result.stdout)

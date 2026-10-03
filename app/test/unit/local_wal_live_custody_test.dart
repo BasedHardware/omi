@@ -103,10 +103,8 @@ void main() {
         infoBytes: 41,
       );
 
-  WalFrame frame(int counter) => WalFrame(
-        payload: [0xAA, counter & 0xFF],
-        syncKey: FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF, 0]),
-      );
+  WalFrame frame(int counter) =>
+      WalFrame(payload: [0xAA, counter & 0xFF], syncKey: FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF, 0]));
 
   LiveMarkNotification mark(int ringId, int ringSeq, int liveIndex) =>
       LiveMarkNotification(ringId: ringId, ringSeq: ringSeq, liveIndex: liveIndex);
@@ -333,7 +331,10 @@ void main() {
     final wals = await WalFileManager.loadWals();
     final file = File('${tempDir.path}/${wals.first.filePath}');
     await file.delete();
-    expect(await custody2.isDurableLiveRecord('dev', 42, 3), isFalse,
-        reason: 'deleted audio must keep both copies — never dedupe a missing file');
+    expect(
+      await custody2.isDurableLiveRecord('dev', 42, 3),
+      isFalse,
+      reason: 'deleted audio must keep both copies — never dedupe a missing file',
+    );
   });
 }

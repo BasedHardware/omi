@@ -12248,6 +12248,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String get peopleStatsIncomplete => 'จำนวนอาจไม่ครบถ้วน';
 
   @override
+  String get previousDay => 'วันก่อนหน้า';
+
+  @override
+  String get nextDay => 'วันถัดไป';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'ไม่มีงานในวันที่ $date';
+  }
+
+  @override
   String get reprocessingConversationProgress => 'กำลังประมวลผลการสนทนาอีกครั้ง…';
 
   @override

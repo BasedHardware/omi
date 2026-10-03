@@ -20,6 +20,7 @@ import { TASK_MODEL, TASK_FALLBACK_MODEL } from './tasks/geminiWire'
 import { MODEL as FOCUS_MODEL } from './focus/gemini'
 import { MODEL as MEMORY_MODEL } from './memory/gemini'
 import { MODEL as INSIGHT_MODEL, FALLBACK_MODEL as INSIGHT_FALLBACK_MODEL } from './insight/gemini'
+import { geminiProxyFetch, type GeminiFetch } from '../../shared/geminiProxy'
 
 const PT_MODEL = 'gemini-2.5-flash'
 const OFF_PT_MODEL = 'gemini-2.5-flash-lite'
@@ -43,3 +44,38 @@ describe('assistant model pins vs the Vertex PT reservation', () => {
     expect(INSIGHT_FALLBACK_MODEL).toBe(OFF_PT_MODEL)
   })
 })
+
+// Compile-time contract for the shared Gemini transport: a misspelled action,
+// a missing/invalid lane, or a missing/invalid workload must not compile. This
+// file is inside the node tsconfig's include roots, so `pnpm typecheck` is what
+// verifies each @ts-expect-error is a real error; the body never runs.
+const _compileAssertions = (): void => {
+  const impl = fetch as GeminiFetch
+  const base = { baseURL: 'b', model: 'm', token: 't', body: '{}', platform: 'windows' as const }
+  geminiProxyFetch(impl, {
+    ...base,
+    // @ts-expect-error action is bounded to the backend allowlist
+    action: 'generateContents',
+    lane: 'focus',
+    workload: 'extraction'
+  })
+  // @ts-expect-error lane is required — an unattributed request must not compile
+  geminiProxyFetch(impl, { ...base, action: 'generateContent', workload: 'extraction' })
+  // @ts-expect-error workload is required
+  geminiProxyFetch(impl, { ...base, action: 'generateContent', lane: 'focus' })
+  geminiProxyFetch(impl, {
+    ...base,
+    action: 'generateContent',
+    // @ts-expect-error lane must be a generated literal
+    lane: 'bogus_lane',
+    workload: 'extraction'
+  })
+  geminiProxyFetch(impl, {
+    ...base,
+    action: 'generateContent',
+    lane: 'focus',
+    // @ts-expect-error workload must be a generated literal
+    workload: 'batch'
+  })
+}
+void _compileAssertions

@@ -29,10 +29,9 @@ void main() {
         final caught = <Object>[];
         final uncaught = <Object>[];
         runZonedGuarded(() {
-          manager.send(() => http.Request('GET', url), retries: 0).then<void>(
-                (_) => fail('Request unexpectedly succeeded'),
-                onError: (Object e) => caught.add(e),
-              );
+          manager
+              .send(() => http.Request('GET', url), retries: 0)
+              .then<void>((_) => fail('Request unexpectedly succeeded'), onError: (Object e) => caught.add(e));
         }, (error, _) => uncaught.add(error));
 
         async.flushMicrotasks();
@@ -58,10 +57,9 @@ void main() {
       final caught = <Object>[];
       final uncaught = <Object>[];
       void send() {
-        manager.send(() => http.Request('GET', url), retries: 0).then<void>(
-              (_) => fail('Request unexpectedly succeeded'),
-              onError: (Object e) => caught.add(e),
-            );
+        manager
+            .send(() => http.Request('GET', url), retries: 0)
+            .then<void>((_) => fail('Request unexpectedly succeeded'), onError: (Object e) => caught.add(e));
       }
 
       runZonedGuarded(() {
@@ -117,10 +115,9 @@ void main() {
       final caught = <Object>[];
       final uncaught = <Object>[];
       runZonedGuarded(() {
-        manager.send(() => http.Request('GET', url)).then<void>(
-              (_) => fail('Request unexpectedly succeeded'),
-              onError: (Object e) => caught.add(e),
-            );
+        manager
+            .send(() => http.Request('GET', url))
+            .then<void>((_) => fail('Request unexpectedly succeeded'), onError: (Object e) => caught.add(e));
       }, (error, _) => uncaught.add(error));
 
       async.flushMicrotasks();
@@ -173,8 +170,12 @@ class _SuccessfulRequest extends Fake implements HttpClientRequest {
 
 class _SuccessfulResponse extends Stream<List<int>> implements HttpClientResponse {
   @override
-  StreamSubscription<List<int>> listen(void Function(List<int>)? onData,
-          {Function? onError, void Function()? onDone, bool? cancelOnError}) =>
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) =>
       const Stream<List<int>>.empty().listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
 
   @override
