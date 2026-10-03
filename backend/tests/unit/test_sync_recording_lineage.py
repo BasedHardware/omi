@@ -262,13 +262,23 @@ def test_unstamped_batch_is_split_across_the_generations_that_own_its_audio():
     assert {row['id'] for row in conversations(store)} == before
 
 
-def test_replay_has_no_repeated_speech_when_live_and_sync_wording_match():
+def test_receipt_only_replay_appends_wording_matched_speech_to_live_rows():
     store = seeded_store()
-    for chunks, stamp in ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None)):
+    before = {row['id'] for row in conversations(store)}
+    stamped, unstamped = upload_stamped_for_l(), upload_straddling_next_two()
+    for chunks, stamp in ((stamped, gen_id(L)), (unstamped, None)):
         targets = plan(store, chunks, stamp=stamp).targets
         replay_proven(store, chunks, targets)
-    for k in (L, L + 1, L + 2):
-        assert len(texts(store, gen_id(k))) == len(set(texts(store, gen_id(k))))
+    assert {row['id'] for row in conversations(store)} == before
+    expected = {
+        gen_id(L): [live_text(L, i) for i in range(4)] + [c['transcript_segments'][0]['text'] for c in stamped],
+        gen_id(L + 1): [live_text(L + 1, i) for i in range(4)]
+        + [c['transcript_segments'][0]['text'] for c in unstamped[:2]],
+        gen_id(L + 2): [live_text(L + 2, i) for i in range(4)]
+        + [c['transcript_segments'][0]['text'] for c in unstamped[2:]],
+    }
+    for cid, want in expected.items():
+        assert sorted(texts(store, cid)) == sorted(want)
 
 
 def test_residual_differently_worded_overlap_still_repeats_on_the_live_row(monkeypatch):
@@ -290,17 +300,37 @@ def test_residual_differently_worded_overlap_still_repeats_on_the_live_row(monke
     assert deduplicated_transcribed_speech_seconds(row['transcript_segments']) == 34  # originally 32; skew adds 2
 
 
-def test_retry_binds_the_same_rows_and_appends_nothing_new():
+def test_receipt_only_retry_binds_the_same_rows_and_reappends_its_speech():
     store = seeded_store()
     uploads = ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None))
     first = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
     for (chunks, _), targets in zip(uploads, first):
         replay_proven(store, chunks, targets)
+    before = {row['id'] for row in conversations(store)}
+    again = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
+    assert again == first
+    for (chunks, _), targets in zip(uploads, again):
+        for chunk, (_, created, survivors) in zip(chunks, replay_proven(store, chunks, targets)):
+            assert not created and [s['text'] for s in survivors] == [s['text'] for s in chunk['transcript_segments']]
+    assert {row['id'] for row in conversations(store)} == before
+
+
+def test_exact_sync_scoped_retry_binds_the_same_rows_and_appends_nothing_new():
+    store = seeded_store()
+    uploads = ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None))
+    for chunks, _ in uploads:
+        for chunk in chunks:
+            for i, segment in enumerate(chunk['transcript_segments']):
+                segment['id'] = f"{chunk['id']}-seg-{i}"
+                segment['speaker_id_scope'] = f"sync:{chunk['id']}"
+    first = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
+    for (chunks, _), targets in zip(uploads, first):
+        replay(store, chunks, targets)
     snapshot = deepcopy(store.rows)
     again = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
     assert again == first
     for (chunks, _), targets in zip(uploads, again):
-        for _, created, survivors in replay_proven(store, chunks, targets):
+        for _, created, survivors in replay(store, chunks, targets):
             assert not created and not survivors
     conversation_rows = lambda rows: {k: v for k, v in rows.items() if k[2] == 'conversations'}  # noqa: E731
     assert {k: v['transcript_segments'] for k, v in conversation_rows(store.rows).items()} == {
