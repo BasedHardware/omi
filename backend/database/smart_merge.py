@@ -29,6 +29,8 @@ from database import smart_merge_audit as audit_db
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 from database.people_stats_cache import invalidate_people_stats_cache
+from config import merge_ancestry
+from config.conversation_smart_merge import smart_merge_flatten_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,14 @@ _PRECEDING_FIELDS = (
 )
 
 Plan = Callable[
-    [Mapping[str, Any], Sequence[Mapping[str, Any]], Mapping[str, Any], Sequence[Mapping[str, Any]]],
-    tuple[Optional[str], Optional[dict], Optional[dict]],
+    [
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Optional[Mapping[str, Any]]],
+    ],
+    tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]],
 ]
 
 
@@ -75,6 +83,10 @@ class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
     audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
+    flattened_ancestor_count: int = 0
+
+
+_UNSET = object()
 
 
 def _collection(client: Any, uid: str) -> Any:
@@ -148,12 +160,19 @@ def absorb_conversation(
     *,
     expected_revision: int,
     plan: Plan,
+    expected_survivor_sync_revision: Any = _UNSET,
+    expected_donor_sync_revision: Any = _UNSET,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
 
     ``plan`` re-applies the deterministic policy to the rows read here and
-    returns ``(reason, survivor_update, donor_update)``; a reason rejects.
+    returns ``(reason, survivor_update, donor_update, ancestor_updates)``; a
+    reason rejects. With flatten enabled, every row in the ancestry union minus
+    the direct donor — the survivor's existing ancestry and the donor's
+    declared ancestry — is re-read in this same transaction before the audit
+    gate and any write, and ``ancestor_updates`` re-points each inherited
+    tombstone at the survivor.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = _collection(client, uid)
@@ -176,9 +195,31 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'survivor_changed')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
+        flatten = smart_merge_flatten_enabled()
+        if flatten:
+            if expected_survivor_sync_revision is not _UNSET and (
+                survivor_raw.get('sync_content_revision') != expected_survivor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+            if expected_donor_sync_revision is not _UNSET and (
+                donor_raw.get('sync_content_revision') != expected_donor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+            reason, union_ids = merge_ancestry.ancestry_union(survivor_raw, {donor_id: donor_raw})
+            if reason is not None:
+                return AbsorbResult('rejected', reason)
+            union_ancestors = [ancestor_id for ancestor_id in union_ids if ancestor_id != donor_id]
+            ancestor_rows = {
+                ancestor_id: collection.document(ancestor_id).get(transaction=transaction).to_dict()
+                for ancestor_id in union_ancestors
+            }
+        else:
+            ancestor_rows = {}
         survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
         donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
-        reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
+        reason, survivor_update, donor_update, ancestor_updates = plan(
+            survivor, survivor_segments, donor, donor_segments, ancestor_rows
+        )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
         # Last read, only on the absorbing path: the gate fence for the audit sibling.
@@ -187,8 +228,15 @@ def absorb_conversation(
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
+        if flatten:
+            donor_update = dict(donor_update)
+            marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})
+            marker['flattened_ancestor_count'] = len(ancestor_updates)
+            donor_update[SMART_MERGE_FIELD] = marker
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
+        for ancestor_id, patch in ancestor_updates.items():
+            transaction.update(collection.document(ancestor_id), patch)
         audit = audit or audit_db.stage_audit(
             transaction,
             client,
@@ -199,7 +247,7 @@ def absorb_conversation(
             donor_update=donor_update,
             source=donor.get('source'),
         )
-        return AbsorbResult('absorbed', 'absorbed', audit)
+        return AbsorbResult('absorbed', 'absorbed', audit, flattened_ancestor_count=len(ancestor_updates))
 
     @firestore.transactional
     def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:

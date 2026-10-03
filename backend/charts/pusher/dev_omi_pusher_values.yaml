@@ -118,6 +118,8 @@ runtimeConfigMapName: dev-omi-backend-config
 env:
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH

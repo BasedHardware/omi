@@ -17,6 +17,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -450,6 +453,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -832,6 +838,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1120,6 +1129,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1373,6 +1385,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1579,6 +1594,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -2028,6 +2046,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2477,6 +2498,9 @@ environments:
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2743,6 +2767,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3048,6 +3075,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3291,6 +3321,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3508,6 +3541,9 @@ environments:
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout

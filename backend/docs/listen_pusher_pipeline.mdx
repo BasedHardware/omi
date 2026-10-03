@@ -570,6 +570,29 @@ repair WALs that target a donor append to its survivor (`utils/sync/assignment.p
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.
 
+`CONVERSATION_SMART_MERGE_FLATTEN_ENABLED` (unset or blank = on; only
+true/on/1/yes enable it, everything else = off) lets a donor that already
+absorbed sync-bridge ancestors merge: the same transaction re-points each
+inherited tombstone one hop at the survivor, unions the ancestry into the
+survivor's `sync_merged_from` under the twelve-fragment budget, and bumps each
+re-pointed tombstone's `sync_content_revision` to fence in-flight receipts.
+Any ancestor that is missing, foreign, malformed, cyclic, over budget, or
+user-managed rejects the absorb with no writes; the decision-time
+`sync_content_revision` snapshots fence a transcript that changed before
+commit. An explicit sync target carrying `sync_merged_into` resolves in one
+hop inside the assignment transaction only when the row is smart-merge
+lineage (a smart-merge donor tombstone or a redirect to a smart-merge
+survivor); ordinary sync tombstones keep the prior temporal fallback — a
+deleted or discarded survivor supersedes, a longer chain or cycle conflicts —
+so late uploads land on the survivor. Bridge cleanup and the flattened ancestors' transfer, retraction
+and audio copy finish on the donor marker's persisted count even after the
+flag is off. Absorbs and bounded rejection reasons count in
+`omi_conversation_smart_merge_flatten_total`; the audit sibling carries the
+content-free `flattened_ancestor_count` when the donor marker records one.
+Apply the kill switch to the six hosts that run the finalizer or sync
+assignment: Cloud Run backend, backend-sync, backend-sync-backfill,
+backend-integration, and GKE backend-listen and pusher.
+
 The same absorb transaction writes a content-free audit sibling,
 `users/{uid}/smart_merge_audit/{donor_id}` (ids, decision numbers, model and
 question version, ledger position; `expire_at` 60 days out with no TTL policy
