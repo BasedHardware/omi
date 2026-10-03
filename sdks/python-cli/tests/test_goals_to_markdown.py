@@ -99,13 +99,14 @@ class TestGoalsToMarkdown(unittest.TestCase):
         md = g2m.goals_to_markdown(self.sample_goals, title="Sprint Goals")
         self.assertIn("---", md)
         self.assertIn("type: goals", md)
-        self.assertIn("total: 3", md)
-        self.assertIn("active: 1", md)
-        self.assertIn("achieved: 1", md)
-        self.assertIn("inactive: 1", md)
+        self.assertRegex(md, r"(?m)^total: 3$")
+        self.assertRegex(md, r"(?m)^active: 1$")
+        self.assertRegex(md, r"(?m)^achieved: 1$")
+        self.assertRegex(md, r"(?m)^inactive: 1$")
         self.assertIn("tags:", md)
         self.assertIn("  - omi", md)
         self.assertIn("  - goals", md)
+
         self.assertIn("# Sprint Goals", md)
         self.assertIn(
             "> **Summary:** 1 active, 1 achieved, 1 inactive (3 total).",
@@ -427,6 +428,80 @@ class TestGoalsToMarkdown(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         err_msg = proc.stderr.decode("utf-8")
         self.assertIn("Path traversal sequence '..' is forbidden", err_msg)
+
+    def test_safe_float_overflow_protection(self) -> None:
+
+        """Verify safe_float gracefully handles massive integers and overflow strings without crashing."""
+        huge_int = 10**1000
+        self.assertEqual(g2m.safe_float(huge_int, default=42.0), 42.0)
+        self.assertEqual(g2m.safe_float("1e1000", default=7.0), 7.0)
+
+    def test_descending_goal_missing_current_value(self) -> None:
+        """Verify descending goal with current_value=None defaults to 0% progress and uncompleted."""
+        goal = {
+            "id": "goal_screen_time",
+            "title": "Reduce Screen Time to 2 Hours",
+            "goal_type": "numeric",
+            "current_value": None,
+            "target_value": 2.0,
+            "min_value": 8.0,
+            "status": "in_progress",
+        }
+        # Must not treat None as 0 and falsely declare 100% progress
+        self.assertEqual(g2m.calculate_progress(goal), 0.0)
+        self.assertFalse(g2m.is_goal_completed(goal))
+
+    def test_qualitative_goal_handling(self) -> None:
+        """Verify qualitative goal with target_value == min_value is only completed if marked achieved."""
+        qual_goal = {
+            "id": "goal_read_book",
+            "title": "Read Domain-Driven Design",
+            "goal_type": "scale",
+            "current_value": None,
+            "target_value": 0.0,
+            "min_value": 0.0,
+            "status": "active",
+        }
+        self.assertEqual(g2m.calculate_progress(qual_goal), 0.0)
+        self.assertFalse(g2m.is_goal_completed(qual_goal))
+
+        # When completed, progress is 100.0%
+        qual_goal["status"] = "completed"
+        self.assertEqual(g2m.calculate_progress(qual_goal), 100.0)
+        self.assertTrue(g2m.is_goal_completed(qual_goal))
+
+    def test_extract_goals_single_dict_wrapper(self) -> None:
+        """Verify top-level dictionary wrapping a single goal object is correctly unwrapped."""
+        payload = {
+            "goals": {
+                "id": "wrapped_goal_1",
+                "title": "Wrapped Goal Title",
+                "goal_type": "numeric",
+                "current_value": 5,
+                "target_value": 10,
+            }
+        }
+        extracted = g2m.extract_goals(payload)
+        self.assertEqual(len(extracted), 1)
+        self.assertEqual(extracted[0]["id"], "wrapped_goal_1")
+        self.assertEqual(extracted[0]["title"], "Wrapped Goal Title")
+
+    def test_subtask_string_boolean_false(self) -> None:
+        """Verify subtask with string completed='false' renders unchecked [ ] instead of checked [x]."""
+        goal = {
+            "id": "goal_subtasks_bool",
+            "title": "Subtask String Boolean Check",
+            "goal_type": "numeric",
+            "current_value": 0,
+            "target_value": 10,
+            "subtasks": [
+                {"title": "Pending Item", "completed": "false"},
+                {"title": "Done Item", "completed": "true"},
+            ],
+        }
+        tree = g2m.format_goal_tree(goal)
+        self.assertIn("  - [ ] Pending Item", tree)
+        self.assertIn("  - [x] Done Item", tree)
 
 
 if __name__ == "__main__":
