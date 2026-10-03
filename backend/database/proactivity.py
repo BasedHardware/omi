@@ -177,6 +177,7 @@ def publish_item(
     encrypted_content: str = '',
     state: str = 'ready',
     reason: str = '',
+    source_guard: dict[str, Any] | None = None,
     firestore_client: Any = None,
     now: datetime | None = None,
 ) -> None:
@@ -195,6 +196,15 @@ def publish_item(
             producer = producer_for(item['producer'])
             generation, _ = admission_records(client, uid, producer, tx, now)
             visible = source_visible(client, uid, item, tx)
+            if source_guard is not None:
+                # A producer can fence its already-observed canonical revision without writing the source.
+                source = data_at(source_ref(client, uid, item['source_kind'], item['source_id']), tx)
+                defaults = {'completed': False, 'status': 'active', 'deleted': False, 'is_deleted': False}
+                if set(source_guard) - {'completed', 'status', 'due_at', 'deleted', 'is_deleted'}:
+                    raise ProactivityDenied('invalid_source_guard')
+                if any(source.get(key, defaults.get(key)) != value for key, value in source_guard.items()):
+                    raise ProactivityDenied('source_changed')
+
         else:
             _, generation = read_owner(client, uid, tx)
             visible = True  # Bookkeeping must survive disablement or source deletion.

@@ -139,7 +139,14 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     return message_data
 
 
-def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+def add_app_message(
+    text: str,
+    app_id: str,
+    uid: str,
+    conversation_id: Optional[str] = None,
+    *,
+    proactivity_item_id: Optional[str] = None,
+) -> Message:
     """Add a chat message an app posted for the user, linking it to that app's chat session so it
     appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
     a message stored without one is never returned on that path."""
@@ -157,7 +164,10 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         memories_id=[conversation_id] if conversation_id else [],
         chat_session_id=chat_session_id,
     )
-    add_message(uid, ai_message.model_dump())
+    payload = ai_message.model_dump()
+    if proactivity_item_id:
+        payload['proactivity_item_id'] = proactivity_item_id
+    add_message(uid, payload)
     if chat_session_id:
         add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message

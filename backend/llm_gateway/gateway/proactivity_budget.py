@@ -72,7 +72,7 @@ def context_from_request(request: Any, caller: Any, accounting: AccountingContex
     except (ValueError, ProactivityDenied) as exc:
         raise GatewayInvalidRequestError('invalid proactivity identity') from exc
     if (
-        step not in {'gate', 'generate', 'critic', 'prefilter', 'phrase'}
+        step not in {'gate', 'generate', 'critic', 'prefilter', 'dedupe', 'phrase'}
         or accounting.request_id != call
         or accounting.feature != f'proactivity_v2_{producer}'
     ):
@@ -89,7 +89,7 @@ def envelope_for(
     jev = provider == 'openrouter' and model == 'typesafe/jev-1.13'
     if not jev and (provider, model) != ('openai', 'gpt-6-luna'):
         raise ProactivityDenied('unsupported_model')
-    if jev != (context.step == 'prefilter'):
+    if jev != (context.step in {'prefilter', 'dedupe'}):
         raise ProactivityDenied('invalid_lane')
     payload = dict(request, model=model)
     if jev:
@@ -173,7 +173,9 @@ async def execute_budgeted_provider(
     except Exception as exc:
         reason = exc.reason if isinstance(exc, ProactivityDenied) else 'unavailable'
         logger.info('proactivity_v2_admission producer=%s result=denied reason=%s', context.producer, reason)
-        raise GatewayInvalidRequestError(f'proactivity admission denied: {reason}') from exc
+        raise GatewayInvalidRequestError(
+            f'proactivity admission denied: {reason}', param='proactivity_admission'
+        ) from exc
     if timeout_ms <= 0:
         await run_blocking(db_executor, authority.release_unsent, reservation=reservation)
         raise GatewayInvalidRequestError('proactivity deadline elapsed')

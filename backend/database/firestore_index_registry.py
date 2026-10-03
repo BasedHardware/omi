@@ -35,6 +35,24 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'proactivity_followup_source_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('source_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_delivered_history',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _asc('delivered'), _desc('delivered_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_recent_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'proactivity_feed_state_created',
         'proactivity_items',
         'COLLECTION',

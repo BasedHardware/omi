@@ -1094,6 +1094,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         )
         if updated:
             bump_action_items_list_version(uid)
+            if update_data.get('completed') is True:
+                _record_followup_completion(uid, action_item_id)
         return updated
 
     # Check if exists
@@ -1105,6 +1107,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    if update_data.get('completed') is True:
+        _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1435,6 +1439,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             result.missing_ids.append(entry['id'])
             continue
         result.updated_ids.append(entry['id'])
+        if update_data.get('completed') is True:
+            _record_followup_completion(uid, entry['id'])
 
     if result.updated_ids:
         bump_action_items_list_version(uid)
@@ -1616,3 +1622,12 @@ def get_scores(
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
     }
+
+
+def _record_followup_completion(uid: str, task_id: str) -> None:
+    from database.proactivity_producers import record_task_completion
+
+    try:
+        record_task_completion(uid, task_id, firestore_client=db)
+    except Exception:
+        logger.info('commitment_followup outcome_unavailable')

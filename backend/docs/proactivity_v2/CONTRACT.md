@@ -692,3 +692,20 @@ route, along with the v2 item/target identity. The producer owns the actual ment
 chat message; generic lock-screen copy is not materialized as a second chat message.
 
 A confirmed low acted rate at >=200 deliveries latches the kill even when cost usage is incomplete; unknown usage cannot defer that independently provable kill. Unknown cost still cannot produce a passing cost verdict. Missing provider usage retains the whole reservation and denies publication. Changes to provider usage parsing are limited to Jev; other provider surfaces retain their existing behavior.
+
+
+### Producer integration extensions (2026-10-03)
+
+The producer lane needs up to five mentor attempts per item: optional prefilter,
+then gate/draft/critic/dedupe. The registry raises only that item ceiling from
+three to five; the 60/day and durable dollar caps stay unchanged. `dedupe` is a
+Jev step on the existing budgeted systemone route. Quality fail-open never bypasses
+typed gateway admission denial or an unsettled hold. Terminal reasons add
+`duplicate`, `safety_escalation`, and `source_changed`.
+
+An optional internal publication `source_guard` checks the follow-up's observed
+open status/due revision inside the existing transaction; it never writes tasks.
+Producer history/outcomes use three declared serving indexes. The existing
+client-local reminder scheduling boundary also enqueues one-shot Cloud Tasks due
+wakes; no polling cron is added. Details, deployment prerequisites and remaining
+coordinator decisions are in `PRODUCERS.md`.

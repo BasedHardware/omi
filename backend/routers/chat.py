@@ -503,6 +503,10 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.model_dump())
+    if compat_app_id == 'mentor':
+        from utils.proactivity_producers import observe_mentor_reply
+
+        await run_blocking(db_executor, observe_mentor_reply, uid)
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):

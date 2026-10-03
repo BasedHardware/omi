@@ -2493,3 +2493,39 @@ _add(
         base={'uid': UID, 'source_kind': 'action_item', 'source_id': 'item-1'},
     )
 )
+
+
+# Producer serving paths use bounded history and canonical source mappings.
+_add(DriverEntry('database.proactivity_producers.delivered_mentor_items', base={'uid': UID}))
+_add(DriverEntry('database.proactivity_producers.record_mentor_reply', base={'uid': UID}))
+_add(DriverEntry('database.proactivity_producers.record_task_completion', base={'uid': UID, 'task_id': 'item-1'}))
+
+_add(
+    CoveredByEntry(
+        'database.proactivity_producers.mentor_history_query',
+        covered_by=('database.proactivity_producers.delivered_mentor_items',),
+        reason='Builder consumed by its registered serving parent',
+        expect_observed=False,
+        body_digest='58d7145835dc52e60251c5034bd57a2b9897ab9bf3c07ad823abd94a0ae404fd',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.proactivity_producers.recent_mentor_query',
+        covered_by=('database.proactivity_producers.record_mentor_reply',),
+        reason='Builder consumed by its registered serving parent',
+        expect_observed=False,
+        body_digest='3a5d81d77cd6379c50c6ecb3e4f35dca71cc63a4cb99e7ed77c11ab8db6631d5',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.proactivity_producers.task_items_query',
+        covered_by=('database.proactivity_producers.record_task_completion',),
+        reason='Builder consumed by its registered serving parent',
+        expect_observed=False,
+        body_digest='851391e841741bcf7b990b3e8b38828c0f8955ad59e64b9987e74a81eeb83ad8',
+    )
+)

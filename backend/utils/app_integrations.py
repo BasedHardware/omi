@@ -674,16 +674,7 @@ def _mentor_gate_debounce_skip_reason(
     return None
 
 
-def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
-    """
-    Three-step proactive notification pipeline:
-      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
-      2. Generate — produce the actual notification (only if gate passes)
-      3. Critic — would a human actually want this on their phone? (final check)
-
-    Returns:
-        The notification text if sent, None otherwise.
-    """
+def _admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
     # 1. Get frequency setting
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
@@ -762,6 +753,24 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             )
         finally:
             mentor_gate_state.release(uid)
+
+    return frequency, base_threshold
+
+
+def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
+    """
+    Three-step proactive notification pipeline:
+      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
+      2. Generate — produce the actual notification (only if gate passes)
+      3. Critic — would a human actually want this on their phone? (final check)
+
+    Returns:
+        The notification text if sent, None otherwise.
+    """
+    admission = _admit_mentor_evaluation(uid, conversation_messages)
+    if admission is None:
+        return None
+    frequency, base_threshold = admission
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
     try:
@@ -1140,20 +1149,23 @@ async def _async_trigger_realtime_integrations(
     if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
-    # Process mentor notification first (built-in feature) — sync, runs in thread
+    # Both paths share buffering and deterministic admission. Invalid flips invoke neither.
     mentor_results = {}
-    conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
-    if conversation_messages:
-        with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = await run_blocking(
-                postprocess_executor,
-                _process_mentor_proactive_notification,
-                uid,
-                conversation_messages,
-            )
-        if mentor_message:
-            mentor_results['mentor'] = mentor_message
-            logger.info(f"Sent mentor notification to user {uid}")
+    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
+    if pipeline in {'legacy', 'v2'}:
+        conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
+        if conversation_messages:
+            if pipeline == 'legacy':
+                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                    mentor_message = await run_blocking(
+                        postprocess_executor, _process_mentor_proactive_notification, uid, conversation_messages
+                    )
+                if mentor_message:
+                    mentor_results['mentor'] = mentor_message
+            elif conversation_id:
+                from utils.proactivity_producers import evaluate_mentor_event
+
+                await evaluate_mentor_event(uid, conversation_id, conversation_messages)
 
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
