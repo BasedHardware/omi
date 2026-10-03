@@ -746,6 +746,7 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    registerProactiveCaptureStatusSnapshot()
     register(
       name: "set_automation_ui_presentation",
       effects: [.localState],
