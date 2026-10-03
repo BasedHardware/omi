@@ -820,6 +820,7 @@ class TestProcessSegmentReal:
         sys.modules['database._client'].is_expired_transaction_error = lambda error: False
         sys.modules['database._client'].FIRESTORE_DOCUMENT_KINDS = frozenset({'none'})
         sys.modules['database._client'].firestore_document_kind = lambda error: 'none'
+        sys.modules['database._client'].firestore_error_document_path = lambda error: None
         sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
         sys.modules['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
         _mock_conv_db = sys.modules['database.conversations']

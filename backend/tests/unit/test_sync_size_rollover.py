@@ -453,11 +453,44 @@ def test_document_path_is_parsed_from_the_verbatim_prod_message():
         ('users/u/sync_assignment/recent', 'full', (None, 'sync_recent')),
     ],
 )
-def test_size_limited_conversation_names_only_conversations(adapter, path, canonical, expected):
+def test_size_limited_conversation_names_only_conversations(path, canonical, expected):
     error = _size_error(path)
-    assert adapter._size_limited_conversation(error, canonical) == expected
+    assert assignment.size_limited_conversation(error, canonical) == expected
     assert error.sync_firestore_doc_kind == expected[1]
-    assert adapter._size_limited_conversation(InvalidArgument('other'), canonical) == (None, 'none')
+    assert assignment.size_limited_conversation(InvalidArgument('other'), canonical) == (None, 'none')
+
+
+def test_backstop_runs_at_most_twice_and_only_for_a_routable_rejection():
+    calls = []
+
+    def run(full_ids):
+        calls.append(full_ids)
+        if len(calls) == 1:
+            raise _size_error('users/u/conversations/full')
+        return 'ok'
+
+    assert assignment.run_with_size_limit_backstop(run, lambda: 'full') == 'ok'
+    assert calls == [frozenset(), frozenset({'full'})]
+
+    calls.clear()
+
+    def always(full_ids):
+        calls.append(full_ids)
+        raise _size_error('users/u/conversations/full')
+
+    with pytest.raises(InvalidArgument):
+        assignment.run_with_size_limit_backstop(always, lambda: 'full')
+    assert len(calls) == 2
+
+    calls.clear()
+
+    def other(full_ids):
+        calls.append(full_ids)
+        raise ServiceUnavailable('transient')
+
+    with pytest.raises(ServiceUnavailable):
+        assignment.run_with_size_limit_backstop(other, lambda: 'full')
+    assert len(calls) == 1
 
 
 def test_pipeline_doc_kind_prefers_the_bounded_stamp():

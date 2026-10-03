@@ -7,10 +7,11 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 
 from copy import deepcopy
 import logging
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
 from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
+from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from google.cloud.firestore_v1.document import DocumentReference
 
 logger = logging.getLogger(__name__)
+_T = TypeVar('_T')
 
 # Firestore rejects any write that leaves a document above 1 MiB
 # (FIRESTORE_MAX_DOCUMENT_BYTES), and a temporal merge only ever grows the
@@ -524,3 +526,60 @@ def _stored_document_bytes(
         stored.pop(field, None)
     path = getattr(reference, 'path', None)
     return estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
+
+
+def size_limited_conversation(error: BaseException, canonical: Optional[str]) -> tuple[Optional[str], str]:
+    """``(conversation id that cannot grow, bounded doc kind)`` for a size-limit commit rejection.
+
+    Only a conversation can be routed around: the one the message names (the
+    canonical, or a donor whose redirect write was rejected), or the attempted
+    canonical when the message names no document. An index document yields no
+    id, so that failure stands. The kind is stamped on the error for the
+    pipeline's ``sync_persistence_exception`` line; ids and paths are never logged.
+    """
+    if not is_document_size_limit_error(error):
+        return None, 'none'
+    kind = firestore_document_kind(error)
+    path = firestore_error_document_path(error)
+    named: Optional[str] = None
+    if kind == 'conversation' and path:
+        named = path[-1]
+        if named != canonical:
+            kind = 'donor'
+    elif kind == 'none':
+        named = canonical
+    setattr(error, 'sync_firestore_doc_kind', kind)
+    return named, kind
+
+
+def run_with_size_limit_backstop(
+    run: Callable[[frozenset[str]], _T], attempted_canonical: Callable[[], Optional[str]]
+) -> _T:
+    """Run the assignment transaction; after a size-limit rejection, retry exactly once.
+
+    ``run(full_ids)`` runs one complete transaction. The retry marks the
+    rejected conversation full, so ``assign_in_transaction`` re-plans without
+    it and re-runs every fence; an identical later retry finds the rollover row
+    by interval and deduplicates. A second rejection is raised unchanged and
+    counts as a strike exactly as before.
+    """
+    try:
+        return run(frozenset())
+    except Exception as error:
+        full_id, kind = size_limited_conversation(error, attempted_canonical())
+        if full_id is None:
+            raise
+    logger.warning('event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=%s', kind)
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='canonical_append',
+        to_mode='size_limit_retry',
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
+    try:
+        return run(frozenset({full_id}))
+    except Exception as error:
+        size_limited_conversation(error, attempted_canonical())
+        raise
