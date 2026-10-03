@@ -34,7 +34,7 @@
 //  - only toolCalls[0] is consumed by the caller; parallel calls are its concern.
 import { net } from 'electron'
 import { getAbortSignal, type BackendSession } from '../core/session'
-import type { GeminiTool, ToolCall } from '../insight/models'
+import type { GeminiTool, ToolCall } from '../core/geminiTypes'
 
 /** Task-loop model pair. Windows surfaces no tier, so both are Flash and dedupe
  *  to one model round (up to three explicitly authorized attempts). Keep the

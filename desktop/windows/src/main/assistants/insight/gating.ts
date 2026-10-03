@@ -19,10 +19,7 @@ export const MAC_EXTRACTION_INTERVAL_MS = 600_000
  *  fewer, better insights. */
 export const MIN_CONFIDENCE = 0.85
 
-/** Has the fixed extraction interval elapsed since the last analysis? */
-export function intervalElapsed(timeSinceLastMs: number, intervalMs: number): boolean {
-  return timeSinceLastMs >= intervalMs
-}
+export { intervalElapsed } from '../core/cadence'
 
 /** Mac's post-provide_advice confidence filter. */
 export function passesConfidence(confidence: number, min: number = MIN_CONFIDENCE): boolean {

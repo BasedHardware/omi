@@ -54,6 +54,7 @@ struct TrackedDirectorFrame: Sendable {
 /// Coordinates all proactive assistants, distributing frames and managing lifecycle
 @MainActor
 class AssistantCoordinator {
+  nonisolated private static let departedFrameCaptureEpsilonSeconds: TimeInterval = 2
   static let shared = AssistantCoordinator()
 
   // MARK: - Properties
@@ -381,7 +382,7 @@ class AssistantCoordinator {
     guard let endedAt else { return true }
     return storedAt <= endedAt
       && captureTime
-        <= endedAt.addingTimeInterval(ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds)
+        <= endedAt.addingTimeInterval(Self.departedFrameCaptureEpsilonSeconds)
   }
 
   /// Distribute a captured frame to all enabled assistants

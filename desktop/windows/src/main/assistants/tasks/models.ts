@@ -1,6 +1,6 @@
 // The TaskAssistant's parse layer: the `extract_task` tool call's args → a
 // validated `ExtractedTask`, plus the `validateTaskTitle` specificity gate. Pure
-// — no network, no Electron, no DB. Modeled on `insight/models.ts`
+// — no network, no Electron, no DB. Modeled on `core/geminiTypes.ts`
 // (`parseProvideAdvice`) and ported 1:1 from Mac's `TaskAssistant.swift` /
 // `TaskModels.swift`.
 //

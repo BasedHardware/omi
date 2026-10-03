@@ -10,16 +10,10 @@
 // `window_title`/`process_name`/`ocr_text`; no `focusStatus`). Every schema string
 // the model sees must name a table/column that actually exists, or execute_sql
 // resolves to nothing.
-import type { InsightCategory } from '../../../shared/types'
+import type { GeminiTool } from '../core/geminiTypes'
+export type { GeminiTool, ToolCall } from '../core/geminiTypes'
 
-/** One function call the model made, as decoded from a response part. */
-export type ToolCall = {
-  name: string
-  args: Record<string, unknown>
-  /** Opaque thinking signature — echoed back verbatim on the model turn so the
-   *  thinking model keeps its chain across the tool round-trip. */
-  thoughtSignature?: string
-}
+import type { InsightCategory } from '../../../shared/types'
 
 /** provide_advice's parsed args (Mac's `ExtractedInsight` + the two summary
  *  fields every terminal tool carries). `advice` is Mac's wire key for the
@@ -39,19 +33,6 @@ export type ExtractedInsight = {
  *  every tool description + the system-prompt schema block. */
 export const REWIND_SCHEMA_DESC =
   'The rewind_frames table has: id INTEGER, ts INTEGER (epoch milliseconds), app TEXT, window_title TEXT, process_name TEXT, ocr_text TEXT.'
-
-/** A single Gemini `tool` (one entry in the request's `tools` array). */
-export type GeminiTool = { function_declarations: FunctionDeclaration[] }
-type FunctionDeclaration = {
-  name: string
-  description: string
-  parameters: {
-    type: 'object'
-    properties: Record<string, PropertySpec>
-    required: string[]
-  }
-}
-type PropertySpec = { type: string; description: string; enum?: string[] }
 
 /** Phase 1 — text-only SQL investigation. execute_sql / request_screenshot /
  *  no_advice. (Mac buildPhase1Tools, re-grounded to rewind_frames.) */
