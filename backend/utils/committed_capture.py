@@ -16,6 +16,7 @@ from typing import Iterable
 MAX_COMMITTED_RUNS = 32
 MAX_LIFETIME_HISTORY = 16
 MAX_TRANSCRIPT_NOTES = 512
+MAX_WORD_NOTE_INTERVALS = 256
 MAX_ACK_GENERATIONS = 16
 MAX_WALL_ANCHOR_DRIFT_SECONDS = 2.0
 MAX_RUN_DURATION_SECONDS = 30.0
@@ -28,7 +29,7 @@ class CommittedCaptureMap:
     def __init__(self) -> None:
         self.runs: list[dict] = []
         self.history: list[dict] = []
-        self.notes: dict[str, tuple[int, int]] = {}
+        self.notes: dict[str, tuple[tuple[int, int], ...]] = {}
         self.complete = True
         self.incomplete = False
         self.conflicts = 0
@@ -162,16 +163,28 @@ class CommittedCaptureMap:
             }
         )
 
+    @staticmethod
+    def _note_intervals(raw) -> tuple[tuple[int, int], ...] | None:
+        if not isinstance(raw, (list, tuple)) or not raw or len(raw) > MAX_WORD_NOTE_INTERVALS:
+            return None
+        intervals = []
+        for pair in raw:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                return None
+            start, end = pair
+            if type(start) is not int or type(end) is not int or start < 0 or end <= start:
+                return None
+            intervals.append((start, end))
+        return tuple(intervals)
+
     def remember_transcripts(self, segments: Iterable[dict]) -> None:
         for segment in segments:
-            start = segment.get('_capture_start_sample')
-            end = segment.get('_capture_end_sample')
-            if type(start) is not int or type(end) is not int or end <= start:
+            note = self._note_intervals(segment.get('_capture_word_ranges'))
+            if note is None:
                 continue
             segment_id = segment.get('id')
             if not segment_id:
                 segment_id = segment['id'] = str(uuid.uuid4())
-            note = (start, end)
             prior = self.notes.get(segment_id)
             if prior is not None:
                 if prior != note:
@@ -206,7 +219,8 @@ class CommittedCaptureMap:
             note = self.notes.get(segment_id)
             if note is None:
                 continue
-            fresh.extend(self._note_runs(note))
+            for interval in note:
+                fresh.extend(self._note_runs(interval))
         committed = self._union_runs([*fresh, *self._acks.get(owner, ())])
         if not committed or len(committed) > MAX_COMMITTED_RUNS:
             return None

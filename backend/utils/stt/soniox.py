@@ -20,6 +20,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
+from utils.stt.committed_words import remember_provider_word
 from utils.stt.socket import STTSocket
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
@@ -481,6 +482,7 @@ class SafeSonioxSocket(STTSocket):
                 ):
                     self._pending_segment.pop('_provider_language', None)
                     self._pending_segment['_language_mixed'] = True
+            remember_provider_word(self._pending_segment, start - self._preseconds, end - self._preseconds, text)
             if text[-1].isspace():
                 self._flush_pending(ready)
         if ready:

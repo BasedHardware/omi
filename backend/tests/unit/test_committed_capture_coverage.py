@@ -58,7 +58,7 @@ def _segment(segment_id, text='hello', start=1.0, end=2.0, **fields):
 def _note_segments(**windows):
     out = []
     for sid, (start, end) in windows.items():
-        out.append({'id': sid, '_capture_start_sample': start, '_capture_end_sample': end})
+        out.append({'id': sid, '_capture_word_ranges': ((start, end),)})
     return out
 
 
@@ -92,10 +92,10 @@ def test_zero_length_unplaced_and_missing_notes_prove_nothing():
     _feed(committed, 11)
     committed.remember_transcripts(
         [
-            {'id': 'zero', '_capture_start_sample': 100, '_capture_end_sample': 100},
-            {'id': 'bad', '_capture_start_sample': 300, '_capture_end_sample': 100},
-            {'id': 'noend', '_capture_start_sample': 100},
-            {'id': 'nonint', '_capture_start_sample': 0.0, '_capture_end_sample': 160.0},
+            {'id': 'zero', '_capture_word_ranges': ((100, 100),)},
+            {'id': 'bad', '_capture_word_ranges': ((300, 100),)},
+            {'id': 'noend', '_capture_word_ranges': ((100,),)},
+            {'id': 'nonint', '_capture_word_ranges': ((0.0, 160.0),)},
         ]
     )
     assert committed.committed_snapshot('conv', [_segment('zero'), _segment('bad'), _segment('noend')]) is None
@@ -363,11 +363,11 @@ def test_note_id_reuse_with_different_span_is_conflict():
 
 def test_missing_segment_id_is_assigned_uuid():
     committed = CommittedCaptureMap()
-    segments = [{'_capture_start_sample': 0, '_capture_end_sample': SPF}]
+    segments = [{'_capture_word_ranges': ((0, SPF),)}]
     committed.remember_transcripts(segments)
     assigned = segments[0]['id']
     uuid.UUID(assigned)
-    assert committed.notes[assigned] == (0, SPF)
+    assert committed.notes[assigned] == ((0, SPF),)
 
 
 def test_listen_committed_flag_tokens(monkeypatch):
@@ -396,7 +396,7 @@ def test_source_position_map_no_helper_path_when_off():
     off = SourcePositionMap()
     off.accept(_claim(0), sample_start=0, sample_count=SPF, rate_hz=RATE, payload=b'x')
     assert off.committed_snapshot('conv', []) is None
-    off.remember_transcripts([{'_capture_start_sample': 0, '_capture_end_sample': SPF}])
+    off.remember_transcripts([{'_capture_word_ranges': ((0, SPF),)}])
     assert off._committed is None
 
 
@@ -439,10 +439,11 @@ async def test_enqueue_epoch_segments_remembers_raw_provider_fields(monkeypatch,
         stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
         assert stack.host.state.source_position_map is not None
         assert stack.host.state.source_position_map._committed is not None
-        segments = [{'text': 'hello', 'start': 1.0, 'end': 2.0, '_capture_start_sample': 0, '_capture_end_sample': SPF}]
+        segments = [{'text': 'hello', 'start': 1.0, 'end': 2.0, '_capture_word_ranges': ((0, SPF),)}]
         stack.receiver._enqueue_epoch_segments(segments)
         committed = stack.host.state.source_position_map._committed
-        assert list(committed.notes.values()) == [(0, SPF)]
+        assert list(committed.notes.values()) == [((0, SPF),)]
+        assert '_capture_word_ranges' not in segments[0]
         assigned = next(iter(committed.notes))
         uuid.UUID(assigned)
     finally:
@@ -480,7 +481,7 @@ async def test_live_persistence_writes_committed_proof_atomically(monkeypatch):
     store = StrictFirestore()
     cid = 'conv-committed'
     processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)
-    raw = [{'_capture_start_sample': 2 * SPF, '_capture_end_sample': 8 * SPF}]
+    raw = [{'_capture_word_ranges': ((2 * SPF, 8 * SPF),)}]
     source_map.remember_transcripts(raw)
     sid = raw[0]['id']
     conversation = _conversation(cid, T0)
@@ -506,7 +507,7 @@ async def test_failed_live_transaction_publishes_neither_proof_nor_acknowledgeme
     store = StrictFirestore()
     cid = 'conv-failed-proof'
     processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)
-    raw = [{'_capture_start_sample': 2 * SPF, '_capture_end_sample': 4 * SPF}]
+    raw = [{'_capture_word_ranges': ((2 * SPF, 4 * SPF),)}]
     source_map.remember_transcripts(raw)
     sid = raw[0]['id']
     conversation = _conversation(cid, T0)
@@ -589,10 +590,10 @@ async def test_speaker_clock_flag_does_not_alter_committed_notes(monkeypatch, sp
     stack = _Stack(monkeypatch, v2=False, conversation_id='committed-speaker-clock')
     try:
         stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
-        segments = [{'text': 'hi', 'start': 1.0, 'end': 2.0, '_capture_start_sample': 0, '_capture_end_sample': SPF}]
+        segments = [{'text': 'hi', 'start': 1.0, 'end': 2.0, '_capture_word_ranges': ((0, SPF),)}]
         stack.receiver._enqueue_epoch_segments(segments)
         committed = stack.host.state.source_position_map._committed
-        assert committed is not None and list(committed.notes.values()) == [(0, SPF)]
+        assert committed is not None and list(committed.notes.values()) == [((0, SPF),)]
     finally:
         stack.restore()
 
@@ -702,13 +703,25 @@ async def test_real_stt_callback_remembers_notes_and_persists_committed_frames(m
         )
         stack.epoch.note_accepted(0, SPF)
         stack.host.state.conversation_sample_ranges.append((0, SPF, cid))
-        stack.provider_callback([{'text': 'final word', 'start': 0.0, 'end': 0.01, 'is_final': True}])
+        stack.provider_callback(
+            [
+                {
+                    'text': 'final word',
+                    'start': 0.0,
+                    'end': 0.01,
+                    'is_final': True,
+                    '_provider_word_ranges': [(0.0, 0.01)],
+                }
+            ]
+        )
         committed = source_map._committed
-        assert list(committed.notes.values()) == [(0, SPF)]
+        assert list(committed.notes.values()) == [((0, SPF),)]
         sid = next(iter(committed.notes))
         uuid.UUID(sid)
         collected = [s for s in stack.segments_collected if s.get('text') == 'final word']
         assert len(collected) == 1 and collected[0]['id'] == sid
+        assert '_provider_word_ranges' not in collected[0]
+        assert '_capture_word_ranges' not in collected[0]
 
         store = StrictFirestore()
         _seed_row(store, cid, started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
@@ -758,13 +771,13 @@ async def test_flag_on_unavailable_proof_persists_unknown_without_receipt_snapsh
                 )
         assert len(committed.runs) == 32
         processor.host.state.source_position_map = source_map
-        raw = [{'_capture_start_sample': 0, '_capture_end_sample': 160 * SPF}]
+        raw = [{'_capture_word_ranges': ((0, 160 * SPF),)}]
         source_map.remember_transcripts(raw)
         sid = raw[0]['id']
     elif unavailable == 'missing_note':
         sid = 's-no-note'
     else:
-        raw = [{'_capture_start_sample': 2 * SPF, '_capture_end_sample': 4 * SPF}]
+        raw = [{'_capture_word_ranges': ((2 * SPF, 4 * SPF),)}]
         source_map.remember_transcripts(raw)
         sid = raw[0]['id']
         if unavailable == 'conflict':

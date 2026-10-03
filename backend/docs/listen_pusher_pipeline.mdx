@@ -2401,17 +2401,17 @@ uploads remain unsupported.
 `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED` defaults on (typos off), but still
 requires separate `CAPTURE_EVIDENCE_V1_DARK_WRITE` admission. Live transcript
 writes now piggyback only whole source frames covered by the fresh transcript's
-exact provider capture-sample ranges, cumulatively acknowledged per generation.
-Receipt wall-time anchors plus bounded root/epoch high-water history accompany
-the `committed_transcript_v1` proof. The proof and speech land in the same
-transaction; missing/unplaced samples, receipt or history conflicts, bounds
-overflow, and failed commits cannot authorize suppression. Flag off writes the
-legacy receipt-only snapshot. Receipt-only evidence never authorizes audio or
-lexical suppression. The committed-coverage consumer and S1-gated lineage
-binding are not enabled by this producer alone. Deploying the producer requires
-the backend-listen image and matching dev/prod Helm values with
-`LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the
-root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
+recognized provider word/token intervals (each <=2s, mapped independently, gaps
+never filled), cumulatively acknowledged per generation and anchored by receipt
+wall times plus bounded root/epoch high-water history. Proof and speech land in
+one transaction; a span-only segment or invalid/missing word metadata adds no
+new coverage, and when no usable proof remains — receipt or history conflicts,
+bounds overflow, failed commits — the committed-coverage unknown envelope
+persists instead of authorizing suppression. Flag off writes the legacy
+receipt-only snapshot; receipt-only evidence never authorizes audio or lexical
+suppression. The committed-coverage consumer and S1-gated lineage binding are
+not enabled by this producer alone; deploying the producer requires the
+backend-listen image and matching dev/prod Helm values with `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED=true`; S1 admission and the root-rotating mobile build are separate coordinator decisions. Matching pusher env is inert co-host configuration; pusher does not execute the producer and no pusher rollout is required for committed proof.
 
 ### Translation admission and output truthfulness
 

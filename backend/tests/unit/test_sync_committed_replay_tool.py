@@ -18,7 +18,7 @@ def _committed_payload(covered=7):
             payload=b'\x01\x00' * 8000,
             receipt_wall_time=1000.0 + (index + 1) * 0.5,
         )
-    source.remember_transcripts([{'id': 'fresh', '_capture_start_sample': 0, '_capture_end_sample': covered * 8000}])
+    source.remember_transcripts([{'id': 'fresh', '_capture_word_ranges': ((0, covered * 8000),)}])
     proof = source.committed_snapshot(
         'owner', [SimpleNamespace(id='fresh', text='synthetic committed speech', start=0.0, end=covered * 0.5)]
     )

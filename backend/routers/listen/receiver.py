@@ -22,6 +22,7 @@ from config.capture_evidence import (
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
 
@@ -198,6 +199,11 @@ def _get_lc3() -> Any:
     if lc3 is None:
         raise RuntimeError('LC3 streaming requires lc3py and its native codec library.') from lc3_import_error
     return lc3
+
+
+def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
+    for segment in segments:
+        segment.pop(CAPTURE_WORD_RANGES_KEY, None)
 
 
 class ListenReceiver(ReplayFilterMixin):
@@ -393,6 +399,7 @@ class ListenReceiver(ReplayFilterMixin):
         source_map = getattr(self.host.state, 'source_position_map', None)
         if source_map is not None and capture_evidence_dark_write_enabled():
             source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
         kept: List[Dict[str, Any]] = []
         for segment in segments:
@@ -463,6 +470,7 @@ class ListenReceiver(ReplayFilterMixin):
         source_map = getattr(self.host.state, 'source_position_map', None)
         if source_map is not None and capture_evidence_dark_write_enabled():
             source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
         if not live_speaker_capture_clock_enabled():
             for segment in segments:

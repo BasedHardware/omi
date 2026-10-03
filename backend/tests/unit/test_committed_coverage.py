@@ -74,10 +74,7 @@ def _envelope(
     if note_start is not None:
         notes.append((note_start, note_end))
     source.remember_transcripts(
-        [
-            {'id': f's{i}', '_capture_start_sample': start, '_capture_end_sample': end}
-            for i, (start, end) in enumerate(notes)
-        ]
+        [{'id': f's{i}', '_capture_word_ranges': ((start, end),)} for i, (start, end) in enumerate(notes)]
     )
     segments = [
         SimpleNamespace(id=f's{i}', text='x', start=0.0, end=1.0, audio_alignment=None) for i in range(len(notes))

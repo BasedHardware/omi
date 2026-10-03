@@ -21,7 +21,8 @@ from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_lineage_dedupe_replay import at, live_row, seeded_store
 from tests.unit.test_sync_recording_lineage import ORIGIN, generation
 from tests.unit.test_wal_audio_coverage import EPOCH, RATE, ROOT, _envelope, _frame_bytes, _run
-from utils.capture_evidence import SourcePositionMap
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.capture_evidence import SourcePositionMap, unknown_envelope
 from utils.conversations import lifecycle
 from utils.sync import recording_lineage
 from utils.sync import wal_audio_coverage as coverage_mod
@@ -245,10 +246,7 @@ def _committed_envelope(covered, *, fed=None, wall0=1760000000.0, spf=FRAME_SAMP
     if note_start is not None:
         notes.append((note_start, note_end))
     source.remember_transcripts(
-        [
-            {'id': f's{i}', '_capture_start_sample': start, '_capture_end_sample': end}
-            for i, (start, end) in enumerate(notes)
-        ]
+        [{'id': f's{i}', '_capture_word_ranges': ((start, end),)} for i, (start, end) in enumerate(notes)]
     )
     segments = [
         SimpleNamespace(id=f's{i}', text='x', start=0.0, end=1.0, audio_alignment=None) for i in range(len(notes))
@@ -521,8 +519,9 @@ async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_p
         [
             {
                 'id': 's1',
-                '_capture_start_sample': 3 * FRAME_SAMPLES + FRAME_SAMPLES // 2,
-                '_capture_end_sample': 7 * FRAME_SAMPLES - FRAME_SAMPLES // 2,
+                '_capture_word_ranges': (
+                    (3 * FRAME_SAMPLES + FRAME_SAMPLES // 2, 7 * FRAME_SAMPLES - FRAME_SAMPLES // 2),
+                ),
             }
         ]
     )
@@ -1668,4 +1667,127 @@ async def test_s1_declared_prefix_claim_still_binds_per_segment(coordinator, mon
     assert spies.resolver_calls == []
     assert len(spies.plan_calls) == 1
     assert len(state.processed) == 1
+    assert state.outcomes[-1].value == 'success'
+
+
+def _word_envelope_via_real_translator(word_ranges, *, wall0=1760000000.0, frames=10):
+    """Committed envelope produced by the real timeline/send-map/translator path.
+
+    Ten half-second WAL frames are receipted and sent; the provider segment
+    spans the whole stream while only `word_ranges` count as evidence.
+    """
+    timeline = CaptureTimeline(sample_rate=RATE)
+    source = SourcePositionMap(committed=True)
+    epoch = ProviderEpochTranslator(timeline, RATE)
+    for i in range(frames):
+        payload = _frame_bytes(i, FRAME_SAMPLES)
+        timeline.accept(payload, wall0 + (i + 1) * FRAME_SAMPLES / RATE, float(i))
+        source.accept(
+            {'capture_root': ROOT, 'clock_epoch': EPOCH, 'source_frame': i},
+            sample_start=i * FRAME_SAMPLES,
+            sample_count=FRAME_SAMPLES,
+            rate_hz=RATE,
+            payload=payload,
+            receipt_wall_time=wall0 + (i + 1) * FRAME_SAMPLES / RATE,
+        )
+        epoch.note_accepted(i * FRAME_SAMPLES, FRAME_SAMPLES)
+    segment = {
+        'id': 'live-seg',
+        'speaker': 'SPEAKER_00',
+        'start': 0.0,
+        'end': frames * FRAME_SAMPLES / RATE,
+        'text': 'live words',
+        'is_user': False,
+    }
+    if word_ranges is not None:
+        segment['_provider_word_ranges'] = list(word_ranges)
+    translated = epoch.translate([segment])
+    assert len(translated) == 1
+    source.remember_transcripts(translated)
+    return source.committed_snapshot(
+        'conv', [SimpleNamespace(id='live-seg', text='live words', start=0.0, end=5.0, audio_alignment=None)]
+    )
+
+
+@pytest.mark.asyncio
+async def test_omitted_middle_phrase_survives_committed_word_coverage(real_pipeline, monkeypatch, tmp_path):
+    """Word evidence proves only what was transcribed: a live segment spanning
+    0..5s whose recognized words cover 0..1.5s and 3.5..5s proves frames 0-2
+    and 7-9 only, so the omitted middle phrase reaches the provider and saves."""
+    pipeline = real_pipeline
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
+    _coverage_env(monkeypatch)
+    env = _word_envelope_via_real_translator([(0.0, 1.5), (3.5, 5.0)])
+
+    def word(value):
+        return f'new-word-{value}' if 3 <= value <= 6 else f'live-word-{value}'
+
+    row = live_row(
+        started_at=at(1760000000),
+        finished_at=at(1760000005.0),
+        transcript_segments=[
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'text': 'live words',
+                'speaker': 'SPEAKER_00',
+                'speaker_id': 0,
+                'is_user': False,
+            }
+        ],
+    )
+    store = seeded_store([row])
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    state = _wire_real(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)], word=word)
+    await _run_real(pipeline, tmp_path, target_conversation_id=row['id'])
+
+    texts = _stored_texts(store, row)
+    for omitted in (3, 4, 5, 6):
+        assert f'new-word-{omitted}' in texts
+    assert 'live words' in texts
+    assert len(state.processed_paths) == 1
+    payload = _read_payload(state.processed_paths[0])
+    for omitted in (3, 4, 5, 6):
+        assert _frame_bytes(omitted, FRAME_SAMPLES) in payload
+    assert env is not None and env.get('proof') == 'committed_transcript_v1'
+    assert [(r['source_frame_start'], r['source_frame_end']) for r in env['runs']] == [(0, 3), (7, 10)]
+    assert state.outcomes[-1].value == 'success'
+
+
+@pytest.mark.asyncio
+async def test_span_only_live_result_retains_all_wal_audio(real_pipeline, monkeypatch, tmp_path):
+    """A live segment carrying no recognized-word intervals cannot prove
+    anything: the committed snapshot abstains, the unknown envelope keeps
+    every WAL frame for the provider, and all new words persist."""
+    pipeline = real_pipeline
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
+    _coverage_env(monkeypatch)
+    env = _word_envelope_via_real_translator(None) or unknown_envelope('missing_source_position', origin='live')
+
+    def word(value):
+        return f'new-word-{value}'
+
+    row = live_row(started_at=at(1760000000), finished_at=at(1760000005.0), transcript_segments=[])
+    store = seeded_store([row])
+    monkeypatch.setattr(
+        lifecycle,
+        'ingest_sync_conversation',
+        lambda uid, incoming, *, candidate_id=None, target_id=None: intake(
+            store, incoming, candidate_id=candidate_id, target_id=target_id
+        ),
+    )
+    state = _wire_real(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)], word=word)
+    await _run_real(pipeline, tmp_path, target_conversation_id=row['id'])
+
+    texts = _stored_texts(store, row)
+    assert sorted(texts) == sorted(word(i) for i in range(10))
+    assert len(state.processed_paths) == 1
+    assert _read_payload(state.processed_paths[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+    assert env.get('proof') != 'committed_transcript_v1'
     assert state.outcomes[-1].value == 'success'

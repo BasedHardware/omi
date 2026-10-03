@@ -40,6 +40,7 @@ from utils.executors import sync_executor, run_blocking
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
+from utils.stt.committed_words import remember_provider_word
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
@@ -1050,6 +1051,7 @@ async def process_audio_dg(
                             'person_id': None,
                         }
                     )
+            remember_provider_word(segments[-1], word.start, word.end, word.punctuated_word)
 
         stream_transcript(segments)
 
