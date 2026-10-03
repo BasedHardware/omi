@@ -7,6 +7,8 @@ origin plus stored offsets — a content window, faithful capture when the v2
 pin is set. All text is synthetic.
 """
 
+import pytest
+
 from utils.sync.live_speech_dedupe import bounded_span_seconds, drop_covered_repeats, drop_exact_retries
 
 ORIGIN = 1_800_000_000.0
@@ -154,6 +156,38 @@ def test_window_never_joins_segments_past_the_gap():
     repeat = incoming(LIVE[0].replace('the ', '') + ' ' + LIVE[1].replace('the ', ''), 40.0, duration=19.5)
     kept, _ = drop([repeat], live=wide_gap)
     assert kept == [repeat]
+
+
+CORRECTION_LIVE = 'the quarterly planning review meeting covered agenda item one in detail'
+
+
+@pytest.mark.parametrize('skew', [40, 1200])
+def test_correction_prefix_is_never_a_repeat(skew):
+    live = [live_segment(0, text=CORRECTION_LIVE)]
+    assert drop([incoming('Actually ' + CORRECTION_LIVE, float(skew))], live=live)[0]
+
+
+def test_correction_marker_only_in_live_is_never_a_repeat():
+    live = [live_segment(0, text='actually ' + CORRECTION_LIVE)]
+    assert drop([incoming(CORRECTION_LIVE, 40.0)], live=live)[0]
+
+
+def test_correction_marker_count_mismatch_is_never_a_repeat():
+    live = [live_segment(0, text='actually actually ' + CORRECTION_LIVE)]
+    assert drop([incoming('actually ' + CORRECTION_LIVE, 40.0)], live=live)[0]
+
+
+def test_novel_correction_words_keep_the_segment():
+    live = [live_segment(0, text=CORRECTION_LIVE)]
+    for marker in ('instead', 'rather', 'correction', 'corrected', 'sorry', 'mean', 'meant'):
+        assert drop([incoming(CORRECTION_LIVE + ' ' + marker, 40.0)], live=live)[0]
+
+
+def test_reordered_correction_marker_count_mismatch_is_never_a_repeat():
+    live = [live_segment(0, text='sorry ' + CORRECTION_LIVE + ' instead')]
+    assert drop([incoming(CORRECTION_LIVE + ' instead', 40.0)], live=live)[0]
+    live = [live_segment(0, text=CORRECTION_LIVE + ' instead')]
+    assert drop([incoming('sorry ' + CORRECTION_LIVE + ' instead', 40.0)], live=live)[0]
 
 
 NEGATED = 'the quarterly planning review did not cover the budget numbers in detail'

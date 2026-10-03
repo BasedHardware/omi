@@ -45,7 +45,11 @@ DURATION_RATIO_MIN = 0.5
 DURATION_RATIO_MAX = 2.0
 
 FILLER_TOKENS = frozenset(
-    {'a', 'an', 'the', 'um', 'uh', 'er', 'hmm', 'well', 'actually', 'basically', 'just', 'so', 'and', 'okay', 'ok'}
+    {'a', 'an', 'the', 'um', 'uh', 'er', 'hmm', 'well', 'basically', 'just', 'so', 'and', 'okay', 'ok'}
+)
+
+PROTECTED_CORRECTIONS = frozenset(
+    {'actually', 'instead', 'rather', 'correction', 'corrected', 'sorry', 'mean', 'meant'}
 )
 
 PROTECTED_NEGATIONS = frozenset(
@@ -91,7 +95,11 @@ def _substantive(tokens: list[str]) -> list[str]:
 
 
 def _protected(tokens: list[str]) -> Counter:
-    return Counter(token for token in tokens if token in PROTECTED_NEGATIONS or any(char.isdigit() for char in token))
+    return Counter(
+        token
+        for token in tokens
+        if token in PROTECTED_NEGATIONS or token in PROTECTED_CORRECTIONS or any(char.isdigit() for char in token)
+    )
 
 
 def _trigrams(tokens: list[str]) -> set[tuple[str, ...]]:

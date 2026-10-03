@@ -536,6 +536,20 @@ def test_sync_scoped_retry_after_a_failed_finish_completes_the_existing_debt(pip
         assert forbidden not in lines[0]
 
 
+@pytest.mark.parametrize('skew', [40, 1200])
+def test_correction_prefixed_transcript_reaches_the_live_row(pipeline_module, monkeypatch, skew):
+    pipeline = pipeline_module
+    store = seeded_store([live_row()])
+    corrected = 'Actually ' + LIVE[0]
+    ok, response, finish = _drive_process_segment(pipeline, monkeypatch, store, [corrected], wal_ts=T0 + skew)
+    assert ok is True
+    row = store.rows[('users', 'u', 'conversations', LIVE_ID)]
+    assert corrected in [segment['text'] for segment in row['transcript_segments']]
+    assert response['updated_memories'] == {LIVE_ID}
+    assert response.get('_merged') == {LIVE_ID: 'en'}
+    finish.assert_called_once()
+
+
 def test_lexical_repeats_on_a_pristine_live_row_still_invent_no_debt(pipeline_module, monkeypatch):
     pipeline = pipeline_module
     store = seeded_store([live_row()])
