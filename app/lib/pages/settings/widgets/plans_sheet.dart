@@ -522,8 +522,6 @@ class _PlansSheetState extends State<PlansSheet> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const ExcludeSemantics(child: FaIcon(FontAwesomeIcons.crown, color: Colors.amber, size: 20)),
-                          const SizedBox(width: OmiSpacing.xs),
                           Flexible(
                             child: Semantics(
                               header: true,

@@ -223,9 +223,13 @@ class ForceDirectedSimulation3D {
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
-  /// A non-interactive card (the Memories page header): card surface, and no retry button on
-  /// failure because the card itself opens the full graph.
+  /// The Memories page header card. It draws its own card: a compact skeleton while loading, a
+  /// non-interactive graph that calls [onOpen] on tap once loaded, and a single row with
+  /// Try Again on failure. The page's list never waits on it.
   final bool preview;
+
+  /// Opens the full graph from the [preview] card.
+  final VoidCallback? onOpen;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
@@ -237,6 +241,7 @@ class MemoryGraphPage extends StatefulWidget {
     super.key,
     this.embedded = false,
     this.preview = false,
+    this.onOpen,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
@@ -555,10 +560,88 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
   }
 
+  /// Height of the preview card while it loads and once it shows the graph, so the list below does
+  /// not jump when the graph arrives.
+  static const double _previewHeight = 140;
+
+  Widget _buildPreviewCard() {
+    final l10n = context.l10n;
+    if (_error != null && !_isLoading) {
+      // Failure collapses to one row so the memory list moves up; Try Again reloads in place.
+      return Container(
+        key: const ValueKey('memories_mind_map_error'),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs),
+        constraints: const BoxConstraints(minHeight: 52),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: Icon(Icons.hub_outlined, size: 20, color: OmiColors.textTertiary)),
+            const SizedBox(width: OmiSpacing.sm),
+            Expanded(
+              child: Text(
+                _error!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
+            OmiButton(
+              key: const ValueKey('memories_mind_map_retry'),
+              variant: OmiButtonVariant.tertiary,
+              size: OmiButtonSize.compact,
+              label: l10n.tryAgain,
+              onPressed: _loadGraph,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: l10n.memoryGraph,
+      child: GestureDetector(
+        key: const ValueKey('memories_mind_map_preview'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onOpen,
+        child: ClipRRect(
+          borderRadius: OmiRadius.xlAll,
+          child: SizedBox(
+            height: _previewHeight,
+            child: ColoredBox(
+              color: OmiColors.surface1,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ExcludeSemantics(
+                        child: _isLoading
+                            ? const MemoryGraphSkeleton(key: ValueKey('memories_mind_map_loading'))
+                            : _buildBody(),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: ExcludeSemantics(
+                      child: Icon(Icons.open_in_full_rounded, size: 18, color: OmiColors.textTertiary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.preview) return _buildPreviewCard();
     if (widget.embedded) {
-      return ColoredBox(color: widget.preview ? OmiColors.surface1 : OmiColors.surface0, child: _buildBody());
+      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
@@ -591,27 +674,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
-      if (widget.preview) {
-        // The preview ignores pointers, so it cannot offer a retry; tapping the card opens the full
-        // graph, which loads (and retries) on its own.
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.hub_outlined, size: 28, color: OmiColors.textTertiary),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
       return SafeArea(
         child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
       );
@@ -1024,4 +1086,90 @@ class _ProjectedNode {
     required this.scale,
     required this.alpha,
   });
+}
+
+/// The preview card's loading state: a faint, static node-and-edge sketch at the card's size. It
+/// pulses gently a few times (not at all under Reduce Motion) and then rests, so a slow load does
+/// not animate forever.
+class MemoryGraphSkeleton extends StatefulWidget {
+  const MemoryGraphSkeleton({super.key});
+
+  @override
+  State<MemoryGraphSkeleton> createState() => _MemoryGraphSkeletonState();
+}
+
+class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100), value: 1);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = OmiMotion.of(context).standard == Duration.zero;
+    if (reduce) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else if (!_started) {
+      _started = true;
+      _pulse.repeat(min: 0.55, max: 1, reverse: true, count: 6);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _pulse,
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _GraphSkeletonPainter(node: OmiColors.surface3, edge: OmiColors.border),
+      ),
+    );
+  }
+}
+
+class _GraphSkeletonPainter extends CustomPainter {
+  _GraphSkeletonPainter({required this.node, required this.edge});
+
+  final Color node;
+  final Color edge;
+
+  // Positions as fractions of the card, and radii in logical pixels: a hub with a few clusters.
+  static const _nodes = <(double, double, double)>[
+    (0.50, 0.50, 9),
+    (0.30, 0.32, 6),
+    (0.68, 0.28, 6),
+    (0.72, 0.68, 7),
+    (0.32, 0.72, 5),
+    (0.16, 0.50, 4),
+    (0.86, 0.46, 4),
+    (0.52, 0.16, 4),
+    (0.55, 0.84, 4),
+  ];
+  static const _edges = <(int, int)>[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 7), (3, 6), (3, 8), (4, 5), (1, 7)];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    Offset at(int i) => Offset(_nodes[i].$1 * size.width, _nodes[i].$2 * size.height);
+    final edgePaint = Paint()
+      ..color = edge
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    for (final (a, b) in _edges) {
+      canvas.drawLine(at(a), at(b), edgePaint);
+    }
+    final nodePaint = Paint()..color = node;
+    for (var i = 0; i < _nodes.length; i++) {
+      canvas.drawCircle(at(i), _nodes[i].$3, nodePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GraphSkeletonPainter old) => old.node != node || old.edge != edge;
 }

@@ -469,21 +469,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   ),
                   _buildCreateYourOwnAppTile(),
                   _buildAddMcpServerTile(),
-                  Padding(
-                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
-                        const SizedBox(width: OmiSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            context.l10n.integrationsFooter,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),

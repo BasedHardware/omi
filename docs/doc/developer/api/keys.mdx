@@ -26,6 +26,28 @@ list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi
 
 ---
 
+## Inspect the Calling Key
+
+`GET /v1/dev/key` accepts any valid Developer API key, regardless of data scopes or memory readiness. It returns only that credential's metadata, never user content, the secret, or its hash. Use it to validate a key without reading memories.
+
+```bash
+curl -H "Authorization: Bearer $OMI_API_KEY" \
+  "https://api.omi.me/v1/dev/key"
+```
+
+```json
+{
+  "id": "key_123abc",
+  "name": "Task reader",
+  "key_prefix": "omi_dev_abc123",
+  "scopes": ["action_items:read"],
+  "created_at": "2025-01-15T10:30:00Z",
+  "last_used_at": "2025-01-20T14:22:00Z"
+}
+```
+
+`scopes` reports effective permissions: legacy keys with missing scopes receive the read-only scopes; an explicit empty list stays empty. `last_used_at` is approximate: authentication updates it on cache misses, roughly hourly, so it is not an activity log and null does not prove a key has never been used. Invalid keys return `401`; the endpoint has its own rate-limit budget (see [Quick Start](/doc/developer/api/overview#rate-limits)).
+
 ## List API Keys
 
 <Card title="GET /v1/dev/keys" icon="download" color="#22c55e" horizontal>
@@ -95,7 +117,7 @@ This endpoint requires your signed-in Omi/Firebase session. The secret key value
     | `name` | string | Descriptive name you gave the key |
     | `key_prefix` | string | First part of the key (for identification) |
     | `created_at` | datetime | When the key was created |
-    | `last_used_at` | datetime | When the key was last used (null if never used) |
+    | `last_used_at` | datetime | Approximate last authentication cache miss; may lag activity by about an hour (null if not recorded) |
     | `scopes` | array | Permissions assigned to the key |
   </Accordion>
 </AccordionGroup>
@@ -283,9 +305,9 @@ If a key is compromised, revoke it immediately and create a new one.
     ```python
     import requests
 
-    API_KEY = "omi_dev_your_api_key"
+    FIREBASE_ID_TOKEN = "your_signed_in_firebase_id_token"
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {FIREBASE_ID_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -333,9 +355,9 @@ If a key is compromised, revoke it immediately and create a new one.
   </Tab>
   <Tab title="JavaScript">
     ```javascript
-    const API_KEY = process.env.OMI_API_KEY;
+    const FIREBASE_ID_TOKEN = process.env.FIREBASE_ID_TOKEN;
     const headers = {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${FIREBASE_ID_TOKEN}`,
       "Content-Type": "application/json"
     };
 

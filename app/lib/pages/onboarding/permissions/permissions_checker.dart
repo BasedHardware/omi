@@ -69,7 +69,7 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                 Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
                 const SizedBox(height: OmiSpacing.xs),
                 Text(
-                  context.l10n.permissionsSetupDescription,
+                  context.l10n.permissionsChangeAnytime,
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),

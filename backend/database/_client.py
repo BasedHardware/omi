@@ -1,4 +1,5 @@
 import logging
+import re
 from threading import Lock
 from typing import Any
 
@@ -18,6 +19,9 @@ __all__ = [
     "db",
     "delete_collection_recursive",
     "document_id_from_seed",
+    "FIRESTORE_DOCUMENT_KINDS",
+    "firestore_document_kind",
+    "firestore_error_document_path",
     "get_customer_firestore_client",
     "get_data_plane_firestore_client",
     "get_firestore_client",
@@ -312,6 +316,51 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     rather than loop.
     """
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+# Firestore names the rejected document as ``.../documents/<collection>/<id>/...``.
+_ERROR_DOCUMENT_PATH = re.compile(r"/documents/([^'\"\s]+)")
+# Every token a persistence log may carry for the rejected document.
+FIRESTORE_DOCUMENT_KINDS = frozenset({'conversation', 'sync_day_index', 'sync_recent', 'donor', 'other', 'none'})
+
+
+def firestore_error_document_path(error: BaseException) -> tuple[str, ...] | None:
+    """The relative document path a Firestore ``InvalidArgument`` names, or ``None``.
+
+    For in-process decisions only. The segments contain uids and document ids,
+    so callers must never log them; log ``firestore_document_kind`` instead.
+    """
+    if not isinstance(error, InvalidArgument):
+        return None
+    match = _ERROR_DOCUMENT_PATH.search(str(error))
+    if not match:
+        return None
+    # The message quotes the path, so the match ends at the closing quote.
+    segments = tuple(match.group(1).split('/'))
+    if len(segments) < 2 or len(segments) % 2 or not all(segments):
+        return None
+    return segments
+
+
+def firestore_document_kind(error: BaseException) -> str:
+    """Bounded token for the document a Firestore ``InvalidArgument`` names.
+
+    Derived from the collection segments only (plus the fixed ``recent`` index
+    name), never from ids: ``conversation``, ``sync_day_index``, ``sync_recent``,
+    ``other`` for any other document, and ``none`` when the error is not an
+    ``InvalidArgument`` or names no document. ``donor`` is a refinement only the
+    sync assignment boundary can make, because it alone knows which
+    conversation was the write's canonical.
+    """
+    segments = firestore_error_document_path(error)
+    if segments is None:
+        return 'none'
+    collections = segments[0::2]
+    if collections == ('users', 'conversations'):
+        return 'conversation'
+    if collections == ('users', 'sync_assignment'):
+        return 'sync_recent' if segments[-1] == 'recent' else 'sync_day_index'
+    return 'other'
 
 
 def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
