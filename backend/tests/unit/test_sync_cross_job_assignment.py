@@ -501,7 +501,7 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     repeat = chunk('wal-repeat', 1600, text='The pasta place is still open.')
     prove(repeat, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, repeat, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors  # same speech, deduplicated
+    assert result['id'] == 'p' and not created and len(survivors) == 1  # receipt-only proof drops nothing
     assert result['sync_live_target'] is True
     fresh = chunk('wal-new', 1620, text='Let us order the mushroom one.')
     result, created, survivors = intake(store, fresh, target_id='n')
@@ -509,7 +509,7 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_deduplicates():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
@@ -519,10 +519,10 @@ def test_repeated_late_repair_to_revisioned_smart_survivor_deduplicates():
     second = chunk('wal-repeat-2', 1600, text='The pasta place is still open.')
     prove(first, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, first, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors
+    assert result['id'] == 'p' and not created and len(survivors) == 1
     prove(second, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, second, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors
+    assert result['id'] == 'p' and not created and len(survivors) == 1
     assert result['sync_live_target'] is True
 
 

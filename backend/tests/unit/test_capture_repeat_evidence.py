@@ -88,9 +88,10 @@ def covered(incoming, sync_env=None, live_env=None):
     )
 
 
-def test_valid_receipt_and_full_live_coverage_proves_the_index():
+def test_valid_receipt_and_full_live_coverage_still_proves_nothing():
+    """A well-formed receipt pair alone is not proof; every index stays kept."""
     incoming = [segment('s0'), segment('s1'), segment('s2')]
-    assert covered(incoming) == frozenset({0, 1, 2})
+    assert covered(incoming) == frozenset()
 
 
 def test_no_evidence_or_wrong_envelope_never_proves():
@@ -191,15 +192,15 @@ def test_partial_coverage_never_proves():
     )
 
 
-def test_exact_exclusive_end_needs_no_extra_frame_positive_end_does():
+def test_exact_exclusive_and_positive_end_offsets_stay_unproven():
     incoming = [segment('s0')]
     env = sync_evidence([receipt('s0', start_frame=0, end_frame=99, end_offset=0)])
-    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=99)])) == frozenset({0})
+    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=99)])) == frozenset()
     env = sync_evidence([receipt('s0', start_frame=0, end_frame=99, end_offset=1)])
     assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=99)])) == frozenset()
-    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=100)])) == frozenset({0})
+    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=100)])) == frozenset()
     env = sync_evidence([receipt('s0', start_frame=0, end_frame=99, end_offset=SPF)])
-    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=100)])) == frozenset({0})
+    assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=100)])) == frozenset()
     env = sync_evidence([receipt('s0', start_frame=0, end_frame=100, end_offset=1)])
     assert covered(incoming, sync_env=env, live_env=live_evidence([run(first=0, last=100)])) == frozenset()
 
@@ -213,7 +214,7 @@ def test_out_of_bounds_offsets_never_prove():
 def test_receipt_cap_and_incoming_cap_bound_the_scan():
     incoming = [segment(f's{i}') for i in range(64)]
     env = sync_evidence([receipt(s['id']) for s in incoming])
-    assert covered(incoming, sync_env=env) == frozenset(range(64))
+    assert covered(incoming, sync_env=env) == frozenset()
     oversized = [segment(f's{i}') for i in range(65)]
     env = sync_evidence([receipt(s['id']) for s in oversized[:64]])
     assert covered(oversized, sync_env=env) == frozenset()

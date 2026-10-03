@@ -163,7 +163,7 @@ async def _run_batch(module, stubs, tmp_path, *, claims=True, session=ORIGIN):
 
 
 @pytest.mark.asyncio
-async def test_tail_received_frames_suppressed_vad_sees_only_new(coordinator, monkeypatch, tmp_path):
+async def test_receipt_only_tail_envelope_vad_sees_the_original_bytes(coordinator, monkeypatch, tmp_path):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
@@ -171,36 +171,38 @@ async def test_tail_received_frames_suppressed_vad_sees_only_new(coordinator, mo
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
     await _run_batch(module, stubs, tmp_path)
     assert len(state.vad_seen) == 1
-    derivative = state.vad_seen[0]
-    assert '.coverage' in derivative and derivative.endswith('_1760000003.5.wav')
-    assert _read_payload(derivative) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
+    original = state.vad_seen[0]
+    assert original.endswith(f'{WAV_STEM}.wav') and '.coverage' not in original
+    assert _read_payload(original) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
     assert len(state.coverage_calls()) == 1
 
 
 @pytest.mark.asyncio
-async def test_prelive_and_missed_holes_preserved_as_two_files(coordinator, monkeypatch, tmp_path):
+async def test_receipt_only_hole_envelope_keeps_the_original_whole(coordinator, monkeypatch, tmp_path):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
     env = _envelope([_run(3, 7, samples_per_frame=FRAME_SAMPLES)])
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
     await _run_batch(module, stubs, tmp_path)
-    assert len(state.vad_seen) == 2
-    payloads = sorted(_read_payload(path) for path in state.vad_seen)
-    expected = sorted(b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in group) for group in ((0, 1, 2), (7, 8, 9)))
-    assert payloads == expected
+    assert len(state.vad_seen) == 1
+    assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
 
 
 @pytest.mark.asyncio
-async def test_fully_covered_file_yields_no_stt_and_success_not_silence(coordinator, monkeypatch, tmp_path):
+async def test_received_but_untranscribed_wal_reaches_stt_and_is_saved(coordinator, monkeypatch, tmp_path):
+    """A receipt fully covering 0..10 authorizes nothing: VAD/STT see the original
+    bytes and the batch never takes the suppress-all success short circuit."""
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
     env = _envelope([_run(0, 10, samples_per_frame=FRAME_SAMPLES)])
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
     await _run_batch(module, stubs, tmp_path)
-    assert state.vad_seen == []
-    assert state.processed == []
+    assert len(state.vad_seen) == 1
+    assert state.vad_seen[0].endswith(f'{WAV_STEM}.wav')
+    assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
+    assert len(state.processed) == 1
     assert len(state.outcomes) == 1
     assert state.outcomes[0].value == 'success'
 
@@ -286,7 +288,7 @@ async def test_truncated_lookup_abstains(coordinator, monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_clock_skewed_filename_still_trims_by_frame_key(coordinator, monkeypatch, tmp_path):
+async def test_clock_skewed_filename_still_preserves_receipt_only_audio(coordinator, monkeypatch, tmp_path):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
@@ -310,7 +312,7 @@ async def test_clock_skewed_filename_still_trims_by_frame_key(coordinator, monke
         'job-coverage-skew', 'uid', ['/tmp/f.bin'], 'omi', False, str(wav_dir / 'job'), **kwargs
     )
     assert len(state.vad_seen) == 1
-    assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
+    assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
 
 
 class _FakeQuery:
@@ -687,7 +689,7 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
         decoded_frames={str(wav_path): [FRAME_SAMPLES] * 10},
     )
     assert batch['status'] == 'applied'
-    assert len(batch['wav_paths']) == 1
+    assert batch['wav_paths'] == [str(wav_path)]
     derivative = batch['wav_paths'][0]
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
@@ -726,7 +728,8 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     )
     assert ok is True
     texts = [s['text'] for s in store.rows[('users', 'u', 'conversations', row['id'])]['transcript_segments']]
-    assert sorted(texts) == sorted(word(i) for i in range(10))
+    expected = sorted([word(i) for i in range(7)] + [word(i) for i in range(10)])
+    assert sorted(texts) == expected
     assert prerecorded_calls
 
 
@@ -789,18 +792,16 @@ def _short_tail_batch(monkeypatch, wav_path):
     )
 
 
-def test_short_novel_tail_marked_and_admitted_past_vad_floor(real_pipeline, monkeypatch, tmp_path):
+def test_receipt_only_batch_keeps_original_and_trim_marker_admits_short_slice(real_pipeline, monkeypatch, tmp_path):
     pipeline = real_pipeline
     _coverage_env(monkeypatch)
     wav_path = tmp_path / f'{WAV_STEM}.wav'
     _write_short_frame_wav(wav_path, range(10))
     batch = _short_tail_batch(monkeypatch, wav_path)
-    assert batch['status'] == 'applied' and len(batch['wav_paths']) == 1
+    assert batch['status'] == 'applied' and batch['wav_paths'] == [str(wav_path)]
+    assert batch['suppressed_all'] is False
     derivative = batch['wav_paths'][0]
-    mapping = batch['source_frame_maps'][derivative]
-    assert mapping['coverage_trimmed'] is True
-    assert _duration(derivative) == pytest.approx(0.4)
-    assert _read_payload(derivative) == _frame_bytes(8, SMALL_FRAME_SAMPLES) + _frame_bytes(9, SMALL_FRAME_SAMPLES)
+    mapping = {**batch['source_frame_maps'][derivative], 'coverage_trimmed': True}
 
     monkeypatch.setattr(pipeline, 'get_timestamp_from_path', _ts)
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *a, **k: [{'start': 0, 'end': 0.4}])
@@ -808,7 +809,7 @@ def test_short_novel_tail_marked_and_admitted_past_vad_floor(real_pipeline, monk
     pipeline.retrieve_vad_segments(derivative, admitted, [], source_frame_map=mapping)
     assert len(admitted) == 1
     exported = next(iter(admitted))
-    assert _read_payload(exported) == _read_payload(derivative)
+    assert _read_payload(exported) == _frame_bytes(0, SMALL_FRAME_SAMPLES) + _frame_bytes(1, SMALL_FRAME_SAMPLES)
 
     dropped = set()
     pipeline.retrieve_vad_segments(derivative, dropped, [], source_frame_map=None)
@@ -820,7 +821,7 @@ def test_short_novel_tail_marked_and_admitted_past_vad_floor(real_pipeline, monk
     assert dropped_default == set()
 
 
-def test_subsecond_tail_saved_transcript_contains_new_word(real_pipeline, monkeypatch, tmp_path):
+def test_receipt_only_saved_transcript_contains_new_word(real_pipeline, monkeypatch, tmp_path):
     import threading
 
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -836,7 +837,7 @@ def test_subsecond_tail_saved_transcript_contains_new_word(real_pipeline, monkey
     wav_path = tmp_path / f'{WAV_STEM}.wav'
     _write_short_frame_wav(wav_path, range(10))
     batch = _short_tail_batch(monkeypatch, wav_path)
-    assert batch['status'] == 'applied' and len(batch['wav_paths']) == 1
+    assert batch['status'] == 'applied' and batch['wav_paths'] == [str(wav_path)]
     derivative = batch['wav_paths'][0]
     mapping = batch['source_frame_maps'][derivative]
 
@@ -859,7 +860,7 @@ def test_subsecond_tail_saved_transcript_contains_new_word(real_pipeline, monkey
     store = seeded_store([row])
 
     monkeypatch.setattr(pipeline, 'get_timestamp_from_path', _ts)
-    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *a, **k: [{'start': 0, 'end': 0.4}])
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *a, **k: [{'start': 0, 'end': 2.0}])
     segmented = set()
     pipeline.retrieve_vad_segments(derivative, segmented, [], source_frame_map=mapping)
     assert len(segmented) == 1
@@ -910,7 +911,7 @@ def test_subsecond_tail_saved_transcript_contains_new_word(real_pipeline, monkey
     assert 'new-word-9' in texts
 
 
-def test_fully_covered_intake_never_calls_provider_or_enrichment(real_pipeline, monkeypatch, tmp_path):
+def test_receipt_only_full_coverage_preserves_the_wal_untouched(real_pipeline, monkeypatch, tmp_path):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from tests.unit.test_sync_lineage_dedupe_replay import live_row, seeded_store
     from utils.sync import recording_lineage
@@ -940,8 +941,8 @@ def test_fully_covered_intake_never_calls_provider_or_enrichment(real_pipeline, 
         decoded_frames={str(wav_path): [FRAME_SAMPLES] * 10},
     )
     assert batch['status'] == 'applied'
-    assert batch['suppressed_all'] is True
-    assert batch['wav_paths'] == []
-    prerecorded = MagicMock()
-    monkeypatch.setattr(pipeline, 'prerecorded', prerecorded)
-    assert prerecorded.call_count == 0
+    assert batch['suppressed_all'] is False
+    assert batch['wav_paths'] == [str(wav_path)]
+    assert batch['retired_paths'] == []
+    assert batch['stats']['dropped_seconds'] == 0.0
+    assert _read_payload(str(wav_path)) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))

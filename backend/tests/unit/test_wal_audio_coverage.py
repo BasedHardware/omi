@@ -5,7 +5,11 @@ import wave
 
 import pytest
 
-from utils.sync.audio_coverage import plan_unreceived_frames, validated_live_ranges
+from utils.sync.audio_coverage import (
+    _validated_received_ranges,
+    plan_unreceived_frames,
+    validated_live_ranges,
+)
 from utils.sync.wal_audio_coverage import apply_wal_audio_coverage
 
 ROOT = '123e4567-e89b-12d3-a456-426614174000'
@@ -207,27 +211,27 @@ def test_plan_frame_start_offsets_output():
 
 def test_ranges_positive_runs():
     env = _envelope([_run(0, 7)])
-    assert validated_live_ranges(CLAIM, [env]) == ((0, 7),)
+    assert _validated_received_ranges(CLAIM, [env]) == ((0, 7),)
 
 
 def test_ranges_merges_overlapping_runs():
     env = _envelope([_run(0, 5), _run(3, 7)])
-    assert validated_live_ranges(CLAIM, [env]) == ((0, 7),)
+    assert _validated_received_ranges(CLAIM, [env]) == ((0, 7),)
 
 
 def test_ranges_no_matching_envelope_returns_empty():
     other = '999e4567-e89b-12d3-a456-426614174999'
     env = _envelope([_run(0, 7, root=other)])
-    assert validated_live_ranges(CLAIM, [env]) == ()
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7, epoch=EPOCH + 1)])]) == ()
-    assert validated_live_ranges(CLAIM, []) == ()
+    assert _validated_received_ranges(CLAIM, [env]) == ()
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7, epoch=EPOCH + 1)])]) == ()
+    assert _validated_received_ranges(CLAIM, []) == ()
 
 
 def test_ranges_unknown_envelopes_give_no_proof():
     unknown = {'version': 1, 'capability': 'unknown', 'coverage': 'unknown', 'origin': 'live', 'reason': 'legacy'}
-    assert validated_live_ranges(CLAIM, [unknown]) == ()
+    assert _validated_received_ranges(CLAIM, [unknown]) == ()
     assert (
-        validated_live_ranges(
+        _validated_received_ranges(
             CLAIM, [{'version': 1, 'capability': 'unknown', 'coverage': 'incomplete', 'reason': 'overflow'}]
         )
         == ()
@@ -236,73 +240,89 @@ def test_ranges_unknown_envelopes_give_no_proof():
 
 def test_ranges_incomplete_coverage_still_yields_positive_runs():
     env = _envelope([_run(0, 3), _run(7, 10)], coverage='incomplete')
-    assert validated_live_ranges(CLAIM, [env]) == ((0, 3), (7, 10))
+    assert _validated_received_ranges(CLAIM, [env]) == ((0, 3), (7, 10))
 
 
 def test_ranges_matching_conflict_abstains_everything():
     conflicted = _envelope([_run(0, 7)], conflicts=1)
     clean = _envelope([_run(0, 5)])
-    assert validated_live_ranges(CLAIM, [conflicted]) is None
-    assert validated_live_ranges(CLAIM, [clean, conflicted]) is None
-    assert validated_live_ranges(CLAIM, [conflicted, clean]) is None
+    assert _validated_received_ranges(CLAIM, [conflicted]) is None
+    assert _validated_received_ranges(CLAIM, [clean, conflicted]) is None
+    assert _validated_received_ranges(CLAIM, [conflicted, clean]) is None
 
 
 def test_ranges_other_root_conflict_does_not_abstain():
     other = '999e4567-e89b-12d3-a456-426614174999'
     conflicted_elsewhere = _envelope([_run(0, 7, root=other)], conflicts=3)
     clean = _envelope([_run(0, 5)])
-    assert validated_live_ranges(CLAIM, [conflicted_elsewhere, clean]) == ((0, 5),)
+    assert _validated_received_ranges(CLAIM, [conflicted_elsewhere, clean]) == ((0, 5),)
 
 
 def test_ranges_wrong_channel_or_rate_give_no_proof():
     assert (
-        validated_live_ranges(
+        _validated_received_ranges(
             CLAIM, [_envelope([_run(0, 7, rate=8000, decoded_end=7 * 16000, samples_per_frame=16000)])]
         )
         == ()
     )
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7, channel='stereo')])]) == ()
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7, channel='stereo')])]) == ()
 
 
 def test_ranges_non_live_origin_gives_no_proof():
     env = _envelope([_run(0, 7)], origin='sync')
-    assert validated_live_ranges(CLAIM, [env]) == ()
+    assert _validated_received_ranges(CLAIM, [env]) == ()
 
 
 def test_ranges_malformed_matching_envelope_abstains():
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], capability='unknown')]) is None
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], coverage='unknown')]) is None
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], version=2)]) is None
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], conflicts=True)]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7)], capability='unknown')]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7)], coverage='unknown')]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7)], version=2)]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 7)], conflicts=True)]) is None
 
 
 def test_ranges_malformed_matching_run_abstains():
     bad_geometry = _run(0, 7, decoded_end=9999)
-    assert validated_live_ranges(CLAIM, [_envelope([bad_geometry])]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([bad_geometry])]) is None
     inverted = _run(7, 0)
     inverted['decoded_sample_end'] = 0
-    assert validated_live_ranges(CLAIM, [_envelope([inverted])]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([inverted])]) is None
     bool_run = _run(0, 7)
     bool_run['source_frame_start'] = True
-    assert validated_live_ranges(CLAIM, [_envelope([bool_run])]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([bool_run])]) is None
     float_run = _run(0, 7)
     float_run['samples_per_frame'] = 16000.0
-    assert validated_live_ranges(CLAIM, [_envelope([float_run])]) is None
+    assert _validated_received_ranges(CLAIM, [_envelope([float_run])]) is None
 
 
 def test_ranges_envelope_and_run_caps():
-    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 1)] * 33)]) is None
-    assert validated_live_ranges(CLAIM, [{}] * 14) is None
-    assert validated_live_ranges(CLAIM, [{}] * 13) == ()
+    assert _validated_received_ranges(CLAIM, [_envelope([_run(0, 1)] * 33)]) is None
+    assert _validated_received_ranges(CLAIM, [{}] * 14) is None
+    assert _validated_received_ranges(CLAIM, [{}] * 13) == ()
 
 
 def test_ranges_bad_claim_abstains():
     env = _envelope([_run(0, 7)])
-    assert validated_live_ranges({'capture_root': ROOT}, [env]) is None
-    assert validated_live_ranges(None, [env]) is None
-    assert validated_live_ranges({**CLAIM, 'codec': 'aac'}, [env]) is None
-    assert validated_live_ranges({**CLAIM, 'channel': 'stereo'}, [env]) is None
-    assert validated_live_ranges({**CLAIM, 'frame_count': True}, [env]) is None
+    assert _validated_received_ranges({'capture_root': ROOT}, [env]) is None
+    assert _validated_received_ranges(None, [env]) is None
+    assert _validated_received_ranges({**CLAIM, 'codec': 'aac'}, [env]) is None
+    assert _validated_received_ranges({**CLAIM, 'channel': 'stereo'}, [env]) is None
+    assert _validated_received_ranges({**CLAIM, 'frame_count': True}, [env]) is None
+
+
+def test_public_ranges_receipt_only_envelopes_never_prove_received_audio():
+    """Receipt-only coverage authorizes no suppression: () keeps everything."""
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)])]) == ()
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 10)])]) == ()
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 5), _run(3, 7)])]) == ()
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 3), _run(7, 10)], coverage='incomplete')]) == ()
+    assert validated_live_ranges(CLAIM, []) == ()
+
+
+def test_public_ranges_preserve_malformed_and_conflict_abstention():
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], conflicts=1)]) is None
+    assert validated_live_ranges(CLAIM, [_envelope([_run(0, 7)], coverage='unknown')]) is None
+    assert validated_live_ranges(CLAIM, [{}] * 14) is None
+    assert validated_live_ranges(None, [_envelope([_run(0, 7)])]) is None
 
 
 def _labeled_wav(tmp_path, name='audio_1760000000.wav', frame_values=range(10), samples_per_frame=160):
@@ -415,17 +435,17 @@ def test_apply_rejects_out_of_domain_or_malformed(tmp_path):
 
 def test_ranges_oversized_envelope_abstains_before_scan():
     env = _envelope([_run(i, i + 1) for i in range(33)])
-    assert validated_live_ranges(dict(CLAIM), [env]) is None
+    assert _validated_received_ranges(dict(CLAIM), [env]) is None
     other = {**CLAIM, 'capture_root': '999e4567-e89b-12d3-a456-426614174999'}
     oversized_other_root = _envelope([_run(i, i + 1, root=other['capture_root']) for i in range(33)])
-    assert validated_live_ranges(dict(CLAIM), [oversized_other_root]) is None
+    assert _validated_received_ranges(dict(CLAIM), [oversized_other_root]) is None
 
 
 def test_ranges_nonint_matching_rate_abstains():
     env = _envelope([_run(0, 5, rate=16000.0)])
-    assert validated_live_ranges(dict(CLAIM), [env]) is None
+    assert _validated_received_ranges(dict(CLAIM), [env]) is None
     env = _envelope([_run(0, 5, rate=True)])
-    assert validated_live_ranges(dict(CLAIM), [env]) is None
+    assert _validated_received_ranges(dict(CLAIM), [env]) is None
 
 
 def _batch_maps(tmp_path, names, claim=None, samples_per_frame=160):

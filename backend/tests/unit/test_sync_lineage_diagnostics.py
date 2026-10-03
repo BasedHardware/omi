@@ -32,6 +32,7 @@ from tests.unit.test_sync_lineage_dedupe_replay import (
     reworded,
     seeded_store,
     seeded_store_with_donor,
+    texts_of,
     wal,
 )
 from tests.unit.test_sync_recording_lineage import (
@@ -415,16 +416,15 @@ def test_stamp_fallback_live_append_reports_extent_growth(extra_seconds, bucket)
     assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == bucket
 
 
-def test_all_repeat_stamp_fallback_reports_zero_and_writes_nothing():
+def test_all_repeat_stamp_fallback_appends_and_reports_extent_growth():
     row = live_row()
     incoming = _stamp_incoming([reworded(text) for text in LIVE])
     prove(incoming, row)
     store = seeded_store([row])
-    before = deepcopy(store.rows)
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
-    assert created is False and not survivors
-    assert store.rows == before
-    assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0'
+    assert created is False and len(survivors) == len(LIVE)
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + [reworded(text) for text in LIVE])
+    assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0_60'
 
 
 def test_known_bound_target_reports_none():
@@ -494,15 +494,17 @@ def test_stamp_fallback_size_rollover_never_reports_live_stretch(monkeypatch):
     assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0'
 
 
-def test_all_repeat_stamp_fallback_with_a_donor_reports_zero():
+def test_all_repeat_stamp_fallback_with_a_donor_appends_and_reports_growth():
     row = live_row()
     incoming = _stamp_incoming([reworded(text) for text in LIVE])
     prove(incoming, row)
     store = seeded_store_with_donor([row])
-    before = deepcopy(store.rows)
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
-    assert created is False and survivors == [] and store.rows == before
-    assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0'
+    assert created is False and len(survivors) == len(LIVE)
+    donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
+    assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + [reworded(text) for text in LIVE])
+    assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0_60'
 
 
 def test_dedupe_off_persistence_is_unchanged(monkeypatch):

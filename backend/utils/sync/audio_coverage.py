@@ -60,7 +60,7 @@ def _run_matches_claim(run: Mapping, root: str, epoch: int) -> bool:
     return run.get('capture_root') == root and _is_int(run.get('clock_epoch')) and run['clock_epoch'] == epoch
 
 
-def validated_live_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> tuple[tuple[int, int], ...] | None:
+def _validated_received_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> tuple[tuple[int, int], ...] | None:
     """Positive live-received source-frame intervals for one WAL file claim.
 
     Returns () when no envelope proves any received frame (caller keeps all
@@ -142,6 +142,13 @@ def validated_live_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> tuple
         else:
             merged.append((start, end))
     return tuple(merged)
+
+
+def validated_live_ranges(claim: Mapping, envelopes: Sequence[Mapping]) -> tuple[tuple[int, int], ...] | None:
+    received = _validated_received_ranges(claim, envelopes)
+    if received is None:
+        return None
+    return ()
 
 
 def plan_unreceived_frames(

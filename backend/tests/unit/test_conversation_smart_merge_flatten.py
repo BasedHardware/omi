@@ -799,8 +799,8 @@ def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world):
     segment_count = len(ids)
     prove(incoming, world.raw('p'))
     result2, _, survivors = _assign(world, incoming, target_id='n')
-    assert result2['id'] == 'p' and not survivors
-    assert len(_segment_ids(world, 'p')) == segment_count
+    assert result2['id'] == 'p' and len(survivors) == len(incoming['transcript_segments'])
+    assert len(_segment_ids(world, 'p')) == segment_count + len(survivors)
     assert _visible(world) == ['p']
 
 

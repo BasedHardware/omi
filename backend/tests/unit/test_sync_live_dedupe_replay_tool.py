@@ -196,7 +196,7 @@ def test_unproven_identical_and_reworded_repeats_are_kept(tmp_path):
     assert out['totals'] == {'kept_segments': 2, 'dropped_segments': 0, 'kept_seconds': 20.0, 'dropped_seconds': 0.0}
 
 
-def test_proven_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_path):
+def test_receipt_only_repeats_and_new_speech_are_all_kept_at_both_skews(tmp_path):
     for skew in (40, 1200):
         sync = with_ids(
             [sync_segment(reworded(LIVE[i]), skew + i * 10.0) for i in range(7)]
@@ -211,15 +211,15 @@ def test_proven_reworded_repeats_drop_and_new_speech_is_kept_at_both_skews(tmp_p
         result = run_replay(tmp_path, payload)
         assert result.returncode == 0, result.stderr
         out = decisions(result)
-        assert [row['decision'] for row in out['segments']] == ['dropped'] * 7 + ['kept'] * 3
-        assert all(row['reason'] == 'lexical_repeat:source_frame_lexical' for row in out['segments'][:7])
+        assert [row['decision'] for row in out['segments']] == ['kept'] * 10
+        assert all(row['reason'] == 'not_proven_same_capture' for row in out['segments'])
         assert all(row['partial_audio'] is False for row in out['segments'])
         assert [intake['segment_count'] for intake in out['intakes']] == [2, 3, 5]
         assert out['totals'] == {
-            'kept_segments': 3,
-            'dropped_segments': 7,
-            'kept_seconds': 30.0,
-            'dropped_seconds': 70.0,
+            'kept_segments': 10,
+            'dropped_segments': 0,
+            'kept_seconds': 100.0,
+            'dropped_seconds': 0.0,
         }
 
 
@@ -233,7 +233,7 @@ def test_correction_prefixed_segment_is_kept_even_with_proof(tmp_path):
     assert out['totals']['kept_seconds'] == 10.0
 
 
-def test_proven_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path):
+def test_receipt_only_exact_text_same_range_is_kept(tmp_path):
     live = live_segments() + [{'start': 70.0, 'end': 73.0, 'text': 'okay see you'}]
     sync = with_ids(
         [
@@ -248,8 +248,8 @@ def test_proven_exact_text_same_range_drops_novel_text_same_range_keeps(tmp_path
         'index': 0,
         'start': 70.0,
         'end': 73.0,
-        'decision': 'dropped',
-        'reason': 'exact_sync_retry',
+        'decision': 'kept',
+        'reason': 'not_proven_same_capture',
         'partial_audio': False,
     }
     assert out['segments'][1]['decision'] == 'kept'
@@ -284,14 +284,13 @@ def test_sync_scoped_live_lines_skip_lexical_but_still_exact_retry(tmp_path):
     }
 
 
-def test_proven_oversized_upload_drops_only_the_proven_prefix(tmp_path):
+def test_receipt_only_oversized_upload_keeps_everything(tmp_path):
     sync = with_ids([sync_segment(reworded(LIVE[i % 7]), i * 10.0 + 40) for i in range(65)])
     result = run_replay(tmp_path, {'live_segments': live_segments(), 'sync_segments': sync, **proof(sync[:64])})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert [row['decision'] for row in out['segments']] == ['dropped'] * 64 + ['kept']
-    assert all(row['reason'] == 'lexical_repeat:source_frame_lexical' for row in out['segments'][:64])
-    assert out['segments'][64]['reason'] == 'not_proven_same_capture'
+    assert [row['decision'] for row in out['segments']] == ['kept'] * 65
+    assert all(row['reason'] == 'not_proven_same_capture' for row in out['segments'])
     sizes = [intake['segment_count'] for intake in out['intakes']]
     assert all(2 <= size <= 5 for size in sizes) and sum(sizes) == 65
 
@@ -369,7 +368,7 @@ def test_unscoped_exact_repeats_across_intakes_get_fresh_scopes_and_stay_kept(tm
 
 
 @pytest.mark.parametrize('skew', [40.0, 1200.0])
-def test_received_frames_drop_audio_candidates_and_plan_the_trim(tmp_path, skew):
+def test_receipt_only_frames_keep_audio_candidates_and_the_whole_wal(tmp_path, skew):
     sync = [
         sync_segment(
             f'w{i}',
@@ -399,21 +398,21 @@ def test_received_frames_drop_audio_candidates_and_plan_the_trim(tmp_path, skew)
     )
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert [row['decision'] for row in out['segments']] == ['dropped'] * 7 + ['kept'] * 3
-    assert [row['reason'] for row in out['segments']] == ['audio_received_repeat'] * 7 + ['not_proven_same_capture'] * 3
+    assert [row['decision'] for row in out['segments']] == ['kept'] * 10
+    assert [row['reason'] for row in out['segments']] == ['not_proven_same_capture'] * 10
     assert all(row['partial_audio'] is False for row in out['segments'])
     assert out['audio_coverage'] == {
         'files': [
             {
                 'wal_index': 0,
-                'decision': 'trimmed',
-                'kept_frame_ranges': [[7, 10]],
-                'kept_seconds': 1.5,
-                'dropped_seconds': 3.5,
+                'decision': 'kept',
+                'kept_frame_ranges': [[0, 10]],
+                'kept_seconds': 5.0,
+                'dropped_seconds': 0.0,
                 'context_seconds': 0.0,
             }
         ],
-        'totals': {'kept_seconds': 1.5, 'dropped_seconds': 3.5, 'context_seconds': 0.0},
+        'totals': {'kept_seconds': 5.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0},
     }
 
 
@@ -436,8 +435,8 @@ def test_declared_wal_frame_count_at_or_above_decoded_keeps_the_plan(tmp_path, d
     result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == [[7, 10]]
-    assert out['audio_coverage']['totals'] == {'kept_seconds': 1.5, 'dropped_seconds': 3.5, 'context_seconds': 0.0}
+    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == [[0, 10]]
+    assert out['audio_coverage']['totals'] == {'kept_seconds': 5.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0}
 
 
 @pytest.mark.parametrize('declared', [9, 0, True])
@@ -467,7 +466,7 @@ def test_declared_wal_frame_count_below_decoded_or_invalid_exits_2(tmp_path, dec
     assert 'input.json' not in result.stdout and 'input.json' not in result.stderr
 
 
-def test_received_hole_leaves_unreceived_and_missed_frame_ranges(tmp_path):
+def test_receipt_only_hole_retains_the_whole_wal(tmp_path):
     coverage = audio_coverage(
         [8000] * 10,
         [
@@ -487,18 +486,18 @@ def test_received_hole_leaves_unreceived_and_missed_frame_ranges(tmp_path):
         'files': [
             {
                 'wal_index': 0,
-                'decision': 'trimmed',
-                'kept_frame_ranges': [[0, 3], [7, 10]],
-                'kept_seconds': 3.0,
-                'dropped_seconds': 2.0,
+                'decision': 'kept',
+                'kept_frame_ranges': [[0, 10]],
+                'kept_seconds': 5.0,
+                'dropped_seconds': 0.0,
                 'context_seconds': 0.0,
             }
         ],
-        'totals': {'kept_seconds': 3.0, 'dropped_seconds': 2.0, 'context_seconds': 0.0},
+        'totals': {'kept_seconds': 5.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0},
     }
 
 
-def test_fully_received_wal_plans_empty_retention(tmp_path):
+def test_fully_receipted_wal_still_retains_everything(tmp_path):
     coverage = audio_coverage(
         [8000] * 10,
         [
@@ -514,8 +513,8 @@ def test_fully_received_wal_plans_empty_retention(tmp_path):
     result = run_replay(tmp_path, {'live_segments': [], 'sync_segments': [], 'audio_coverage': coverage})
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert out['audio_coverage']['files'][0]['decision'] == 'covered'
-    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == []
+    assert out['audio_coverage']['files'][0]['decision'] == 'kept'
+    assert out['audio_coverage']['files'][0]['kept_frame_ranges'] == [[0, 10]]
 
 
 @pytest.mark.parametrize(
@@ -572,7 +571,7 @@ def test_missing_or_conflicting_evidence_retains_all(tmp_path, runs_over, expect
     assert out['audio_coverage']['totals'] == {'kept_seconds': 5.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0}
 
 
-def test_context_expansion_retains_adjacent_covered_frames_and_marks_partial(tmp_path):
+def test_receipt_only_coverage_never_marks_a_straddling_segment_partial(tmp_path):
     sync = [
         sync_segment(
             'a straddling utterance',
@@ -602,18 +601,18 @@ def test_context_expansion_retains_adjacent_covered_frames_and_marks_partial(tmp
         'files': [
             {
                 'wal_index': 0,
-                'decision': 'trimmed',
-                'kept_frame_ranges': [[45, 100]],
-                'kept_seconds': 0.55,
-                'dropped_seconds': 0.45,
-                'context_seconds': 0.25,
+                'decision': 'kept',
+                'kept_frame_ranges': [[0, 100]],
+                'kept_seconds': 1.0,
+                'dropped_seconds': 0.0,
+                'context_seconds': 0.0,
             }
         ],
-        'totals': {'kept_seconds': 0.55, 'dropped_seconds': 0.45, 'context_seconds': 0.25},
+        'totals': {'kept_seconds': 1.0, 'dropped_seconds': 0.0, 'context_seconds': 0.0},
     }
     assert out['segments'][0]['decision'] == 'kept'
-    assert out['segments'][0]['reason'] == 'partial_audio_candidate_retained'
-    assert out['segments'][0]['partial_audio'] is True
+    assert out['segments'][0]['reason'] == 'not_proven_same_capture'
+    assert out['segments'][0]['partial_audio'] is False
 
 
 @pytest.mark.parametrize(
@@ -688,7 +687,7 @@ def test_cli_and_production_agree_appended_receipts_replace_live_proof(tmp_path,
         **proof(sync),
     }
     cli = replay_tool.replay(payload)
-    assert [row['decision'] for row in cli['segments']] == ['kept', 'dropped', 'kept', 'kept']
+    assert [row['decision'] for row in cli['segments']] == ['kept', 'kept', 'kept', 'kept']
     cli_kept_texts = [texts[i] for i, row in enumerate(cli['segments']) if row['decision'] == 'kept']
 
     row = helpers.live_row()
@@ -708,7 +707,7 @@ def test_cli_and_production_agree_appended_receipts_replace_live_proof(tmp_path,
     assert appended == cli_kept_texts
     persisted = store.rows[('users', 'u', 'conversations', helpers.LIVE_ID)]['capture_evidence']
     assert persisted.get('receipts') and 'runs' not in persisted
-    assert cli['totals'] == {'kept_segments': 3, 'dropped_segments': 1, 'kept_seconds': 30.0, 'dropped_seconds': 10.0}
+    assert cli['totals'] == {'kept_segments': 4, 'dropped_segments': 0, 'kept_seconds': 40.0, 'dropped_seconds': 0.0}
 
 
 def test_extra_metadata_is_ignored_and_the_input_is_never_mutated(tmp_path):
@@ -725,7 +724,7 @@ def test_extra_metadata_is_ignored_and_the_input_is_never_mutated(tmp_path):
     result = run_replay(tmp_path, payload)
     assert result.returncode == 0, result.stderr
     out = decisions(result)
-    assert [row['decision'] for row in out['segments']] == ['dropped', 'kept']
+    assert [row['decision'] for row in out['segments']] == ['kept', 'kept']
     assert input_path.read_bytes() == raw
 
 
