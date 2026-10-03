@@ -1048,16 +1048,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     ),
                   ],
 
-                  if (asksToConfirm)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
-                      child: SpeakerLikelyConfirm(
-                        name: person.name,
-                        onYes: () => confirm(data),
-                        onNot: () => reject(data),
-                      ),
-                    ),
-
                   // Chat bubble
                   Row(
                     mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -1132,6 +1122,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ),
                     ],
                   ),
+                  // Under the line it asks about.
+                  if (asksToConfirm)
+                    Padding(
+                      padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                      child: SpeakerLikelyConfirm(
+                        name: person.name,
+                        onYes: () => confirm(data),
+                        onNot: () => reject(data),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1289,14 +1289,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (startsTurn || isTagging) who,
+          if (startsTurn || isTagging) ...[
+            who,
+            const SizedBox(height: 3),
+          ],
+          words,
           if (asksToConfirm)
             Padding(
               padding: const EdgeInsets.only(top: OmiSpacing.xxs),
               child: SpeakerLikelyConfirm(name: person.name, onYes: () => confirm(data), onNot: () => reject(data)),
             ),
-          if (startsTurn || isTagging || asksToConfirm) const SizedBox(height: 3),
-          words,
         ],
       ),
     );

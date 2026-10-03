@@ -178,12 +178,11 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
             ),
             const SizedBox(height: OmiSpacing.xl),
             OmiSettingsGroup(
-              footer: l10n.pinPersonHonestLine,
               children: [
                 OmiSettingsRow.toggle(
                   key: const Key('person_pin_switch'),
-                  title: l10n.pinPersonTitle(person.name),
-                  subtitle: l10n.pinPersonSubtitle(person.name),
+                  title: l10n.pinAction,
+                  subtitle: l10n.pinPersonHonestLine,
                   value: person.pinned,
                   onChanged: (_) => togglePersonPinned(context, provider, person),
                 ),

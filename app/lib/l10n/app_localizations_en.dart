@@ -282,7 +282,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportMessage => 'Report Message';
 
   @override
-  String get reportMessageConfirm => 'Are you sure you want to report this message?';
+  String get reportMessageConfirm => 'Report this message?';
 
   @override
   String get messageReported => 'Message reported successfully.';
@@ -294,7 +294,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearChat => 'Clear Chat';
 
   @override
-  String get clearChatConfirm => 'Are you sure you want to clear the chat? This action cannot be undone.';
+  String get clearChatConfirm => 'All messages in this chat are deleted. This can\'t be undone.';
 
   @override
   String get maxFilesLimit => 'You can only upload 4 files at a time';
@@ -357,10 +357,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cannotBeUndone => 'This cannot be undone.';
 
   @override
-  String get allDataErased => 'All of your memories and conversations will be permanently erased.';
+  String get allDataErased => 'Your memories and conversations will be erased.';
 
   @override
-  String get appsDisconnected => 'Your Apps and Integrations will be disconnected effectively immediately.';
+  String get appsDisconnected => 'Your apps and integrations will be disconnected.';
 
   @override
   String get exportBeforeDelete =>
@@ -1036,7 +1036,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Are you sure you want to disconnect from $appName? You can reconnect anytime.';
+    return 'You can reconnect $appName anytime.';
   }
 
   @override
@@ -1975,14 +1975,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteActionItemTitle => 'Delete Task';
 
   @override
-  String get deleteActionItemMessage => 'Are you sure you want to delete this task?';
+  String get deleteActionItemMessage => 'Delete this task?';
 
   @override
   String get deleteSelectedItemsTitle => 'Delete Selected Items';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Are you sure you want to delete $count selected task$s?';
+    return 'Delete $count selected task$s?';
   }
 
   @override
@@ -2050,7 +2050,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get undo => 'Undo';
 
   @override
-  String get noMemoriesYet => '🧠 No memories yet';
+  String get noMemoriesYet => 'No Memories Yet';
 
   @override
   String get noAutoMemories => 'No auto-extracted memories yet';
@@ -2062,16 +2062,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noMemoriesInCategories => 'No memories in these categories';
 
   @override
-  String get noMemoriesFound => '🔍 No memories found';
+  String get noMemoriesFound => 'No Memories Found';
 
   @override
-  String get addFirstMemory => 'Add your first memory';
+  String get addFirstMemory => 'Add Your First Memory';
 
   @override
   String get clearMemoryTitle => 'Clear Omi\'s Memory';
 
   @override
-  String get clearMemoryMessage => 'Are you sure you want to clear Omi\'s memory? This action cannot be undone.';
+  String get clearMemoryMessage => 'All your memories are deleted. This can\'t be undone.';
 
   @override
   String get clearMemoryButton => 'Clear Memory';
@@ -2217,20 +2217,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Delete Task';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Are you sure you want to delete this task?';
+  String get deleteActionItemConfirmMessage => 'Delete this task?';
 
   @override
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App Interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & Transcription';
 
   @override
   String get languageSettingsHelperText =>
-      'App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.';
+      'App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.';
 
   @override
   String get translationNotice => 'Translation Notice';
@@ -2320,7 +2320,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteMemory => 'Delete Memory';
 
   @override
-  String get thisActionCannotBeUndone => 'This action cannot be undone.';
+  String get thisActionCannotBeUndone => 'This can\'t be undone.';
 
   @override
   String memoriesCount(int count) {
@@ -2761,7 +2761,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteActionItem => 'Delete Task';
 
   @override
-  String get deleteActionItemConfirmation => 'Are you sure you want to delete this task? This action cannot be undone.';
+  String get deleteActionItemConfirmation => 'Delete this task? This can\'t be undone.';
 
   @override
   String get enterActionItemDescription => 'Enter task description';
@@ -3101,7 +3101,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Message reported successfully';
 
   @override
-  String get confirmReportMessage => 'Are you sure you want to report this message?';
+  String get confirmReportMessage => 'Report this message?';
 
   @override
   String get selectChatAssistant => 'Select Chat Assistant';
@@ -3116,7 +3116,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearChatTitle => 'Clear Chat?';
 
   @override
-  String get confirmClearChat => 'Are you sure you want to clear the chat? This action cannot be undone.';
+  String get confirmClearChat => 'Clear this chat? This can\'t be undone.';
 
   @override
   String get copy => 'Copy';
@@ -3288,7 +3288,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createMemory => 'Create Memory';
 
   @override
-  String get deleteMemoryConfirmation => 'Are you sure you want to delete this memory? This action cannot be undone.';
+  String get deleteMemoryConfirmation => 'Delete this memory? This can\'t be undone.';
 
   @override
   String get makePrivate => 'Make Private';
@@ -3325,7 +3325,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Are you sure you want to clear Omi\'s memory? This action cannot be undone and will permanently delete all $count memories.';
+    return 'All $count memories are deleted. This can\'t be undone.';
   }
 
   @override
@@ -3617,8 +3617,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Let Omi choose the best app automatically';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Are you sure you want to delete this conversation? This action cannot be undone.';
+  String get deleteConversationConfirmation => 'Delete this conversation? This can\'t be undone.';
 
   @override
   String get conversationDeleted => 'Conversation deleted';
@@ -3944,8 +3943,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateAppQuestion => 'Update App?';
 
   @override
-  String get updateAppConfirmation =>
-      'Are you sure you want to update your app? The changes will reflect once reviewed by our team.';
+  String get updateAppConfirmation => 'Your changes go live after our team reviews them.';
 
   @override
   String get updateApp => 'Update App';
@@ -4009,8 +4007,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Cancel Subscription?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.';
+  String get cancelSubscriptionConfirmation => 'You keep access until the end of your current billing period.';
 
   @override
   String get cancelSubscriptionButton => 'Cancel Subscription';
@@ -4195,8 +4192,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Revoke API Key?';
 
   @override
-  String get revokeApiKeyWarning =>
-      'This action cannot be undone. Any applications using this key will no longer be able to access the API.';
+  String get revokeApiKeyWarning => 'Apps using this key lose API access. This can\'t be undone.';
 
   @override
   String get revoke => 'Revoke';
@@ -4253,7 +4249,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Are you sure you want to delete this $item? This action cannot be undone.';
+    return 'Deleting this $item can\'t be undone.';
   }
 
   @override
@@ -4261,7 +4257,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Are you sure you want to revoke the key \"$keyName\"? This action cannot be undone.';
+    return 'Anything using \"$keyName\" loses access. This can\'t be undone.';
   }
 
   @override
@@ -4437,7 +4433,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Your plan will remain active until $date. After that, you will lose access to your unlimited features. Are you sure?';
+    return 'Your plan stays active until $date. After that, you lose your unlimited features.';
   }
 
   @override
@@ -4529,7 +4525,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get askOmiAnything => 'Ask Omi anything about your life';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Unlock Omi\'s infinite memory';
+  String get unlockOmiInfiniteMemory => 'Unlimited memories';
 
   @override
   String get youreOnAnnualPlan => 'You\'re on the Annual Plan';
@@ -4541,7 +4537,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unableToLoadPlans => 'Unable to load plans';
 
   @override
-  String get checkConnectionTryAgain => 'Please check your connection and try again';
+  String get checkConnectionTryAgain => 'Check your connection and try again.';
 
   @override
   String get useFreePlan => 'Use Free Plan';
@@ -4723,7 +4719,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'This will permanently delete all conversations imported from Limitless. This action cannot be undone.';
+      'All conversations imported from Limitless are deleted. This can\'t be undone.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4764,7 +4760,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Are you sure you want to delete $name\'s sample?';
+    return '$name\'s voice sample is removed. This can\'t be undone.';
   }
 
   @override
@@ -4772,7 +4768,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Are you sure you want to delete $name? This will also remove all associated speech samples.';
+    return 'This removes $name\'s voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.';
   }
 
   @override
@@ -5127,7 +5123,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get finishedConversation => 'Finished Conversation?';
 
   @override
-  String get stopRecordingConfirmation => 'Are you sure you want to stop recording and summarize the conversation now?';
+  String get stopRecordingConfirmation => 'Stop recording and summarize the conversation now?';
 
   @override
   String get conversationEndsManually => 'Conversation will only end manually.';
@@ -5968,7 +5964,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cloudProvider => 'Cloud Provider';
 
   @override
-  String get premiumMinutesInfo => '300 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '300 premium minutes a month. Choose On Device for unlimited free transcription.';
 
   @override
   String get viewUsage => 'View Usage';
@@ -6047,7 +6043,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryDrainSignificantly => 'Battery drain will increase significantly.';
 
   @override
-  String get premiumMinutesMonth => '300 premium minutes/month. On-Device tab offers unlimited free transcription. ';
+  String get premiumMinutesMonth => '300 premium minutes a month. Choose On Device for unlimited free transcription. ';
 
   @override
   String get audioProcessedLocally => 'Audio is processed locally. Works offline, more private, but uses more battery.';
@@ -6100,7 +6096,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.';
+      'Omi\'s live transcription is built for real-time conversations and labels who said what.';
 
   @override
   String get reset => 'Reset';
@@ -6634,8 +6630,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareRecording => 'Share Recording';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+  String get deleteRecordingConfirmation => 'This can\'t be undone.';
 
   @override
   String get recordingIdLabel => 'Recording ID';
@@ -7008,7 +7003,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'You\'re switching your Unlimited Plan to the $title.';
   }
 
   @override
@@ -7720,7 +7715,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resetFilters => 'Reset Filters';
 
   @override
-  String get applyFilters => 'Apply filters';
+  String get applyFilters => 'Apply Filters';
 
   @override
   String get mostInstalls => 'Most Installs';
@@ -8262,7 +8257,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteSyncedFilesMessage =>
-      'These recordings have already been synced to your phone. This cannot be undone.';
+      'These recordings have already been synced to your phone. This can\'t be undone.';
 
   @override
   String get syncedFilesDeleted => 'Synced recordings deleted';
@@ -8275,7 +8270,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deletePendingFilesWarning =>
-      'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.';
+      'These recordings have NOT been synced to your phone and will be permanently lost. This can\'t be undone.';
 
   @override
   String get pendingFilesDeleted => 'Pending recordings deleted';
@@ -8288,7 +8283,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteAllFilesWarning =>
-      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.';
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can\'t be undone.';
 
   @override
   String get allFilesDeleted => 'All recordings deleted';
@@ -8469,7 +8464,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tipAutoSync => 'Recordings sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -8895,10 +8890,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'Delete Your Account?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'This can\'t be undone, even by support.';
 
   @override
   String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
@@ -9339,7 +9334,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.';
+      'Record now, transcribe when you choose. Audio stays on your phone until then.';
 
   @override
   String get transcribeLaterNote =>
@@ -9619,7 +9614,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteOnDeviceModel => 'Delete Model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Delete this model?';
 
   @override
   String get onDeviceModelDownloaded => 'Downloaded';
@@ -9775,7 +9770,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncStatusTooOld => 'Too old to sync — Omi can\'t accept it';
 
   @override
-  String get planSheetChooseYourPlan => 'Choose your plan to unlock unlimited Omi.';
+  String get planSheetChooseYourPlan => 'Choose the plan that fits you.';
 
   @override
   String get availableOnMacMobileWeb => 'Available on Mac, mobile, and web';
@@ -10020,24 +10015,23 @@ class AppLocalizationsEn extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10050,13 +10044,13 @@ class AppLocalizationsEn extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10436,8 +10430,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Forget Device?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi will stop connecting to this device. To use it again, you\'ll have to pair it again.';
+  String get forgetDeviceConfirmMessage => 'Omi will stop connecting to this device.';
 
   @override
   String get deviceForgottenMessage => 'Device forgotten';
@@ -11813,19 +11806,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get evidenceNothing => 'You haven\'t labeled or confirmed them yet';
 
   @override
-  String get effectCountsALot => 'Counts a lot';
+  String get effectCountsALot => 'Helps a lot';
 
   @override
-  String get effectCounts => 'Counts';
+  String get effectCounts => 'Helps';
 
   @override
-  String get effectCountsALittle => 'Counts a little';
+  String get effectCountsALittle => 'Helps a little';
 
   @override
-  String get effectBarelyCounts => 'Barely counts';
+  String get effectBarelyCounts => 'Barely helps';
 
   @override
-  String get effectCountsAgainst => 'Counts against';
+  String get effectCountsAgainst => 'Hurts';
 
   @override
   String get effectNeeded => 'Needed for Confirmed';
@@ -11845,7 +11838,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Only your answers move confidence much. Automatic matches on their own barely count.';
+      'Only your answers move confidence much. Automatic matches on their own barely help.';
 
   @override
   String get personWhyConfidence => 'Why?';
@@ -11861,7 +11854,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi will ask you to confirm close matches instead of guessing.';
+  String get pinPersonHonestLine => 'Omi asks before matching close voices.';
 
   @override
   String get pinAction => 'Pin';
@@ -12151,7 +12144,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Lines labeled: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Labeled $count lines',
+      one: 'Labeled 1 line',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12184,7 +12183,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Earlier conversations with this voice: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Found in $count earlier conversations',
+      one: 'Found in 1 earlier conversation',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12209,6 +12214,70 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration of this voice';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'No Omi Found';
+
+  @override
+  String get findDeviceNoneMessage => 'Turn it on and hold it near your phone.';
+
+  @override
+  String get startupFailedDetails => 'Details';
+
+  @override
+  String get couldNotLoadApiKeys => 'Couldn\'t load API keys.';
+
+  @override
+  String get speakerTagPromptNoAction => 'No…';
+
+  @override
+  String get diagnosticsRightNow => 'Right Now';
+
+  @override
+  String get diagnosticsLast7Days => 'Last 7 Days';
+
+  @override
+  String get diagnosticsConnectedFor => 'Connected for';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Reconnects on its own';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Brief drops, back in about $duration each time';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'No drops this week';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Having trouble connecting';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Failed connections in the last 24 hours: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Drops';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'about $count an hour';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Longest gap';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Since pairing: $drops drops, $failed failed connections.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Last $duration';
   }
 
   @override

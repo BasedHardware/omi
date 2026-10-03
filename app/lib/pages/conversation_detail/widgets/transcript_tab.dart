@@ -14,7 +14,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
-import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
@@ -417,8 +416,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   }
 }
 
-/// "Transcript · 14m · 2 speakers" over the lines (Omi v8 transcript heading): the length by the
-/// list row's rule, and how many voices took part, counting the owner once.
+/// "Transcript · 2 speakers" over the lines (Omi v8 transcript heading): how many voices took part,
+/// counting the owner once. The length is in the header's date chip, so it is not repeated here.
 class _TranscriptHeading extends StatelessWidget {
   const _TranscriptHeading({required this.conversation});
 
@@ -469,10 +468,8 @@ class _TranscriptHeading extends StatelessWidget {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final count = _speakerCount(conversation);
-    final duration = conversationDurationLabel(conversation, l10n);
     final label = [
       l10n.transcript,
-      if (duration.isNotEmpty) duration,
       if (count != null) l10n.transcriptSpeakerCount(count),
     ].join(' · ');
     return Padding(

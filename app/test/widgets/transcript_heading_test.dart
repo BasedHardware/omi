@@ -107,14 +107,14 @@ void main() {
         _conversation(segments, speakers: const ConversationSpeakers(status: 'unavailable')),
       );
 
-      expect(headingLabel(tester), 'Transcript · 55s');
+      expect(headingLabel(tester), 'Transcript');
     });
 
     testWidgets('missing metadata shows no speaker count', (tester) async {
       final segments = [for (var i = 0; i < 11; i++) _seg('s$i', i, i * 5.0)];
       await pumpDetail(tester, _conversation(segments));
 
-      expect(headingLabel(tester), 'Transcript · 55s');
+      expect(headingLabel(tester), 'Transcript');
     });
 
     testWidgets('a resolved count uses participants plus the owner, ignoring other raw ids', (tester) async {
@@ -134,7 +134,7 @@ void main() {
         ),
       );
 
-      expect(headingLabel(tester), 'Transcript · 55s · 3 speakers');
+      expect(headingLabel(tester), 'Transcript · 3 speakers');
     });
 
     testWidgets('the owner counts once across raw ids, duplicate participant ids once', (tester) async {
@@ -152,7 +152,7 @@ void main() {
         ),
       );
 
-      expect(headingLabel(tester), 'Transcript · 35s · 2 speakers');
+      expect(headingLabel(tester), 'Transcript · 2 speakers');
     });
 
     testWidgets('the same person across participant ids counts once, another person still counts', (tester) async {
@@ -171,7 +171,7 @@ void main() {
         people: [_person('p1', 'Ada'), _person('p2', 'Ada')],
       );
 
-      expect(headingLabel(tester), 'Transcript · 35s · 3 speakers');
+      expect(headingLabel(tester), 'Transcript · 3 speakers');
     });
 
     testWidgets('Omi is not counted as a speaker', (tester) async {
@@ -188,7 +188,7 @@ void main() {
         ),
       );
 
-      expect(headingLabel(tester), 'Transcript · 25s · 2 speakers');
+      expect(headingLabel(tester), 'Transcript · 2 speakers');
     });
 
     testWidgets('an unknown future status omits the count', (tester) async {
@@ -201,7 +201,7 @@ void main() {
         ),
       );
 
-      expect(headingLabel(tester), 'Transcript · 15s');
+      expect(headingLabel(tester), 'Transcript');
     });
   });
 

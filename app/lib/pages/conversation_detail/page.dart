@@ -62,6 +62,13 @@ import 'widgets/transcript_tab.dart';
 /// so the bar never sits lower than the inset the window reports.
 double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
+/// Height of the floating bottom bar (Ask Omi, or the player and Ask button).
+const double detailFloatingBarHeight = 56;
+
+/// How far above the safe area a toast must float to clear the floating bottom bar.
+double detailToastClearance(double bottomSystemInset) =>
+    detailFloatingBarBottom(bottomSystemInset) + detailFloatingBarHeight - bottomSystemInset;
+
 /// Chooses the first useful detail tab for a conversation.
 ///
 /// A caller-supplied tab is authoritative: search deep links use it to
@@ -801,9 +808,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     final summarySelection = provider.getSummarySelection();
     final summaryApp =
         summarySelection.isApp ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull : null;
-    return [
-      // Which app writes the summary, then the conversation's own actions; Star and Share live in
-      // the top bar; Delete stays last.
+    // Grouped, with large dividers between groups: how the summary is written, then organising
+    // the conversation, then finding and copying its words; developer tools (when on) sit last
+    // before Delete. Star and Share live in the top bar.
+    final summaryGroup = <PullDownMenuEntry>[
       if (!conversation.discarded) ...[
         PullDownMenuItem(
           title: l10n.summaryTemplate,
@@ -817,8 +825,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             showSummarizedAppsSheet(context);
           },
         ),
-        const PullDownMenuDivider.large(),
+        PullDownMenuItem(
+          title: l10n.reprocessConversation,
+          iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+          onTap:
+              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
+        ),
       ],
+    ];
+    final organizeGroup = <PullDownMenuEntry>[
       if (!conversation.discarded)
         PullDownMenuItem(
           title: l10n.renameConversation,
@@ -840,13 +855,24 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         ),
         onTap: () => _handleMenuSelection(context, 'visibility', provider),
       ),
+      if (provider.conversation.calendarEvent == null)
+        PullDownMenuItem(
+          title: l10n.linkEvent,
+          iconWidget: ClipRRect(
+            borderRadius: const BorderRadius.all(Radius.circular(4)),
+            child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 17, height: 17),
+          ),
+          onTap: () => _handleMenuSelection(context, 'link_event', provider),
+        ),
       if (hasRecordings)
         PullDownMenuItem(
           title: l10n.recordings,
           iconWidget: const FaIcon(FontAwesomeIcons.layerGroup, size: 16),
           onTap: () => _handleMenuSelection(context, 'recordings', provider),
         ),
-      const PullDownMenuDivider.large(),
+    ];
+    // Search covers both tabs (summary and transcript), so it stays in the page menu.
+    final wordsGroup = <PullDownMenuEntry>[
       PullDownMenuItem(
         title: l10n.search,
         iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
@@ -880,22 +906,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
           onTap: _isDownloadingAudio ? null : () => _handleMenuSelection(context, 'download_audio', provider),
         ),
-      if (provider.conversation.calendarEvent == null)
-        PullDownMenuItem(
-          title: l10n.linkEvent,
-          iconWidget: ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(4)),
-            child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 17, height: 17),
-          ),
-          onTap: () => _handleMenuSelection(context, 'link_event', provider),
-        ),
-      if (!provider.conversation.discarded)
-        PullDownMenuItem(
-          title: l10n.reprocessConversation,
-          iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap:
-              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
-        ),
+    ];
+    final developerGroup = <PullDownMenuEntry>[
       if (showDeveloperTools) ...[
         PullDownMenuItem(
           title: l10n.copyConversationId,
@@ -908,12 +920,22 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
         ),
       ],
+    ];
+    final deleteGroup = <PullDownMenuEntry>[
+      // "Delete": the menu is already about this conversation.
       PullDownMenuItem(
-        title: l10n.deleteConversation,
+        title: l10n.delete,
         isDestructive: true,
         iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
+    ];
+    final groups = [summaryGroup, organizeGroup, wordsGroup, developerGroup, deleteGroup].where((g) => g.isNotEmpty);
+    return [
+      for (final (index, group) in groups.indexed) ...[
+        if (index > 0) const PullDownMenuDivider.large(),
+        ...group,
+      ],
     ];
   }
 
@@ -1079,142 +1101,146 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           titleSpacing: 0,
           actions: [_buildHeaderActions(context, detailProvider)],
         ),
-        body: Stack(
-          children: [
-            GestureDetector(
-              excludeFromSemantics: true,
-              behavior: HitTestBehavior.translucent,
-              // Tapping content closes an empty search. There is deliberately no horizontal
-              // gesture here: a sideways swipe moves between the tabs, never to another
-              // conversation (D2), and the iOS edge swipe always goes back.
-              onTap: _closeSearchIfEmpty,
-              child: Column(
-                children: [
-                  // Title and facts, shared by both tabs (#17297), then the tab row (v3).
-                  ConversationDetailHeader(onOpenRecordings: _openRecordings),
-                  ConversationDetailTabs(
-                    controller: _controller!,
-                    onTap: (_) => _hasExplicitTabSelection = true,
-                  ),
-                  const ConversationActivityStrip(),
-                  Expanded(
-                    // Each tab owns the page's side margin, so a section can scroll edge to edge
-                    // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                    child: TabBarView(
-                      controller: _controller,
-                      children: [
-                        SummaryTab(
-                          reviewEnabled: !widget.isFromOnboarding &&
-                              widget.initialSeekStart == null &&
-                              selectedTab == ConversationTab.summary &&
-                              !_controller!.indexIsChanging &&
-                              !_isSearching &&
-                              !_isSharing &&
-                              !_isDownloadingAudio &&
-                              !_reviewInterrupted,
-                          searchQuery: _searchQuery,
-                          currentResultIndex: getCurrentResultIndexForHighlighting(),
-                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                          child: TranscriptWidgets(
+        // Toasts float above the pinned Ask Omi bar instead of covering it.
+        body: OmiFeedbackClearance(
+          bottom: hasBar ? detailToastClearance(MediaQuery.viewPaddingOf(context).bottom) : 0,
+          child: Stack(
+            children: [
+              GestureDetector(
+                excludeFromSemantics: true,
+                behavior: HitTestBehavior.translucent,
+                // Tapping content closes an empty search. There is deliberately no horizontal
+                // gesture here: a sideways swipe moves between the tabs, never to another
+                // conversation (D2), and the iOS edge swipe always goes back.
+                onTap: _closeSearchIfEmpty,
+                child: Column(
+                  children: [
+                    // Title and facts, shared by both tabs (#17297), then the tab row (v3).
+                    ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                    ConversationDetailTabs(
+                      controller: _controller!,
+                      onTap: (_) => _hasExplicitTabSelection = true,
+                    ),
+                    const ConversationActivityStrip(),
+                    Expanded(
+                      // Each tab owns the page's side margin, so a section can scroll edge to edge
+                      // (the Summary tab's screenshot strip) instead of clipping at the margin.
+                      child: TabBarView(
+                        controller: _controller,
+                        children: [
+                          SummaryTab(
+                            reviewEnabled: !widget.isFromOnboarding &&
+                                widget.initialSeekStart == null &&
+                                selectedTab == ConversationTab.summary &&
+                                !_controller!.indexIsChanging &&
+                                !_isSearching &&
+                                !_isSharing &&
+                                !_isDownloadingAudio &&
+                                !_reviewInterrupted,
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onSegmentTap: (segment) async {
-                              if (selectedTab != ConversationTab.transcript) {
-                                setState(() {
-                                  selectedTab = ConversationTab.transcript;
-                                });
-                                _controller!.animateTo(_transcriptTabIndex);
-                              }
-
-                              // Seek to segment start; playback keeps running past the segment end.
-                              if (_seekToSegmentCallback != null) {
-                                await _seekToSegmentCallback!(segment.start, segment.end);
-                              }
-                            },
-                            playbackController: _playbackController,
                           ),
-                        ),
-                      ],
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                            child: TranscriptWidgets(
+                              searchQuery: _searchQuery,
+                              currentResultIndex: getCurrentResultIndexForHighlighting(),
+                              onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                              onSegmentTap: (segment) async {
+                                if (selectedTab != ConversationTab.transcript) {
+                                  setState(() {
+                                    selectedTab = ConversationTab.transcript;
+                                  });
+                                  _controller!.animateTo(_transcriptTabIndex);
+                                }
+
+                                // Seek to segment start; playback keeps running past the segment end.
+                                if (_seekToSegmentCallback != null) {
+                                  await _seekToSegmentCallback!(segment.start, segment.end);
+                                }
+                              },
+                              playbackController: _playbackController,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                ),
+              ),
+
+              // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
+              // colour fades in behind it so text never runs under the bar.
+              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
+                _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
+              if (MediaQuery.of(context).viewInsets.bottom == 0)
+                Positioned(
+                  // Stable key so the body Stack's collection-`if` diff matches
+                  // by identity, not by slot+type. Without it the surviving
+                  // search-overlay Positioned below was being reused into this
+                  // slot when the keyboard rose, tearing down the search
+                  // TextField subtree and dropping the IME mid-frame.
+                  key: const ValueKey('detail_floating_bottom_bar'),
+                  bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
+                  left: 0,
+                  right: 0,
+                  child: ConversationBottomBar(
+                    onAudioInteraction: () {
+                      if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+                    },
+                    mode: ConversationBottomBarMode.detail,
+                    onAskOmi: () => _openAskOmi(detailProvider),
+                    selectedTab: selectedTab,
+                    conversation: conversation,
+                    hasSegments: hasBar,
+                    playbackController: _playbackController,
+                    onSeekFunctionReady: (seekFunction) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            _seekToSegmentCallback = seekFunction;
+                          });
+                          _maybePlayInitialSeek();
+                        }
+                      });
+                    },
+                    onTabSelected: (tab) {
+                      _hasExplicitTabSelection = true;
+                      final index = _indexForTab(tab);
+                      if (index < _controller!.length) _controller!.animateTo(index);
+                    },
+                    onStopPressed: () {
+                      // Empty since we don't show the stop button in detail mode
+                    },
                   ),
-                ],
-              ),
-            ),
-
-            // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
-            // colour fades in behind it so text never runs under the bar.
-            if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
-              _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
-            if (MediaQuery.of(context).viewInsets.bottom == 0)
-              Positioned(
-                // Stable key so the body Stack's collection-`if` diff matches
-                // by identity, not by slot+type. Without it the surviving
-                // search-overlay Positioned below was being reused into this
-                // slot when the keyboard rose, tearing down the search
-                // TextField subtree and dropping the IME mid-frame.
-                key: const ValueKey('detail_floating_bottom_bar'),
-                bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
-                left: 0,
-                right: 0,
-                child: ConversationBottomBar(
-                  onAudioInteraction: () {
-                    if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
-                  },
-                  mode: ConversationBottomBarMode.detail,
-                  onAskOmi: () => _openAskOmi(detailProvider),
-                  selectedTab: selectedTab,
-                  conversation: conversation,
-                  hasSegments: hasBar,
-                  playbackController: _playbackController,
-                  onSeekFunctionReady: (seekFunction) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() {
-                          _seekToSegmentCallback = seekFunction;
-                        });
-                        _maybePlayInitialSeek();
-                      }
-                    });
-                  },
-                  onTabSelected: (tab) {
-                    _hasExplicitTabSelection = true;
-                    final index = _indexForTab(tab);
-                    if (index < _controller!.length) _controller!.animateTo(index);
-                  },
-                  onStopPressed: () {
-                    // Empty since we don't show the stop button in detail mode
-                  },
                 ),
-              ),
 
-            // Search bar over the content
-            if (_isSearching)
-              Positioned(
-                // Stable key — same reason as the floating bottom bar above.
-                // Without it the keyboard pop-up flickered closed because
-                // the body Stack's diff was reusing this Positioned's
-                // element into the bar's slot and remounting the TextField.
-                key: const ValueKey('detail_search_overlay'),
-                top: 0,
-                left: 0,
-                right: 0,
-                child: DetailSearchBar(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  query: _searchQuery,
-                  currentIndex: _currentSearchIndex,
-                  totalResults: _totalSearchResults,
-                  onChanged: _onSearchChanged,
-                  onPrevious: () => _navigateSearch(false),
-                  onNext: () => _navigateSearch(true),
-                  onCancel: _closeSearch,
+              // Search bar over the content
+              if (_isSearching)
+                Positioned(
+                  // Stable key — same reason as the floating bottom bar above.
+                  // Without it the keyboard pop-up flickered closed because
+                  // the body Stack's diff was reusing this Positioned's
+                  // element into the bar's slot and remounting the TextField.
+                  key: const ValueKey('detail_search_overlay'),
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: DetailSearchBar(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    query: _searchQuery,
+                    currentIndex: _currentSearchIndex,
+                    totalResults: _totalSearchResults,
+                    onChanged: _onSearchChanged,
+                    onPrevious: () => _navigateSearch(false),
+                    onNext: () => _navigateSearch(true),
+                    onCancel: _closeSearch,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1229,7 +1255,7 @@ class _DetailBarBackdrop extends StatelessWidget {
   /// Distance from the screen edge to the bar's bottom.
   final double barBottom;
 
-  static const double _barHeight = 56;
+  static const double _barHeight = detailFloatingBarHeight;
   static const double _fade = 28;
 
   @override
