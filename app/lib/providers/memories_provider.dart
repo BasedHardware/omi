@@ -141,6 +141,7 @@ class MemoriesProvider extends ChangeNotifier {
   /// load-more must not read the same offset page and advance the offset
   /// again; it returns and the next tap continues from the completed page.
   bool _loadingMoreHistory = false;
+  int _ledgerHistoryRequestSequence = 0;
 
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
@@ -513,14 +514,21 @@ class MemoriesProvider extends ChangeNotifier {
       return;
     }
     if (_loadingMoreHistory) return;
+    final requestSequence = ++_ledgerHistoryRequestSequence;
     _loadingMoreHistory = true;
     try {
       final generation = _sessionGeneration;
+      final loadSequence = _loadSequence;
+      final ledgerProjectionRevision = _ledgerProjectionRevision;
       final cursor = _ledgerHistoryNextCursor;
       final result = await _fetchHistoryPage(limit: limit, offset: _ledgerHistoryOffset, cursor: cursor);
       // Continuation pages carry the same capability contract as the initial
       // page; do not let a stale true value survive a missing/false header.
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration ||
+          loadSequence != _loadSequence ||
+          ledgerProjectionRevision != _ledgerProjectionRevision) {
+        return;
+      }
       _beliefEnabled = result.beliefEnabled;
       if (!result.supported) return;
 
@@ -533,7 +541,7 @@ class MemoriesProvider extends ChangeNotifier {
       _ledgerHistoryTruncated = result.truncated || _ledgerHistoryHasMore;
       _setCategories();
     } finally {
-      _loadingMoreHistory = false;
+      if (requestSequence == _ledgerHistoryRequestSequence) _loadingMoreHistory = false;
     }
   }
 
@@ -1001,6 +1009,8 @@ class MemoriesProvider extends ChangeNotifier {
       return;
     }
 
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
     final id = _pendingDeletionId!;
 
     final deletedMemory = _lastDeletedMemory;
@@ -1019,7 +1029,13 @@ class MemoriesProvider extends ChangeNotifier {
       }
     }
 
-    if (!deleteSucceeded && deletedMemory?.id == id) {
+    if (deleteSucceeded) {
+      if (generation == _sessionGeneration && SharedPreferencesUtil().uid == ownerUid) {
+        _ledgerProjectionRevision++;
+        SharedPreferencesUtil().cachedMemories =
+            SharedPreferencesUtil().cachedMemories.where((memory) => memory.id != id).toList();
+      }
+    } else if (deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
         _memories.add(deletedMemory!);
       }
@@ -1070,10 +1086,17 @@ class MemoriesProvider extends ChangeNotifier {
     _sessionGeneration++;
     _loadSequence++;
     _ledgerProjectionRevision++;
+    _ledgerHistoryRequestSequence++;
     _inFlightLoad = null;
     // The fenced load returns at its guards without releasing _loading; this
-    // mutation owns the terminal state.
+    // mutation owns the terminal state and retires the history pager too.
     _loading = false;
+    _ledgerHistoryRequestSequence++;
+    _loadingMoreHistory = false;
+    _ledgerHistoryOffset = 0;
+    _ledgerHistoryNextCursor = null;
+    _ledgerHistoryHasMore = false;
+    _ledgerHistoryTruncated = false;
     _memories.clear();
     _cancelDeletionTimer();
     _pendingDeletionId = null;
@@ -1119,6 +1142,7 @@ class MemoriesProvider extends ChangeNotifier {
 
     // Save to pending memories for persistence across app restarts
     SharedPreferencesUtil().addPendingMemory(newMemory);
+    final pendingId = newMemory.id;
 
     // Try to sync to server immediately
     final serverMemory = await _createMemoryRequest(content, visibility.name, category.name);
@@ -1126,12 +1150,20 @@ class MemoriesProvider extends ChangeNotifier {
     if (serverMemory != null) {
       // Remove from the original account's pending queue even if the visible
       // session changed while the request was in flight.
-      SharedPreferencesUtil().removePendingMemory(newMemory.id, ownerUid: ownerUid);
+      SharedPreferencesUtil().removePendingMemory(pendingId, ownerUid: ownerUid);
       if (generation != _sessionGeneration) return true;
-      final idx = _memories.indexWhere((m) => m.id == newMemory.id);
+      final idx = _memories.indexWhere((m) => m.id == pendingId);
       if (idx != -1) {
         _memories[idx].id = serverMemory.id;
       }
+      _ledgerProjectionRevision++;
+      _inFlightLoad = null;
+      SharedPreferencesUtil().cachedMemories = [
+        ...SharedPreferencesUtil()
+            .cachedMemories
+            .where((cached) => cached.id != pendingId && cached.id != serverMemory.id),
+        serverMemory,
+      ];
       SiriIntegration.current.queueUpsertMemories([serverMemory]);
       unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }

@@ -38,6 +38,20 @@ Memory _supersededFact() => Memory(
       intentBacked: true,
     );
 
+Memory _currentFact() => Memory(
+      id: 'current-fact',
+      uid: _uid,
+      content: 'Lives in Brooklyn',
+      category: MemoryCategory.system,
+      createdAt: DateTime.utc(2026, 8, 23),
+      updatedAt: DateTime.utc(2026, 8, 23),
+      visibility: MemoryVisibility.private,
+      ledgerSchemaVersion: 'knowledge_ledger.v1',
+      ledgerKind: KnowledgeLedgerKind.fact,
+      ledgerSlot: 'home_city',
+      intentBacked: true,
+    );
+
 Memory _revertReplacement(Memory source) => Memory(
       id: 'restored-fact',
       uid: source.uid,
