@@ -1,0 +1,7 @@
+{
+  "changes": [
+    "Conversations search now runs on the server across your full history — titles, summaries, and spoken words — with match snippets in the list preview.",
+    "Settings → Transcription gains a Custom vocabulary editor (names, brands, jargon). Terms sync to your account and are used by both recordings and push-to-talk.",
+    "You can now correct a transcript line from the conversation detail transcript drawer (pencil next to the timestamp), like the phone app."
+  ]
+}

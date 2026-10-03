@@ -11,6 +11,22 @@ const syncLanguage = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../../lib/userProfile', () => ({
   syncLanguage: (...a: unknown[]) => syncLanguage(...a)
 }))
+// The Custom vocabulary card fetches the account list on mount; stub the module
+// (its own behaviour is covered in VocabularyEditor.test.tsx / transcriptionVocabulary.test.ts).
+vi.mock('../../../lib/transcriptionVocabulary', () => ({
+  VOCABULARY_LIMIT: 100,
+  fetchTranscriptionVocabulary: vi.fn().mockResolvedValue([]),
+  saveTranscriptionVocabulary: vi.fn().mockResolvedValue(undefined),
+  addVocabularyTerms: (existing: string[], raw: string) => {
+    const added = raw
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .filter((t) => !existing.some((e) => e.toLowerCase() === t.toLowerCase()))
+    return { terms: [...existing, ...added], added, duplicates: [], overflow: [], tooLong: [] }
+  },
+  removeVocabularyTerm: (existing: string[], term: string) => existing.filter((t) => t !== term)
+}))
 
 const renderTab = (): void => {
   render(
