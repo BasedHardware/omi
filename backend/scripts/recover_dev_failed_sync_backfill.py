@@ -74,7 +74,7 @@ def _metadata_present(paths: list[str]) -> bool:
 
 
 def _requeue(row: dict[str, Any], old_job: dict[str, Any] | None) -> str:
-    from database.sync_jobs import TERMINAL_STATUSES, create_sync_job, get_raw_sync_job
+    from database.sync_jobs import TERMINAL_STATUSES, create_sync_job, get_sync_job
     from database.sync_ledger import claim_sync_content
     from database import sync_backfill_sequencer
     from utils.sync.uid_sequencer import kick
@@ -86,7 +86,7 @@ def _requeue(row: dict[str, Any], old_job: dict[str, Any] | None) -> str:
     payload = dict(row['payload'])
     payload.pop('sequencer_epoch', None)
     payload['job_id'] = new_id
-    existing = get_raw_sync_job(new_id)
+    existing = get_sync_job(new_id)
     if existing is not None:
         if any(
             existing.get(field) != value
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     if not os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL'):
         parser.error('BUCKET_TEMPORAL_SYNC_LOCAL is required')
 
-    from database.sync_jobs import get_raw_sync_job
+    from database.sync_jobs import get_sync_job
 
     ready = 0
     with args.manifest.open() as source:
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             row = json.loads(line)
             if not isinstance(row, dict):
                 raise ValueError(f'line {line_number} must be an object')
-            job = get_raw_sync_job(row.get('job_id', '')) if isinstance(row.get('job_id'), str) else None
+            job = get_sync_job(row.get('job_id', '')) if isinstance(row.get('job_id'), str) else None
             reason = selection_reason(row, job, False)
             if reason == 'staged_audio_missing':
                 metadata_ok = _metadata_present(row['payload']['raw_blob_paths'])

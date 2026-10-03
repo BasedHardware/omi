@@ -2120,6 +2120,16 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     )
     request.json.return_value['lane'] = 'backfill'
     setattr(module, 'finalize_sync_job_superseded', AsyncMock())
+    # A backfill task without a sequencer epoch first reads its own job to decide
+    # whether the UID sequencer should adopt it. This test covers the legacy direct
+    # path, so pin that decision off explicitly: sequencer disabled, no owner and
+    # nothing pending. The job is still `queued` at that point, so that read gets
+    # its own entry ahead of the three the processor makes.
+    module.uid_sequencer.enabled = MagicMock(return_value=False)
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
+    processor_reads = list(module.get_sync_job.side_effect)
+    module.get_sync_job.side_effect = [processor_reads[0], *processor_reads]
 
     try:
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -3130,7 +3140,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
     }
     request = MagicMock()
     request.json = AsyncMock(return_value=payload)
-    module.get_raw_sync_job = MagicMock(return_value={'status': 'queued'})
+    module.get_sync_job = MagicMock(return_value={'status': 'queued'})
     module.uid_sequencer.enabled.return_value = True
     module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
     module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
@@ -3185,7 +3195,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
     module.uid_sequencer.production_stage = MagicMock(return_value=False)
     module.get_sync_ledger_fence_mode = MagicMock()
     module._run_sync_job_body = AsyncMock()
-    module.get_raw_sync_job = MagicMock()
+    module.get_sync_job = MagicMock()
     module.try_acquire_job_run_lock = MagicMock()
     module.sync_backfill_sequencer.reset_mock()
     module.backfill_cutover.reset_mock()
@@ -3199,7 +3209,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
         assert response.status_code == 200
         assert response.body == b'{"status":"foreign_stage"}'
         module.get_sync_ledger_fence_mode.assert_not_called()
-        module.get_raw_sync_job.assert_not_called()
+        module.get_sync_job.assert_not_called()
         module.try_acquire_job_run_lock.assert_not_called()
         module._run_sync_job_body.assert_not_awaited()
         assert module.sync_backfill_sequencer.mock_calls == []
@@ -3221,7 +3231,7 @@ async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     request = MagicMock()
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
-    module.get_raw_sync_job = MagicMock(return_value={'status': 'processing'})
+    module.get_sync_job = MagicMock(return_value={'status': 'processing'})
     module.sync_backfill_sequencer.get_owner = MagicMock(return_value={'active_job_id': 'sequenced-job'})
     module.uid_sequencer.enabled.return_value = True
     module.backfill_cutover.uid_hash = MagicMock(return_value='private-hash')
@@ -3255,7 +3265,7 @@ async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_
     module.sync_backfill_sequencer.begin_job = MagicMock(side_effect=[True, True, False])
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
-    module.get_raw_sync_job = MagicMock(return_value={'status': 'failed', 'attempt': 2})
+    module.get_sync_job = MagicMock(return_value={'status': 'failed', 'attempt': 2})
     module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
     module._run_sync_job_body = AsyncMock(
         side_effect=[
