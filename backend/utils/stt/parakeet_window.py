@@ -1110,13 +1110,23 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         acquired = False
         try:
-            async with asyncio.timeout(self._post_timeout):
+            async with asyncio.timeout(self._post_timeout) as deadline:
                 async with get_stt_semaphore():
                     acquired = True
+                    when = deadline.when()
+                    remaining = (
+                        max(0.0, when - asyncio.get_running_loop().time()) if when is not None else self._post_timeout
+                    )
+                    remaining = math.floor(remaining * 1000) / 1000
+                    if remaining <= 0:
+                        raise TimeoutError('post budget exhausted at semaphore admission')
                     return await get_stt_client().post(
                         self._url,
                         files={'file': ('audio.wav', wav, 'audio/wav')},
-                        headers={'X-Omi-STT-Surface': 'live-window'},
+                        headers={
+                            'X-Omi-STT-Surface': 'live-window',
+                            'X-Omi-STT-Timeout-Seconds': f'{remaining:.3f}',
+                        },
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -1133,6 +1143,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 response = await self._post_window(pcm)
             finally:
                 self._post_in_flight = False
+            if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                outcome = 'queue_timeout'
+                self.fail('capacity_full', capacity_subtype='queue_timeout')
+                response.raise_for_status()
             if response.status_code >= 500:
                 st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
                 self.fail('provider_5xx')

@@ -408,7 +408,12 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
     entries = ',\n'.join(
-        '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            **translation_defaults,
+            # Debounce is declared on this serving host too.
+            'MENTOR_GATE_DEBOUNCE_ENABLED': 'true',
+        }.items()
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -1611,6 +1616,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -1630,6 +1636,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1646,6 +1653,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1894,6 +1902,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -1914,6 +1923,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1930,6 +1940,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1966,6 +1977,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -1985,6 +1997,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -2000,6 +2013,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
