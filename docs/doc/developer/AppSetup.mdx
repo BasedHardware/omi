@@ -149,13 +149,15 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
 <Tip>
 The automatic setup runs entirely on your machine — local API, local emulators,
 no production data — making it the fastest way to start building apps and making
-changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN or Tailscale
-address before running both `setup.sh ios` and `make dev-up` (in the same shell,
-or exported so both commands see it) — this now makes the harness itself listen
-there too, not just the app you build. Only a private address works (LAN, e.g.
-`192.168.x.x`, or Tailscale/CGNAT, e.g. `100.x.x.x`); a public address is
+changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN or
+Tailscale address (RFC 1918 `192.168.x.x` or CGNAT `100.x.x.x`) before
+running both `setup.sh ios` and `make dev-up` (in the same shell, or exported
+so both commands see it) — this now makes the harness itself listen there too,
+not just the app you build. Only a private address works; a public address is
 rejected. Use `OMI_DEV_BIND_HOST` instead if you want the harness to bind a
-different address than the one the app is compiled to reach.
+different address than the one the app is compiled to reach. Sign in with
+Google on the device completes against the Auth emulator (no Safari, no Google
+OAuth client). Rebuild the app after changing `OMI_DEV_HOST`.
 </Tip>
 
 ---
@@ -331,11 +333,23 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Run `make dev-up` from the repo root first, and confirm with `make dev-status`.
 
     On a physical device, `127.0.0.1` is the phone — set `OMI_DEV_HOST` to your
-    Mac's LAN or Tailscale address before running **both** `setup.sh` (so the
-    build points at your machine) and `make dev-up` (so the harness actually
-    listens there — it defaults to loopback-only otherwise, which is why a
-    device build alone used to reach nothing). Export it in the same shell so
-    both commands see it. The Android emulator uses `10.0.2.2` by default.
+    Mac's LAN or Tailscale address (RFC 1918 `192.168.x.x` or CGNAT
+    `100.x.x.x`) before running **both** `setup.sh` (so the build points at
+    your machine) and `make dev-up` (so the harness actually listens there —
+    it defaults to loopback-only otherwise, which is why a device build alone
+    used to reach nothing). Export it in the same shell so both commands see
+    it. The Android emulator uses `10.0.2.2` by default.
+  </Accordion>
+  <Accordion title="Sign in with Google shows a blank Safari screen" icon="globe">
+    The local harness has no Google OAuth client, and iOS will not render the
+    plain-HTTP `/v1/auth/authorize` page in an in-app Safari view. `local_dev`
+    completes Google sign-in against the Firebase Auth emulator over HTTP
+    instead. Confirm `OMI_APP_PROFILE=local_dev`, the harness is up with
+    `OMI_DEV_HOST` set, and the app was rebuilt after that change.
+
+    Two Home Screen icons can both be named **Omi Dev**. Open the one built
+    against the current `OMI_DEV_HOST`; an older install still opens Safari
+    against a backend the phone cannot reach.
   </Accordion>
   <Accordion title="Sign-in works but every request returns 401" icon="triangle-exclamation">
     The app and the backend are on **different Firebase projects**. Firebase ID

@@ -54,6 +54,13 @@ else
   pass "output does not declare NSAllowsLocalNetworking"
 fi
 
+usage=$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$work/Info-Dev.plist" 2>/dev/null || true)
+if [[ -n "$usage" ]]; then
+  pass "output declares NSLocalNetworkUsageDescription (LAN device prompt)"
+else
+  fail "output is missing NSLocalNetworkUsageDescription — iOS will not prompt for local-network access to a LAN harness"
+fi
+
 rm -rf "$work"
 
 echo

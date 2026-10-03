@@ -18,4 +18,5 @@ cp "$SOURCE_PLIST" "$OUTPUT_PLIST"
 # NSAllowsLocalNetworking and silently reverted the CGNAT fix on every run.
 /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity dict' "$OUTPUT_PLIST"
 /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true' "$OUTPUT_PLIST"
+/usr/libexec/PlistBuddy -c 'Add :NSLocalNetworkUsageDescription string Omi talks to the development server on your Mac so you can sign in and use the local API.' "$OUTPUT_PLIST"
 plutil -lint "$OUTPUT_PLIST" >/dev/null
