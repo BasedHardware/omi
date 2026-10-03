@@ -28,6 +28,7 @@ the only client read path. The doc is cached 60s like app_review_config so
 admin copy edits reach clients within one poll (~5 min) plus the cache.
 """
 
+import logging
 import time
 from typing import Any, Dict, Tuple, cast
 
@@ -35,6 +36,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict
 
 from database._client import get_firestore_client
 from database.cache import get_memory_cache
+
+logger = logging.getLogger(__name__)
 
 CONFIG_COLLECTION = 'csat_config'
 CONFIG_DOC = 'product'
@@ -98,18 +101,26 @@ def normalize_config(raw: Dict[str, Any] | None) -> Dict[str, Any]:
 
 
 def _fetch_config() -> Dict[str, Any]:
-    doc = get_firestore_client().collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
-    if not getattr(doc, 'exists', False):
+    try:
+        doc = get_firestore_client().collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
+        if not getattr(doc, 'exists', False):
+            return dict(DEFAULT_CONFIG)
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else dict(DEFAULT_CONFIG)
+    except Exception as e:
+        logger.warning(f"Failed to fetch CSAT config from Firestore: {e}", exc_info=True)
         return dict(DEFAULT_CONFIG)
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else dict(DEFAULT_CONFIG)
 
 
 def get_product_config() -> Dict[str, Any]:
     """Return the product CSAT config, normalized, cached for 60s."""
-    fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
-    raw = cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else dict(DEFAULT_CONFIG)
-    return normalize_config(raw)
+    try:
+        fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
+        raw = cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else dict(DEFAULT_CONFIG)
+        return normalize_config(raw)
+    except Exception as e:
+        logger.warning(f"Failed to resolve product CSAT config: {e}", exc_info=True)
+        return dict(DEFAULT_CONFIG)
 
 
 def submit_rating(

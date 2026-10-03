@@ -1,4 +1,9 @@
-"""CSAT contract: config defaults on a missing doc, create-only ratings."""
+import google.api_core
+
+if not hasattr(google.api_core, 'check_python_version'):
+    google.api_core.check_python_version = lambda *args, **kwargs: None
+if not hasattr(google.api_core, 'check_dependency_versions'):
+    google.api_core.check_dependency_versions = lambda *args, **kwargs: None
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -167,3 +172,37 @@ def test_normalize_config_clamps_stored_doc(monkeypatch):
     assert normalized['question_threshold'] == 50
     assert normalized['comment_max_score'] == 5
     assert normalized['revision'] == 0
+
+
+def test_get_config_firestore_failure_returns_defaults(monkeypatch):
+    monkeypatch.setattr(
+        csat_db, 'get_firestore_client', lambda: (_ for _ in ()).throw(RuntimeError('Firestore timeout'))
+    )
+    monkeypatch.setattr(csat_db, 'get_memory_cache', lambda: _MemoryCache())
+    app = FastAPI()
+    app.include_router(csat_router.router)
+    app.dependency_overrides[csat_router.auth.get_current_user_uid] = lambda: UID
+    client = TestClient(app)
+
+    response = client.get('/v1/csat/config')
+    assert response.status_code == 200
+    assert response.json()['title'] == csat_db.DEFAULT_TITLE
+    assert response.json()['enabled'] is True
+
+
+def test_post_rating_firestore_failure_returns_500(monkeypatch):
+    _install_fake_backend(monkeypatch)
+    monkeypatch.setattr(
+        csat_db, 'submit_rating', lambda **kwargs: (_ for _ in ()).throw(RuntimeError('Firestore transport failure'))
+    )
+    app = FastAPI()
+    app.include_router(csat_router.router)
+    app.dependency_overrides[csat_router.auth.get_current_user_uid] = lambda: UID
+    client = TestClient(app)
+
+    response = client.post(
+        '/v1/csat/ratings',
+        json={'platform': 'macos', 'score': 4, 'comment': 'great', 'revision': 0},
+    )
+    assert response.status_code == 500
+    assert response.json()['detail'] == 'Failed to record CSAT rating'
