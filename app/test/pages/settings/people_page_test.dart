@@ -356,11 +356,11 @@ void main() {
     expect(find.text("Omi usually recognizes Sam Okafor's voice, but you've only confirmed it a few times."),
         findsOneWidget);
     expect(find.text('Picked in 2 suggestions'), findsWidgets);
-    expect(find.text('Counts'), findsWidgets);
+    expect(find.text('Helps'), findsWidgets);
     expect(find.text('1 match moved to someone else'), findsOneWidget);
-    expect(find.text('Counts against'), findsOneWidget);
+    expect(find.text('Hurts'), findsOneWidget);
     expect(find.text('3 automatic matches nobody confirmed'), findsOneWidget);
-    expect(find.text('Barely counts'), findsOneWidget);
+    expect(find.text('Barely helps'), findsOneWidget);
     expect(find.text('Label them in 1 more conversation.'), findsOneWidget);
   });
 
@@ -374,8 +374,8 @@ void main() {
     await tester.tap(find.text('Maya Chen'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pin Maya Chen'), findsOneWidget);
-    expect(find.text('Omi will ask you to confirm close matches instead of guessing.'), findsOneWidget);
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Omi asks before matching close voices.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('person_confidence_pill')));
     await tester.pumpAndSettle();
     expect(find.text('Maya Chen is Confirmed. Omi keeps learning from each label.'), findsOneWidget);

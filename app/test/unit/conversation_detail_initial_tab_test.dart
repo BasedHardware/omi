@@ -139,10 +139,14 @@ void main() {
       ConversationTab.summary,
     );
 
-    // Visibility is no chip under the title: a quiet label at the end of the tab row, and the ⋯ menu.
+    // Visibility is no chip under the title. Private is the default and shows nothing; a shared
+    // conversation gets a quiet label at the end of the tab row. Both reach the ⋯ menu.
     final visibility = find.byKey(const Key('conversation_visibility'));
-    expect(find.text('Private'), findsOneWidget);
-    expect(find.descendant(of: visibility, matching: find.text('Private')), findsOneWidget);
+    expect(visibility, findsNothing);
+    expect(find.text('Private'), findsNothing);
+    detail.updateVisibilityLocally(ConversationVisibility.shared);
+    await tester.pump();
+    expect(find.descendant(of: visibility, matching: find.text('Shared')), findsOneWidget);
     expect(tester.getCenter(visibility).dy, moreOrLessEquals(tester.getCenter(transcript).dy, epsilon: 1));
     expect(tester.getCenter(visibility).dx, greaterThan(tester.getCenter(transcript).dx));
 

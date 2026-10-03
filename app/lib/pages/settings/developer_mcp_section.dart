@@ -178,7 +178,7 @@ class _McpKeysList extends StatelessWidget {
         }
         if (provider.error != null) {
           return OmiErrorState(
-            message: l10n.errorWithMessage(provider.error!),
+            message: l10n.couldNotLoadApiKeys,
             onRetry: () => provider.fetchKeys(),
           );
         }

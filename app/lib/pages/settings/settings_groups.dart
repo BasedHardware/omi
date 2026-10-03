@@ -242,7 +242,6 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         // Capture modes: two-state settings, so inline switches that apply immediately.
         OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta, OmiColors.warning)),
         OmiSettingsGroup(
-          footer: l10n.transcribeLaterNote,
           children: [
             OmiSettingsRow.toggle(
               key: const ValueKey('settings_row_transcribeLater'),
