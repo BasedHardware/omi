@@ -296,7 +296,11 @@ def socket_is_finishing(socket: Any) -> bool:
         try:
             outcome = getattr(current, 'leg_outcome', None)
             if outcome is not None:
-                # Managed transport cleanup also calls raw.finish() after a
+                # A managed leg calls raw.finish() as transport cleanup after a
+                # failed send (e.g. a send queue that overflowed on replay). That
+                # sets the raw socket's _finishing, which is not the client
+                # leaving. Only the serving owner can declare teardown, so do not
+                # descend into the raw transport here.
                 return bool(outcome.owner_closing)
             pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
         except Exception:

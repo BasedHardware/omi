@@ -5,6 +5,7 @@ import os
 from collections.abc import Mapping
 
 from utils.llm import vertex_pt_routing as ptr
+from config.vertex_reservations import RESERVATIONS
 
 
 def request_body(body: bytes, url: str) -> bytes:
@@ -25,12 +26,9 @@ def request_body(body: bytes, url: str) -> bytes:
 
 
 def target_url(model: str, action: str, capacity: str, default: str) -> str:
-    if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
+    if model not in RESERVATIONS or capacity != ptr.REQUEST_TYPE_DEDICATED:
         return default
-    location = os.getenv(
-        ptr.PT_TARGET_LOCATION_ENV, os.getenv(ptr.MULTI_REGION_LOCATION_ENV, ptr.MULTI_REGION_LOCATION)
-    )
-    host, location = ptr.target_capacity_endpoint(location=location)
+    host, location = ptr.reservation_endpoint(model, os.environ)
     project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
     return f'https://{host}/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
 

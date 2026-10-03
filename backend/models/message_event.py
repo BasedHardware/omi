@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from models.chat import Message
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
@@ -152,6 +153,8 @@ class TranslationEvent(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         del j["event_type"]
+        # Callers pass stored segment dicts; storage-only placement evidence stays server-side.
+        j["segments"] = [transcript_segment_for_client(segment) for segment in j.get("segments") or []]
         return j
 
 
